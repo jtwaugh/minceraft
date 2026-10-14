@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain Viewer</title>
+<style>
+  :root {
+    --bg: #15171a; --panel: #1e2125; --line: #30353b; --text: #d8dde3;
+    --muted: #8a939d; --accent: #7fb35a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 14px; margin: 0 8px 0 0; letter-spacing: .04em; }
+  label { color: var(--muted); }
+  input {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 4px 6px; font: inherit; width: 90px;
+  }
+  input#seed { width: 160px; }
+  button {
+    background: var(--accent); color: #10140c; border: 0; border-radius: 4px;
+    padding: 5px 12px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  #stats { color: var(--muted); margin-left: auto; }
+  #stats b { color: var(--text); font-weight: 600; }
+  main {
+    display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start;
+  }
+  .view { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
+  .view .cap { color: var(--muted); }
+  .wrap { position: relative; width: 512px; max-width: calc(100vw - 32px); aspect-ratio: 1; }
+  canvas { display: block; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 4px; }
+  #map { image-rendering: pixelated; cursor: crosshair; }
+  #sel {
+    position: absolute; border: 2px solid #fff; pointer-events: none;
+    box-shadow: 0 0 0 1px #000; display: none;
+  }
+  #gl { cursor: grab; background: #9cc3e6; }
+  #gl:active { cursor: grabbing; }
+  #hover { min-height: 1.4em; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); }
+  .legend span::before {
+    content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 4px;
+    vertical-align: -1px; background: var(--c); border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>BETA TERRAIN</h1>
+  <label>seed <input id="seed" value="12345"></label>
+  <label>x <input id="x0" type="number" value="0" step="64"></label>
+  <label>z <input id="z0" type="number" value="0" step="64"></label>
+  <button id="go">regenerate</button>
+  <div id="stats">loading…</div>
+</header>
+<main>
+  <div class="view">
+    <div class="cap">512×512 top-down map. Click to choose the 64×64 area for the 3D view.</div>
+    <div class="wrap"><canvas id="map" width="512" height="512"></canvas><div id="sel"></div></div>
+    <div id="hover"></div>
+    <div class="legend">
+      <span style="--c:#5f9f35">grass</span><span style="--c:#dbcf8e">sand</span>
+      <span style="--c:#887e7e">gravel</span><span style="--c:#808080">stone</span>
+      <span style="--c:#86603f">dirt</span><span style="--c:#2a5ac8">water</span>
+    </div>
+  </div>
+  <div class="view">
+    <div class="cap" id="cap3d">3D view: drag to orbit, wheel to zoom.</div>
+    <div class="wrap"><canvas id="gl" width="1024" height="1024"></canvas></div>
+  </div>
+</main>
+<script type="module">
+import init, { heightmap, generate_region } from './pkg/terrain_web.js';
+
+const $ = (id) => document.getElementById(id);
+const N = 512, AREA = 64, H = 128;
+const WASM_URL = './pkg/terrain_web_bg.wasm';
+
+// Block ids: 0 Air, 1 Stone, 2 Dirt, 3 Grass, 4 Sand, 5 Gravel, 6 Water
+const COLORS = [
+  [0, 0, 0], [128, 128, 128], [134, 96, 63], [95, 159, 53],
+  [219, 207, 142], [136, 126, 126], [42, 90, 200],
+];
+const NAMES = ['air', 'stone', 'dirt', 'grass', 'sand', 'gravel', 'water'];
+
+let state = { seed: 0n, x0: 0, z0: 0, hm: null, sel: null, wasmText: '' };
+
+function parseSeed(s) {
+  s = s.trim();
+  if (/^-?\d+$/.test(s)) return BigInt.asUintN(64, BigInt(s));
+  // FNV-1a 64 for text seeds
+  let h = 0xcbf29ce484222325n;
+  for (const b of new TextEncoder().encode(s)) {
+    h ^= BigInt(b);
+    h = BigInt.asUintN(64, h * 0x100000001b3n);
+  }
+  return h;
+}
+
+async function wasmSize() {
+  try {
+    const buf = await (await fetch(WASM_URL)).arrayBuffer();
+    let txt = `wasm <b>${(buf.byteLength / 1024).toFixed(1)} KB</b>`;
+    if (typeof CompressionStream !== 'undefined') {
+      const gz = await new Response(new Blob([buf]).stream()
+        .pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+      txt += ` (gzip <b>${(gz.byteLength / 1024).toFixed(1)} KB</b>)`;
+    }
+    return txt;
+  } catch { return ''; }
+}
+
+function setStats(genMs) {
+  $('stats').innerHTML = `map gen <b>${genMs.toFixed(0)} ms</b> · ${state.wasmText}`;
+}
+
+// ---------------------------------------------------------------- map
+function drawMap() {
+  const hm = state.hm;
+  const ctx = $('map').getContext('2d');
+  const img = ctx.createImageData(N, N);
+  const d = img.data;
+  for (let z = 0; z < N; z++) {
+    for (let x = 0; x < N; x++) {
+      const i = (z * N + x) * 4;
+      const tb = hm[i], ty = hm[i + 1], fy = hm[i + 2], fb = hm[i + 3];
+      let r, g, b;
+      if (tb === 6) {
+        // water: tint by depth to the floor
+        const depth = Math.min(ty - fy, 24) / 24;
+        const fc = COLORS[fb] || COLORS[1];
+        const k = 0.35 * (1 - depth);
+        r = (20 + 30 * (1 - depth)) * (1 - k) + fc[0] * k;
+        g = (55 + 60 * (1 - depth)) * (1 - k) + fc[1] * k;
+        b = (140 + 70 * (1 - depth)) * (1 - k) + fc[2] * k;
+      } else {
+        const west = x > 0 ? hm[i - 4 + 1] : ty;
+        const north = z > 0 ? hm[i - N * 4 + 1] : ty;
+        let s = 1 + (ty - west) * 0.09 + (ty - north) * 0.09;
+        s = Math.max(0.55, Math.min(1.45, s)) * (0.72 + (ty - 40) / 150);
+        const c = COLORS[tb];
+        r = c[0] * s; g = c[1] * s; b = c[2] * s;
+      }
+      d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function placeSel() {
+  const el = $('sel');
+  if (!state.sel) { el.style.display = 'none'; return; }
+  const pct = (v) => (v / N * 100) + '%';
+  el.style.display = 'block';
+  el.style.left = pct(state.sel.x); el.style.top = pct(state.sel.z);
+  el.style.width = pct(AREA); el.style.height = pct(AREA);
+}
+
+function mapCoord(ev) {
+  const r = $('map').getBoundingClientRect();
+  return [
+    Math.max(0, Math.min(N - 1, Math.floor((ev.clientX - r.left) / r.width * N))),
+    Math.max(0, Math.min(N - 1, Math.floor((ev.clientY - r.top) / r.height * N))),
+  ];
+}
+
+$('map').addEventListener('mousemove', (ev) => {
+  if (!state.hm) return;
+  const [x, z] = mapCoord(ev);
+  const i = (z * N + x) * 4;
+  const hm = state.hm;
+  let t = `x ${state.x0 + x}  z ${state.z0 + z}  ${NAMES[hm[i]]} y=${hm[i + 1]}`;
+  if (hm[i] === 6) t += `  (floor ${NAMES[hm[i + 3]]} y=${hm[i + 2]}, depth ${hm[i + 1] - hm[i + 2]})`;
+  $('hover').textContent = t;
+});
+
+$('map').addEventListener('click', (ev) => {
+  const [x, z] = mapCoord(ev);
+  state.sel = {
+    x: Math.max(0, Math.min(N - AREA, x - AREA / 2)),
+    z: Math.max(0, Math.min(N - AREA, z - AREA / 2)),
+  };
+  placeSel();
+  build3d();
+});
+
+function regenerate() {
+  state.seed = parseSeed($('seed').value);
+  state.x0 = parseInt($('x0').value, 10) || 0;
+  state.z0 = parseInt($('z0').value, 10) || 0;
+  $('stats').textContent = 'generating…';
+  requestAnimationFrame(() => setTimeout(() => {
+    const t0 = performance.now();
+    state.hm = heightmap(state.seed, state.x0, state.z0, N, N);
+    const ms = performance.now() - t0;
+    drawMap();
+    setStats(ms);
+    if (!state.sel) state.sel = { x: (N - AREA) / 2, z: (N - AREA) / 2 };
+    placeSel();
+    build3d();
+  }, 0));
+}
+
+$('go').addEventListener('click', regenerate);
+for (const id of ['seed', 'x0', 'z0']) {
+  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') regenerate(); });
+}
+
+// ---------------------------------------------------------------- 3D
+const gl = $('gl').getContext('webgl2', { antialias: true });
+let prog, opaque = null, water = null;
+const cam = { yaw: 0.8, pitch: 0.55, dist: 95, ty: 68 };
+
+function shader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+function initGL() {
+  prog = gl.createProgram();
+  gl.attachShader(prog, shader(gl.VERTEX_SHADER, `#version 300 es
+    layout(location=0) in vec3 pos;
+    layout(location=1) in vec2 uv;
+    layout(location=2) in float layer;
+    layout(location=3) in float shade;
+    uniform mat4 mvp;
+    uniform float waterFrame;
+    out vec3 vuv;
+    out float vshade;
+    out float vdist;
+    void main() {
+      gl_Position = mvp * vec4(pos, 1.0);
+      // animated tiles (water, flowing water) are runs of 4 layers starting
+      // at ANIM_FIRST; offset by the current frame
+      bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
+      vuv = vec3(uv, anim ? layer + waterFrame : layer);
+      vshade = shade;
+      vdist = gl_Position.w;
+    }`));
+  gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, `#version 300 es
+    precision mediump float;
+    precision mediump sampler2DArray;
+    in vec3 vuv; in float vshade; in float vdist;
+    uniform sampler2DArray tex;
+    uniform float alpha; uniform float fogFar;
+    out vec4 o;
+    void main() {
+      vec4 t = texture(tex, vuv);
+      if (t.a < 0.5) discard; // transparent pixels ('.') in sky sprites
+      vec3 c = t.rgb * vshade;
+      float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, 0.6);
+      o = vec4(mix(c, vec3(0.61, 0.76, 0.9), f), alpha);
+    }`));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+}
+
+// ---------------------------------------------------------------- textures
+// Faces sample a TEXTURE_2D_ARRAY built from the full Mince Raft tileset
+// (art/batches_*.json, exported to viewer/textures.json by build.sh).
+// Layers are 16x16: 8x8 tiles are scaled up 2x, the 16x16 sky tiles fit as-is.
+const TILES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel',
+  'water_0', 'water_1', 'water_2', 'water_3',
+  'water_flow_0', 'water_flow_1', 'water_flow_2', 'water_flow_3',
+  'sun_sky'];
+const T = Object.fromEntries(TILES.map((n, i) => [n, i]));
+const ANIM_FIRST = T.water_0, ANIM_END = T.water_flow_3 + 1;
+// Layer for block id b on a face with vertical normal dy (1 top, -1 bottom, 0 side).
+function tileFor(b, dy) {
+  switch (b) {
+    case 1: return T.stone;
+    case 2: return T.dirt;
+    case 3: return dy > 0 ? T.grass_top : dy < 0 ? T.dirt : T.grass_side;
+    case 4: return T.sand;
+    case 5: return T.gravel;
+    default: return dy === 0 ? T.water_flow_0 : T.water_0;
+  }
+}
+// Flat colours per tile, used if textures.json can't be loaded.
+const FLAT = [COLORS[1], COLORS[2], COLORS[3], [118, 128, 60], COLORS[4], COLORS[5],
+  ...Array(8).fill(COLORS[6]), [232, 195, 58]];
+
+async function loadTextures() {
+  const S = 16;
+  // Each layer is a function (x, y) -> [r, g, b, a] over the 16x16 layer.
+  const layers = [];
+  let textured = false;
+  try {
+    const set = await (await fetch('./textures.json')).json();
+    const batches = Object.values(set.batches);
+    const all = Object.assign({}, ...batches.map((b) => b.textures || {}));
+    const models = Object.assign({}, ...batches.map((b) => b.models || {}));
+    const pal = Object.fromEntries(Object.entries(set.palette).map(([k, hex]) =>
+      [k, [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))]));
+    const px = (ch) => ch === '.' ? [0, 0, 0, 0] : [...pal[ch], 255];
+    for (const name of TILES) {
+      const rows = all[name];
+      if (!rows) throw new Error(`missing tile ${name}`);
+      const k = S / rows.length; // 2 for 8x8 tiles, 1 for 16x16
+      if (k !== Math.floor(k) || rows[0].length * k !== S) throw new Error(`tile ${name} is not square`);
+      layers.push((x, y) => px(rows[Math.floor(y / k)][Math.floor(x / k)]));
+    }
+    // Fish model faces: one layer each, drawn at native size in the top-left
+    // corner. The rest of the layer repeats the edge pixels so mipmaps
+    // don't bleed transparent texels into small faces.
+    for (const sp of Object.keys(FISH_SPECIES)) {
+      const m = models[sp];
+      if (!m) { console.warn(`no model for ${sp}`); continue; }
+      const faces = {};
+      for (const [fname, rows] of Object.entries(m)) {
+        const w = rows[0].length, h = rows.length;
+        if (w > S || h > S) continue;
+        faces[fname] = { layer: layers.length, w, h };
+        layers.push((x, y) => px(rows[Math.min(y, h - 1)][Math.min(x, w - 1)]));
+      }
+      fishModels[sp] = {
+        faces,
+        W: m.body_front[0].length, H: m.body_front.length, D: m.body_left[0].length,
+      };
+    }
+    textured = true;
+  } catch (e) {
+    console.warn('textures unavailable, using flat colours:', e);
+    layers.length = 0;
+    fishModels = {};
+    for (const c of FLAT) layers.push(() => [...c, 255]);
+  }
+  const data = new Uint8Array(S * S * 4 * layers.length);
+  layers.forEach((f, L) => {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) data.set(f(x, y), ((L * S + y) * S + x) * 4);
+  });
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, S, S, layers.length, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  return textured;
+}
+
+// Faces: [normal, 4 corner offsets, shade]
+const FACES = [
+  { d: [0, 1, 0], c: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], s: 1.0 },   // top
+  { d: [0, -1, 0], c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s: 0.5 },  // bottom
+  { d: [1, 0, 0], c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], s: 0.8 },   // +x
+  { d: [-1, 0, 0], c: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s: 0.65 }, // -x
+  { d: [0, 0, 1], c: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s: 0.9 },   // +z
+  { d: [0, 0, -1], c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], s: 0.6 },  // -z
+];
+
+// Texture coords for a face corner: top/bottom map x,z; sides map the
+// horizontal axis to u and put the tile's top row at the top of the block.
+function faceUV(f, [a, b, c]) {
+  if (f.d[1] !== 0) return [a, c];
+  return [f.d[0] !== 0 ? c : a, 1 - b];
+}
+
+function mesh(blocks) {
+  const verts = [[], []]; // per vertex: x y z u v layer shade
+  // Clip solid ground well below the lowest surface so the view frames the
+  // terrain; also find the mean surface height for the camera target.
+  let minY = H, sumY = 0;
+  for (let c = 0; c < AREA * AREA; c++) {
+    let y = H - 1;
+    while (y > 0 && (blocks[c * H + y] === 0 || blocks[c * H + y] === 6)) y--;
+    minY = Math.min(minY, y); sumY += y;
+  }
+  const y0 = Math.max(0, minY - 8);
+  cam.ty = sumY / (AREA * AREA);
+  const at = (x, y, z) => (x < 0 || z < 0 || x >= AREA || z >= AREA || y < y0 || y >= H)
+    ? 0 : blocks[(z * AREA + x) * H + y];
+  for (let z = 0; z < AREA; z++) for (let x = 0; x < AREA; x++) {
+    const base = (z * AREA + x) * H;
+    for (let y = y0; y < H; y++) {
+      const b = blocks[base + y];
+      if (b === 0) continue;
+      const isW = b === 6;
+      for (const f of FACES) {
+        if (y === y0 && f.d[1] < 0) continue;
+        const n = at(x + f.d[0], y + f.d[1], z + f.d[2]);
+        // solid faces: visible next to air or water; water: only next to air
+        if (isW ? n !== 0 : !(n === 0 || n === 6)) continue;
+        const layer = tileFor(b, f.d[1]);
+        const k = f.s * (0.75 + y / 256);
+        const L = isW ? 1 : 0;
+        for (const i of [0, 1, 2, 0, 2, 3]) {
+          const [a, bb, cc] = f.c[i];
+          const [u, v] = faceUV(f, f.c[i]);
+          verts[L].push(x + a - AREA / 2, y + bb - 64, z + cc - AREA / 2, u, v, layer, k);
+        }
+      }
+    }
+  }
+  return [0, 1].map((L) => upload(new Float32Array(verts[L])));
+}
+
+const STRIDE = 7;
+function upload(v) {
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const vb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+  const attr = (loc, size, off) => {
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, STRIDE * 4, off * 4);
+  };
+  attr(0, 3, 0); attr(1, 2, 3); attr(2, 1, 5); attr(3, 1, 6);
+  gl.bindVertexArray(null);
+  return { vao, n: v.length / STRIDE, bufs: [vb] };
+}
+
+function free(m) {
+  if (!m) return;
+  gl.deleteVertexArray(m.vao);
+  m.bufs.forEach((b) => gl.deleteBuffer(b));
+}
+
+function build3d() {
+  if (!state.sel) return;
+  const wx = state.x0 + state.sel.x, wz = state.z0 + state.sel.z;
+  const t0 = performance.now();
+  const blocks = generate_region(state.seed, wx, wz, AREA, AREA);
+  const t1 = performance.now();
+  free(opaque); free(water);
+  [opaque, water] = mesh(blocks);
+  state.blocks = blocks;
+  spawnFish();
+  const t2 = performance.now();
+  $('cap3d').textContent = `3D view of x ${wx}..${wx + AREA - 1}, z ${wz}..${wz + AREA - 1} · ` +
+    `gen ${(t1 - t0).toFixed(0)} ms, mesh ${(t2 - t1).toFixed(0)} ms, ` +
+    `${((opaque.n + water.n) / 6) | 0} faces, ${fish.length} fish · drag to orbit, wheel to zoom`;
+  draw();
+}
+
+// column-major 4x4 matrices
+function persp(fov, asp, near, far) {
+  const f = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
+  return [f / asp, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+}
+function lookAt(e, t, u) {
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const norm = (a) => { const l = Math.hypot(...a); return a.map((v) => v / l); };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const zA = norm(sub(e, t)), xA = norm(cross(u, zA)), yA = cross(zA, xA);
+  return [xA[0], yA[0], zA[0], 0, xA[1], yA[1], zA[1], 0, xA[2], yA[2], zA[2], 0,
+    -dot(xA, e), -dot(yA, e), -dot(zA, e), 1];
+}
+function mul(a, b) {
+  const o = new Array(16).fill(0);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
+    for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
+  return o;
+}
+
+function draw() {
+  if (!opaque) return;
+  const cv = $('gl');
+  gl.viewport(0, 0, cv.width, cv.height);
+  gl.clearColor(0.61, 0.76, 0.9, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.useProgram(prog);
+  const cp = Math.cos(cam.pitch);
+  const eye = [cam.dist * cp * Math.cos(cam.yaw), cam.dist * Math.sin(cam.pitch), cam.dist * cp * Math.sin(cam.yaw)];
+  const target = [0, cam.ty - 64, 0];
+  const view = lookAt([eye[0], eye[1] + target[1], eye[2]], target, [0, 1, 0]);
+  const mvp = mul(persp(0.9, cv.width / cv.height, 0.5, 2000), view);
+  gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'mvp'), false, new Float32Array(mvp));
+  gl.uniform1f(gl.getUniformLocation(prog, 'alpha'), 1);
+  gl.uniform1f(gl.getUniformLocation(prog, 'waterFrame'), waterFrame);
+  gl.disable(gl.BLEND);
+  // sun first, unfogged and behind everything
+  gl.uniform1f(gl.getUniformLocation(prog, 'fogFar'), 1e9);
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+  drawSun(view, target);
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  gl.uniform1f(gl.getUniformLocation(prog, 'fogFar'), cam.dist + 90);
+  gl.bindVertexArray(opaque.vao); gl.drawArrays(gl.TRIANGLES, 0, opaque.n);
+  // fish under the water surface; fins are flat, so draw both sides
+  if (fish.length) {
+    gl.disable(gl.CULL_FACE);
+    drawDynamic('fish', fishVerts());
+    gl.enable(gl.CULL_FACE);
+  }
+  // translucent water last, without depth writes
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.uniform1f(gl.getUniformLocation(prog, 'alpha'), 0.45);
+  gl.bindVertexArray(water.vao); gl.drawArrays(gl.TRIANGLES, 0, water.n);
+  gl.depthMask(true);
+  gl.bindVertexArray(null);
+}
+
+// The sun (16x16 sun_sky tile) as a camera-facing sprite in a fixed direction:
+// low in the north-west sky (~9 degrees up), matching the textures' top-left
+// lighting. The orbit camera looks down, so it shows when you orbit low.
+const SUN_DIR = (() => { const v = [-0.7, 0.16, -0.7], l = Math.hypot(...v); return v.map((c) => c / l); })();
+function drawSun(view, target) {
+  const right = [view[0], view[4], view[8]], up = [view[1], view[5], view[9]];
+  const R = 46, D = 700;
+  const c = SUN_DIR.map((d, i) => target[i] + d * D);
+  const corner = (sx, sy) => c.map((v, i) => v + (right[i] * sx + up[i] * sy) * R);
+  const q = [[corner(-1, -1), 0, 1], [corner(1, -1), 1, 1], [corner(1, 1), 1, 0], [corner(-1, 1), 0, 0]];
+  const v = [];
+  for (const i of [0, 1, 2, 0, 2, 3]) v.push(...q[i][0], q[i][1], q[i][2], T.sun_sky, 1);
+  gl.disable(gl.CULL_FACE);
+  drawDynamic('sun', new Float32Array(v));
+  gl.enable(gl.CULL_FACE);
+}
+
+// Geometry rebuilt every frame (sun, fish) goes through one reusable buffer per key.
+const dynMeshes = {};
+function drawDynamic(key, v) {
+  const m = dynMeshes[key] ||= upload(new Float32Array(0));
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.bufs[0]);
+  gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
+  gl.bindVertexArray(m.vao); gl.drawArrays(gl.TRIANGLES, 0, v.length / STRIDE);
+}
+
+// ---------------------------------------------------------------- fish
+// Salmon, tuna and mackerel from the Batch 11 box models, swimming in small
+// schools like Minecraft 1.13 fish. Each species is a body box plus flat tail
+// and dorsal fins. Only the left side is drawn in the tileset; the right side
+// reuses it mirrored.
+const FISH_SPECIES = {
+  salmon: { speed: 2.2 },
+  mackerel: { speed: 2.6 },
+  tuna: { speed: 1.8 },
+};
+const FISH_PX = 1 / 8;       // block units per model pixel (a salmon is 1 block long)
+const SURFACE = 63.3;        // keep fish below the water surface (top of y=63)
+let fishModels = {};         // species -> { W, H, D, faces: {name: {layer, w, h}} }
+let fish = [], schools = [];
+
+function isWater(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  if (ix < 0 || iz < 0 || ix >= AREA || iz >= AREA || iy < 0 || iy >= H) return false;
+  return state.blocks[(iz * AREA + ix) * H + iy] === 6;
+}
+
+function spawnFish() {
+  fish = []; schools = [];
+  const kinds = Object.keys(fishModels);
+  if (!kinds.length) return;
+  // Candidate spawn cells: water with water above, at least a block under the surface.
+  const cells = [];
+  let surface = 0;
+  for (let z = 0; z < AREA; z++) for (let x = 0; x < AREA; x++) {
+    if (isWater(x, 63, z)) surface++;
+    for (let y = 40; y <= 61; y++) if (isWater(x, y, z) && isWater(x, y + 1, z)) cells.push([x, y, z]);
+  }
+  if (!cells.length) return;
+  const target = Math.min(40, Math.round(surface / 70));
+  while (fish.length < target) {
+    const species = kinds[Math.floor(Math.random() * kinds.length)];
+    const school = { species, yaw: Math.random() * 2 * Math.PI, pitch: 0, timer: 1 + Math.random() * 3 };
+    schools.push(school);
+    const [cx, cy, cz] = cells[Math.floor(Math.random() * cells.length)];
+    const size = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < size && fish.length < target; i++) {
+      for (let tries = 0; tries < 8; tries++) {
+        const p = [cx + 0.5 + (Math.random() - 0.5) * 3, cy + 0.5 + (Math.random() - 0.5), cz + 0.5 + (Math.random() - 0.5) * 3];
+        if (!isWater(...p) || p[1] > SURFACE) continue;
+        fish.push({
+          school, pos: p, yaw: school.yaw, pitch: 0,
+          jitter: (Math.random() - 0.5) * 0.4,
+          phase: Math.random() * 10,
+          speed: FISH_SPECIES[species].speed * (0.85 + Math.random() * 0.3),
+        });
+        break;
+      }
+    }
+  }
+}
+
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const approach = (a, b, max) => a + Math.max(-max, Math.min(max, wrap(b - a)));
+
+function updateFish(dt) {
+  if (!fish.length) return;
+  // Each school picks a new heading every few seconds.
+  const centre = new Map();
+  for (const s of schools) {
+    s.timer -= dt;
+    if (s.timer < 0) {
+      s.yaw += (Math.random() - 0.5) * 2.4;
+      s.pitch = (Math.random() - 0.5) * 0.5;
+      s.timer = 2 + Math.random() * 4;
+    }
+    centre.set(s, [0, 0, 0, 0]);
+  }
+  for (const f of fish) { const c = centre.get(f.school); c[0] += f.pos[0]; c[1] += f.pos[1]; c[2] += f.pos[2]; c[3]++; }
+  for (const f of fish) {
+    const s = f.school, m = fishModels[s.species];
+    const c = centre.get(s);
+    let want = s.yaw + f.jitter;
+    // drift back toward the school when straying
+    const dx = c[0] / c[3] - f.pos[0], dz = c[2] / c[3] - f.pos[2];
+    if (Math.hypot(dx, dz) > 2.5) want = approach(want, Math.atan2(dz, dx), 1.2);
+    f.yaw = approach(f.yaw, want, 2.5 * dt);
+    f.pitch += (s.pitch - f.pitch) * Math.min(1, dt * 2);
+    const cp = Math.cos(f.pitch);
+    const dir = [cp * Math.cos(f.yaw), Math.sin(f.pitch), cp * Math.sin(f.yaw)];
+    const reach = (m.D / 2) * FISH_PX + 0.4;
+    const ahead = f.pos.map((v, i) => v + dir[i] * reach);
+    if (!isWater(...ahead) || ahead[1] > SURFACE) {
+      // Blocked by land or the surface: the school turns around.
+      if (ahead[1] > SURFACE) s.pitch = -0.3;
+      else if (!isWater(ahead[0], ahead[1] - 1, ahead[2])) s.pitch = 0.2;
+      if (s.timer > 0.3) { s.yaw = f.yaw + Math.PI + (Math.random() - 0.5); s.timer = 2 + Math.random() * 2; }
+      f.yaw += 3 * dt;
+      f.pitch *= 0.5;
+    } else {
+      for (let i = 0; i < 3; i++) f.pos[i] += dir[i] * f.speed * dt;
+    }
+    // keep a little space between schoolmates
+    for (const o of fish) {
+      if (o === f || o.school !== s) continue;
+      const sx = f.pos[0] - o.pos[0], sy = f.pos[1] - o.pos[1], sz = f.pos[2] - o.pos[2];
+      const dd = Math.hypot(sx, sy, sz);
+      if (dd > 0.01 && dd < 1.1) {
+        const k = (1.1 - dd) * dt * 2 / dd;
+        const next = [f.pos[0] + sx * k, f.pos[1] + sy * k, f.pos[2] + sz * k];
+        if (isWater(...next) && next[1] <= SURFACE) f.pos = next;
+      }
+    }
+    f.phase += dt * (6 + f.speed * 2);
+  }
+}
+
+// Face quads in model pixels, corners in texture order (top-left, top-right,
+// bottom-right, bottom-left) as seen from outside. +X is the nose, +Y up and
+// -Z the fish's left side, per art/PROMPT.md's model face conventions.
+function fishFaces(m) {
+  const d = m.D / 2, h = m.H / 2, w = m.W / 2;
+  const t = m.faces.tail, f = m.faces.dorsal;
+  const q = [
+    ['body_left', [[d, h, -w], [-d, h, -w], [-d, -h, -w], [d, -h, -w]], 0.8],
+    ['body_left', [[d, h, w], [-d, h, w], [-d, -h, w], [d, -h, w]], 0.8], // right = mirrored left
+    ['body_front', [[d, h, w], [d, h, -w], [d, -h, -w], [d, -h, w]], 0.7],
+    ['body_back', [[-d, h, -w], [-d, h, w], [-d, -h, w], [-d, -h, -w]], 0.65],
+    ['body_top', [[-d, h, w], [-d, h, -w], [d, h, -w], [d, h, w]], 1.0],
+    ['body_bottom', [[d, -h, w], [d, -h, -w], [-d, -h, -w], [-d, -h, w]], 0.5],
+  ];
+  if (t) q.push(['tail', [[-d, t.h / 2, 0], [-d - t.w, t.h / 2, 0], [-d - t.w, -t.h / 2, 0], [-d, -t.h / 2, 0]], 0.85, true]);
+  if (f) q.push(['dorsal', [[f.w / 2, h + f.h, 0], [-f.w / 2, h + f.h, 0], [-f.w / 2, h, 0], [f.w / 2, h, 0]], 0.9]);
+  return q.filter(([name]) => m.faces[name]);
+}
+
+function fishVerts() {
+  const out = [];
+  for (const f of fish) {
+    const m = fishModels[f.school.species];
+    const faces = m.faceQuads ||= fishFaces(m);
+    const tailA = Math.sin(f.phase + 0.8) * 0.6;       // tail sweep
+    const yaw = f.yaw + Math.sin(f.phase) * 0.12;     // body wiggle
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(f.pitch), sp = Math.sin(f.pitch);
+    const ox = f.pos[0] - AREA / 2, oy = f.pos[1] - 64, oz = f.pos[2] - AREA / 2;
+    const xf = ([x, y, z], tail) => {
+      if (tail) { // swing around the tail's hinge at the back of the body
+        const r = x + m.D / 2;
+        x = -m.D / 2 + r * Math.cos(tailA); z = r * Math.sin(tailA);
+      }
+      x *= FISH_PX; y *= FISH_PX; z *= FISH_PX;
+      const x1 = x * cp - y * sp, y1 = x * sp + y * cp;  // pitch: nose up
+      return [ox + x1 * cy - z * sy, oy + y1, oz + x1 * sy + z * cy]; // yaw
+    };
+    for (const [name, corners, shade, tail] of faces) {
+      const { layer, w, h } = m.faces[name];
+      const uv = [[0, 0], [w / 16, 0], [w / 16, h / 16], [0, h / 16]];
+      const p = corners.map((c) => xf(c, tail));
+      for (const i of [0, 1, 2, 0, 2, 3]) out.push(...p[i], uv[i][0], uv[i][1], layer, shade);
+    }
+  }
+  return new Float32Array(out);
+}
+
+// Animate water frames and fish, unless the viewer prefers reduced motion
+// (then the scene is still and redraws only on camera moves).
+let waterFrame = 0, lastT = 0;
+function tick(t) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.1, (t - lastT) / 1000);
+  lastT = t;
+  if (document.hidden || !opaque) return;
+  waterFrame = Math.floor(t / 300) % 4;
+  updateFish(dt);
+  draw();
+}
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(tick);
+
+let drag = null;
+$('gl').addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; $('gl').setPointerCapture(e.pointerId); });
+$('gl').addEventListener('pointerup', () => { drag = null; });
+$('gl').addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  cam.yaw += (e.clientX - drag[0]) * 0.01;
+  cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + (e.clientY - drag[1]) * 0.01));
+  drag = [e.clientX, e.clientY];
+  draw();
+});
+$('gl').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  cam.dist = Math.max(10, Math.min(400, cam.dist * Math.exp(e.deltaY * 0.001)));
+  draw();
+}, { passive: false });
+
+// ---------------------------------------------------------------- start
+const qs = new URLSearchParams(location.search);
+for (const k of ['seed', 'x0', 'z0']) if (qs.has(k)) $(k).value = qs.get(k);
+if (qs.has('sx') && qs.has('sz')) state.sel = { x: +qs.get('sx'), z: +qs.get('sz') };
+if (qs.has('dist')) cam.dist = +qs.get('dist');
+if (qs.has('yaw')) cam.yaw = +qs.get('yaw');
+if (qs.has('pitch')) cam.pitch = +qs.get('pitch');
+await init();
+initGL();
+if (!await loadTextures()) $('cap3d').textContent = 'textures.json not found; using flat colours.';
+state.wasmText = await wasmSize();
+regenerate();
+</script>
+</body>
+</html>

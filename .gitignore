@@ -1,0 +1,7 @@
+/work/
+/target/
+/crates/web/pkg/
+/viewer/pkg/
+*.jar
+/viewer/textures.json
+/art/build/

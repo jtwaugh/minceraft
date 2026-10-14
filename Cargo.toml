@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/terrain", "crates/web"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# Native benches/examples: use full speed optimisation for the terrain crate.
+[profile.bench-native]
+inherits = "release"
+opt-level = 3
+
+# The hot noise loops benefit a lot from speed optimisation; the size cost
+# is a few KB of wasm.
+[profile.release.package.terrain]
+opt-level = 3
