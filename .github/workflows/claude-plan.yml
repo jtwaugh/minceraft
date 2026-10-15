@@ -37,6 +37,14 @@ on:
         description: "Optional guidance: priorities, what to leave out, size of tickets"
         required: false
         type: string
+      before:
+        description: "(Set by the push trigger) SPEC.md change to plan from: old commit"
+        required: false
+        type: string
+      after:
+        description: "(Set by the push trigger) SPEC.md change to plan from: new commit"
+        required: false
+        type: string
 
 concurrency:
   group: claude-plan
@@ -44,11 +52,16 @@ concurrency:
 
 jobs:
   # Decide what to plan: a list of {file, section}, possibly empty.
+  # The Claude action doesn't run on push events, so on a push this job
+  # only decides what to plan and starts one workflow_dispatch run per
+  # target (runs started with GITHUB_TOKEN show github-actions[bot] as the
+  # actor). Dispatch runs then plan.
   pick:
-    if: github.actor == 'jtwaugh'
+    if: contains(fromJSON('["jtwaugh", "github-actions[bot]"]'), github.actor)
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: write # starts the dispatch runs
       issues: write # closes a plan whose questions are all answered
     outputs:
       targets: ${{ steps.pick.outputs.targets }}
@@ -62,13 +75,26 @@ jobs:
           EVENT: ${{ github.event_name }}
           FILE: ${{ inputs.file }}
           SECTION: ${{ inputs.section }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.event.after }}
+          BEFORE: ${{ github.event.before || inputs.before }}
+          AFTER: ${{ github.event.after || inputs.after }}
+          NOTES: ${{ inputs.notes }}
+          REPO: ${{ github.repository }}
         run: |
           targets=$(python3 -B .github/scripts/plan_targets.py)
-          echo "targets=$targets" >> "$GITHUB_OUTPUT"
           echo "### Planning" >> "$GITHUB_STEP_SUMMARY"
           echo "$targets" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EVENT" = push ]; then
+            # Hand each target to a dispatch run, which can run Claude.
+            echo "$targets" | jq -c '.[]' | while read -r t; do
+              file=$(echo "$t" | jq -r .file)
+              section=$(echo "$t" | jq -r .section)
+              gh workflow run claude-plan.yml --repo "$REPO" --ref master \
+                -f file="$file" -f section="$section" -f before="$BEFORE" -f after="$AFTER"
+              echo "Started a planning run for $file $section" >> "$GITHUB_STEP_SUMMARY"
+            done
+            targets='[]'
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   plan:
     needs: pick
@@ -94,11 +120,13 @@ jobs:
           FILE: ${{ matrix.target.file }}
           SECTION: ${{ matrix.target.section }}
           NOTES: ${{ inputs.notes }}
-          # Set on push runs: the SPEC.md change to plan from.
-          SPEC_BEFORE: ${{ github.event.before }}
-          SPEC_AFTER: ${{ github.event.after }}
+          # Set when a SPEC.md merge started this run: the change to plan from.
+          SPEC_BEFORE: ${{ inputs.before }}
+          SPEC_AFTER: ${{ inputs.after }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Runs started by a merge come from this workflow's own token.
+          allowed_bots: github-actions
           prompt: |
             REPO: ${{ github.repository }}
 
