@@ -434,8 +434,8 @@ pub(crate) fn generate_decorated(
 /// cells, shrinking by one per pass), then the snow pass over `area`.
 fn run(world: &mut World, gen: &Generator, area: Area, margin: i32) -> DecorationStats {
     let mut stats = DecorationStats::default();
-    let (cx0, cz0) = (area.x0.div_euclid(16), area.z0.div_euclid(16));
-    let (cx1, cz1) = ((area.x1 - 1).div_euclid(16), (area.z1 - 1).div_euclid(16));
+    let (cx0, cz0) = (cell_index(area.x0), cell_index(area.z0));
+    let (cx1, cz1) = (cell_index(area.x1 - 1), cell_index(area.z1 - 1));
     let maxima = Maxima::new();
     for pass in 0..4 {
         let (px, pz) = (pass & 1, pass >> 1);
@@ -509,6 +509,13 @@ fn libm_ceil(x: f64) -> f64 {
     } else {
         f
     }
+}
+
+/// Decoration cell containing world column `x` (cells are 16 wide, aligned
+/// to multiples of 16, floor division so negatives round down).
+#[inline]
+fn cell_index(x: i32) -> i32 {
+    x.div_euclid(16)
 }
 
 fn cell_rng(seed: u64, cx: i32, cz: i32) -> Rng {
@@ -633,4 +640,41 @@ pub(crate) fn snow_column(world: &mut World, x: i32, z: i32) -> bool {
         return false;
     }
     world.set(x, top, z, SNOW)
+}
+
+#[cfg(test)]
+mod tests_cells {
+    use super::*;
+
+    fn stream(seed: u64, cx: i32, cz: i32) -> [u64; 8] {
+        let mut r = cell_rng(seed, cx, cz);
+        core::array::from_fn(|_| r.next_u64())
+    }
+
+    #[test]
+    fn cell_rng_is_pure() {
+        assert_eq!(stream(12345, 3, -7), stream(12345, 3, -7));
+        assert_eq!(stream(0, 0, 0), stream(0, 0, 0));
+    }
+
+    #[test]
+    fn cell_rng_differs_by_cell_and_seed() {
+        let base = stream(12345, 1, 2);
+        assert_ne!(base, stream(12345, 2, 1));
+        assert_ne!(stream(12345, -1, 0), stream(12345, 0, -1));
+        assert_ne!(stream(12345, 1, 0), stream(12345, -1, 0));
+        assert_ne!(stream(12345, 0, 1), stream(12345, 0, -1));
+        assert_ne!(base, stream(12346, 1, 2));
+        assert_ne!(base, stream(12345, 1, 3));
+    }
+
+    #[test]
+    fn cell_index_is_floor_division() {
+        assert_eq!(cell_index(-1), -1);
+        assert_eq!(cell_index(-16), -1);
+        assert_eq!(cell_index(-17), -2);
+        assert_eq!(cell_index(0), 0);
+        assert_eq!(cell_index(15), 0);
+        assert_eq!(cell_index(16), 1);
+    }
 }
