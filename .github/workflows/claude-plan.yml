@@ -2,12 +2,17 @@
 # in docs/design/, into draft issues. Runs only on GitHub, so it sees the
 # repo (specs, code, issues) and never work/ or the jar.
 #
-# Run it from the Actions tab ("Claude planner" -> Run workflow), or:
-#   gh workflow run claude-plan.yml -f section="15" -f notes="..."
-#   gh workflow run claude-plan.yml -f file=docs/design/world-layout.md -f section="Phase A"
+# It runs by itself when a change lands on master:
+# - SPEC.md changed: plans the sections that changed.
+# - a design doc changed (accepted, a decision recorded, a phase marked
+#   done): plans that doc's next phase, if no plan exists for it yet. Phases
+#   go one at a time, in header order; .github/scripts/plan_targets.py
+#   decides.
 #
-# It also runs by itself when a change to SPEC.md lands on master (usually a
-# spec-editor PR), planning only the sections that changed.
+# Or run it by hand from the Actions tab, or:
+#   gh workflow run claude-plan.yml -f section="15"                        # SPEC.md section
+#   gh workflow run claude-plan.yml -f file=docs/design/world-layout.md    # next phase
+#   gh workflow run claude-plan.yml -f file=docs/design/world-layout.md -f section="Phase C"
 #
 # It opens issues labelled "planned". Read them, edit as needed, and add the
 # "factory" label to the ones you want built, in dependency order.
@@ -16,7 +21,7 @@ name: Claude planner
 on:
   push:
     branches: [master]
-    paths: [SPEC.md]
+    paths: [SPEC.md, "docs/design/**"]
   workflow_dispatch:
     inputs:
       file:
@@ -25,8 +30,8 @@ on:
         default: SPEC.md
         type: string
       section:
-        description: 'Section(s) or phase to plan, e.g. "15", "11.5", "Part II", "Phase A"'
-        required: true
+        description: "Section(s) or phase, e.g. 15, Part II, Phase A. Empty: a design doc's next phase."
+        required: false
         type: string
       notes:
         description: "Optional guidance: priorities, what to leave out, size of tickets"
@@ -38,10 +43,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  plan:
+  # Decide what to plan: a list of {file, section}, possibly empty.
+  pick:
     if: github.actor == 'jtwaugh'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      targets: ${{ steps.pick.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          FILE: ${{ inputs.file }}
+          SECTION: ${{ inputs.section }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          targets=$(python3 -B .github/scripts/plan_targets.py)
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "### Planning" >> "$GITHUB_STEP_SUMMARY"
+          echo "$targets" >> "$GITHUB_STEP_SUMMARY"
+
+  plan:
+    needs: pick
+    if: needs.pick.outputs.targets != '[]'
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.pick.outputs.targets) }}
     permissions:
       contents: read
       issues: write
@@ -51,23 +89,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check the spec file can be planned
-        env:
-          FILE: ${{ inputs.file || 'SPEC.md' }}
-        run: |
-          case "$FILE" in
-            SPEC.md) ;;
-            docs/design/*.md)
-              [ -f "$FILE" ] || { echo "::error::$FILE doesn't exist on this branch."; exit 1; }
-              status=$(sed -n '2,20{s/^status:[[:space:]]*\([a-z]*\).*/\1/p}' "$FILE" | head -1)
-              [ "$status" = accepted ] || { echo "::error::$FILE has status '$status'. Only accepted design docs are planned; merge its reconciler PR first."; exit 1; } ;;
-            *) echo "::error::file must be SPEC.md or docs/design/*.md"; exit 1 ;;
-          esac
-
       - uses: anthropics/claude-code-action@v1
         env:
-          FILE: ${{ inputs.file || 'SPEC.md' }}
-          SECTION: ${{ inputs.section }}
+          FILE: ${{ matrix.target.file }}
+          SECTION: ${{ matrix.target.section }}
           NOTES: ${{ inputs.notes }}
           # Set on push runs: the SPEC.md change to plan from.
           SPEC_BEFORE: ${{ github.event.before }}
@@ -181,40 +206,49 @@ jobs:
             branch clusters", or for a design doc its short name and phase,
             e.g. "Layout A: radial base-height bias".
 
-            ## Finish
+            ## Order of work
 
-            Create one more issue, labelled `planned`, titled
+            Create the Plan issue first, before any ticket, so that a run
+            that dies halfway still leaves the marker and is never planned
+            twice. Then create the tickets and spec questions, then edit the
+            Plan issue's body to list them, then attach them.
+
+            The Plan issue is labelled `planned` and titled
             "Plan: SPEC <section>" (or "Plan: <doc title> <phase>" for a
             design doc). Its body starts with this line, exactly, which the
-            docs updater reads when the plan finishes:
+            pick step and the docs updater read:
 
             `<!-- plan-source file=<FILE> section=<SECTION> -->`
 
             Then three short parts: the build order as a numbered list of
             issue numbers with one line each on why that order; the
             spec-question issues; and any code/spec disagreements you found
-            (plus, for a design doc, the `[game]` items not planned here). Don't use a `- [ ]` checklist; GitHub's
-            sub-issue list tracks progress instead.
+            (plus, for a design doc, the `[game]` items not planned here).
+            Don't use a `- [ ]` checklist; GitHub's sub-issue list tracks
+            progress instead. Update the body with
+            `gh issue edit <plan number> --body-file <file>`.
 
-            Then attach every ticket and spec-question issue you created to
-            the plan as a sub-issue, in build order, spec questions last.
-            Sub-issues take the issue's internal id, not its number, so for
-            each child run two separate commands (no `$(...)`, `&&` or pipes):
+            Attach every ticket and spec-question issue to the plan as a
+            sub-issue, in build order, spec questions last. Sub-issues take
+            the issue's internal id, not its number, so for each child run
+            two separate commands (no `$(...)`, `&&` or pipes):
 
             ```
             gh api repos/${{ github.repository }}/issues/<child number> --jq .id
             gh api repos/${{ github.repository }}/issues/<plan number>/sub_issues -X POST -F sub_issue_id=<id printed above>
             ```
 
-            Finish by
-            checking `gh api repos/${{ github.repository }}/issues/<plan number>/sub_issues --jq '.[].number'`
-            lists them all.
+            Finish by checking
+            `gh api repos/${{ github.repository }}/issues/<plan number>/sub_issues --jq '.[].number'`
+            lists them all. Before creating anything, check no Plan issue
+            with the same plan-source line exists already; if one does,
+            stop.
 
-            If this run created no tickets, still create the Plan issue
-            explaining why, and attach any spec questions.
+            If this run created no tickets, the Plan issue says why, with
+            any spec questions attached.
 
             Don't add the `factory` label to anything. The maintainer does
             that after reviewing.
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(git log:*),Bash(git diff:*),Bash(gh api repos/${{ github.repository }}/issues:*)"
+            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(git log:*),Bash(git diff:*),Bash(gh api repos/${{ github.repository }}/issues:*)"

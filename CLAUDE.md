@@ -68,8 +68,9 @@ done, superseded). When a ticket comes from a design doc:
    `accepted`; merging the PR is the acceptance.
 2. The planner (`claude-plan.yml`) turns a SPEC section, or a phase of an
    accepted design doc, into `planned` tickets and `spec-question` issues,
-   attached as sub-issues of a "Plan:" issue. It also runs when SPEC.md
-   changes on `master`.
+   attached as sub-issues of a "Plan:" issue. It runs by itself when SPEC.md
+   or a design doc changes on `master`: changed SPEC sections, or a design
+   doc's next `todo` phase (one phase at a time, in header order).
 3. The maintainer labels tickets `factory`; the implementer (`claude.yml`)
    opens a PR; CI and the reviewer (`claude-review.yml`) check it.
 4. The maintainer answers `decision` questions with `/decide <option>`; the
