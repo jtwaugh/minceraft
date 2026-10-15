@@ -78,10 +78,12 @@ jobs:
             gh issue comment "$N" --body "Waiting on $list. I'll start by myself once they're all closed."
           fi
 
-      - if: steps.deps.outputs.waiting == '' || steps.deps.outputs.waiting == '[]'
+      # Gate on the event, not on an empty output, so a failed dependency
+      # check stops the run instead of reading as "no dependencies".
+      - if: success() && (github.event_name != 'issues' || steps.deps.outputs.waiting == '[]')
         uses: ./.github/actions/toolchain
 
-      - if: steps.deps.outputs.waiting == '' || steps.deps.outputs.waiting == '[]'
+      - if: success() && (github.event_name != 'issues' || steps.deps.outputs.waiting == '[]')
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -142,6 +144,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # Marks the ticket as auto-started, so tickets.py never starts it
+      # automatically again (no retry loops). Relabel it, or comment
+      # @claude, to try again.
+      - name: Mark as started
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ matrix.issue }}" --repo "${{ github.repository }}" \
+            --body "<!-- factory-auto-start --> Dependencies closed; starting automatically ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))."
       - uses: ./.github/actions/toolchain
       - uses: anthropics/claude-code-action@v1
         env:
@@ -160,12 +171,14 @@ jobs:
             1. Run `gh pr list --state open --search "${{ matrix.issue }}"`. If
                a pull request for this ticket already exists, stop.
             2. Read the ticket: `gh issue view ${{ matrix.issue }} --comments`.
-            3. Create a branch `claude/issue-${{ matrix.issue }}-<yyyymmdd-hhmm>`
+            3. Create a branch with
+               `git checkout -b claude/issue-${{ matrix.issue }}-<yyyymmdd-hhmm>`
                from master, implement the ticket, and run every check.
-            4. Commit, push the branch, and open the pull request.
+            4. Commit, push with `git push -u origin <that branch>`, and open
+               the pull request. Never push to any other branch.
             5. Comment on the ticket with a link to the pull request, or,
                if you stopped, why.
           claude_args: |
             --max-turns 80
-            --allowedTools "${{ env.ALLOWED_TOOLS }},Bash(git checkout:*),Bash(git switch:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(date:*)"
+            --allowedTools "${{ env.ALLOWED_TOOLS }},Bash(git checkout -b claude/*),Bash(git switch -c claude/*),Bash(git add:*),Bash(git commit:*),Bash(git push -u origin claude/*),Bash(git push origin claude/*),Bash(date:*)"
             --append-system-prompt "${{ env.RULES }}"

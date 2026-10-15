@@ -8,8 +8,10 @@
                            open pull request yet.
 
 A ticket's dependencies are every issue number on its "**Depends on:**"
-line, plus any "Blocked by #n" anywhere in its body (the planner writes
-both). Plan issues are never tickets.
+line, plus any "Blocked by #n" in its body (the planner writes both). A
+dependency closed as "not planned" counts as closed. Plan issues are never
+tickets, and each ticket is started automatically at most once (marked by a
+`factory-auto-start` comment); after that, relabel it or comment @claude.
 """
 import json
 import os
@@ -33,7 +35,6 @@ def deps(body):
     for line in body.splitlines():
         if "Depends on:" in line:
             found.update(int(n) for n in re.findall(r"#(\d+)", line))
-    found.update(int(n) for n in re.findall(r"[Bb]locked by[^\n]*?#(\d+)", body))
     for m in re.finditer(r"[Bb]locked by ([^\n]*)", body):
         found.update(int(n) for n in re.findall(r"#(\d+)", m.group(1)))
     return found
@@ -55,6 +56,11 @@ def has_open_pr(n, prs):
                for pr in prs)
 
 
+def auto_started(n):
+    comments = gh(f"repos/{REPO}/issues/{n}/comments?per_page=100")
+    return any("<!-- factory-auto-start -->" in (c.get("body") or "") for c in comments)
+
+
 def main():
     mode = sys.argv[1]
     if mode == "blocked":
@@ -71,6 +77,9 @@ def main():
                 print(f"#{t['number']}: waiting on {waiting}", file=sys.stderr)
             elif has_open_pr(t["number"], prs):
                 print(f"#{t['number']}: already has an open PR", file=sys.stderr)
+            elif auto_started(t["number"]):
+                print(f"#{t['number']}: already started automatically once; relabel or @claude to retry",
+                      file=sys.stderr)
             else:
                 print(f"#{t['number']}: ready", file=sys.stderr)
                 ready.append(t["number"])
