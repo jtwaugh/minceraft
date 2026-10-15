@@ -48,8 +48,9 @@ on:
 
 concurrency:
   # One planning run per target at a time. Push runs only dispatch, so each
-  # gets its own group; a shared group would let GitHub cancel queued runs.
-  group: claude-plan-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}', inputs.file, inputs.section) || github.run_id }}
+  # gets its own group, and merge-started runs include the merge commit, so
+  # GitHub (which keeps one pending run per group) never cancels one.
+  group: claude-plan-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}-{2}', inputs.file, inputs.section, inputs.after) || github.run_id }}
   cancel-in-progress: false
 
 jobs:
