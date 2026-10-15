@@ -134,7 +134,8 @@ jobs:
             You are the docs updater, in drift mode. Run `printenv DOC_PATH`.
 
             - If DOC_PATH is set, reconcile that one doc, whatever its status.
-              A doc with `status: idea` becomes `status: proposed`.
+              A doc with `status: idea` becomes `status: accepted` (merging the PR
+              accepts it).
             - If it's empty, reconcile every doc in docs/design/ (not
               README.md) whose header says `status: accepted`.
 

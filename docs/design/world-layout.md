@@ -1,6 +1,6 @@
 ---
 title: World layout
-status: proposed
+status: accepted
 scope: both
 source: "#10"
 superseded_by: ""

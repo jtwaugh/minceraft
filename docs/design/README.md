@@ -12,8 +12,7 @@ behaviour themselves.
 | Status | Meaning | Who moves it on |
 |---|---|---|
 | `idea` | Captured, unchecked. Never planned. | The maintainer labels the issue `idea`. |
-| `proposed` | Reconciled against the code, in a PR. | The reconciler opens the PR; the maintainer edits and merges it. |
-| `accepted` | Merged. The planner may plan its phases. | Merging the reconciler's PR. |
+| `accepted` | Reconciled and merged. The planner may plan its phases. | The reconciler writes it in its PR; merging the PR is the acceptance. |
 | `done` | Every phase in this repo is done. | The docs updater, when the last phase's plan closes. |
 | `superseded` | Replaced by another doc (say which in the header). | The maintainer. |
 
@@ -23,7 +22,8 @@ behaviour themselves.
 2. **Reconcile.** The reconciler (`claude-idea.yml`, or `claude-docs.yml`
    for a file) checks the idea against the code, SPEC.md, CLAUDE.md and the
    other docs here, and opens a PR adding `docs/design/<name>.md` with
-   `status: proposed`. The instructions it follows are in
+   `status: accepted`. While the PR is open, that is the proposal; nothing
+   plans from an unmerged doc. The instructions it follows are in
    `.github/prompts/reconcile.md`.
 3. **Accept.** Review the PR, edit anything, merge. Merging is acceptance.
 4. **Plan.** `gh workflow run claude-plan.yml -f file=docs/design/<name>.md -f section="Phase A"`.
@@ -43,7 +43,7 @@ Every doc starts with this header. CI checks it.
 ```yaml
 ---
 title: World layout
-status: proposed          # idea | proposed | accepted | done | superseded
+status: accepted          # idea | accepted | done | superseded
 scope: both               # repo | game | both
 source: "#12"             # the idea issue, if there was one
 superseded_by: ""         # only when status is superseded
