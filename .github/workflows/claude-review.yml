@@ -1,0 +1,85 @@
+# Reviewer: a fresh Claude session reviews each PR against SPEC.md and
+# CLAUDE.md. It comments; it can't approve or merge.
+name: Claude reviewer
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+    # Skip spec-lane PRs: if every changed file is SPEC.md, don't run.
+    paths-ignore:
+      - SPEC.md
+
+concurrency:
+  # A new push supersedes a review still in progress.
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Public repo: review only PRs from branches in this repo (not forks),
+    # opened and updated by jtwaugh or the Claude app.
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.pull_request.user.login) &&
+      contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.actor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true
+          use_sticky_comment: true
+          # PRs opened or updated by the Claude app have it as the actor; the
+          # if: above already limits runs to this repo's own PRs.
+          allowed_bots: claude
+          include_comments_by_actor: jtwaugh,claude[bot]
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are reviewing this pull request. You did not write it. Read
+            CLAUDE.md first, then the linked issue, then the diff.
+
+            Check, in this order:
+
+            1. Clean room. Does anything look derived from Minecraft source
+               rather than SPEC.md: structure, constants or names the spec
+               doesn't give? Does the PR edit SPEC.md? Either is a blocker.
+            2. Spec conformance. For each SPEC section the PR cites, read it
+               and check the code does what it says, including the quirks the
+               spec says to keep or drop. Flag behaviour the spec doesn't
+               cover, and spec requirements the PR skips.
+            3. Determinism. Can any block depend on region origin or size?
+               Does a new feature have an overlapping-regions test?
+            4. World output. If the change can alter blocks, heights, biomes
+               or decoration for a fixed seed, does the PR description say so
+               and explain why? An unannounced change is a blocker.
+            5. CLAUDE.md invariants: terrain crate stays no_std with no
+               runtime dependencies, constants live in data/*.toml, no new
+               #[allow]s without a spec reason, viewer stays framework-free,
+               batches_7_12.json not hand-edited.
+            6. Tests: do they test the behaviour the spec describes, or only
+               that the code runs?
+
+            Don't comment on style that rustfmt or clippy already enforce,
+            and don't restate CI results.
+
+            Use inline comments for specific lines. Finish with one summary
+            comment that starts with a verdict line, either
+            "Verdict: ready to merge" or "Verdict: changes needed", followed
+            by the blockers, then the minor points.
+          claude_args: |
+            --max-turns 40
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"

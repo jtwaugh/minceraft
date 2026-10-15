@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Keep in step with the toolchain used locally; clippy lints change between releases.
+  RUST_TOOLCHAIN: 1.97.1
+  BINARYEN_VERSION: version_133
+  # Gzipped size of viewer/pkg/terrain_web_bg.wasm. Was 30,914 bytes on 2026-10-15.
+  WASM_GZIP_BUDGET: 40000
+
+jobs:
+  clean-room:
+    name: Clean-room boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: No decompiled code, jars or work/ in the tree
+        run: |
+          bad=$(git ls-files | grep -E '(^|/)work/|\.(jar|class|java)$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Files that must never be committed (see CLAUDE.md, Clean-room rules):"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: SPEC.md changes travel alone, and no Java-like code is added
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE...$HEAD")
+          echo "Changed files:"; echo "$changed"
+
+          if echo "$changed" | grep -qx 'SPEC.md' && [ "$(echo "$changed" | grep -vcx 'SPEC.md')" -gt 0 ]; then
+            echo "::error::This PR changes SPEC.md and other files. Spec changes come from the maintainer in PRs that change only SPEC.md."
+            exit 1
+          fi
+
+          java=$(git diff "$BASE...$HEAD" -- . ':!*.md' \
+            | grep -E '^\+' \
+            | grep -E '\b(public|private|protected)\s+(static\s+|final\s+)*(void|int|long|double|float|boolean|class)\b|\bnet\.minecraft\b' || true)
+          if [ -n "$java" ]; then
+            echo "::error::Added lines look like Java source. Implement from SPEC.md only (CLAUDE.md, Clean-room rules)."
+            echo "$java"
+            exit 1
+          fi
+
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  wasm:
+    name: Wasm build and flyover smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - name: Install binaryen (wasm-opt)
+        run: |
+          curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/binaryen-${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
+            | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Build (./build.sh)
+        run: ./build.sh
+
+      - name: Wasm size budget
+        run: |
+          wasm=viewer/pkg/terrain_web_bg.wasm
+          raw=$(wc -c < "$wasm")
+          gz=$(gzip -9 -c "$wasm" | wc -c)
+          echo "### Wasm size" >> "$GITHUB_STEP_SUMMARY"
+          echo "$raw bytes raw, **$gz bytes gzipped** (budget $WASM_GZIP_BUDGET)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$gz" -gt "$WASM_GZIP_BUDGET" ]; then
+            echo "::error::Gzipped wasm is $gz bytes, over the $WASM_GZIP_BUDGET-byte budget. Raise WASM_GZIP_BUDGET in ci.yml only on purpose."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Flyover plans a route
+        run: |
+          for seed in 12345 1 987654321; do
+            out=$(node viewer/flyover/preview.mjs "$seed")
+            echo "$out"
+            echo "$out" | grep -q 'keyframes' || { echo "::error::No flyover route for seed $seed"; exit 1; }
+          done
+
+      - name: Upload viewer
+        uses: actions/upload-artifact@v7
+        with:
+          name: viewer
+          path: viewer/
+          retention-days: 14
+
+  art:
+    name: Art (validate, generated files, preview)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: art
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate textures
+        run: |
+          out=$(python3 -I tools/validate.py)
+          echo "$out"
+          # validate.py globs relative to the working directory; "ok: 0" means it found nothing.
+          echo "$out" | grep -qE '^ok: [1-9]' || { echo "::error::validate.py failed or found no textures"; exit 1; }
+
+      - name: batches_7_12.json matches draw_7_12.py
+        run: |
+          python3 -I tools/draw_7_12.py
+          git diff --exit-code -- batches_7_12.json \
+            || { echo "::error::batches_7_12.json is out of date or was hand-edited. Edit tools/draw_7_12.py and rerun it from art/."; exit 1; }
+
+      - name: Build preview sheet
+        run: python3 -I tools/build_sheet.py
+
+      - name: Upload preview sheet
+        uses: actions/upload-artifact@v7
+        with:
+          name: art-sheet
+          path: art/build/
+          retention-days: 14
