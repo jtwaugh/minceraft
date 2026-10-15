@@ -1,0 +1,10 @@
+# Level validation thresholds (docs/design/world-layout.md 6.1).
+# Read by crates/layout at compile time (defaults) or at run time.
+
+# Island land area above sea level, flood-filled from the island centre,
+# must cover at least this many columns.
+min_island_columns = 150
+
+# Blocks added on every side of the box that contains the island centre and
+# the spawn water zone. The flood fill never leaves this window.
+window_margin = 48
