@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/terrain", "crates/web", "crates/layout", "crates/game"]
+members = ["crates/terrain", "crates/web", "crates/layout", "crates/game", "crates/game-web"]
 
 [profile.release]
 opt-level = "z"

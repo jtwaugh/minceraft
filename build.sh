@@ -31,6 +31,12 @@ raw=$(wc -c < "$wasm" | tr -d ' ')
 gz=$(gzip -9 -c "$wasm" | wc -c | tr -d ' ')
 echo "built $wasm: $raw bytes raw, $gz bytes gzipped"
 
+wasm-pack build crates/game-web --target web --release --out-dir ../../client/pkg
+
+game_wasm=client/pkg/game_web_bg.wasm
+wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int "$game_wasm" -o "$game_wasm"
+echo "built $game_wasm: $(wc -c < "$game_wasm" | tr -d ' ') bytes raw, $(gzip -9 -c "$game_wasm" | wc -c | tr -d ' ') bytes gzipped"
+
 if [ "$serve" -eq 1 ]; then
   echo "serving viewer at http://localhost:8000"
   exec python3 -m http.server -d viewer 8000

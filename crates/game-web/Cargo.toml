@@ -1,0 +1,18 @@
+[package]
+name = "game-web"
+version = "0.1.0"
+edition = "2021"
+description = "wasm bindings for the game crate's input types (built into client/pkg)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+game = { path = "../game" }
+wasm-bindgen = "0.2"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[lints]
+workspace = true
