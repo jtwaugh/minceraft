@@ -233,9 +233,11 @@ and deciding which tickets are unblocked
 ([`tickets.py`](.github/scripts/tickets.py)).
 
 That last split came from a real bug: the planner was asked to attach
-sub-issues itself, but the tool permission it was given didn't match the
-command it ran, so it silently skipped the step and no phase could ever
-finish. A script after the agent now does it every time.
+sub-issues itself, but its tool permission, `Bash(gh api repos/.../issues:*)`,
+only matches when a space follows `issues` (`:*` means " *"), so every
+`gh api repos/.../issues/20` call was refused, the step was silently
+skipped, and no phase could ever finish. A script after the agent now does
+it every time, and path-style permissions are written as `claude/*`.
 
 ### 11. Safe on a public repository
 
