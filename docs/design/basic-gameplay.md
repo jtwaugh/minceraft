@@ -102,18 +102,10 @@ belt, hands, item entities, the event system and the HUD.
 
 ## Mince Raft: Basic Gameplay Specification
 
-> **Reconciler:** the text below is the author's, unchanged. Notes beside it
-> are marked like this one. Sections 2.2 to 11 are absent from the idea issue
-> (note 2).
-
 Status: draft
 Scope: player input, camera, movement (land, water, raft deck), the interaction model, and the first two tools: sword and hoe.
 
 Companion to `WORLD_LAYOUT_SPEC.md`. Physics values come from Beta 1.7.3 via `MECHANICS_SPEC.md`. Numbers marked **(verify)** are from memory of Beta's behavior and must be checked against the extracted spec before they are treated as final. Everything tunable lives in data files so feel can be adjusted without code changes.
-
-> **Reconciler:** `[game]`. `MECHANICS_SPEC.md` does not exist here (note 3).
-> Game tunables would live in the game's data files, not in `data/*.toml`
-> read by `terrain`.
 
 ---
 
@@ -126,28 +118,357 @@ Companion to `WORLD_LAYOUT_SPEC.md`. Physics values come from Beta 1.7.3 via `ME
 5. Every player action goes through one interaction dispatch table, so new tools and items are data, not new code paths.
 6. The sim is deterministic: the same seed and input sequence produce the same state.
 
-> **Reconciler:** `[game]`. Rule 2 needs a game-side world overlay (note 7).
-> Rule 3 is a design target, not a SPEC fact (note 4).
-
 ---
 
 ## 2. Input
 
 ### 2.1 Bindings (desktop)
 
-Action | Default | Edge or hold
--- | -- | --
-Move | W A S D | hold
-Look | mouse (pointer lock) | continuous
-Jump / swim up | Space | hold
-Sneak | Left Shift | hold
-Primary (attack) | Left mouse | press edge
-Secondary (use) | Right mouse | press edge, plus hold for repeat where noted
-Interact (pick up, put down, use station) | E | press edge
-Drop carried item | Q | press edge
-Select tool | 1 to 5, mouse wheel | press edge
+| Action | Default | Edge or hold |
+|---|---|---|
+| Move | W A S D | hold |
+| Look | mouse (pointer lock) | continuous |
+| Jump / swim up | Space | hold |
+| Sneak | Left Shift | hold |
+| Primary (attack) | Left mouse | press edge |
+| Secondary (use) | Right mouse | press edge, plus hold for repeat where noted |
+| Interact (pick up, put down, use station) | E | press edge |
+| Drop carried item | Q | press edge |
+| Select tool | 1 to 5, mouse wheel | press edge |
 
-> **Reconciler:** `[game]`.
+Bindings live in `data/input.toml`. Touch and gamepad mappings come later and map onto the same `TickInput`.
+
+### 2.2 Per-tick input
+
+The platform layer samples devices every frame and accumulates them into one record per sim tick:
+
+```rust
+struct TickInput {
+    move_forward: f32,   // -1..1
+    move_strafe: f32,    // -1..1
+    yaw: f32,            // absolute, radians
+    pitch: f32,          // absolute, clamped to +/- 90 degrees
+    jump: bool,          // held
+    sneak: bool,         // held
+    primary: bool,       // pressed since last tick
+    secondary: bool,     // pressed since last tick
+    secondary_held: bool,
+    interact: bool,      // pressed since last tick
+    drop: bool,          // pressed since last tick
+    tool_slot: Option<u8>,
+}
+```
+
+Rules:
+- Press edges are latched: a click between two ticks is never lost, and one physical click triggers exactly one action.
+- Look is applied every frame for smooth camera motion, but the sim reads the value at the tick boundary. This keeps camera feel responsive while keeping the sim deterministic and replayable.
+- Recorded input sequences are the basis for replay tests.
+
+---
+
+## 3. Camera
+
+| Parameter | Default | Notes |
+|---|---|---|
+| Field of view | 70 degrees | Beta default |
+| Eye height | 1.62 blocks | 1.62 minus about 0.08 while sneaking **(verify)** |
+| View bobbing | on | Driven by distance walked, disabled in water and in air |
+| Mouse sensitivity | data | Use Beta's sensitivity curve from the mechanics spec |
+| Deck roll | data | Camera rolls with raft tilt, scaled down (default 50 percent) to reduce motion sickness |
+
+A first-person hand renders the current tool or carried item, with Beta's swing animation on primary and a smaller use animation on secondary.
+
+---
+
+## 4. Movement
+
+### 4.1 Player body
+
+| Parameter | Value |
+|---|---|
+| Bounding box | 0.6 wide, 1.8 tall |
+| Step height | 0.5 |
+| Max health | 20 (10 hearts) |
+
+### 4.2 Land movement per tick
+
+Order of operations each tick, following Beta's entity update:
+
+1. Read input. Scale forward and strafe by 0.98. If sneaking, scale them by 0.3 **(verify)**.
+2. Choose acceleration:
+   - On ground: `accel = 0.1 * (0.16277136 / f^3)` where `f = slipperiness * 0.91` and slipperiness is 0.6 for normal blocks. This works out to 0.1 on normal ground **(verify)**.
+   - In air: `accel = 0.02`.
+3. Add acceleration to horizontal velocity in the facing direction, normalized so diagonal input is not faster.
+4. If jump is held and on ground, set vertical velocity to 0.42.
+5. Move with collision (section 4.4).
+6. Apply gravity: `vy = (vy - 0.08) * 0.98`.
+7. Apply horizontal friction: multiply by `f` on ground (0.546 on normal blocks), 0.91 in air.
+
+Expected results (use as tests): walking about 4.3 blocks per second, sneaking about 1.3, jump apex about 1.25 blocks, about 12 ticks in the air on flat ground **(verify all)**.
+
+### 4.3 Water movement
+
+When the player's body intersects water:
+
+- Acceleration 0.02 in all cases.
+- Velocity multiplied by 0.8 each tick on all axes, then gravity of 0.02 subtracted from vertical velocity.
+- Holding jump adds 0.04 to vertical velocity each tick (swim up).
+- Exiting water: if the player is pushing into a block face and the space 0.6 above would be clear, set vertical velocity to 0.3 so they climb out onto the raft or shore **(verify)**.
+
+Values from the mechanics spec override these. No drowning in v0; add an air meter later if diving becomes a mechanic.
+
+### 4.4 Collision
+
+- Collect block collision boxes overlapping the swept bounding box.
+- Resolve vertical first, then x, then z, clipping movement against each box per axis (Beta's order).
+- If horizontal movement was blocked and the player is on ground, retry with the box raised by step height. Keep the stepped result only if it moved farther horizontally.
+- `on_ground` is true when vertical movement was clipped while moving downward.
+- Plants (tall grass, flowers, crops) have no collision.
+
+### 4.5 Sneak edge protection
+
+While sneaking on ground, before moving, shrink horizontal motion in small steps (0.05 blocks) on each axis until the moved box would still have ground under it. The player cannot walk off a ledge or off the raft deck while sneaking.
+
+### 4.6 Falling
+
+Track fall distance while airborne, reset on landing or entering water. On landing, damage is `ceil(fall_distance - 3)` if positive. Falling into water does no damage.
+
+### 4.7 Standing on the raft
+
+The raft is a moving rigid body (see the mechanics spec's boat section). For any entity whose `on_ground` support comes from a raft cell:
+
+- Before the entity's own movement, translate it by the raft's displacement this tick, and rotate it around the raft's center by the raft's yaw change.
+- Deck tilt from swells does not move the player directly. Instead, it adds a small horizontal push down-slope each tick (data, default 0.004 per degree of tilt), so standing still on a rocking raft means drifting slowly unless you sneak. Sneaking cancels the push.
+- Loose item entities on the deck get the same push at double strength, so dropped items slide.
+
+### 4.8 Movement events
+
+Emit `landed { fall_distance }`, `entered_water`, `exited_water`, and `stepped_onto_raft` / `stepped_off_raft` for sound, particles, and gameplay hooks.
+
+---
+
+## 5. Targeting
+
+Each tick, cast a ray from the eye along the look direction:
+
+- Block reach: 4.5 blocks **(verify)**. Entity reach: 3 blocks **(verify)**.
+- Test entity bounding boxes (expanded by 0.1) and block selection boxes. The nearest hit wins.
+- Plants have selection boxes even without collision boxes, so they can be targeted.
+- Result: `Target::Block { pos, face }`, `Target::Entity { id }`, or `Target::None`.
+- Render a selection outline on the targeted block and a subtle highlight on the targeted entity.
+
+---
+
+## 6. Hands and tool belt
+
+```rust
+struct PlayerState {
+    tool_belt: [Option<ToolInstance>; 5],
+    selected: u8,
+    hands: Option<ItemInstance>,   // carried ingredient, dish, or plate
+    // ... physics, health, etc.
+}
+```
+
+Rules:
+- If the hands are empty, primary and secondary use the selected tool.
+- If the hands hold an item, tools are stowed. Primary does nothing, secondary uses the carried item if it has a use (for example, seeds on farmland), and interact puts it down. This keeps the Overcooked rule that you can't swing a sword while carrying a fish.
+- Interact on a loose item entity picks it up if the hands are empty. Interact on a station or counter places or takes items (stations are specified later).
+- Drop throws the carried item forward as an item entity with Beta's drop velocity.
+- Walking over an item entity does not auto-pick it up. Pickup is always deliberate, so the deck doesn't vacuum up ingredients.
+- v0 starting belt: hand (empty slot), wooden sword, wooden hoe. Fishing rod and bucket slots are reserved.
+
+---
+
+## 7. Interaction dispatch
+
+Every action resolves through one table keyed on what is held, which button, and what is targeted:
+
+```toml
+# data/interactions.toml
+
+[[rule]]
+held = "tool:sword"
+button = "primary"
+target = "entity:animal"
+action = "attack"
+
+[[rule]]
+held = "tool:hoe"
+button = "secondary"
+target = "block:grass"
+require_air_above = true
+action = "till"
+
+[[rule]]
+held = "tool:hoe"
+button = "secondary"
+target = "block:dirt"
+require_air_above = true
+action = "till"
+
+[[rule]]
+held = "tool:hoe"
+button = "secondary"
+target = "block:planter_dirt"
+action = "till"
+
+[[rule]]
+held = "item:seeds"
+button = "secondary"
+target = "block:farmland"
+target_face = "top"
+require_air_above = true
+action = "plant"
+
+[[rule]]
+held = "empty"
+button = "secondary"
+target = "block:crop"
+require_state = "mature"
+action = "harvest"
+
+[[rule]]
+held = "any_tool"
+button = "secondary"
+target = "block:crop"
+require_state = "mature"
+action = "harvest"
+
+[[rule]]
+held = "empty"
+button = "secondary"
+target = "block:tall_grass"
+action = "forage"
+
+[[rule]]
+held = "any"
+button = "primary"
+target = "entity:animal"
+action = "attack"     # fallback: punch
+```
+
+Resolution: the first matching rule wins, so specific rules go above general ones. Each action is a function in code: `attack`, `till`, `plant`, `harvest`, `forage`. Adding a tool means adding item data and rules, plus a new action function only if the behavior is new.
+
+Every action that succeeds triggers the hand swing (primary) or use animation (secondary), emits an event, and applies tool durability if enabled.
+
+---
+
+## 8. Sword
+
+### 8.1 Attack
+
+- Triggered on the primary press edge. No cooldown; damage does not depend on timing (pre-1.9 combat).
+- Holding primary does not auto-attack. One click, one swing.
+- Damage by tool, in half-hearts:
+
+| Weapon | Damage |
+|---|---|
+| Hand | 1 |
+| Wooden sword | 4 **(verify)** |
+| Stone sword | 6 **(verify)** |
+| Iron sword | 8 **(verify)** |
+
+- On hit: apply damage, knockback, and hurt state as in section 8.2.
+- Swinging at a block or at nothing plays the swing animation and does nothing else. Swords never damage blocks.
+
+### 8.2 Hurt and knockback
+
+From the mechanics spec's living-entity rules:
+- Invulnerability window after a hit (about 10 ticks of effective immunity) **(verify)**. Hits during it are ignored unless they deal more damage than the last hit, in which case only the difference applies.
+- Knockback: horizontal push away from the attacker of about 0.4, plus a small upward push **(verify)**.
+- Red flash for the duration of the hurt time.
+- On death: death animation (tip over, about 20 ticks), then drops spawn and the entity is removed.
+- Animals respond to being hit by fleeing in a random direction for a few seconds. Beta animals only wander, so this is a Mince Raft addition; keep the flee speed modest so chasing a cow around an island stays funny rather than frustrating.
+
+### 8.3 Animals and drops
+
+Beta 1.7.3 cows drop only leather and chickens only feathers; raw beef and raw chicken came later. Mince Raft defines its own drops:
+
+```toml
+# data/animals.toml
+
+[cow]
+health = 10
+drops = [{ item = "raw_beef", min = 1, max = 3 }, { item = "leather", min = 0, max = 1 }]
+
+[pig]
+health = 10
+drops = [{ item = "raw_pork", min = 1, max = 3 }]
+
+[chicken]
+health = 4
+drops = [{ item = "raw_chicken", min = 1, max = 1 }, { item = "feather", min = 0, max = 2 }]
+```
+
+Expected: a wooden sword kills a cow or pig in 3 hits and a chicken in 1.
+
+Drops spawn as item entities with Beta's scatter velocity. Since pickup is deliberate (section 6), the player carries drops one at a time. That makes hunting trips a real cost in a two-minute gathering phase, which is intended.
+
+### 8.4 Animal respawn
+
+Island animal counts are topped up at the start of each day (not continuously) to the level's target count, spawning on valid grass tiles out of the player's view.
+
+---
+
+## 9. Hoe
+
+### 9.1 Till
+
+- Triggered on secondary press. Holding secondary repeats every 4 ticks on newly targeted blocks so a row can be tilled by sweeping the mouse.
+- Grass or dirt with air above becomes farmland. Planter dirt becomes planter farmland.
+- Tilling is a block transform, allowed under the no-breaking rule.
+- Tilling grass has a 1 in 8 chance to drop seeds (data). This is Mince Raft's own value; check whether Beta's tilling had a seed drop and match it if so.
+
+### 9.2 Plant
+
+- With seeds in hands, secondary on the top face of farmland with air above places a stage-0 crop and consumes the seed.
+- One seed item plants one crop. Carrying seeds in hands means planting a row takes several trips to the crate, so seed bags (one item, multiple plantings) are a likely early upgrade.
+
+### 9.3 Growth
+
+From the mechanics spec's crop rules:
+- Crops advance stages on random ticks with a chance that depends on hydration and neighboring crops.
+- Farmland is hydrated if water is within 4 blocks horizontally at the same level or one below. Raft planters sit at deck level next to the sea, so they are always hydrated unless a level disables it.
+- Trampling is disabled.
+- Crop growth must be scaled for a 4-minute day. Target: a crop planted Monday is ready by Wednesday's gathering phase. Keep Beta's relative odds and scale the per-tick chance in data.
+
+### 9.4 Harvest
+
+- Secondary on a mature crop, with empty hands or any tool selected, drops its produce and resets the crop to stage 0. No seed is needed to replant, since breaking is not allowed and replanting by hand would add a chore without a decision.
+- Harvest yields come from `data/crops.toml`, for example wheat gives 1 wheat and 0 to 2 seeds.
+- Harvesting an immature crop does nothing.
+
+### 9.5 Forage
+
+- Secondary on tall grass with empty hands has a chance to drop seeds (data, default 1 in 6). The tall grass stays.
+- Each tall grass block has a per-block cooldown (default one day) so foraging can't be spammed.
+
+---
+
+## 10. Durability
+
+Off by default in v0. When enabled, swords lose 1 per hit on an entity and hoes lose 1 per till. Values per material from the mechanics spec. A broken tool vanishes from the belt and a replacement can be bought over the weekend.
+
+---
+
+## 11. Events
+
+The sim emits these for the game layer (orders, scoring, sound, particles, tutorials):
+
+| Event | Fields |
+|---|---|
+| `swing` | player, tool |
+| `entity_hurt` | entity, attacker, damage |
+| `entity_killed` | entity, kind, attacker |
+| `item_dropped` | item, position, source |
+| `item_picked_up` | item, player |
+| `item_put_down` | item, target |
+| `block_tilled` | position, from, to |
+| `crop_planted` | position, crop |
+| `crop_harvested` | position, crop, yields |
+| `foraged` | position, yields |
+| `landed`, `entered_water`, `exited_water` | player, details |
 
 ---
 
@@ -159,55 +480,27 @@ Select tool | 1 to 5, mouse wheel | press edge
 - Health hearts.
 - Day phase timer (gathering or service, seconds left).
 
-> **Reconciler:** `[game]`. `heart_full` and `heart_half` textures are listed
-> in `art/PROMPT.md`; the rest of the HUD art is not.
-
 ---
 
 ## 13. Implementation phases
 
 Each phase ends with something playable in the browser test scene.
 
-> **Reconciler:** no browser test scene exists in this repo; the only page is
-> the viewer (`viewer/index.html`).
-> **Maintainer, 2026-10-15:** the game lives in this repo, so the browser
-> test scene is built here too, superseding the earlier answer to #30
-> ("the game repo"). Where in the repo it goes is open question 1.
-
 **1. Input and camera.** Pointer lock, bindings, `TickInput` accumulation with latched edges, free-look camera with FOV and interpolation. Done when looking and moving a debug camera feels smooth at 60 fps with the sim at 20 Hz.
-
-> **Reconciler:** `[game]` `[manual check]` (note 10).
 
 **2. Land movement and collision.** Sections 4.1, 4.2, 4.4, 4.5, 4.6. Done when the movement tests pass and the player can walk around the island, step up half blocks, jump onto one-block ledges, and sneak to the edge without falling.
 
-> **Reconciler:** `[game]`. Sections 4.x are missing (note 2); half-block
-> collision needs note 5.
-
 **3. Water and raft.** Sections 4.3 and 4.7. Done when the player can swim, climb back onto the raft, stay on a moving raft, and feel the deck push during swells.
-
-> **Reconciler:** `[game]` `[manual check]` for "feel the deck push".
 
 **4. Targeting and dispatch.** Section 5 and the dispatch table from section 7 with stub actions. Done when the selection outline tracks blocks, plants, and animals correctly, and a debug overlay shows which rule matched.
 
-> **Reconciler:** `[game]`. Sections 5 and 7 are missing.
-
 **5. Hands and tool belt.** Section 6. Done when tools can be selected, item entities picked up and dropped, and tools are stowed while carrying.
-
-> **Reconciler:** `[game]`. Section 6 is missing.
 
 **6. Sword and animals.** Section 8. Done when cows, pigs, and chickens wander, take hits with knockback and flashes, flee, die, and drop items that can be carried to a crate.
 
-> **Reconciler:** `[game]` `[manual check]` for "flashes". The `crate` block
-> is requested by `world-layout.md`. Section 8 is missing.
-
 **7. Hoe and crops.** Section 9. Done when grass and planters can be tilled, seeds planted, crops grow over a few in-game days, and mature crops harvested and reset.
 
-> **Reconciler:** `[game]` for the logic; the repo-side part is the missing
-> `farmland` and crop blocks and textures (note 6). Section 9 is missing.
-
 **8. HUD and events.** Sections 11 and 12. Done when every action produces its event and the HUD reflects state.
-
-> **Reconciler:** `[game]`. Section 11 is missing.
 
 ---
 
@@ -225,9 +518,6 @@ Each phase ends with something playable in the browser test scene.
 - Hoe tills grass and dirt only with air above; never affects other blocks.
 - Seeds plant only on farmland tops; harvest works only on mature crops and resets to stage 0.
 - Replay: a recorded 5,000-tick session with movement, combat, and farming produces an identical world hash on two runs.
-
-> **Reconciler:** `[game]`. The first two depend on `MECHANICS_SPEC.md`
-> values that are not available (note 3).
 
 ---
 
