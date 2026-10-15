@@ -62,6 +62,36 @@ jobs:
             exit 1
           fi
 
+      - name: Design doc headers
+        run: |
+          python3 - <<'PY'
+          import glob, re, sys
+          bad = []
+          for p in sorted(glob.glob("docs/design/*.md")):
+              if p.endswith("README.md"):
+                  continue
+              text = open(p, encoding="utf-8").read()
+              m = re.match(r"---\n(.*?)\n---\n", text, re.S)
+              if not m:
+                  bad.append(f"{p}: no '---' header at the top"); continue
+              head = m.group(1)
+              st = re.search(r"^status:\s*([a-z]+)", head, re.M)
+              sc = re.search(r"^scope:\s*([a-z]+)", head, re.M)
+              if not re.search(r"^title:\s*\S", head, re.M):
+                  bad.append(f"{p}: header needs a title")
+              if not st or st.group(1) not in {"idea", "proposed", "accepted", "done", "superseded"}:
+                  bad.append(f"{p}: status must be idea, proposed, accepted, done or superseded")
+              if not sc or sc.group(1) not in {"repo", "game", "both"}:
+                  bad.append(f"{p}: scope must be repo, game or both")
+              for ph, v in re.findall(r"^\s+([A-Za-z0-9]+):\s*([a-z]+)", head.split("phases:", 1)[1] if "phases:" in head else "", re.M):
+                  if v not in {"todo", "done"}:
+                      bad.append(f"{p}: phase {ph} must be todo or done, not {v}")
+          for b in bad:
+              print(f"::error::{b}")
+          print(f"checked design docs: {len(bad)} problem(s)")
+          sys.exit(1 if bad else 0)
+          PY
+
   rust:
     name: Rust (fmt, clippy, test)
     runs-on: ubuntu-latest

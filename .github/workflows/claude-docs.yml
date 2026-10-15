@@ -1,0 +1,150 @@
+# Docs updater: keeps design docs in docs/design/ true to the code.
+#
+# - When the last ticket under a "Plan:" issue closes, it closes the plan
+#   and, for a design doc, opens a PR marking that phase done.
+# - Every Monday it re-reconciles each "accepted" doc against the code and
+#   opens a PR for any that have drifted.
+# - Run by hand on one file, e.g. an idea committed as a file:
+#     gh workflow run claude-docs.yml -f path=docs/design/<name>.md
+#
+# The reconciling itself follows .github/prompts/reconcile.md.
+name: Claude docs updater
+
+on:
+  issues:
+    types: [closed]
+  schedule:
+    - cron: "17 13 * * 1" # Mondays 13:17 UTC
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "One design doc to reconcile (default: every accepted doc)"
+        required: false
+        type: string
+
+concurrency:
+  group: claude-docs
+  cancel-in-progress: false
+
+jobs:
+  # On a ticket closing: is its plan now finished?
+  finish-plan:
+    if: github.event_name == 'issues' && github.event.sender.login == 'jtwaugh'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    outputs:
+      plan: ${{ steps.check.outputs.plan }}
+      file: ${{ steps.check.outputs.file }}
+      section: ${{ steps.check.outputs.section }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          parent=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.parent_issue_url // ""')
+          [ -n "$parent" ] || { echo "No parent issue; nothing to do."; exit 0; }
+          plan=${parent##*/}
+          gh api "repos/$REPO/issues/$plan" > plan.json
+          title=$(jq -r .title plan.json)
+          case "$title" in Plan:*) ;; *) echo "Parent #$plan is not a plan."; exit 0;; esac
+          [ "$(jq -r .state plan.json)" = open ] || { echo "Plan #$plan already closed."; exit 0; }
+          open=$(gh api "repos/$REPO/issues/$plan/sub_issues" --paginate --jq '[.[] | select(.state=="open")] | length')
+          [ "$open" -eq 0 ] || { echo "Plan #$plan has $open open sub-issues."; exit 0; }
+
+          gh api "repos/$REPO/issues/$plan" -X PATCH -f state=closed -f state_reason=completed > /dev/null
+          echo "Closed plan #$plan."
+
+          # The planner records its source as <!-- plan-source file=... section=... -->
+          marker=$(jq -r .body plan.json | grep -o '<!-- plan-source .* -->' | head -1 || true)
+          file=$(echo "$marker" | sed -n 's/.*file=\([^ ]*\).*/\1/p')
+          section=$(echo "$marker" | sed -n 's/.*section=\(.*\) -->.*/\1/p')
+          echo "plan=$plan" >> "$GITHUB_OUTPUT"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "section=$section" >> "$GITHUB_OUTPUT"
+
+  phase-done:
+    needs: finish-plan
+    if: startsWith(needs.finish-plan.outputs.file, 'docs/design/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        env:
+          DOC: ${{ needs.finish-plan.outputs.file }}
+          SECTION: ${{ needs.finish-plan.outputs.section }}
+          PLAN: ${{ needs.finish-plan.outputs.plan }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            You are the docs updater, in phase-done mode. Run
+            `printenv DOC SECTION PLAN`. Every ticket in plan #PLAN, for
+            SECTION of the design doc DOC, has closed.
+
+            Read .github/prompts/reconcile.md and follow it for DOC. Read
+            plan #PLAN and its sub-issues (`gh api repos/${{ github.repository }}/issues/<plan>/sub_issues`)
+            and the pull requests that closed them. If the code now does
+            what SECTION asks, set that phase to `done` in the header, and
+            add one line under Current state naming the PRs. If something
+            is still missing, leave the phase `todo` and add a
+            reconciliation note saying what.
+
+            Then create a branch `docs/<doc-name>-phase-done-<plan>`, commit
+            only DOC, push it, and open a PR titled
+            "Design: <title>: <SECTION> done" (or "... still incomplete").
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Read,Glob,Grep,Edit,Bash(printenv:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api repos/${{ github.repository }}/issues:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout -b:*),Bash(git add docs/design/:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*)"
+
+  drift:
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.actor == 'jtwaugh')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        env:
+          DOC_PATH: ${{ inputs.path }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            You are the docs updater, in drift mode. Run `printenv DOC_PATH`.
+
+            - If DOC_PATH is set, reconcile that one doc, whatever its status.
+              A doc with `status: idea` becomes `status: proposed`.
+            - If it's empty, reconcile every doc in docs/design/ (not
+              README.md) whose header says `status: accepted`.
+
+            For each doc, follow .github/prompts/reconcile.md. Skip a doc if
+            an open PR already changes it (`gh pr list --state open --json files,number`).
+            For each doc that needs changes, create a branch
+            `docs/<doc-name>-sync`, commit only that doc, push, and open a PR
+            titled "Design: <title> (sync)". One PR per doc. Docs that are
+            already accurate get no PR. Finish with a one-line summary per
+            doc in your final message.
+          claude_args: |
+            --max-turns 120
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(printenv:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout:*),Bash(git add docs/design/:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*)"

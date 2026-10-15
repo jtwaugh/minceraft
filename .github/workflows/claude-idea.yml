@@ -1,0 +1,46 @@
+# Design reconciler, issue intake: label an issue "idea" whose body is a
+# design doc (paste the markdown). Claude reconciles it against the code and
+# opens a PR adding docs/design/<name>.md with status "proposed". Merging the
+# PR accepts the doc. See docs/design/README.md.
+#
+# For a doc that's already a file, use claude-docs.yml instead.
+name: Claude design reconciler
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: claude-idea-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    # Only ideas jtwaugh wrote and labelled.
+    if: |
+      github.event.label.name == 'idea' &&
+      github.event.sender.login == 'jtwaugh' &&
+      github.event.issue.user.login == 'jtwaugh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          label_trigger: idea
+          branch_prefix: design/
+          track_progress: true
+          include_comments_by_actor: jtwaugh,claude[bot]
+          claude_args: |
+            --max-turns 80
+            --allowedTools "Read,Glob,Grep,Write,Edit,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr create:*)"
+            --append-system-prompt "You are the design reconciler. This issue's body is a new design idea. Follow .github/prompts/reconcile.md exactly (read it first): create docs/design/<short-kebab-name>.md containing the idea, reconciled against this repository, with status proposed and source set to this issue. Change no other file. Then open the pull request as that file describes, ending its body with 'Closes #<this issue>'."

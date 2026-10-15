@@ -19,6 +19,7 @@
 
 # Briefs that steer generated work.
 /art/PROMPT.md          @jtwaugh
+/docs/design/           @jtwaugh
 
 # Never committed; listed so any attempt is flagged for review.
 /work/                  @jtwaugh

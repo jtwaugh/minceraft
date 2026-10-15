@@ -5,9 +5,11 @@ name: Claude reviewer
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, synchronize]
-    # Skip spec-lane PRs: if every changed file is SPEC.md, don't run.
+    # Skip spec and design-doc PRs: if every changed file is one of these,
+    # don't run. You review those yourself.
     paths-ignore:
       - SPEC.md
+      - docs/design/**
 
 concurrency:
   # A new push supersedes a review still in progress.

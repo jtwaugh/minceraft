@@ -1,8 +1,10 @@
-# Planner: turns a SPEC.md section into draft issues. Runs only on GitHub, so
-# it sees the repo (SPEC.md, code, issues) and never work/ or the jar.
+# Planner: turns a section of SPEC.md, or a phase of an accepted design doc
+# in docs/design/, into draft issues. Runs only on GitHub, so it sees the
+# repo (specs, code, issues) and never work/ or the jar.
 #
 # Run it from the Actions tab ("Claude planner" -> Run workflow), or:
 #   gh workflow run claude-plan.yml -f section="15" -f notes="..."
+#   gh workflow run claude-plan.yml -f file=docs/design/world-layout.md -f section="Phase A"
 #
 # It also runs by itself when a change to SPEC.md lands on master (usually a
 # spec-editor PR), planning only the sections that changed.
@@ -17,8 +19,13 @@ on:
     paths: [SPEC.md]
   workflow_dispatch:
     inputs:
+      file:
+        description: "Spec to plan from: SPEC.md or an accepted docs/design/*.md"
+        required: false
+        default: SPEC.md
+        type: string
       section:
-        description: 'SPEC.md section(s) to plan, e.g. "15", "11.5", "Part II"'
+        description: 'Section(s) or phase to plan, e.g. "15", "11.5", "Part II", "Phase A"'
         required: true
         type: string
       notes:
@@ -44,8 +51,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check the spec file can be planned
+        env:
+          FILE: ${{ inputs.file || 'SPEC.md' }}
+        run: |
+          case "$FILE" in
+            SPEC.md) ;;
+            docs/design/*.md)
+              [ -f "$FILE" ] || { echo "::error::$FILE doesn't exist on this branch."; exit 1; }
+              status=$(sed -n '2,20{s/^status:[[:space:]]*\([a-z]*\).*/\1/p}' "$FILE" | head -1)
+              [ "$status" = accepted ] || { echo "::error::$FILE has status '$status'. Only accepted design docs are planned; merge its reconciler PR first."; exit 1; } ;;
+            *) echo "::error::file must be SPEC.md or docs/design/*.md"; exit 1 ;;
+          esac
+
       - uses: anthropics/claude-code-action@v1
         env:
+          FILE: ${{ inputs.file || 'SPEC.md' }}
           SECTION: ${{ inputs.section }}
           NOTES: ${{ inputs.notes }}
           # Set on push runs: the SPEC.md change to plan from.
@@ -56,13 +77,29 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
 
-            You are the planner for this repository. Break one part of
-            SPEC.md into GitHub issues that an implementer agent will later
+            You are the planner for this repository. Break one part of a
+            spec into GitHub issues that an implementer agent will later
             pick up one at a time. You plan; you don't write code.
 
-            The section to plan is in the environment variable SECTION, and
-            optional guidance from the maintainer is in NOTES. Read them with
-            `printenv SECTION NOTES SPEC_BEFORE SPEC_AFTER`.
+            The spec file is in the environment variable FILE (SPEC.md, or
+            an accepted design doc under docs/design/), the section or phase
+            to plan is in SECTION, and optional guidance from the maintainer
+            is in NOTES. Read them with
+            `printenv FILE SECTION NOTES SPEC_BEFORE SPEC_AFTER`.
+
+            If FILE is a design doc, read docs/design/README.md too, and:
+            - plan only SECTION, and skip any phase the header marks `done`;
+            - plan nothing tagged `[game]`; list those items in the Plan
+              issue under "Not planned here (game scope)";
+            - treat `[manual check]` criteria as notes for the maintainer,
+              not as things a test must prove;
+            - use the doc's Current state and Reconciliation notes, but
+              check them against the code, since they may be out of date;
+            - the doc's own Open questions that affect SECTION become
+              `decision` issues (see Ambiguities);
+            - Beta behaviour still comes only from SPEC.md. If the doc relies
+              on a Beta fact SPEC.md doesn't state, that's a `research`
+              question.
 
             If SECTION is empty, this run was started by a change to SPEC.md
             on master. Run `git diff "$SPEC_BEFORE" "$SPEC_AFTER" -- SPEC.md`
@@ -76,11 +113,10 @@ jobs:
             ## Read first
 
             1. CLAUDE.md, especially the clean-room rules. They apply to you:
-               every requirement you write must come from SPEC.md. Never add
-               detail from your own knowledge of Minecraft, even if you're
-               sure of it.
-            2. The SPEC.md section(s) named in SECTION, and any sections they
-               refer to.
+               every requirement you write must come from FILE (and, for Beta
+               behaviour, SPEC.md). Never add detail from your own knowledge
+               of Minecraft, even if you're sure of it.
+            2. SECTION of FILE, and any sections it refers to.
             3. The code that already implements related behaviour, so you
                plan only what's missing or wrong. Note where code and spec
                disagree.
@@ -99,16 +135,17 @@ jobs:
 
             - `decision`: a choice about this project that can be made
               without knowing how the original game behaves (policy,
-              trade-offs, which of two readings to adopt). End the body with:
+              trade-offs, which of two readings to adopt). Start the body
+              with a line `**File:** <FILE>` and end it with:
               "Answer by commenting `/decide <option>` with any reasoning;
-              the spec editor will draft the SPEC.md change."
+              the spec editor will draft the change to <FILE>."
             - `research`: answering needs facts about the original game's
               behaviour that SPEC.md doesn't state. End the body with:
               "Needs research from the maintainer's local spec lane."
 
             ## Tickets
 
-            Each ticket is one pull request's worth of work: one SPEC
+            Each ticket is one pull request's worth of work: one spec
             subsection or less, typically under 300 changed lines, testable on
             its own. Order them so each builds on the ones before. Prefer more
             small tickets over fewer large ones.
@@ -118,7 +155,8 @@ jobs:
             writing the body to a file first. Use this body format:
 
             ```
-            **Spec:** SPEC <number> (<heading>)
+            **Spec:** SPEC <number> (<heading>), or for a design doc
+                      <FILE> <phase> (<heading>), plus any SPEC sections it relies on
             **Depends on:** #<n>, or "none"
 
             ### What
@@ -140,15 +178,22 @@ jobs:
             ```
 
             Titles start with the spec number, e.g. "SPEC 11.5: big oak
-            branch clusters".
+            branch clusters", or for a design doc its short name and phase,
+            e.g. "Layout A: radial base-height bias".
 
             ## Finish
 
             Create one more issue, labelled `planned`, titled
-            "Plan: SPEC <section>". Its body has three short parts: the build
-            order as a numbered list of issue numbers with one line each on
-            why that order; the spec-question issues; and any code/spec
-            disagreements you found. Don't use a `- [ ]` checklist; GitHub's
+            "Plan: SPEC <section>" (or "Plan: <doc title> <phase>" for a
+            design doc). Its body starts with this line, exactly, which the
+            docs updater reads when the plan finishes:
+
+            `<!-- plan-source file=<FILE> section=<SECTION> -->`
+
+            Then three short parts: the build order as a numbered list of
+            issue numbers with one line each on why that order; the
+            spec-question issues; and any code/spec disagreements you found
+            (plus, for a design doc, the `[game]` items not planned here). Don't use a `- [ ]` checklist; GitHub's
             sub-issue list tracks progress instead.
 
             Then attach every ticket and spec-question issue you created to

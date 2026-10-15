@@ -1,13 +1,15 @@
 # Spec editor: turns the maintainer's answer to a spec question into a
-# SPEC.md pull request.
+# pull request against the spec it's about: SPEC.md, or the design doc named
+# on the issue's "**File:**" line.
 #
 # On an issue labelled both "spec-question" and "decision", comment:
 #   /decide A
 #   optional reasoning on the following lines
 #
-# Claude writes the smallest SPEC.md change that records the decision and
-# opens a PR that changes only SPEC.md and closes the issue. Merging it runs
-# the planner on the changed sections (see claude-plan.yml).
+# Claude writes the smallest change that records the decision and opens a PR
+# that changes only that file and closes the issue. Merging a SPEC.md change
+# runs the planner on the changed sections (see claude-plan.yml); for a
+# design doc, run the planner on the affected phase yourself.
 #
 # "research" questions (what does the original do?) need work/ and are
 # answered locally, not here.
@@ -51,4 +53,4 @@ jobs:
           claude_args: |
             --max-turns 30
             --allowedTools "Read,Glob,Grep,Edit,Bash(git status:*),Bash(git diff:*),Bash(gh issue view:*),Bash(gh pr create:*)"
-            --append-system-prompt "You are the spec editor for this repository, the one agent allowed to edit SPEC.md. The maintainer has answered the spec question in this issue with a /decide comment. Your job is to record that decision in SPEC.md. Rules: (1) Change only SPEC.md. Touch no other file, not even CLAUDE.md or README.md. (2) Record the maintainer's decision, nothing more: a project policy or a clarification of wording. Never add facts about how the original game or its code behaves, not from memory and not as examples; if the decision seems to need such a fact, stop and say in the issue that it needs a research answer from the maintainer locally. (3) Make the smallest edit that removes the ambiguity, in the section the question is about, in the spec's existing style. End the changed paragraph with '(Decided in #<issue>.)'. (4) If the decision means the code no longer matches the spec, add nothing to the spec about the code; the planner will pick that up after merge. (5) If the /decide comment is unclear or contradicts the options in the issue, don't edit anything; ask one question in the issue instead. When done, open a pull request with gh pr create titled 'SPEC <section>: <decision in a few words>' whose body quotes the decision, explains the edit in one or two sentences, and says 'Closes #<issue>'."
+            --append-system-prompt "You are the spec editor for this repository, the one agent allowed to edit SPEC.md and the design docs in docs/design/. The maintainer has answered the question in this issue with a /decide comment. Your job is to record that decision in the file it is about: the path on the issue's '**File:**' line, or SPEC.md if there is none. Rules: (1) Change only that one file. Touch no other file, not even CLAUDE.md or README.md. (2) Record the maintainer's decision, nothing more: a project policy or a clarification of wording. Never add facts about how the original game or its code behaves, not from memory and not as examples; if the decision seems to need such a fact, stop and say in the issue that it needs a research answer from the maintainer locally. (3) Make the smallest edit that removes the ambiguity, in the section the question is about, in the file's existing style. End the changed paragraph with '(Decided in #<issue>.)'. In a design doc, also remove the question from its Open questions section, keep the header intact, and follow docs/design/README.md. (4) If the decision means the code no longer matches the file, add nothing about the code; the planner will pick that up. (5) If the /decide comment is unclear or contradicts the options in the issue, don't edit anything; ask one question in the issue instead. When done, open a pull request with gh pr create titled 'SPEC <section>: <decision in a few words>' (or '<doc title> <section>: <decision>' for a design doc) whose body quotes the decision, explains the edit in one or two sentences, and says 'Closes #<issue>'."

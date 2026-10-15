@@ -42,18 +42,42 @@ contaminate the codebase in a way that can't be undone.
 - **Spec lane:** `SPEC.md`. Research (anything needing `work/`) happens
   only on the maintainer's machine. Decisions on `decision` questions are
   drafted by the spec editor on GitHub and merged by the maintainer.
+- **Design lane:** `docs/design/`. The maintainer's own designs built on
+  top of the generator. Only the reconciler, the docs updater and the spec
+  editor change these files, and only as `docs/design/README.md` describes.
 - **Implementation lane:** everything else. This is where agents work.
+
+## Design docs
+
+`docs/design/README.md` defines the format and lifecycle (idea, proposed,
+accepted, done). When a ticket comes from a design doc:
+
+- The doc says what to build; SPEC.md still says how Beta behaves. Never
+  take Beta facts from a design doc.
+- Read the doc's Current state and Reconciliation notes before starting,
+  and check them against the code.
+- Don't build anything tagged `[game]`; it belongs to the game, not this
+  repo.
+- Don't edit the design doc in an implementation PR. The docs updater
+  marks phases done after the plan's tickets close.
 
 ## The loop
 
-1. The planner (`claude-plan.yml`) turns a SPEC section into `planned`
-   issues and `spec-question` issues. It also runs when SPEC.md changes on
-   `master`.
-2. The maintainer labels tickets `factory`; the implementer (`claude.yml`)
+1. Ideas arrive as issues labelled `idea`. The reconciler
+   (`claude-idea.yml`) opens a PR adding `docs/design/<name>.md` as
+   `proposed`; merging it makes the doc `accepted`.
+2. The planner (`claude-plan.yml`) turns a SPEC section, or a phase of an
+   accepted design doc, into `planned` tickets and `spec-question` issues,
+   attached as sub-issues of a "Plan:" issue. It also runs when SPEC.md
+   changes on `master`.
+3. The maintainer labels tickets `factory`; the implementer (`claude.yml`)
    opens a PR; CI and the reviewer (`claude-review.yml`) check it.
-3. The maintainer answers `decision` questions with `/decide <option>`; the
-   spec editor (`claude-spec.yml`) opens a SPEC.md-only PR; merging it
-   re-runs the planner on the changed sections.
+4. The maintainer answers `decision` questions with `/decide <option>`; the
+   spec editor (`claude-spec.yml`) opens a PR changing only the file the
+   question is about.
+5. When a plan's last ticket closes, the docs updater (`claude-docs.yml`)
+   closes the plan and marks the design-doc phase done. Every Monday it
+   re-reconciles accepted docs against the code.
 
 ## Commands
 
