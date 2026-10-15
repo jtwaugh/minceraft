@@ -271,13 +271,13 @@ How each density bias applies:
   - For `SEA_LEVEL - 1 <= y < SEA_LEVEL + clear_above`, clamp density to `min(density, lerp(density, -1.0, w))`. This removes overhangs above the waterline inside the channel.
 
 > **Reconciler:** the second `Channel` bullet is a function of final density
-> and `y`, so it fits the existing additive hook (a term that subtracts
-> `w * (density + 1)` needs the density value, which the hook does not
-> receive; an additive `-k * w` with large `k` is the nearest equivalent).
-> The first bullet and `RadialBaseHeight` need the base-height hook (note 1).
+> and `y`, and the existing additive hook does not receive the density value.
+> It uses a new hook, `DensityClamp`, which receives `(x, y, z, density)` and
+> returns the new density, applied just before the `rho > 0` test. The first
+> bullet and `RadialBaseHeight` need the base-height hook (note 1).
 > Beyond the density lattice, the lattice is 4 blocks horizontally (SPEC
 > 3.1), so a channel narrower than a few blocks will alias; the default
-> `half_width = 6` is fine.
+> `half_width = 6` is fine. (Decided in #18.)
 
 Climate biases add `d_temp` and `d_humid`, scaled by their falloff, then clamp to the climate's valid range.
 
@@ -752,11 +752,12 @@ Plan and build against these.
    level), is added to `center` in SPEC 3.3 step 6, evaluated at each
    lattice column's world block coordinates. No terms means identical
    output. `RadialBaseHeight` and the seabed part of `Channel` use this
-   hook; `Channel`'s overhang clamp near the waterline uses the existing
-   density hook. This keeps the overhangs the doc asks for. The hook is a
-   project extension point, not Beta behaviour; SPEC 6.3 only describes the
-   density hook and can be extended to list this one in a separate
-   SPEC-only change.
+   hook; `Channel`'s overhang clamp near the waterline uses a density clamp
+   hook, `DensityClamp` (`f(x, y, z, density) -> f64`, returns the new
+   density, applied just before the `rho > 0` test). This keeps the
+   overhangs the doc asks for. The hooks are project extension points, not
+   Beta behaviour; SPEC 6.3 only describes the density hook and can be
+   extended to list these in a separate SPEC-only change. (Decided in #18.)
 2. **Humidity bias: A, add a humidity hook.** Add `HumidityBias`, mirroring
    `TemperatureBias`: summed, added to H and clamped to [0, 1] in
    `Climate`, before anything reads H (density, biome lookup, decoration).

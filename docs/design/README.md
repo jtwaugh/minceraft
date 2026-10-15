@@ -34,7 +34,7 @@ behaviour themselves.
    previous one left behind. To plan by hand:
    `gh workflow run claude-plan.yml -f file=docs/design/<name>.md` (next
    phase) or add `-f section="Phase C"` for a specific one. The planner
-   skips anything marked as game scope. Open questions become `decision`
+   skips anything tagged `[external]`. Open questions become `decision`
    issues, answered with `/decide`.
 5. **Build.** Label tickets `factory`, as for SPEC work.
 6. **Keep it true.** When a plan's last ticket closes, the docs updater
@@ -55,7 +55,7 @@ Every doc starts with this header. CI checks it.
 ---
 title: World layout
 status: accepted          # idea | accepted | done | superseded
-scope: both               # repo | game | both
+scope: both               # generator | game | both
 source: "#12"             # the idea issue, if there was one
 superseded_by: ""         # only when status is superseded
 phases:                   # omit if the doc has no phases
@@ -70,15 +70,20 @@ Then, in this order:
    updater): what already exists in the code that this doc relies on or
    overlaps, with file paths, and which parts are already done.
 2. **Reconciliation notes** (reconciler): conflicts with the code,
-   CLAUDE.md invariants, SPEC.md or other design docs; what is game scope
-   rather than this repo; criteria that can't be tested automatically.
+   CLAUDE.md invariants, SPEC.md or other design docs; what is
+   `[external]` rather than this repo; criteria that can't be tested automatically.
 3. The author's text, phases and all. Agents add notes beside it as
-   `> **Reconciler:** ...` blockquotes and tag items `[game]` or
+   `> **Reconciler:** ...` blockquotes and tag items `[external]` or
    `[manual check]`, but never delete or reword the author's intent.
 4. **Open questions**, each with options A, B, ... where possible.
 
 ## Scope
 
-`scope: repo` work is planned and built here. `[game]` items (the sim,
-renderer, player, raft entity, streaming in the game client) are listed so
-the design reads whole, but nothing here plans or builds them.
+Everything is built in this repo: the generator and the game alike. The
+header's `scope` says which part a doc is about (`generator`, `game` or
+`both`); it doesn't limit what gets planned.
+
+Tag an item `[external]` if it lives outside this repo (hosting, app
+stores, third-party services). The planner lists those but never plans
+them. Older docs may tag items `[game]`; that now just means game code, and
+it is planned like anything else.

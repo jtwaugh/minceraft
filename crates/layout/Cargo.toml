@@ -1,0 +1,11 @@
+[package]
+name = "layout"
+version = "0.1.0"
+edition = "2021"
+description = "World layout bias terms built on the terrain generator (std; not part of the wasm)"
+
+[dependencies]
+terrain = { path = "../terrain" }
+
+[lints]
+workspace = true

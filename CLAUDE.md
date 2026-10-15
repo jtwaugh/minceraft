@@ -5,10 +5,17 @@ Actions. Read this file, then `README.md`, before changing anything.
 
 ## What this is
 
-The world generator for Mince Raft: a Beta-1.7.3-style terrain generator in
-Rust (`crates/terrain`), compiled to wasm (`crates/web`), with a browser
-viewer and flyover (`viewer/`) and a text-based pixel-art tileset (`art/`).
-`SPEC.md` is the source of truth for how the generator behaves.
+Mince Raft: the game and its world. This repo holds both:
+
+- the **world generator**, a Beta-1.7.3-style terrain generator in Rust
+  (`crates/terrain`), compiled to wasm (`crates/web`), with a browser viewer
+  and flyover (`viewer/`) and a text-based pixel-art tileset (`art/`);
+- the **game** built on top of it (layout, simulation, client), designed in
+  `docs/design/` and added crate by crate as the design docs are built.
+
+`SPEC.md` is the source of truth for how Beta behaves, and so for the
+generator and any Beta mechanic the game reuses. Design docs are the source
+of truth for everything that is this project's own.
 
 ## Clean-room rules (do not break these)
 
@@ -56,8 +63,9 @@ done, superseded). When a ticket comes from a design doc:
   take Beta facts from a design doc.
 - Read the doc's Current state and Reconciliation notes before starting,
   and check them against the code.
-- Don't build anything tagged `[game]`; it belongs to the game, not this
-  repo.
+- Game code is built here like everything else. Don't build anything tagged
+  `[external]`; it lives outside this repo (hosting, app stores, third-party
+  services).
 - Don't edit the design doc in an implementation PR. The docs updater
   marks phases done after the plan's tickets close.
 
@@ -123,7 +131,9 @@ to touch.
   coordinate, never on the region origin or size. Overlapping regions must
   agree, with and without decoration. Any new feature needs a test for this.
 - **`crates/terrain` stays `no_std` + `alloc` with zero runtime
-  dependencies.** Build-dependencies (`toml` in `build.rs`) are fine.
+  dependencies.** Build-dependencies (`toml` in `build.rs`) are fine. Other
+  crates (layout, game) may use `std` and dependencies; keep whatever ships
+  to the browser small, and report wasm sizes in PRs.
 - **Data lives in `data/*.toml`,** read at compile time by
   `crates/terrain/build.rs`. Add constants there, not as magic numbers.
 - **Wasm size matters.** `[profile.release]` is size-optimised on purpose;

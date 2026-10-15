@@ -16,7 +16,7 @@ Inside the doc you may:
 - write or update the **Current state** and **Reconciliation notes**
   sections;
 - add `> **Reconciler:** ...` notes beside the author's text;
-- tag items `[game]` or `[manual check]`;
+- tag items `[external]` or `[manual check]`;
 - set phase status to `done` when the code shows the phase is done;
 - add questions to **Open questions**.
 
@@ -39,9 +39,10 @@ something the author wrote is wrong, say so in a note beside it.
    no viewer frameworks). Anything the doc needs that would break one goes
    in Reconciliation notes with the smallest way to avoid it (for example
    a new crate for code that needs std or dependencies).
-6. Sort the work by scope: this repo (generator, viewer, tools, data) or
-   `[game]` (sim, renderer, player, raft entity, game-side streaming).
-   Set the header's `scope`.
+6. Everything is built in this repo, generator and game alike. Set the
+   header's `scope` to the part the doc is about (`generator`, `game` or
+   `both`), and tag `[external]` only what lives outside the repo
+   (hosting, app stores, third-party services).
 7. Find "done when" criteria that no test could check (visual judgments,
    "fast on a laptop") and tag them `[manual check]`, with a note
    proposing a measurable version if there is one.

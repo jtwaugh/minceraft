@@ -110,6 +110,31 @@ impl<F: Fn(i32, i32, i32) -> f64> DensityBias for F {
 }
 
 // ===========================================================================
+// EXTENSION POINT: per-column base-height terms (SPEC 3.3, 6.3)
+// ===========================================================================
+//
+// Every term receives WORLD block coordinates (x, z) and returns a height
+// offset in blocks. The sum of all terms, divided by 8 (blocks per vertical
+// lattice level), is added to `center` in SPEC 3.3 step 6, evaluated at each
+// lattice column's world block coordinates (lattice x * 4, lattice z * 4).
+// Positive values raise the terrain, negative values lower it. Default: none.
+//
+// Any `Fn(i32, i32) -> f64` closure implements `BaseHeightBias`.
+
+/// A base-height bias term `f(x, z) -> f64` in world block coordinates; the
+/// result is in blocks.
+pub trait BaseHeightBias {
+    fn bias(&self, x: i32, z: i32) -> f64;
+}
+
+impl<F: Fn(i32, i32) -> f64> BaseHeightBias for F {
+    #[inline]
+    fn bias(&self, x: i32, z: i32) -> f64 {
+        self(x, z)
+    }
+}
+
+// ===========================================================================
 // Public API
 // ===========================================================================
 
@@ -121,6 +146,8 @@ impl<F: Fn(i32, i32, i32) -> f64> DensityBias for F {
 ///   lookup, sea ice, decoration and snow.
 /// - `humidity`: humidity bias terms, world `(x, z)`; added to H (then
 ///   clamped to [0, 1]) before H is used anywhere.
+/// - `base_height`: per-column base-height terms, world `(x, z)`, in blocks;
+///   their sum / 8 is added to the column `center` (SPEC 3.3 step 6).
 /// - `protected`: cells decoration must never modify (raft mask, spawn
 ///   water). Terrain itself is not affected by the mask.
 #[derive(Clone, Copy, Default)]
@@ -128,6 +155,7 @@ pub struct Biases<'a> {
     pub density: &'a [&'a dyn DensityBias],
     pub temperature: &'a [&'a dyn TemperatureBias],
     pub humidity: &'a [&'a dyn HumidityBias],
+    pub base_height: &'a [&'a dyn BaseHeightBias],
     pub protected: Option<&'a dyn ProtectedMask>,
 }
 
@@ -366,7 +394,7 @@ pub fn generate_coarse_heightmap(
     let lx0 = (x0 as i64).div_euclid(4);
     let lz0 = (z0 as i64).div_euclid(4);
     let (nx, nz) = (nx as usize, nz as usize);
-    let lat = gen.lattice_grid(lx0, lz0, nx, nz, ls, &[], &[]);
+    let lat = gen.lattice_grid(lx0, lz0, nx, nz, ls, &Biases::default());
     let mut out = vec![0u8; nx * nz * 4];
     for ix in 0..nx {
         for iz in 0..nz {
@@ -503,14 +531,9 @@ impl Generator {
     }
 
     /// Per-lattice-column (center, scale) (SPEC 3.3).
-    fn column_terms(
-        &self,
-        lx: i64,
-        lz: i64,
-        tb: &[&dyn TemperatureBias],
-        hb: &[&dyn HumidityBias],
-    ) -> (f64, f64) {
-        let (t, h) = self.climate.at((lx * 4) as i32, (lz * 4) as i32, tb, hb);
+    fn column_terms(&self, lx: i64, lz: i64, biases: &Biases) -> (f64, f64) {
+        let (wx, wz) = ((lx * 4) as i32, (lz * 4) as i32);
+        let (t, h) = self.climate.at(wx, wz, biases.temperature, biases.humidity);
         let th = 1.0 - t * h;
         let a = 1.0 - th * th * th * th;
         let c = self.scale.sample2d(lx as f64 * 1.121, lz as f64 * 1.121);
@@ -537,28 +560,24 @@ impl Generator {
         }
         let scale = scale.max(0.0) + 0.5;
         let d = d * 17.0 / 16.0;
-        let center = 17.0 / 2.0 + d * 4.0;
+        let mut center = 17.0 / 2.0 + d * 4.0;
+        if !biases.base_height.is_empty() {
+            let blocks: f64 = biases.base_height.iter().map(|b| b.bias(wx, wz)).sum();
+            center += blocks / 8.0;
+        }
         (center, scale)
     }
 
     /// Compute the density lattice covering block columns
     /// `x0..x0+w`, `z0..z0+d` (SPEC 3.1 - 3.4), all at once.
-    fn lattice(
-        &self,
-        x0: i32,
-        z0: i32,
-        w: u32,
-        d: u32,
-        tb: &[&dyn TemperatureBias],
-        hb: &[&dyn HumidityBias],
-    ) -> Lattice {
+    fn lattice(&self, x0: i32, z0: i32, w: u32, d: u32, biases: &Biases) -> Lattice {
         let lx0 = (x0 as i64).div_euclid(4);
         let lz0 = (z0 as i64).div_euclid(4);
         let lx1 = (x0 as i64 + w.max(1) as i64 - 1).div_euclid(4) + 1;
         let lz1 = (z0 as i64 + d.max(1) as i64 - 1).div_euclid(4) + 1;
         let nx = (lx1 - lx0 + 1) as usize;
         let nz = (lz1 - lz0 + 1) as usize;
-        self.lattice_grid(lx0, lz0, nx, nz, 1, tb, hb)
+        self.lattice_grid(lx0, lz0, nx, nz, 1, biases)
     }
 
     /// Density lattice at lattice columns `(lx0 + ix * step, lz0 + iz * step)`
@@ -571,8 +590,7 @@ impl Generator {
         nx: usize,
         nz: usize,
         step: i64,
-        tb: &[&dyn TemperatureBias],
-        hb: &[&dyn HumidityBias],
+        biases: &Biases,
     ) -> Lattice {
         let n = nx * nz * LEVELS;
 
@@ -632,7 +650,7 @@ impl Generator {
         for ix in 0..nx {
             for iz in 0..nz {
                 let (center, scale) =
-                    self.column_terms(lx0 + ix as i64 * step, lz0 + iz as i64 * step, tb, hb);
+                    self.column_terms(lx0 + ix as i64 * step, lz0 + iz as i64 * step, biases);
                 let base = (ix * nz + iz) * LEVELS;
                 for ly in 0..LEVELS {
                     let i = base + ly;
@@ -686,7 +704,7 @@ impl Generator {
         let tb = biases.temperature;
         let hb = biases.humidity;
         let db = biases.density;
-        let lat = self.lattice(x0, z0, w, d, tb, hb);
+        let lat = self.lattice(x0, z0, w, d, biases);
         let mut col = [0u8; HEIGHT];
         let mut lev = [0.0f64; LEVELS];
         // Per-row surface noise buffers (SPEC 4), computed with the grid path

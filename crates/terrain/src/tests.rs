@@ -212,3 +212,89 @@ fn coarse_heightmap_matches_full_terrain() {
         "coarse heights matched {same}/{total}"
     );
 }
+
+// ---- base-height bias (SPEC 3.3 step 6 extension point) ----
+
+fn mean_top(hm: &[u8]) -> f64 {
+    hm.chunks(4).map(|c| c[1] as f64).sum::<f64>() / (hm.len() / 4) as f64
+}
+
+#[test]
+fn empty_base_height_is_identical() {
+    for seed in [1u64, 12345, 987654321] {
+        let b = Biases::default();
+        assert_eq!(
+            generate_region_with_biases(seed, -40, 25, 70, 50, &b, false).blocks,
+            generate_region(seed, -40, 25, 70, 50).blocks
+        );
+        assert_eq!(
+            generate_heightmap_with_biases(seed, -40, 25, 70, 50, &b, false),
+            generate_heightmap(seed, -40, 25, 70, 50)
+        );
+        let none: [&dyn BaseHeightBias; 0] = [];
+        let e = Biases {
+            base_height: &none,
+            ..Biases::default()
+        };
+        assert_eq!(
+            generate_region_with_biases(seed, -40, 25, 70, 50, &e, true).blocks,
+            generate_decorated(seed, -40, 25, 70, 50).blocks
+        );
+    }
+}
+
+#[test]
+fn base_height_raises_and_lowers() {
+    let seed = 12345;
+    let base = mean_top(&generate_heightmap(seed, 0, 0, 96, 96));
+    let up = |_: i32, _: i32| 16.0;
+    let down = |_: i32, _: i32| -16.0;
+    let ups: [&dyn BaseHeightBias; 1] = [&up];
+    let downs: [&dyn BaseHeightBias; 1] = [&down];
+    let run = |t: &[&dyn BaseHeightBias]| {
+        mean_top(&generate_heightmap_with_biases(
+            seed,
+            0,
+            0,
+            96,
+            96,
+            &Biases {
+                base_height: t,
+                ..Biases::default()
+            },
+            false,
+        ))
+    };
+    let (hi, lo) = (run(&ups), run(&downs));
+    assert!(hi > base + 4.0, "up {hi} vs base {base}");
+    assert!(lo < base - 4.0, "down {lo} vs base {base}");
+}
+
+#[test]
+fn base_height_overlapping_regions_agree() {
+    let seed = 777;
+    let a = |x: i32, z: i32| (x as f64 * 0.05).sin() * 10.0 + z as f64 * 0.1;
+    let c = |x: i32, _z: i32| if x > 20 { 6.0 } else { -3.0 };
+    let terms: [&dyn BaseHeightBias; 2] = [&a, &c];
+    let b = Biases {
+        base_height: &terms,
+        ..Biases::default()
+    };
+    for decorate in [false, true] {
+        let big = generate_region_with_biases(seed, -20, -20, 90, 90, &b, decorate);
+        let small = generate_region_with_biases(seed, 7, -3, 40, 50, &b, decorate);
+        for z in 0..small.depth {
+            for x in 0..small.width {
+                let bx = (small.x0 + x as i32 + 20) as u32;
+                let bz = (small.z0 + z as i32 + 20) as u32;
+                let i = small.index(x, 0, z);
+                let j = big.index(bx, 0, bz);
+                assert_eq!(
+                    small.blocks[i..i + HEIGHT],
+                    big.blocks[j..j + HEIGHT],
+                    "decorate={decorate} at ({x},{z})"
+                );
+            }
+        }
+    }
+}

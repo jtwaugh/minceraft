@@ -10,10 +10,11 @@ Prints a JSON list of {"file", "section"} targets for the plan job's matrix.
   phase, if one is due.
 
 A design doc's next phase is the first phase its header marks `todo`, in
-header order. It is due only if no "Plan:" issue exists for it yet: an open
-plan means the phase is being built, and a closed plan with the phase still
-`todo` waits for the maintainer. So phases are planned one at a time, each
-once the previous one is marked done.
+header order. It is due unless a "Plan:" issue for it is open (being
+built), or a closed one had tickets or found nothing to build (both wait
+for the docs updater to mark the phase done). A closed plan that only
+raised questions, all now answered, is planned again. So phases are
+planned one at a time, each once the previous one is marked done.
 """
 import json
 import os
@@ -52,17 +53,47 @@ def header(path):
     return (st.group(1) if st else None), phases
 
 
-def plan_bodies():
-    """Bodies of every issue labelled `planned`, open or closed."""
-    out = subprocess.run(
-        ["gh", "api", "--paginate",
-         f"repos/{REPO}/issues?state=all&labels=planned&per_page=100",
-         "--jq", ".[] | .body // \"\""],
-        check=True, capture_output=True, text=True).stdout
-    return out
+def gh_json(path):
+    out = subprocess.run(["gh", "api", path], check=True,
+                         capture_output=True, text=True).stdout
+    return json.loads(out)
 
 
-def next_phase(path, bodies):
+def plan_issues():
+    """Every issue labelled `planned`, open or closed (plans and tickets)."""
+    issues, page = [], 1
+    while True:
+        batch = gh_json(f"repos/{REPO}/issues?state=all&labels=planned&per_page=100&page={page}")
+        issues += batch
+        if len(batch) < 100:
+            return issues
+        page += 1
+
+
+def plan_verdict(plan):
+    """'built' (it has tickets), 'questions' (only spec questions, all
+    closed), 'waiting' (only spec questions, some still open) or 'empty'
+    (nothing to build in this repo)."""
+    subs = gh_json(f"repos/{REPO}/issues/{plan['number']}/sub_issues?per_page=100")
+    labels = [{l["name"] for l in s.get("labels", [])} for s in subs]
+    if any("spec-question" not in ls for ls in labels):
+        return "built"
+    if not subs:
+        return "empty"
+    return "questions" if all(s["state"] == "closed" for s in subs) else "waiting"
+
+
+def close_answered(plan):
+    """Close a plan whose questions are all answered, so it is planned anew."""
+    subprocess.run(["gh", "api", f"repos/{REPO}/issues/{plan['number']}", "-X", "PATCH",
+                    "-f", "state=closed", "-f", "state_reason=not_planned"],
+                   check=True, capture_output=True)
+    subprocess.run(["gh", "issue", "comment", str(plan["number"]), "--repo", REPO, "--body",
+                    "All questions answered. Closing this plan and planning the phase again."],
+                   check=True, capture_output=True)
+
+
+def next_phase(path, plans):
     status, phases = header(path)
     if status != "accepted":
         log(f"{path}: status is {status!r}, not accepted; skipping.")
@@ -76,10 +107,29 @@ def next_phase(path, bodies):
         return None
     section = f"Phase {todo[0]}"
     marker = f"plan-source file={path} section={section} -->"
-    if marker in bodies:
-        log(f"{path}: {section} already has a plan; waiting for it to be marked done.")
+    mine = [p for p in plans
+            if p["title"].startswith("Plan:") and marker in (p.get("body") or "")]
+    verdicts = []
+    for p in mine:
+        v = plan_verdict(p)
+        if p["state"] == "open":
+            if v != "questions":
+                log(f"{path}: {section} has an open plan (#{p['number']}); waiting for it to finish.")
+                return None
+            # Its questions were just answered (often by the same merge that
+            # started this run): retire it and plan again.
+            close_answered(p)
+        verdicts.append(v)
+    if "built" in verdicts:
+        log(f"{path}: {section} was built from a plan; waiting for it to be marked done.")
         return None
-    log(f"{path}: next is {section}.")
+    if verdicts and all(v == "empty" for v in verdicts):
+        log(f"{path}: {section} had nothing to build here; waiting for it to be marked done.")
+        return None
+    if verdicts:
+        log(f"{path}: {section}'s earlier plan only raised questions, now answered; planning again.")
+    else:
+        log(f"{path}: next is {section}.")
     return {"file": path, "section": section}
 
 
@@ -91,13 +141,13 @@ def is_design_doc(path):
 def main():
     event = os.environ["EVENT"]
     targets = []
-    bodies = None
+    plans = None
 
-    def bodies_once():
-        nonlocal bodies
-        if bodies is None:
-            bodies = plan_bodies()
-        return bodies
+    def plans_once():
+        nonlocal plans
+        if plans is None:
+            plans = plan_issues()
+        return plans
 
     if event == "workflow_dispatch":
         f = os.environ.get("FILE") or "SPEC.md"
@@ -115,7 +165,7 @@ def main():
             if section:
                 targets.append({"file": f, "section": section})
             else:
-                t = next_phase(f, bodies_once())
+                t = next_phase(f, plans_once())
                 if t:
                     targets.append(t)
         else:
@@ -140,7 +190,7 @@ def main():
                 targets.append({"file": "SPEC.md", "section": ""})
             for f in changed:
                 if is_design_doc(f):
-                    t = next_phase(f, bodies_once())
+                    t = next_phase(f, plans_once())
                     if t:
                         targets.append(t)
 

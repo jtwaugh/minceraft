@@ -1,0 +1,32 @@
+name: Toolchain
+description: The Rust, wasm and Node toolchain CI uses, so agents can run the same checks before pushing.
+inputs:
+  rust:
+    description: Rust toolchain version
+    default: 1.97.1
+  binaryen:
+    description: Binaryen release (wasm-opt)
+    default: version_133
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.rust }}
+        components: rustfmt, clippy
+        targets: wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@v2
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack
+    - name: Install binaryen (wasm-opt)
+      shell: bash
+      env:
+        BINARYEN_VERSION: ${{ inputs.binaryen }}
+      run: |
+        curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/binaryen-${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
+          | tar xz -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/binaryen-${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 22
