@@ -54,7 +54,10 @@ crates/
     examples/stats.rs native timing, biome and vegetation statistics, PPM map
   web/                wasm-bindgen wrapper used by the viewer
 viewer/
-  index.html          single-file viewer (no frameworks)
+  index.html          the viewer page (no frameworks)
+  mesh.js             block meshing, shared by the 3D view and the workers
+  worker.js, pool.js  background workers (map tiles, flyover plans and chunks) and their queue
+  flyover/            flyover video: planner and player (see its README)
   pkg/                build output (gitignored)
   textures.json       full tileset exported by build.sh (gitignored)
 ```
@@ -75,7 +78,10 @@ let world = generate_decorated(seed, x0, z0, width, depth);   // + trees, plants
   regions always agree, with or without decoration.
 - **Heightmaps:** `generate_heightmap` (terrain) and
   `generate_heightmap_with_biases(.., decorate)` return the top block and
-  height per column.
+  height per column. `generate_coarse_heightmap(seed, x0, z0, step, nx, nz)`
+  surveys a wide area cheaply: terrain height, biome and overhang gaps at
+  every `step`-th column, read straight off the density lattice (about 14×
+  faster per area; used by the flyover to find islands).
 - **Climate and biomes:** `climate_at(seed, x, z) -> (T, H)`,
   `biome_at(seed, x, z) -> Biome`, and `generate_climate(..)` for a whole
   region (T, H and biome id per column). `Climate` is the single climate
@@ -166,8 +172,8 @@ cargo run -p terrain --profile bench-native --example stats -- <seed> <x0> <z0> 
 
 `viewer/index.html` loads the wasm module and shows:
 
-- **Map:** a 512×512 top-down view of the decorated world
-  (`heightmap_decorated`), with four modes:
+- **Map:** a top-down view of 1024×1024 blocks of the decorated world
+  (`heightmap_decorated`), drawn at 2 blocks per pixel, with four modes:
   - *terrain*: coloured by top block using the legend colours from
     `data/blocks.toml`, so trees (oak, birch and spruce leaves and logs),
     plants, cactus, pumpkins, snow and ice each show in their own colour.
@@ -180,16 +186,32 @@ cargo run -p terrain --profile bench-native --example stats -- <seed> <x0> <z0> 
   In the biome and climate modes the sea is darkened slightly so coastlines
   stay readable. Hover to see a column's block, height (and floor under
   water or ice), biome, T and H.
-- **3D view:** a WebGL2 render of a 64×64 area of `generate_region_decorated`.
-  Click the map to move it, drag to orbit and scroll to zoom. Schools of fish
-  swim in the sea (see [Fish](#fish)).
-- **Stats:** map generation time (heightmap plus climate maps) and the
+
+  How it loads:
+  - A rough draft from `coarse_heightmap` shows almost at once.
+  - The detail comes in 512×512 tiles, generated in parallel by background
+    workers (`viewer/worker.js`, queued by `viewer/pool.js`). The tile under
+    the 3D area comes first.
+  - Tiles sit on a fixed world grid and the last 16 are cached, so moving the
+    map reuses the tiles it already has.
+- **3D view**, with two modes:
+  - *chunk preview*: a WebGL2 render of a 64×64 area of
+    `generate_region_decorated`. Click the map to move it, drag to orbit and
+    scroll to zoom. Schools of fish swim in the sea (see [Fish](#fish)).
+  - *flyover*: a 60–110 s flight from an island on the map over the most
+    interesting terrain around it (peaks, cliffs, overhangs, channels, lakes,
+    big biomes). It plays at 1280×720 with captions and can be recorded to an
+    MP4 or WebM file. The route and camera are drawn on the map. The flyover
+    for the current map is prepared in the background, so it usually starts
+    at once. See [`viewer/flyover/README.md`](viewer/flyover/README.md).
+- **Stats:** map generation time, tiles generated and cached, and the
   `.wasm` size, raw and gzipped.
 
 URL parameters: `?seed=9&x0=100000&z0=100000&sx=150&sz=190&dist=70&yaw=0.8&pitch=0.15`
 (`sx`/`sz` place the 3D area within the map; `dist`, `yaw` and `pitch` set
 the camera). Add `mode=biome`, `temperature` or `humidity` to open the map in
-that mode. Text seeds are hashed to a number.
+that mode. Text seeds are hashed to a number. Add `fly=1` to open the 3D
+view in flyover mode.
 
 ### Textures in the 3D view
 
@@ -210,22 +232,27 @@ The 3D view uses these tiles from it:
 | Dirt, stone, sand, gravel | own tile | own tile | own tile |
 | Water | `water_0`–`3`, animated | `water_flow_0`–`3`, animated | `water_0`–`3` |
 | Oak log | `log_top` | `log_side` | `log_top` |
-| Birch, spruce log | `log_top` | `log_side`'s shading over the legend colour | `log_top` |
+| Birch, spruce log | `birch_log_top`, `spruce_log_top` | `birch_log_side`, `spruce_log_side` | same as top |
 | Oak, birch, spruce leaves | `leaves` (cut-out, tinted) | same | same |
+| Cactus (inset 1/16 on the sides) | `cactus_top` | `cactus_side` | `cactus_top` |
+| Pumpkin | `pumpkin_top` | `pumpkin_side` | `pumpkin_top` |
+| Ice (translucent, drawn after the water) | `ice` | `ice` | `ice` |
+| Snow layer (a slab 1/8 block high) | `snow` | `snow` | `snow` |
 | Sun | `sun_sky`, a sprite low in the north-west sky | | |
 | Fish | salmon, tuna and mackerel models from Batch 11 | | |
 
-The tileset has no tiles for the other decoration blocks, so they use their
-legend colour from `data/blocks.toml`:
+**Plants** (tall grass, fern, dead bush, dandelion, rose, sugar cane, brown
+and red mushroom) are two crossed quads, drawn from both sides, each using
+the tile of the same name from Batch 14. Tall grass and fern are tinted
+like grass.
 
-- **Plants** (tall grass, fern, dead bush, dandelion, rose, sugar cane, brown
-  and red mushroom) are two crossed quads, drawn from both sides, using a
-  small cut-out silhouette defined in the viewer (`SPRITES`) and filled with
-  the legend colour. Tall grass and fern are tinted like grass.
-- **Cactus** is a cube inset 1/16 on the sides, with faint ribs.
-- **Pumpkin** is a full cube with ribbed sides and a stem spot on top.
-- **Snow layer** is a flat white slab 1/8 of a block high.
-- **Ice** is a flat colour, drawn translucent after the water.
+The tiles in `TILES` are required: if any is missing from `textures.json`,
+the whole view falls back to flat colours. The biome tiles (Batches 13–14,
+listed in `BIOME_TILES`) are optional. When one is missing, that block gets
+a stand-in built in the viewer: its legend colour from `data/blocks.toml`
+(with ribs for cactus and pumpkin, and a small cut-out silhouette in
+`SPRITES` for plants). Birch and spruce logs fall back to `log_side`'s
+shading over their legend colour, and to `log_top`.
 
 Face culling: only full opaque cubes (stone, dirt, grass, sand, gravel, logs,
 pumpkin) hide their neighbours' faces. Leaves are cut-out, so the faces next
@@ -265,12 +292,13 @@ How it works:
 - Filtering is nearest-neighbour up close, with mipmaps so distant faces
   don't shimmer.
 - If `textures.json` is missing, the viewer falls back to flat legend colours
-  (the plant silhouettes and climate tints still apply) and says so above the
+  (the stand-in plant silhouettes and climate tints still apply) and says so above the
   3D view.
 
 To change a texture, edit the `art/batches_*.json` file that holds it and
 rerun `./build.sh`. To use another tile in the 3D view, add its name to
-`TILES` in `viewer/index.html` (and drop any stand-in from `EXTRA`). Block faces are assigned in `tileFor()`. A
+`BIOME_TILES` in `viewer/index.html` (or to `TILES` if the view can't do
+without it) and give it a stand-in. Block faces are assigned in `tileFor()`. A
 tile must be square with a side that divides 16 (4, 8 or 16).
 
 The rest of the tileset isn't drawn yet. That covers the raft and

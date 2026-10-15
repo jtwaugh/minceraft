@@ -277,6 +277,66 @@ pub fn generate_climate(
     m
 }
 
+/// Coarse land survey: the terrain height at every `step`-th block column,
+/// read straight off the density lattice (no surface pass, no decoration).
+///
+/// Samples sit on lattice columns, so `step` is rounded up to a multiple of
+/// 4 and the origin down to one. Sample `(i, k)` is world column
+/// `(x0' + i * step, z0' + k * step)` where `x0' = x0 & !3`, `z0' = z0 & !3`.
+/// Returns 4 bytes per sample in order `k * nx + i`:
+/// `[top_y, biome, gaps, gap_h]`, where `top_y` is the highest solid block
+/// (land iff `top_y >= SEA_LEVEL`) and matches the full generator's terrain
+/// height at that column; `gaps` counts air gaps above sea level with solid
+/// both above and below them (overhangs, arches, floating rock) and `gap_h`
+/// is the tallest such gap in blocks.
+/// Much cheaper per area than [`generate_heightmap`]: one lattice point per
+/// sample instead of `step * step` interpolated columns.
+pub fn generate_coarse_heightmap(seed: u64, x0: i32, z0: i32, step: u32, nx: u32, nz: u32) -> Vec<u8> {
+    let gen = Generator::new(seed);
+    let ls = (step.max(1) as i64 + 3) / 4;
+    let lx0 = (x0 as i64).div_euclid(4);
+    let lz0 = (z0 as i64).div_euclid(4);
+    let (nx, nz) = (nx as usize, nz as usize);
+    let lat = gen.lattice_grid(lx0, lz0, nx, nz, ls, &[]);
+    let mut out = vec![0u8; nx * nz * 4];
+    for ix in 0..nx {
+        for iz in 0..nz {
+            let lev = &lat.data[(ix * lat.nz + iz) * LEVELS..][..LEVELS];
+            // Walk down the Y-interpolated density (SPEC 3.5, 3.6): the first
+            // solid block is the top; each later air run that ends on solid
+            // again at or above sea level is a gap.
+            let (mut top, mut gaps, mut gap_h) = (0usize, 0u32, 0usize);
+            let mut air_from: Option<usize> = None; // top of the current air run under solid
+            let mut seen_solid = false;
+            for y in (0..HEIGHT).rev() {
+                let l = y >> 3;
+                let rho = lev[l] + (lev[l + 1] - lev[l]) * ((y & 7) as f64 * 0.125);
+                if rho > 0.0 {
+                    if !seen_solid {
+                        seen_solid = true;
+                        top = y;
+                    } else if let Some(a) = air_from.take() {
+                        if y + 1 >= SEA_LEVEL as usize {
+                            gaps += 1;
+                            gap_h = gap_h.max(a - y);
+                        }
+                    }
+                } else if seen_solid && air_from.is_none() {
+                    air_from = Some(y);
+                }
+            }
+            let wx = ((lx0 + ix as i64 * ls) * 4) as i32;
+            let wz = ((lz0 + iz as i64 * ls) * 4) as i32;
+            let o = (iz * nx + ix) * 4;
+            out[o] = top as u8;
+            out[o + 1] = gen.biome(wx, wz) as u8;
+            out[o + 2] = gaps.min(255) as u8;
+            out[o + 3] = gap_h.min(255) as u8;
+        }
+    }
+    out
+}
+
 /// `(top_block, top_y, floor_y, floor_block)` for one 128-block column.
 pub fn column_summary(col: &[u8]) -> (u8, u8, u8, u8) {
     let mut y = HEIGHT - 1;
@@ -415,11 +475,26 @@ impl Generator {
         let lz1 = (z0 as i64 + d.max(1) as i64 - 1).div_euclid(4) + 1;
         let nx = (lx1 - lx0 + 1) as usize;
         let nz = (lz1 - lz0 + 1) as usize;
+        self.lattice_grid(lx0, lz0, nx, nz, 1, tb)
+    }
+
+    /// Density lattice at lattice columns `(lx0 + ix * step, lz0 + iz * step)`
+    /// for `ix < nx`, `iz < nz`. `step == 1` is the full lattice; a larger
+    /// step samples a sparse subset (same values at the shared points).
+    fn lattice_grid(
+        &self,
+        lx0: i64,
+        lz0: i64,
+        nx: usize,
+        nz: usize,
+        step: i64,
+        tb: &[&dyn TemperatureBias],
+    ) -> Lattice {
         let n = nx * nz * LEVELS;
 
         // Base (unscaled) lattice coordinates.
-        let lxs: Vec<f64> = (0..nx).map(|i| (lx0 + i as i64) as f64).collect();
-        let lzs: Vec<f64> = (0..nz).map(|i| (lz0 + i as i64) as f64).collect();
+        let lxs: Vec<f64> = (0..nx).map(|i| (lx0 + i as i64 * step) as f64).collect();
+        let lzs: Vec<f64> = (0..nz).map(|i| (lz0 + i as i64 * step) as f64).collect();
         let lys: Vec<f64> = (0..LEVELS).map(|i| i as f64).collect();
         let scaled = |v: &[f64], s: f64| -> Vec<f64> { v.iter().map(|&c| c * s).collect() };
 
@@ -456,7 +531,7 @@ impl Generator {
         // Combine into densities, reusing the `sel` buffer as output.
         for ix in 0..nx {
             for iz in 0..nz {
-                let (center, scale) = self.column_terms(lx0 + ix as i64, lz0 + iz as i64, tb);
+                let (center, scale) = self.column_terms(lx0 + ix as i64 * step, lz0 + iz as i64 * step, tb);
                 let base = (ix * nz + iz) * LEVELS;
                 for ly in 0..LEVELS {
                     let i = base + ly;

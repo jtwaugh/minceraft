@@ -210,3 +210,23 @@ gray hair, a long off-white robe with a deep-water sash, brown sandals):
   leg (4 wide, 12 tall, 4 deep; mostly hidden by the robe): leg_front,
   leg_back, leg_outer, leg_inner, each 4×12; leg_top 4×4,
   leg_bottom 4×4
+
+BATCH 13: BIOME BLOCK FACES (8x8, opaque, tileable)
+birch_log_side (off-white bark with short near-black horizontal
+marks), birch_log_top (rings like log_top in sand and tan, with an
+off-white bark rim), spruce_log_side (dark brown bark with vertical
+near-black furrows), spruce_log_top (rings like log_top, darker, with a
+dark rim), ice (water blue with light diagonal streaks), snow
+(off-white with a few light gray specks), cactus_side (green with dark
+green vertical ribs and off-white spine dots on the ribs), cactus_top
+(green with a dark green rim and a small dark centre), pumpkin_side
+(salmon orange with red vertical ribs and yellow highlights),
+pumpkin_top (orange with red ribs and a brown stem in the middle)
+
+BATCH 14: WILD PLANTS (transparent background, growing from the bottom
+row, drawn on two crossed quads; tall_grass, fern and sugar_cane use
+only the greens 8 and 9 so the engine can tint them)
+tall_grass, fern, dead_bush (bare brown twigs), dandelion (yellow head
+on a green stem), rose (red bloom on a green stem), sugar_cane (two
+green stalks with dark nodes; tiles vertically), brown_mushroom,
+red_mushroom (red cap with off-white spots)

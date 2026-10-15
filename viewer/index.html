@@ -46,6 +46,20 @@
   #gl { cursor: grab; background: #9cc3e6; }
   #gl:active { cursor: grabbing; }
   #hover { min-height: 2.8em; max-width: 512px; }
+  #overlay { position: absolute; inset: 0; pointer-events: none; border-color: transparent; }
+  .wrap.wide { width: 912px; aspect-ratio: 16 / 9; }
+  #flyout { display: none; }
+  .flying #gl { display: none; }
+  .flying #flyout { display: block; }
+  .flying #sel { display: none !important; }
+  #flybar { display: none; flex-wrap: wrap; gap: 6px 12px; align-items: center; max-width: 912px; }
+  .flying #flybar { display: flex; }
+  #flystatus, #flyinfo { color: var(--muted); }
+  #flyinfo { display: none; white-space: pre-line; max-width: 912px; }
+  .flying #flyinfo { display: block; }
+  button.ghost { background: var(--bg); color: var(--text); border: 1px solid var(--line); font-weight: 400; }
+  #flybar a { color: var(--accent); }
+  input[type=range] { width: 220px; padding: 0; }
   .modes { display: flex; gap: 0; }
   .modes button {
     background: var(--bg); color: var(--muted); border: 1px solid var(--line);
@@ -77,29 +91,46 @@
 </header>
 <main>
   <div class="view">
-    <div class="cap">512×512 top-down map. Click to choose the 64×64 area for the 3D view.</div>
+    <div class="cap">Top-down map of 1024×1024 blocks (2 per pixel). Click to choose the 64×64 area for the 3D view.</div>
     <div class="modes" role="group" aria-label="map mode">
       <button data-mode="terrain" aria-pressed="true">terrain</button>
       <button data-mode="biome" aria-pressed="false">biome</button>
       <button data-mode="temperature" aria-pressed="false">temperature</button>
       <button data-mode="humidity" aria-pressed="false">humidity</button>
     </div>
-    <div class="wrap"><canvas id="map" width="512" height="512"></canvas><div id="sel"></div></div>
+    <div class="wrap"><canvas id="map" width="512" height="512"></canvas><canvas id="overlay" width="512" height="512"></canvas><div id="sel"></div></div>
     <div id="hover"></div>
     <div class="legend" id="legend"></div>
   </div>
-  <div class="view">
+  <div class="view" id="view3d">
+    <div class="modes" role="group" aria-label="3D view">
+      <button data-view="preview" aria-pressed="true">chunk preview</button>
+      <button data-view="flyover" aria-pressed="false" title="find an island near the map and fly a tour of the terrain around it">flyover</button>
+    </div>
     <div class="cap" id="cap3d">3D view: drag to orbit, wheel to zoom.</div>
-    <div class="wrap"><canvas id="gl" width="1024" height="1024"></canvas></div>
+    <div id="flybar">
+      <button id="flyplay">play</button>
+      <button id="flyrec" class="ghost" title="play from the start and record the view to a video file">record video</button>
+      <input id="flyseek" type="range" min="0" max="1000" value="0" aria-label="position in flight">
+      <span id="flystatus"></span>
+      <span id="flydl"></span>
+    </div>
+    <div class="wrap" id="stage3d"><canvas id="gl" width="1024" height="1024"></canvas><canvas id="flyout" width="1280" height="720"></canvas></div>
+    <div id="flyinfo"></div>
   </div>
 </main>
 <script type="module">
-import init, {
-  heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend,
-} from './pkg/terrain_web.js';
+import init, * as wasm from './pkg/terrain_web.js';
+import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, columnTints, meshBlocks } from './mesh.js';
+import { hydrate, VIEW } from './flyover/plan.js';
+import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
+import { WorkerPool } from './pool.js';
+const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend } = wasm;
 
 const $ = (id) => document.getElementById(id);
-const N = 512, AREA = 64, H = 128;
+// The map covers MAP x MAP blocks drawn at PX x PX pixels. It's built from
+// TILE x TILE tiles on a fixed world grid, generated in workers and cached.
+const MAP = 1024, PX = 512, K = MAP / PX, TILE = 512, AREA = 64, H = 128;
 const WASM_URL = './pkg/terrain_web_bg.wasm';
 
 // Block ids (data/blocks.toml); names and colours come from legend().
@@ -109,14 +140,7 @@ const B = {
   tall_grass: 14, fern: 15, dead_bush: 16, dandelion: 17, rose: 18, sugar_cane: 19,
   cactus: 20, brown_mushroom: 21, red_mushroom: 22, pumpkin: 23, snow_layer: 24,
 };
-let LEGEND, COLORS, NAMES, BIOMES;
-
-const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
-// Full cubes that hide the faces of whatever is next to them.
-const OPAQUE = flags([B.stone, B.dirt, B.grass, B.sand, B.gravel, B.oak_log, B.birch_log, B.spruce_log, B.pumpkin]);
-// Drawn as two crossed quads.
-const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom]);
-const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
+let LEGEND, COLORS, NAMES, BIOMES, CTX; // CTX: mesh.js context (legend + face layers)
 
 let state = { seed: 0n, x0: 0, z0: 0, hm: null, sel: null, wasmText: '', mode: 'terrain' };
 
@@ -143,10 +167,6 @@ async function wasmSize() {
     }
     return txt;
   } catch { return ''; }
-}
-
-function setStats(genMs) {
-  $('stats').innerHTML = `map gen <b>${genMs.toFixed(0)} ms</b> · ${state.wasmText}`;
 }
 
 // ---------------------------------------------------------------- colour helpers
@@ -181,22 +201,41 @@ function terrainColor(i, x, z) {
     return tb === B.ice ? lerp3(w, COLORS[B.ice], 0.7) : w;
   }
   const west = x > 0 ? hm[i - 4 + 1] : ty;
-  const north = z > 0 ? hm[i - N * 4 + 1] : ty;
+  const north = z > 0 ? hm[i - MAP * 4 + 1] : ty;
   let s = 1 + (ty - west) * 0.09 + (ty - north) * 0.09;
   s = Math.max(0.55, Math.min(1.45, s)) * (0.72 + (ty - 40) / 150);
   const c = COLORS[tb] || [255, 0, 255];
   return [c[0] * s, c[1] * s, c[2] * s];
 }
 
+// Quick first draft, from the coarse survey (one sample per 8 blocks): sea by
+// depth, land by height in its biome's surface colour. Tiles replace it.
+function draftColor(x, z) {
+  const dr = state.draft;
+  if (!dr) return [30, 30, 30];
+  const i = Math.min(dr.n - 1, Math.max(0, Math.floor((x + state.x0 - dr.x0) / dr.step)));
+  const k = Math.min(dr.n - 1, Math.max(0, Math.floor((z + state.z0 - dr.z0) / dr.step)));
+  const top = dr.raw[(k * dr.n + i) * 4], bio = dr.raw[(k * dr.n + i) * 4 + 1];
+  if (top < 64) {
+    const depth = Math.min(63 - top, 24) / 24;
+    return [20 + 30 * (1 - depth), 55 + 60 * (1 - depth), 140 + 70 * (1 - depth)];
+  }
+  const name = BIOMES[bio].name;
+  const c = COLORS[name === 'Desert' ? B.sand : name === 'Tundra' || name === 'Ice Desert' ? B.snow_layer : B.grass];
+  const s = 0.72 + (top - 40) / 150;
+  return [c[0] * s, c[1] * s, c[2] * s];
+}
+
 function drawMap() {
   const hm = state.hm, mode = state.mode;
   const ctx = $('map').getContext('2d');
-  const img = ctx.createImageData(N, N);
+  const img = ctx.createImageData(PX, PX);
   const d = img.data;
-  for (let z = 0; z < N; z++) {
-    for (let x = 0; x < N; x++) {
-      const c = z * N + x, i = c * 4;
+  for (let pz = 0; pz < PX; pz++) {
+    for (let px = 0; px < PX; px++) {
+      const x = px * K, z = pz * K, c = z * MAP + x, i = c * 4, o = (pz * PX + px) * 4;
       let col;
+      if (!state.filled[c]) { col = draftColor(x, z); d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255; continue; }
       if (mode === 'terrain') col = terrainColor(i, x, z);
       else {
         if (mode === 'biome') col = BIOMES[state.biome[c]].map;
@@ -204,7 +243,7 @@ function drawMap() {
         // darken the sea a little so coastlines stay readable
         if (hm[i] === B.water || hm[i] === B.ice) col = col.map((v) => v * 0.72);
       }
-      d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
+      d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -230,15 +269,15 @@ function drawLegend() {
 
 function setMode(mode) {
   state.mode = mode;
-  for (const b of document.querySelectorAll('.modes button')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  for (const b of document.querySelectorAll('button[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
   if (state.hm) drawMap();
 }
-for (const b of document.querySelectorAll('.modes button')) b.addEventListener('click', () => setMode(b.dataset.mode));
+for (const b of document.querySelectorAll('button[data-mode]')) b.addEventListener('click', () => setMode(b.dataset.mode));
 
 function placeSel() {
   const el = $('sel');
   if (!state.sel) { el.style.display = 'none'; return; }
-  const pct = (v) => (v / N * 100) + '%';
+  const pct = (v) => (v / MAP * 100) + '%';
   el.style.display = 'block';
   el.style.left = pct(state.sel.x); el.style.top = pct(state.sel.z);
   el.style.width = pct(AREA); el.style.height = pct(AREA);
@@ -247,15 +286,16 @@ function placeSel() {
 function mapCoord(ev) {
   const r = $('map').getBoundingClientRect();
   return [
-    Math.max(0, Math.min(N - 1, Math.floor((ev.clientX - r.left) / r.width * N))),
-    Math.max(0, Math.min(N - 1, Math.floor((ev.clientY - r.top) / r.height * N))),
+    Math.max(0, Math.min(MAP - 1, Math.floor((ev.clientX - r.left) / r.width * MAP))),
+    Math.max(0, Math.min(MAP - 1, Math.floor((ev.clientY - r.top) / r.height * MAP))),
   ];
 }
 
 $('map').addEventListener('mousemove', (ev) => {
   if (!state.hm) return;
   const [x, z] = mapCoord(ev);
-  const c = z * N + x, i = c * 4;
+  if (!state.filled[z * MAP + x]) return;
+  const c = z * MAP + x, i = c * 4;
   const hm = state.hm;
   const nm = (b) => (NAMES[b] || `#${b}`).replace(/_/g, ' ');
   let t = `x ${state.x0 + x}  z ${state.z0 + z}  ${nm(hm[i])} y=${hm[i + 1]}`;
@@ -266,40 +306,103 @@ $('map').addEventListener('mousemove', (ev) => {
   $('hover').innerText = t;
 });
 
-$('map').addEventListener('click', (ev) => {
-  const [x, z] = mapCoord(ev);
+function selectAt(x, z) {
   state.sel = {
-    x: Math.max(0, Math.min(N - AREA, x - AREA / 2)),
-    z: Math.max(0, Math.min(N - AREA, z - AREA / 2)),
+    x: Math.max(0, Math.min(MAP - AREA, Math.round(x - AREA / 2))),
+    z: Math.max(0, Math.min(MAP - AREA, Math.round(z - AREA / 2))),
   };
   placeSel();
+}
+
+$('map').addEventListener('click', (ev) => {
+  if (flying) return; // the map shows the route while flying
+  selectAt(...mapCoord(ev));
   build3d();
 });
 
-function regenerate() {
+// Build the map: a coarse draft first (instant), then the decorated tiles
+// that overlap it, in workers, the one under the 3D area first. Tiles sit on
+// a fixed world grid and are cached, so moving the map reuses what it can.
+// Resolves true when the map is complete (false if a newer call replaced it).
+const tileCache = new Map(); // `${seed}:${tx}:${tz}` -> { hm, biome, temp, hum }, most recent last
+const TILE_CACHE = 16;
+let mapJobs = [], genId = 0;
+async function regenerate() {
+  const id = ++genId;
+  mapJobs.forEach((j) => j.cancel());
+  mapJobs = [];
   state.seed = parseSeed($('seed').value);
   state.x0 = parseInt($('x0').value, 10) || 0;
   state.z0 = parseInt($('z0').value, 10) || 0;
-  $('stats').textContent = 'generating…';
-  requestAnimationFrame(() => setTimeout(() => {
-    const t0 = performance.now();
-    const { seed, x0, z0 } = state;
-    state.hm = heightmap_decorated(seed, x0, z0, N, N);
-    state.biome = biome_map(seed, x0, z0, N, N);
-    state.temp = temperature_map(seed, x0, z0, N, N);
-    state.hum = humidity_map(seed, x0, z0, N, N);
-    const ms = performance.now() - t0;
+  const { seed, x0, z0 } = state;
+  state.hm = new Uint8Array(MAP * MAP * 4);
+  state.biome = new Uint8Array(MAP * MAP);
+  state.temp = new Float32Array(MAP * MAP);
+  state.hum = new Float32Array(MAP * MAP);
+  state.filled = new Uint8Array(MAP * MAP);
+  state.draft = null;
+  if (!state.sel) state.sel = { x: (MAP - AREA) / 2, z: (MAP - AREA) / 2 };
+  placeSel();
+  const t0 = performance.now();
+  $('stats').textContent = 'generating map…';
+  drawMap();
+  setTimeout(() => { if (id === genId && !document.body.classList.contains('flying')) build3d(); }, 0);
+  prepareFlyover();
+
+  const draft = pool.run('coarse', { seed, x0, z0, step: 8, nx: MAP / 8, nz: MAP / 8 }, -1);
+  mapJobs.push(draft);
+  draft.promise.then((raw) => {
+    if (id !== genId) return;
+    state.draft = { raw, x0: x0 & ~3, z0: z0 & ~3, step: 8, n: MAP / 8 };
     drawMap();
-    setStats(ms);
-    if (!state.sel) state.sel = { x: (N - AREA) / 2, z: (N - AREA) / 2 };
-    placeSel();
-    build3d();
-  }, 0));
+  }, () => {});
+
+  // tiles overlapping the map, the one under the 3D area first
+  const sx = x0 + state.sel.x + AREA / 2, sz = z0 + state.sel.z + AREA / 2;
+  const tiles = [];
+  for (let tz = Math.floor(z0 / TILE); tz <= Math.floor((z0 + MAP - 1) / TILE); tz++)
+    for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + MAP - 1) / TILE); tx++)
+      tiles.push({ tx, tz, d: Math.hypot((tx + 0.5) * TILE - sx, (tz + 0.5) * TILE - sz) });
+  tiles.sort((a, b) => a.d - b.d);
+  let cached = 0;
+  const work = tiles.map(({ tx, tz }, n) => {
+    const key = `${seed}:${tx}:${tz}`;
+    const hit = tileCache.get(key);
+    if (hit) { cached++; tileCache.delete(key); tileCache.set(key, hit); return Promise.resolve(hit); }
+    const job = pool.run('tile', { seed, x: tx * TILE, z: tz * TILE, size: TILE }, n / 100);
+    mapJobs.push(job);
+    return job.promise.then((t) => {
+      tileCache.set(key, t);
+      while (tileCache.size > TILE_CACHE) tileCache.delete(tileCache.keys().next().value);
+      return t;
+    });
+  }).map((p, n) => p.then((t) => { if (id === genId) placeTile(t, tiles[n].tx * TILE - x0, tiles[n].tz * TILE - z0); }));
+  try { await Promise.all(work); } catch { return false; }
+  if (id !== genId) return false;
+  const ms = performance.now() - t0;
+  $('stats').innerHTML = `map <b>${ms.toFixed(0)} ms</b> (${tiles.length} tiles, ${cached} cached) · ${state.wasmText}`;
+  return true;
 }
 
-$('go').addEventListener('click', regenerate);
+// Copy the part of a tile (map-relative corner ox, oz) that falls on the map.
+function placeTile(t, ox, oz) {
+  const xa = Math.max(0, ox), xb = Math.min(MAP, ox + TILE), za = Math.max(0, oz), zb = Math.min(MAP, oz + TILE);
+  for (let z = za; z < zb; z++) {
+    const src = (z - oz) * TILE + (xa - ox), dst = z * MAP + xa, w = xb - xa;
+    state.hm.set(t.hm.subarray(src * 4, (src + w) * 4), dst * 4);
+    state.biome.set(t.biome.subarray(src, src + w), dst);
+    state.temp.set(t.temp.subarray(src, src + w), dst);
+    state.hum.set(t.hum.subarray(src, src + w), dst);
+    state.filled.fill(1, dst, dst + w);
+  }
+  drawMap();
+}
+
+// The header's regenerate (and Enter in its fields) leaves the flyover.
+const userRegenerate = () => { stopFlyover(); regenerate(); };
+$('go').addEventListener('click', userRegenerate);
 for (const id of ['seed', 'x0', 'z0']) {
-  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') regenerate(); });
+  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') userRegenerate(); });
 }
 
 // ---------------------------------------------------------------- 3D
@@ -325,17 +428,20 @@ function initGL() {
     layout(location=4) in vec3 tint;
     uniform mat4 mvp;
     uniform float waterFrame;
+    // packed meshes (mesh.js): position, uv and shade scales, and the mesh's offset
+    uniform vec3 unpack;
+    uniform vec3 offset;
     out vec3 vuv;
     out float vshade;
     out float vdist;
     out vec3 vtint;
     void main() {
-      gl_Position = mvp * vec4(pos, 1.0);
+      gl_Position = mvp * vec4(pos * unpack.x + offset, 1.0);
       // animated tiles (water, flowing water) are runs of 4 layers starting
       // at ANIM_FIRST; offset by the current frame
       bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
-      vuv = vec3(uv, anim ? layer + waterFrame : layer);
-      vshade = shade;
+      vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
+      vshade = shade * unpack.z;
       vtint = tint;
       vdist = gl_Position.w;
     }`));
@@ -344,14 +450,14 @@ function initGL() {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
     uniform sampler2DArray tex;
-    uniform float alpha; uniform float fogFar; uniform vec3 fogColor;
+    uniform float alpha; uniform float fogFar; uniform float fogMax; uniform vec3 fogColor;
     out vec4 o;
     void main() {
       vec4 t = texture(tex, vuv);
       if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky
       // texels stored with alpha ~0.78 are greyscale and take the climate tint
       vec3 c = (t.a < 0.9 ? t.rgb * vtint : t.rgb) * vshade;
-      float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, 0.6);
+      float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, fogMax);
       o = vec4(mix(c, fogColor, f), alpha);
     }`));
   gl.linkProgram(prog);
@@ -362,24 +468,25 @@ function initGL() {
 // Faces sample a TEXTURE_2D_ARRAY of 16x16 layers. Tiles come from the Mince
 // Raft tileset (art/batches_*.json, exported to viewer/textures.json by
 // build.sh); 8x8 tiles are scaled up 2x, the 16x16 sky tiles fit as-is.
-// Blocks with no tile use their flat legend colour; small plants with no
-// tile get a simple cut-out silhouette in their legend colour so the crossed
-// quads don't read as solid squares.
+// The viewer needs every TILES entry to use the tileset at all. BIOME_TILES
+// (art batches 13-14) are optional: a missing one falls back to a stand-in
+// built here (legend colours, ribs, plant silhouettes), so an older
+// textures.json still loads.
 const TILES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel',
   'water_0', 'water_1', 'water_2', 'water_3',
   'water_flow_0', 'water_flow_1', 'water_flow_2', 'water_flow_3',
   'sun_sky', 'log_side', 'log_top', 'leaves'];
+const BIOME_TILES = ['birch_log_side', 'birch_log_top', 'spruce_log_side', 'spruce_log_top',
+  'ice', 'snow', 'cactus_side', 'cactus_top', 'pumpkin_side', 'pumpkin_top',
+  'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose', 'sugar_cane',
+  'brown_mushroom', 'red_mushroom'];
 // Greyscale-and-tint pixels (palette greens) for climate-tinted tiles.
-const TINTED = { grass_top: '89', grass_side: '89', leaves: '89' };
-// Layers built here rather than taken from the tileset.
-const EXTRA = ['birch_log_side', 'spruce_log_side', 'ice', 'snow', 'cactus_side', 'cactus_top',
-  'pumpkin_side', 'pumpkin_top', 'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose',
-  'sugar_cane', 'brown_mushroom', 'red_mushroom'];
-const LAYER_NAMES = [...TILES, ...EXTRA];
+const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89' };
+const LAYER_NAMES = [...TILES, ...BIOME_TILES];
 const T = Object.fromEntries(LAYER_NAMES.map((n, i) => [n, i]));
 const ANIM_FIRST = T.water_0, ANIM_END = T.water_flow_3 + 1;
 
-// Plant silhouettes (8x8, bottom row on the ground). Keys: g = tinted green
+// Stand-in plant silhouettes for missing tiles (8x8, bottom row on the ground). Keys: g = tinted green
 // (grass ramp), G = darker tinted green, s = stem green, c = legend colour,
 // C = darker legend colour, w = pale stem/spots.
 const SPRITES = {
@@ -436,6 +543,7 @@ async function loadTextures() {
     const bark = (c, contrast) => (p) => c.map((v) => Math.min(255, v * (1 + (lum(p) / meanL - 1) * contrast)));
     make.birch_log_side = tileFn('log_side', bark(col('birch_log'), 1.6));
     make.spruce_log_side = tileFn('log_side', bark(col('spruce_log'), 1.0));
+    make.birch_log_top = make.spruce_log_top = make.log_top;
   } else {
     // flat colours; tinted tiles are white so the tint gives the ramp colour
     Object.assign(make, {
@@ -444,11 +552,12 @@ async function loadTextures() {
       sun_sky: solid([232, 195, 58]), log_side: solid(col('oak_log')), log_top: solid(dark(col('oak_log'), 1.25)),
       leaves: solid([255, 255, 255], TINT_A),
       birch_log_side: solid(col('birch_log')), spruce_log_side: solid(col('spruce_log')),
+      birch_log_top: solid(dark(col('birch_log'), 0.9)), spruce_log_top: solid(dark(col('spruce_log'), 1.25)),
     });
     for (const n of TILES) if (n.startsWith('water')) make[n] = solid(col('water'));
   }
-  // Blocks with no tile: flat legend colours (cactus and pumpkin get ribs so
-  // their faces read as blocks).
+  // Stand-ins for missing biome tiles: flat legend colours (cactus and
+  // pumpkin get ribs so their faces read as blocks).
   const ribs = (c, every, k) => (x) => (x % every === 0 ? dark(c, k) : c);
   make.ice = solid(col('ice'));
   make.snow = solid(col('snow_layer'));
@@ -467,6 +576,8 @@ async function loadTextures() {
       return [...map[ch], 255];
     };
   }
+  // Biome tiles from the tileset replace the stand-ins above.
+  if (textured) for (const name of BIOME_TILES) if (all[name]) make[name] = tileFn(name);
   const layers = LAYER_NAMES.map((n) => make[n]);
   // Fish model faces: one layer each, drawn at native size in the top-left
   // corner. The rest of the layer repeats the edge pixels so mipmaps
@@ -516,138 +627,14 @@ function tileFor(b, dy) {
     case B.water: return dy === 0 ? T.water_flow_0 : T.water_0;
     case B.ice: return T.ice;
     case B.oak_log: return dy ? T.log_top : T.log_side;
-    case B.birch_log: return dy ? T.log_top : T.birch_log_side;
-    case B.spruce_log: return dy ? T.log_top : T.spruce_log_side;
+    case B.birch_log: return dy ? T.birch_log_top : T.birch_log_side;
+    case B.spruce_log: return dy ? T.spruce_log_top : T.spruce_log_side;
     case B.oak_leaves: case B.birch_leaves: case B.spruce_leaves: return T.leaves;
     case B.cactus: return dy ? T.cactus_top : T.cactus_side;
     case B.pumpkin: return dy ? T.pumpkin_top : T.pumpkin_side;
     case B.snow_layer: return T.snow;
     default: return T[NAMES[b]] ?? T.stone; // cross plants
   }
-}
-
-// Faces: [normal, 4 corner offsets, shade]
-const FACES = [
-  { d: [0, 1, 0], c: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], s: 1.0 },   // top
-  { d: [0, -1, 0], c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s: 0.5 },  // bottom
-  { d: [1, 0, 0], c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], s: 0.8 },   // +x
-  { d: [-1, 0, 0], c: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s: 0.65 }, // -x
-  { d: [0, 0, 1], c: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s: 0.9 },   // +z
-  { d: [0, 0, -1], c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], s: 0.6 },  // -z
-];
-
-// Texture coords for a face corner: top/bottom map x,z; sides map the
-// horizontal axis to u and put the tile's top row at the top of the block.
-function faceUV(f, [a, b, c]) {
-  if (f.d[1] !== 0) return [a, c];
-  return [f.d[0] !== 0 ? c : a, 1 - b];
-}
-
-const WHITE = [1, 1, 1];
-const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
-
-// Per-column climate tints for the 3D area: grass and leaf ramps by humidity.
-function columnTints(seed, wx, wz) {
-  const bio = biome_map(seed, wx, wz, AREA, AREA);
-  const hum = humidity_map(seed, wx, wz, AREA, AREA);
-  const tmp = temperature_map(seed, wx, wz, AREA, AREA);
-  const grass = [], leaf = [];
-  for (let c = 0; c < AREA * AREA; c++) {
-    const bi = BIOMES[bio[c]];
-    grass.push(ramp3(bi.grass, hum[c]).map((v) => v / 255));
-    leaf.push(ramp3(bi.leaf, hum[c]).map((v) => v / 255));
-  }
-  const mid = (AREA / 2) * AREA + AREA / 2;
-  return { grass, leaf, bio, tmp, centre: { biome: BIOMES[bio[mid]], t: tmp[mid] } };
-}
-
-function tintFor(b, tints, c) {
-  switch (b) {
-    case B.grass: case B.tall_grass: return tints.grass[c];
-    case B.fern: return tints.grass[c].map((v) => v * 0.88);
-    case B.oak_leaves: return tints.leaf[c];
-    case B.birch_leaves: return lerp3(tints.leaf[c], COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
-    case B.spruce_leaves: return lerp3(tints.leaf[c], COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
-    default: return WHITE;
-  }
-}
-
-function mesh(blocks, tints) {
-  const verts = [[], [], []]; // solid+cutout, water, ice; per vertex: x y z u v layer shade r g b
-  // Clip solid ground well below the lowest surface so the view frames the
-  // terrain; also find the mean surface height for the camera target.
-  let minY = H, sumY = 0;
-  for (let c = 0; c < AREA * AREA; c++) {
-    let y = H - 1;
-    while (y > 0 && (blocks[c * H + y] === B.air || blocks[c * H + y] === B.water || blocks[c * H + y] === B.ice)) y--;
-    minY = Math.min(minY, y); sumY += y;
-  }
-  const y0 = Math.max(0, minY - 8);
-  cam.ty = sumY / (AREA * AREA);
-  const at = (x, y, z) => (x < 0 || z < 0 || x >= AREA || z >= AREA || y < y0 || y >= H)
-    ? 0 : blocks[(z * AREA + x) * H + y];
-  const push = (L, x, y, z, p, uv, layer, k, tint) => {
-    for (const i of [0, 1, 2, 0, 2, 3]) {
-      verts[L].push(x + p[i][0] - AREA / 2, y + p[i][1] - 64, z + p[i][2] - AREA / 2,
-        uv[i][0], uv[i][1], layer, k, tint[0], tint[1], tint[2]);
-    }
-  };
-  // One face of the box lo..hi (block-local) for face f.
-  const boxFace = (L, x, y, z, f, lo, hi, layer, tint) => {
-    const p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
-    push(L, x, y, z, p, p.map((q) => faceUV(f, q)), layer, f.s * (0.75 + y / 256), tint);
-  };
-  const FULL_LO = [0, 0, 0], FULL_HI = [1, 1, 1];
-  const CACTUS_LO = [CACTUS_INSET, 0, CACTUS_INSET], CACTUS_HI = [1 - CACTUS_INSET, 1, 1 - CACTUS_INSET];
-  const SNOW_HI = [1, SNOW_H, 1];
-  const X1 = [[0.15, 1, 0.15], [0.85, 1, 0.85], [0.85, 0, 0.85], [0.15, 0, 0.15]];
-  const X2 = [[0.85, 1, 0.15], [0.15, 1, 0.85], [0.15, 0, 0.85], [0.85, 0, 0.15]];
-  const XUV = [[0, 0], [1, 0], [1, 1], [0, 1]];
-  for (let z = 0; z < AREA; z++) for (let x = 0; x < AREA; x++) {
-    const c = z * AREA + x, base = c * H;
-    for (let y = y0; y < H; y++) {
-      const b = blocks[base + y];
-      if (b === B.air) continue;
-      const tint = tintFor(b, tints, c);
-      if (CROSS[b]) {
-        // two crossed quads, wound both ways so they show from either side
-        const layer = tileFor(b, 0), k = 0.9 * (0.75 + y / 256);
-        for (const q of [X1, X2]) {
-          push(0, x, y, z, q, XUV, layer, k, tint);
-          push(0, x, y, z, [q[1], q[0], q[3], q[2]], [XUV[1], XUV[0], XUV[3], XUV[2]], layer, k, tint);
-        }
-        continue;
-      }
-      for (const f of FACES) {
-        if (y === y0 && f.d[1] < 0) continue;
-        const n = at(x + f.d[0], y + f.d[1], z + f.d[2]);
-        const layer = tileFor(b, f.d[1]);
-        if (b === B.water) {
-          // water: only next to air, plants or leaves (not water, ice or solids)
-          if (n === B.water || n === B.ice || OPAQUE[n]) continue;
-          boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
-        } else if (b === B.ice) {
-          if (n === B.ice || OPAQUE[n]) continue;
-          boxFace(2, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
-        } else if (b === B.cactus) {
-          // inset sides always show; top/bottom hidden by more cactus or solid ground
-          if (f.d[1] > 0 && n === B.cactus) continue;
-          if (f.d[1] < 0 && (n === B.cactus || OPAQUE[n])) continue;
-          boxFace(0, x, y, z, f, CACTUS_LO, CACTUS_HI, layer, tint);
-        } else if (b === B.snow_layer) {
-          if (f.d[1] < 0 && OPAQUE[n]) continue;
-          if (f.d[1] === 0 && (OPAQUE[n] || n === B.snow_layer)) continue;
-          boxFace(0, x, y, z, f, FULL_LO, SNOW_HI, layer, tint);
-        } else {
-          // full cubes and leaves: hidden only by opaque cubes, so leaves
-          // never hide their neighbours and leaf-leaf faces are drawn (cut-out)
-          if (OPAQUE[n]) continue;
-          boxFace(0, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
-        }
-      }
-    }
-  }
-  return verts.map((v) => upload(new Float32Array(v)));
 }
 
 const STRIDE = 10;
@@ -665,6 +652,35 @@ function upload(v) {
   return { vao, n: v.length / STRIDE, bufs: [vb] };
 }
 
+// A packed mesh part from mesh.js ({ verts, idx }): 16-byte vertices, indexed quads.
+function uploadPacked({ verts, idx }) {
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const vb = gl.createBuffer(), ib = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  const attr = (loc, size, type, normalized, off) => {
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, type, normalized, VERTEX_BYTES, off);
+  };
+  attr(0, 3, gl.SHORT, false, 0); attr(1, 2, gl.UNSIGNED_BYTE, false, 6); attr(2, 1, gl.UNSIGNED_BYTE, false, 8);
+  attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10);
+  gl.bindVertexArray(null);
+  return { vao, n: idx.length, faces: idx.length / 6, packed: true, bufs: [vb, ib] };
+}
+
+const uloc = (n) => gl.getUniformLocation(prog, n);
+const PACKED = [POS_SCALE, UV_SCALE, SHADE_SCALE];
+// Draw a mesh: packed (mesh.js, placed at `off`) or float (sun, fish).
+function drawMesh(m, off = [0, 0, 0]) {
+  if (!m || !m.n) return;
+  gl.uniform3fv(uloc('unpack'), m.packed ? PACKED : [1, 1, 1]);
+  gl.uniform3fv(uloc('offset'), m.packed ? off : [0, 0, 0]);
+  gl.bindVertexArray(m.vao);
+  if (m.packed) gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_INT, 0);
+  else gl.drawArrays(gl.TRIANGLES, 0, m.n);
+}
+
 function free(m) {
   if (!m) return;
   gl.deleteVertexArray(m.vao);
@@ -676,10 +692,12 @@ function build3d() {
   const wx = state.x0 + state.sel.x, wz = state.z0 + state.sel.z;
   const t0 = performance.now();
   const blocks = generate_region_decorated(state.seed, wx, wz, AREA, AREA);
-  const tints = columnTints(state.seed, wx, wz);
+  const tints = columnTints(wasm, CTX, state.seed, wx, wz, AREA);
   const t1 = performance.now();
   free(opaque); free(water); free(ice);
-  [opaque, water, ice] = mesh(blocks, tints);
+  const m = meshBlocks(CTX, blocks, tints, AREA);
+  [opaque, water, ice] = [m.opaque, m.water, m.ice].map(uploadPacked);
+  cam.ty = m.meanY;
   state.blocks = blocks;
   // sky and fog from the centre column's biome sky ramp (by temperature)
   sky = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
@@ -688,7 +706,7 @@ function build3d() {
   const t2 = performance.now();
   $('cap3d').textContent = `3D view of x ${wx}..${wx + AREA - 1}, z ${wz}..${wz + AREA - 1} ` +
     `(${tints.centre.biome.name} at centre) · gen ${(t1 - t0).toFixed(0)} ms, mesh ${(t2 - t1).toFixed(0)} ms, ` +
-    `${((opaque.n + water.n + ice.n) / 6) | 0} faces, ${fish.length} fish · drag to orbit, wheel to zoom` +
+    `${opaque.faces + water.faces + ice.faces} faces, ${fish.length} fish · drag to orbit, wheel to zoom` +
     (state.textured ? '' : ' · textures.json not found; using flat colours');
   draw();
 }
@@ -728,8 +746,9 @@ function draw() {
   const target = [0, cam.ty - 64, 0];
   const view = lookAt([eye[0], eye[1] + target[1], eye[2]], target, [0, 1, 0]);
   const mvp = mul(persp(0.9, cv.width / cv.height, 0.5, 2000), view);
-  const u = (n) => gl.getUniformLocation(prog, n);
+  const u = uloc;
   gl.uniformMatrix4fv(u('mvp'), false, new Float32Array(mvp));
+  gl.uniform1f(u('fogMax'), 0.6);
   gl.uniform1f(u('alpha'), 1);
   gl.uniform1f(u('waterFrame'), waterFrame);
   gl.uniform3f(u('fogColor'), sky[0], sky[1], sky[2]);
@@ -741,7 +760,8 @@ function draw() {
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   gl.uniform1f(u('fogFar'), cam.dist + 90);
   // opaque and cut-out geometry (leaves, plants) in one pass
-  gl.bindVertexArray(opaque.vao); gl.drawArrays(gl.TRIANGLES, 0, opaque.n);
+  const AT = [-AREA / 2, -64, -AREA / 2]; // packed meshes are in area-local coordinates
+  drawMesh(opaque, AT);
   // fish under the water surface; fins are flat, so draw both sides
   if (fish.length) {
     gl.disable(gl.CULL_FACE);
@@ -752,9 +772,9 @@ function draw() {
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   gl.uniform1f(u('alpha'), 0.45);
-  gl.bindVertexArray(water.vao); gl.drawArrays(gl.TRIANGLES, 0, water.n);
+  drawMesh(water, AT);
   gl.uniform1f(u('alpha'), 0.72);
-  gl.bindVertexArray(ice.vao); gl.drawArrays(gl.TRIANGLES, 0, ice.n);
+  drawMesh(ice, AT);
   gl.depthMask(true);
   gl.bindVertexArray(null);
 }
@@ -782,7 +802,8 @@ function drawDynamic(key, v) {
   const m = dynMeshes[key] ||= upload(new Float32Array(0));
   gl.bindBuffer(gl.ARRAY_BUFFER, m.bufs[0]);
   gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
-  gl.bindVertexArray(m.vao); gl.drawArrays(gl.TRIANGLES, 0, v.length / STRIDE);
+  m.n = v.length / STRIDE;
+  drawMesh(m);
 }
 
 // ---------------------------------------------------------------- fish
@@ -958,7 +979,7 @@ function tick(t) {
   requestAnimationFrame(tick);
   const dt = Math.min(0.1, (t - lastT) / 1000);
   lastT = t;
-  if (document.hidden || !opaque) return;
+  if (document.hidden || !opaque || flying) return; // the flyover runs its own loop
   waterFrame = Math.floor(t / 300) % 4;
   updateFish(dt);
   draw();
@@ -981,6 +1002,290 @@ $('gl').addEventListener('wheel', (e) => {
   draw();
 }, { passive: false });
 
+// ---------------------------------------------------------------- flyover
+// Every time the map changes, a flyover for it is prepared in the background
+// (prepareFlyover): a worker plans it (flyover/plan.js) and the chunks for its
+// first OPENING seconds start rendering in the pool, after the map tiles. The
+// flyover toggle then plays at once, or shows a loading card until those
+// chunks are in. The route stays on the map when it can (otherwise the map
+// moves to it), and is drawn on #overlay. Frames render into the hidden #gl
+// at 1280x720 and are copied into #flyout (shown in its place) with
+// captions; #flyout is what gets recorded. See viewer/flyover/README.md.
+let pool;              // WorkerPool, created at startup
+let prep = null;       // { key, seed, job, ready, plan, player, origin, sky, ... } for the current map
+let flying = false;    // the 3D view is in flyover mode
+let markStarted;
+const started = new Promise((r) => { markStarted = r; }); // the page has a map and a pool
+const FLY_W = 1280, FLY_H = 720;
+const FLY_FOG = VIEW.fogEnd / 1.15; // the shader's fog is solid at 1.15 x fogFar
+
+function flyStatus(text) { $('flystatus').textContent = text; }
+
+const flyEnv = () => ({ pool, canvas: $('flyout'), upload: uploadPacked, free, render: (f) => renderFly(f) });
+
+function prepareFlyover() {
+  const key = `${state.seed}:${state.x0}:${state.z0}`;
+  if (prep && prep.key === key) return prep;
+  cancelPrep();
+  const seed = state.seed, x0 = state.x0, z0 = state.z0;
+  const p = prep = { key, seed, sky: null, skyAt: -1 };
+  p.job = pool.run('plan', { seed, cx: x0 + MAP / 2, cz: z0 + MAP / 2, bounds: { x0, z0, x1: x0 + MAP, z1: z0 + MAP } }, PRI.plan);
+  p.ready = p.job.promise.then((data) => {
+    if (prep !== p) return null;
+    if (!data) { p.none = true; return null; }
+    p.plan = hydrate(data);
+    p.origin = [Math.round(p.plan.island.cx / CHUNK) * CHUNK, 0, Math.round(p.plan.island.cz / CHUNK) * CHUNK];
+    p.player = new FlyoverPlayer(p.plan, seed, flyEnv(), onFlyState);
+    return p;
+  }, () => null);
+  return p;
+}
+
+function cancelPrep() {
+  if (!prep) return;
+  prep.job?.cancel();
+  prep.player?.dispose();
+  prep = null;
+}
+
+function setView(view) {
+  for (const b of document.querySelectorAll('button[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === view));
+  document.body.classList.toggle('flying', view === 'flyover');
+  $('stage3d').classList.toggle('wide', view === 'flyover');
+}
+
+async function startFlyover() {
+  if (flying) return;
+  flying = true;
+  setView('flyover');
+  $('flydl').textContent = ''; $('flyinfo').textContent = '';
+  $('cap3d').textContent = 'Flyover: an island on the map, then a tour of the terrain around it.';
+  $('gl').width = FLY_W; $('gl').height = FLY_H;
+  flyStatus('planning the flyover…');
+  requestAnimationFrame(flyLoop);
+  await started;
+  // the map may change while this waits (then a new plan replaces it)
+  let p;
+  for (;;) {
+    p = prepareFlyover();
+    await p.ready;
+    if (!flying) return;
+    if (prep === p) break;
+  }
+  if (!p.plan) { flyStatus('no island within 1024 blocks of the map centre; try another x/z or seed'); return; }
+  if (p.plan.moved) {
+    // No route fits this map: move the map to the route, keeping this plan.
+    const [mx, mz] = p.plan.mapOrigin;
+    $('x0').value = mx; $('z0').value = mz;
+    p.key = `${state.seed}:${mx}:${mz}`;
+    p.plan.moved = false;
+    regenerate();
+  }
+  selectAt(p.plan.island.cx - state.x0, p.plan.island.cz - state.z0);
+  $('flyinfo').textContent = flyInfo(p.plan);
+  p.player.play();
+}
+
+// Back to the chunk preview, on the flyover's island. The flyover only pauses,
+// so its loaded chunks are still there if you switch back.
+function stopFlyover() {
+  if (!flying) return;
+  flying = false;
+  setView('preview');
+  $('overlay').getContext('2d').clearRect(0, 0, PX, PX);
+  prep?.player?.pause();
+  $('gl').width = 1024; $('gl').height = 1024;
+  build3d();
+}
+
+function flyInfo(plan) {
+  const i = plan.island;
+  const lines = [`${i.label} at x ${Math.round(i.cx)} z ${Math.round(i.cz)}, ${i.blocks} m², top y ${i.maxH}`,
+    `(${plan.islandCount} islands and ${plan.featureCount} features surveyed, ${plan.schedule.length} chunks in view, planned in ${plan.ms} ms)`];
+  plan.chosen.forEach((f, n) => lines.push(`${n + 1}. ${f.label}  (x ${f.x} z ${f.z}) · in view ${plan.coverage[n].seconds.toFixed(1)} s`));
+  lines.push(`${plan.path.duration.toFixed(0)} s flight`);
+  return lines.join('\n');
+}
+
+function onFlyState(s) {
+  if (!flying) return;
+  $('flyplay').textContent = s === 'playing' || s === 'loading' ? 'pause' : 'play';
+}
+
+function flyLoop(now) {
+  if (!flying) return;
+  requestAnimationFrame(flyLoop);
+  const p = prep;
+  if (document.hidden || !p?.player) return;
+  waterFrame = Math.floor(now / 300) % 4;
+  const pl = p.player, st = pl.stream;
+  if (!pl.prepared && pl.t === 0 && pl.state !== 'playing') {
+    // still rendering the opening: a card instead of a half-built scene
+    const [d, n] = pl.opening;
+    pl.frame(now); // keeps loading; its picture is replaced below
+    loadingCard(d, n);
+    flyStatus(`loading flyover render… ${d}/${n} chunks`);
+    drawRoute(pl.plan.path.at(0));
+    return;
+  }
+  pl.frame(now);
+  const label = { loading: 'loading chunks…', playing: 'playing', paused: 'paused', done: 'done' }[pl.state];
+  flyStatus(`${pl.t.toFixed(1)} / ${pl.duration.toFixed(1)} s · ${label} · ${st.loaded.size} chunks loaded, ` +
+    `${st.jobs.size} queued` + (pl.recorder ? ' · recording' : ''));
+  if (!seeking) $('flyseek').value = String(Math.round(pl.t / pl.duration * 1000));
+}
+
+function loadingCard(d, n) {
+  const ctx = $('flyout').getContext('2d');
+  ctx.fillStyle = '#101214'; ctx.fillRect(0, 0, FLY_W, FLY_H);
+  ctx.fillStyle = '#d8dde3'; ctx.font = '600 28px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.fillText('loading flyover render…', 80, FLY_H / 2 - 24);
+  ctx.fillStyle = '#30353b'; ctx.fillRect(80, FLY_H / 2, FLY_W - 160, 10);
+  ctx.fillStyle = '#7fb35a'; ctx.fillRect(80, FLY_H / 2, (FLY_W - 160) * (n ? d / n : 0), 10);
+  ctx.fillStyle = '#8a939d'; ctx.font = '18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.fillText(`${d} of ${n} chunks for the first ${OPENING} s`, 80, FLY_H / 2 + 44);
+}
+
+// Sky and fog follow the biome under the camera (its sky ramp by temperature),
+// eased so biome edges don't flash.
+function flySky(eye) {
+  const want = (() => {
+    const x = Math.round(eye[0]), z = Math.round(eye[2]);
+    const b = biome_map(prep.seed, x, z, 1, 1)[0], t = temperature_map(prep.seed, x, z, 1, 1)[0];
+    return ramp3(BIOMES[b].sky, t).map((v) => v / 255);
+  });
+  if (!prep.sky) prep.sky = want();
+  if (prep.player.frameNo - prep.skyAt >= 15) { prep.skyWant = want(); prep.skyAt = prep.player.frameNo; }
+  prep.sky = lerp3(prep.sky, prep.skyWant || prep.sky, 0.04);
+  return prep.sky;
+}
+
+function renderFly(f) {
+  const o = prep.origin;
+  const eye = [f.eye[0] - o[0], f.eye[1] - 64, f.eye[2] - o[2]];
+  const tgt = [f.target[0] - o[0], f.target[1] - 64, f.target[2] - o[2]];
+  const skyC = flySky(f.eye);
+  gl.viewport(0, 0, FLY_W, FLY_H);
+  gl.clearColor(skyC[0], skyC[1], skyC[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
+  gl.useProgram(prog);
+  const view = lookAt(eye, tgt, [0, 1, 0]);
+  gl.uniformMatrix4fv(uloc('mvp'), false, new Float32Array(mul(persp(1.0, FLY_W / FLY_H, 0.3, 1000), view)));
+  gl.uniform1f(uloc('alpha'), 1);
+  gl.uniform1f(uloc('waterFrame'), waterFrame);
+  gl.uniform3f(uloc('fogColor'), skyC[0], skyC[1], skyC[2]);
+  gl.uniform1f(uloc('fogMax'), 1);
+  gl.uniform1f(uloc('fogFar'), 1e9);
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+  drawSun(view, eye);
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  gl.uniform1f(uloc('fogFar'), FLY_FOG);
+  // chunks in front of the camera (or under it), opaque first, then water and ice
+  const fwd = [tgt[0] - eye[0], tgt[2] - eye[2]], fl = Math.hypot(...fwd) || 1;
+  const vis = [];
+  for (const c of f.chunks) {
+    const off = [c.cx * CHUNK - o[0], -64, c.cz * CHUNK - o[2]];
+    const dx = off[0] + CHUNK / 2 - eye[0], dz = off[2] + CHUNK / 2 - eye[2];
+    if ((dx * fwd[0] + dz * fwd[1]) / fl < -CHUNK * 0.75) continue;
+    vis.push([c, off]);
+  }
+  for (const [c, off] of vis) drawMesh(c.parts.opaque, off);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.uniform1f(uloc('alpha'), 0.45);
+  for (const [c, off] of vis) drawMesh(c.parts.water, off);
+  gl.uniform1f(uloc('alpha'), 0.72);
+  for (const [c, off] of vis) drawMesh(c.parts.ice, off);
+  gl.depthMask(true);
+  gl.bindVertexArray(null);
+  composeFly(f);
+  drawRoute(f);
+}
+
+// Copy the frame into #flyout (same task, so no preserveDrawingBuffer) and
+// draw the captions over it.
+function composeFly(f) {
+  const ctx = $('flyout').getContext('2d');
+  ctx.drawImage($('gl'), 0, 0);
+  const caption = (text, alpha, y, size) => {
+    if (alpha <= 0 || !text) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `600 ${size}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, 48, y);
+    ctx.restore();
+  };
+  // opening title, then feature captions
+  const ta = Math.min(1, f.t / 0.8, Math.max(0, (4.5 - f.t) / 0.8));
+  caption('MINCE RAFT', ta, FLY_H - 112, 34);
+  caption(`seed ${$('seed').value.trim()}`, ta * 0.85, FLY_H - 80, 20);
+  if (f.t > 4.5) caption(f.label, f.labelAlpha, FLY_H - 56, 28);
+  // gentle fade from and to black
+  const fade = Math.max(0, 1 - f.t / 1.2, 1 - (f.duration - f.t) / 1.5);
+  if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, FLY_W, FLY_H); }
+}
+
+// The route, the features and the camera, over the main map.
+function drawRoute(f) {
+  if (prep.player.frameNo % 6) return;
+  const ctx = $('overlay').getContext('2d');
+  const px = (x, z) => [(x - state.x0) / K, (z - state.z0) / K];
+  ctx.clearRect(0, 0, PX, PX);
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  const trace = () => {
+    ctx.beginPath();
+    const path = prep.plan.path;
+    for (let t = 0; t <= path.duration; t += 0.5) { const e = path.at(t).eye; const [a, b] = px(e[0], e[2]); t ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }
+    ctx.stroke();
+  };
+  trace();
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  trace();
+  ctx.font = '11px ui-monospace, Menlo, monospace'; ctx.textBaseline = 'middle';
+  prep.plan.chosen.forEach((ft, n) => {
+    const [a, b] = px(ft.x, ft.z);
+    ctx.fillStyle = '#ff5a4a'; ctx.fillRect(a - 3, b - 3, 6, 6);
+    ctx.fillStyle = '#fff'; ctx.fillText(String(n + 1), a + 6, b);
+  });
+  const [a, b] = px(f.eye[0], f.eye[2]);
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000';
+  ctx.beginPath(); ctx.arc(a, b, 4, 0, 7); ctx.fill(); ctx.stroke();
+}
+
+// For the console and scripted captures: window.flyover() -> { plan, player, ... } or null.
+window.flyover = () => (flying ? prep : null);
+
+let seeking = false;
+for (const b of document.querySelectorAll('button[data-view]')) {
+  b.addEventListener('click', () => { if (b.dataset.view === 'flyover') startFlyover(); else stopFlyover(); });
+}
+$('flyplay').addEventListener('click', () => {
+  const p = prep?.player;
+  if (!flying || !p) return;
+  if (p.state === 'playing' || p.state === 'loading') p.pause(); else p.play();
+});
+$('flyseek').addEventListener('input', () => { seeking = true; const p = prep?.player; if (flying && p) p.seek($('flyseek').value / 1000 * p.duration); });
+$('flyseek').addEventListener('change', () => { seeking = false; });
+$('flyrec').addEventListener('click', async () => {
+  if (!flying || !prep?.player || prep.player.recorder) return;
+  $('flydl').textContent = '';
+  const f = prep;
+  try {
+    const { blob, type } = await f.player.record();
+    const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `flyover-${$('seed').value.trim().replace(/[^\w-]+/g, '_')}.${ext}`;
+    a.textContent = `save ${a.download} (${(blob.size / 1048576).toFixed(1)} MB)`;
+    $('flydl').replaceChildren(a);
+  } catch (e) {
+    $('flydl').textContent = String(e.message || e);
+  }
+});
+
 // ---------------------------------------------------------------- start
 const qs = new URLSearchParams(location.search);
 for (const k of ['seed', 'x0', 'z0']) if (qs.has(k)) $(k).value = qs.get(k);
@@ -988,18 +1293,25 @@ if (qs.has('sx') && qs.has('sz')) state.sel = { x: +qs.get('sx'), z: +qs.get('sz
 if (qs.has('dist')) cam.dist = +qs.get('dist');
 if (qs.has('yaw')) cam.yaw = +qs.get('yaw');
 if (qs.has('pitch')) cam.pitch = +qs.get('pitch');
-await init();
+// Compile the wasm once; the workers get the same module instead of each
+// compiling (and warming up) their own.
+const wasmModule = await WebAssembly.compileStreaming(fetch(WASM_URL));
+await init({ module_or_path: wasmModule });
 LEGEND = JSON.parse(legend());
 COLORS = []; NAMES = [];
 for (const b of LEGEND.blocks) { COLORS[b.id] = b.color; NAMES[b.id] = b.name; }
 BIOMES = [];
 for (const b of LEGEND.biomes) BIOMES[b.id] = b;
+CTX = legendContext(legend(), faceLayers(tileFor));
+pool = new WorkerPool({ faceLayer: CTX.faceLayer, module: wasmModule });
 setMode(['terrain', 'biome', 'temperature', 'humidity'].includes(qs.get('mode')) ? qs.get('mode') : 'terrain');
 initGL();
 state.textured = await loadTextures();
 if (!state.textured) $('cap3d').textContent = 'textures.json not found; using flat colours.';
 state.wasmText = await wasmSize();
 regenerate();
+markStarted();
+if (qs.has('fly')) startFlyover(); // ?fly=1 opens the flyover straight away
 </script>
 </body>
 </html>

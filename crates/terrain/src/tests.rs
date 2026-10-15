@@ -153,3 +153,46 @@ fn gradient_table_matches_spec() {
         assert_eq!(noise::grad_reference(h, x, y, z), noise::grad_table(h, x, y, z), "h={h}");
     }
 }
+
+#[test]
+fn coarse_heightmap_matches_full_terrain() {
+    // Samples sit on lattice columns, where the full generator's trilinear
+    // interpolation reduces to the same Y interpolation. The surface pass
+    // can turn a few top blocks into water at sea level, so allow a sliver
+    // of mismatches there.
+    let (seed, x0, z0, step, n) = (12345u64, -203, 77, 8u32, 40u32);
+    let coarse = generate_coarse_heightmap(seed, x0, z0, step, n, n);
+    let (ax, az) = (x0 & !3, z0 & !3);
+    let span = (n - 1) * step + 1;
+    let r = generate_region(seed, ax, az, span, span);
+    let (mut same, mut total) = (0, 0);
+    for k in 0..n {
+        for i in 0..n {
+            let (x, z) = (i * step, k * step);
+            let solid = |y: u32| {
+                let b = r.get(x, y, z);
+                b != Block::Air && b != Block::Water && b != Block::Ice
+            };
+            let top = (0..128).rev().find(|&y| solid(y)).unwrap_or(0);
+            // gaps: air runs above sea level with solid above and below
+            let (mut gaps, mut in_air) = (0u8, false);
+            for y in (0..=top).rev() {
+                if solid(y) {
+                    if in_air && y + 1 >= 64 {
+                        gaps += 1;
+                    }
+                    in_air = false;
+                } else {
+                    in_air = true;
+                }
+            }
+            let o = ((k * n + i) * 4) as usize;
+            total += 1;
+            if coarse[o] as u32 == top && coarse[o + 2] == gaps {
+                same += 1;
+            }
+            assert_eq!(coarse[o + 1], biome_at(seed, ax + x as i32, az + z as i32) as u8);
+        }
+    }
+    assert!(same * 100 >= total * 98, "coarse heights matched {same}/{total}");
+}

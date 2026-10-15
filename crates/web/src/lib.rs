@@ -42,6 +42,17 @@ pub fn heightmap_decorated(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<u
     terrain::generate_heightmap_with_biases(seed, x0, z0, w, d, &Biases::default(), true)
 }
 
+/// Coarse land survey for finding islands and features over a wide area:
+/// 4 bytes per sample `[top_y, biome, gaps, gap_h]` (order `k * nx + i`;
+/// gaps = air gaps above sea level under solid, gap_h = the tallest) at world columns
+/// `(x0 & !3) + i * step`, `(z0 & !3) + k * step`; `step` is rounded up to a
+/// multiple of 4. Land iff `top_y >= 64`. Heights equal the terrain
+/// heightmap's at those columns, but cost one lattice point per sample.
+#[wasm_bindgen]
+pub fn coarse_heightmap(seed: u64, x0: i32, z0: i32, step: u32, nx: u32, nz: u32) -> Vec<u8> {
+    terrain::generate_coarse_heightmap(seed, x0, z0, step, nx, nz)
+}
+
 /// Biome id per column (`z * w + x`); names/colours via `legend()`.
 #[wasm_bindgen]
 pub fn biome_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<u8> {
