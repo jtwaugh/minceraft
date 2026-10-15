@@ -138,7 +138,7 @@ jobs:
             "Design: <title>: <SECTION> done" (or "... still incomplete").
           claude_args: |
             --max-turns 40
-            --allowedTools "Read,Glob,Grep,Edit,Bash(printenv:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api repos/${{ github.repository }}/issues:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout -b:*),Bash(git add docs/design/:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Bash(printenv:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api repos/${{ github.repository }}/issues/*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout -b:*),Bash(git add docs/design/*),Bash(git commit:*),Bash(git push -u origin docs/*),Bash(git push origin docs/*),Bash(gh pr create:*)"
 
   drift:
     if: |
@@ -180,4 +180,4 @@ jobs:
             doc in your final message.
           claude_args: |
             --max-turns 120
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(printenv:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout:*),Bash(git add docs/design/:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(printenv:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout:*),Bash(git add docs/design/*),Bash(git commit:*),Bash(git push -u origin docs/*),Bash(git push origin docs/*),Bash(gh pr create:*)"

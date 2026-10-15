@@ -109,27 +109,28 @@ def next_phase(path, plans):
     marker = f"plan-source file={path} section={section} -->"
     mine = [p for p in plans
             if p["title"].startswith("Plan:") and marker in (p.get("body") or "")]
-    verdicts = []
-    for p in mine:
-        v = plan_verdict(p)
-        if p["state"] == "open":
-            if v != "questions":
-                log(f"{path}: {section} has an open plan (#{p['number']}); waiting for it to finish.")
-                return None
-            # Its questions were just answered (often by the same merge that
-            # started this run): retire it and plan again.
-            close_answered(p)
-        verdicts.append(v)
-    if "built" in verdicts:
-        log(f"{path}: {section} was built from a plan; waiting for it to be marked done.")
-        return None
-    if verdicts and all(v == "empty" for v in verdicts):
-        log(f"{path}: {section} had nothing to build here; waiting for it to be marked done.")
-        return None
-    if verdicts:
-        log(f"{path}: {section}'s earlier plan only raised questions, now answered; planning again.")
-    else:
+    if not mine:
         log(f"{path}: next is {section}.")
+        return {"file": path, "section": section}
+    # Only the newest plan for this phase decides; older ones are history.
+    latest = max(mine, key=lambda p: p["number"])
+    v = plan_verdict(latest)
+    if v == "built":
+        log(f"{path}: {section} has tickets (#{latest['number']}); waiting for the phase to be marked done.")
+        return None
+    if v == "empty":
+        log(f"{path}: {section} had nothing to build here (#{latest['number']}); waiting for it to be marked done.")
+        return None
+    if v == "waiting":
+        log(f"{path}: {section}'s plan #{latest['number']} has open questions; waiting for answers.")
+        return None
+    # Only questions, all answered.
+    if latest["state"] == "open":
+        # Often the same merge that answered the last question started this
+        # run: retire the plan and plan the phase again.
+        close_answered(latest)
+        log(f"{path}: closed plan #{latest['number']} (questions answered).")
+    log(f"{path}: {section}'s plan only raised questions, now answered; planning again.")
     return {"file": path, "section": section}
 
 
