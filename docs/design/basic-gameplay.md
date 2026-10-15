@@ -49,10 +49,11 @@ belt, hands, item entities, the event system and the HUD.
 ## Reconciliation notes
 
 1. **Almost all of this is game scope.** Input, camera, movement, targeting,
-   hands, tools, animals, crops, HUD and events are the sim and client, which
-   CLAUDE.md keeps out of this repo. Every phase is `[game]` and the header
-   says `scope: game`. Nothing here is planned or built here; the doc stays as
-   the design record.
+   hands, tools, animals, crops, HUD and events are the sim and client.
+   > **Maintainer, 2026-10-15:** game code now lives in this repo (see
+   > CLAUDE.md, "What this is"), so these phases are planned and built here.
+   > The `[game]` tags below just mark game code. This supersedes the
+   > answer to #30.
 2. **The idea issue is incomplete.** The text jumps from section 2.1 to
    section 12; sections 2.2 to 11 (look, movement, targeting, hands, sword,
    hoe, dispatch table, events) are missing. Phases 2 to 8 and the tests refer
@@ -163,9 +164,10 @@ Select tool | 1 to 5, mouse wheel | press edge
 Each phase ends with something playable in the browser test scene.
 
 > **Reconciler:** no browser test scene exists in this repo; the only page is
-> the viewer (`viewer/index.html`). The browser test scene lives in the game
-> repo, so Phase 1 needs nothing from this repo. All phases are `[game]`.
-> (Decided in #30.)
+> the viewer (`viewer/index.html`).
+> **Maintainer, 2026-10-15:** the game lives in this repo, so the browser
+> test scene is built here too, superseding the earlier answer to #30
+> ("the game repo"). Where in the repo it goes is open question 1.
 
 **1. Input and camera.** Pointer lock, bindings, `TickInput` accumulation with latched edges, free-look camera with FOV and interpolation. Done when looking and moving a debug camera feels smooth at 60 fps with the sim at 20 Hz.
 
@@ -236,6 +238,13 @@ Each phase ends with something playable in the browser test scene.
 > affect this repo are below.
 
 ## Open questions (reconciler)
+
+1. **Where the browser test scene lives in this repo.** (Reopened: #30
+   chose a separate game repo, and the game now lives here instead.)
+   - A: a new page in `viewer/` (plain ES modules, no bundler, like the
+     viewer), with the sim compiled to wasm alongside the generator.
+   - B: a separate web client folder (for example `client/`) with its own
+     page, sharing `viewer/`'s meshing and textures.
 
 2. **Partial-height collision data.**
    - A: a game-side shape table; `blocks.toml` unchanged.

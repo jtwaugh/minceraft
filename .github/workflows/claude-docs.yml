@@ -27,9 +27,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # On a ticket closing: is its plan now finished?
+  # On a ticket closing: is its plan now finished? Also handles a plan
+  # issue closed directly (the planner closes a plan with nothing to build).
   finish-plan:
-    if: github.event_name == 'issues' && github.event.sender.login == 'jtwaugh'
+    if: |
+      github.event_name == 'issues' &&
+      contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login)
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -43,19 +46,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          REASON: ${{ github.event.issue.state_reason }}
         run: |
-          parent=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.parent_issue_url // ""')
-          [ -n "$parent" ] || { echo "No parent issue; nothing to do."; exit 0; }
-          plan=${parent##*/}
-          gh api "repos/$REPO/issues/$plan" > plan.json
-          title=$(jq -r .title plan.json)
-          case "$title" in Plan:*) ;; *) echo "Parent #$plan is not a plan."; exit 0;; esac
-          [ "$(jq -r .state plan.json)" = open ] || { echo "Plan #$plan already closed."; exit 0; }
-          open=$(gh api "repos/$REPO/issues/$plan/sub_issues" --paginate --jq '[.[] | select(.state=="open")] | length')
-          [ "$open" -eq 0 ] || { echo "Plan #$plan has $open open sub-issues."; exit 0; }
-
-          gh api "repos/$REPO/issues/$plan" -X PATCH -f state=closed -f state_reason=completed > /dev/null
-          echo "Closed plan #$plan."
+          case "$TITLE" in
+            Plan:*)
+              # A plan closed directly. "Not planned" means abandoned: leave
+              # the phase alone (the pick step may plan it again).
+              [ "$REASON" = completed ] || { echo "Plan #$ISSUE closed as $REASON; nothing to do."; exit 0; }
+              plan=$ISSUE
+              gh api "repos/$REPO/issues/$plan" > plan.json ;;
+            *)
+              parent=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.parent_issue_url // ""')
+              [ -n "$parent" ] || { echo "No parent issue; nothing to do."; exit 0; }
+              plan=${parent##*/}
+              gh api "repos/$REPO/issues/$plan" > plan.json
+              title=$(jq -r .title plan.json)
+              case "$title" in Plan:*) ;; *) echo "Parent #$plan is not a plan."; exit 0;; esac
+              [ "$(jq -r .state plan.json)" = open ] || { echo "Plan #$plan already closed."; exit 0; }
+              open=$(gh api "repos/$REPO/issues/$plan/sub_issues" --paginate --jq '[.[] | select(.state=="open")] | length')
+              [ "$open" -eq 0 ] || { echo "Plan #$plan has $open open sub-issues."; exit 0; }
+              tickets=$(gh api "repos/$REPO/issues/$plan/sub_issues" --paginate --jq '[.[] | select([.labels[].name] | index("spec-question") | not)] | length')
+              if [ "$tickets" -eq 0 ]; then
+                # Only questions, now answered: the phase needs planning
+                # again, not marking done. Close the plan; the planner's
+                # pick step will re-plan the phase on the next doc change.
+                gh api "repos/$REPO/issues/$plan" -X PATCH -f state=closed -f state_reason=not_planned > /dev/null
+                gh issue comment "$plan" --repo "$REPO" --body "All questions answered. Closing this plan; the phase will be planned again with the answers. To do it now: \`gh workflow run claude-plan.yml -f file=<doc>\`."
+                echo "Plan #$plan only had questions; closed for re-planning."
+                exit 0
+              fi
+              gh api "repos/$REPO/issues/$plan" -X PATCH -f state=closed -f state_reason=completed > /dev/null
+              echo "Closed plan #$plan." ;;
+          esac
 
           # The planner records its source as <!-- plan-source file=... section=... -->
           marker=$(jq -r .body plan.json | grep -o '<!-- plan-source .* -->' | head -1 || true)
@@ -86,12 +109,21 @@ jobs:
           PLAN: ${{ needs.finish-plan.outputs.plan }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # A plan with nothing to build is closed by the Claude app.
+          allowed_bots: claude
           prompt: |
             REPO: ${{ github.repository }}
 
             You are the docs updater, in phase-done mode. Run
-            `printenv DOC SECTION PLAN`. Every ticket in plan #PLAN, for
-            SECTION of the design doc DOC, has closed.
+            `printenv DOC SECTION PLAN`. Plan #PLAN, for SECTION of the
+            design doc DOC, has finished: every ticket in it has closed, or
+            it had no tickets because SECTION needs nothing built in this
+            repo.
+
+            If the plan had no tickets, read its body for why. If SECTION
+            really needs nothing built here (everything in it is tagged
+            `[external]`, or the code already does it), set the phase to
+            `done` and add one line under Current state saying so.
 
             Read .github/prompts/reconcile.md and follow it for DOC. Read
             plan #PLAN and its sub-issues (`gh api repos/${{ github.repository }}/issues/<plan>/sub_issues`)

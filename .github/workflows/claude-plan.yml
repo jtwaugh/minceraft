@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: read
+      issues: write # closes a plan whose questions are all answered
     outputs:
       targets: ${{ steps.pick.outputs.targets }}
     steps:
@@ -114,8 +114,10 @@ jobs:
 
             If FILE is a design doc, read docs/design/README.md too, and:
             - plan only SECTION, and skip any phase the header marks `done`;
-            - plan nothing tagged `[game]`; list those items in the Plan
-              issue under "Not planned here (game scope)";
+            - plan nothing tagged `[external]`; list those items in the Plan
+              issue under "Not planned here (external)". Game code is built
+              in this repo; older docs' `[game]` tags just mean game code
+              and are planned like anything else;
             - treat `[manual check]` criteria as notes for the maintainer,
               not as things a test must prove;
             - use the doc's Current state and Reconciliation notes, but
@@ -223,32 +225,38 @@ jobs:
             Then three short parts: the build order as a numbered list of
             issue numbers with one line each on why that order; the
             spec-question issues; and any code/spec disagreements you found
-            (plus, for a design doc, the `[game]` items not planned here).
+            (plus, for a design doc, the `[external]` items not planned here).
             Don't use a `- [ ]` checklist; GitHub's sub-issue list tracks
             progress instead. Update the body with
             `gh issue edit <plan number> --body-file <file>`.
 
-            Attach every ticket and spec-question issue to the plan as a
-            sub-issue, in build order, spec questions last. Sub-issues take
-            the issue's internal id, not its number, so for each child run
-            two separate commands (no `$(...)`, `&&` or pipes):
+            Don't attach sub-issues yourself: after you finish, a workflow
+            step attaches every ticket and spec question the Plan body
+            mentions, in the order it mentions them. So make sure the body
+            lists each one as `#<number>`, build order first, questions
+            last. Before creating anything, check no Plan issue with the
+            same plan-source line exists already; if one does, stop.
 
-            ```
-            gh api repos/${{ github.repository }}/issues/<child number> --jq .id
-            gh api repos/${{ github.repository }}/issues/<plan number>/sub_issues -X POST -F sub_issue_id=<id printed above>
-            ```
-
-            Finish by checking
-            `gh api repos/${{ github.repository }}/issues/<plan number>/sub_issues --jq '.[].number'`
-            lists them all. Before creating anything, check no Plan issue
-            with the same plan-source line exists already; if one does,
-            stop.
-
-            If this run created no tickets, the Plan issue says why, with
-            any spec questions attached.
+            If this run created no tickets, the Plan issue says why. If it
+            also opened no spec questions (SECTION needs nothing built in
+            this repo), close the Plan issue with
+            `gh issue close <plan number> --reason completed`; the docs
+            updater then marks the phase done and the next one is planned.
 
             Don't add the `factory` label to anything. The maintainer does
             that after reviewing.
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(git log:*),Bash(git diff:*),Bash(gh api repos/${{ github.repository }}/issues:*)"
+            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh issue close:*),Bash(git log:*),Bash(git diff:*)"
+
+      # Attach the plan's tickets and questions as sub-issues, from the
+      # issue numbers in its body. Done here, not by Claude, so it always
+      # happens and in a fixed order.
+      - name: Attach sub-issues
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          FILE: ${{ matrix.target.file }}
+          SECTION: ${{ matrix.target.section }}
+        run: python3 -B .github/scripts/attach_subissues.py
