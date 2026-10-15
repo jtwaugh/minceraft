@@ -1,0 +1,255 @@
+# Biomes, biome lookup thresholds and tree shapes (SPEC 8, 9, 11, 14).
+#
+# Read at compile time by crates/terrain/build.rs, which generates the
+# `Biome` enum, `BIOME_INFO`, the lookup threshold constants, the tree shape
+# constants and the JSON legend exported to the viewer. Nothing here is parsed
+# at runtime.
+#
+# Colours are this project's own (not taken from any original colour map).
+# Ramps have three stops; the viewer interpolates between them:
+#   grass_ramp, leaf_ramp : by the column's humidity H (stop 0 = H 0, stop 2 = H 1)
+#   sky_ramp              : by the column's temperature T (stop 0 = T 0, stop 2 = T 1)
+
+# ---------------------------------------------------------------------------
+# Biome lookup (SPEC 8.2). With t = i/63, h = j/63 (quantised T, H) and
+# w = t*h, the first matching rule wins:
+#   1 t < cold_t                      Tundra
+#   2 w < dry_w   and t < cool_t      Tundra
+#   3 w < dry_w   and t < hot_t       Savanna
+#   4 w < dry_w                       Desert
+#   5 w > swamp_w and t < swamp_t     Swampland
+#   6 t < cool_t                      Taiga
+#   7 t < very_hot_t and w < shrub_w  Shrubland
+#   8 t < very_hot_t                  Forest
+#   9 w < plains_w                    Plains
+#  10 w < seasonal_w                  Seasonal Forest
+#  11 otherwise                       Rainforest
+# ---------------------------------------------------------------------------
+[lookup]
+cold_t = 0.1
+cool_t = 0.5
+swamp_t = 0.7
+hot_t = 0.95
+very_hot_t = 0.97
+dry_w = 0.2
+shrub_w = 0.35
+plains_w = 0.45
+swamp_w = 0.5
+seasonal_w = 0.9
+
+# Spawn lists shared by every biome (SPEC 14); `extra_creatures` in a biome
+# is appended to `creatures`. [species, weight]
+[spawns]
+creature_cap = 15
+monster_cap = 70
+water_cap = 5
+creatures = [["sheep", 12], ["pig", 10], ["chicken", 10], ["cow", 8]]
+monsters = [["spider", 10], ["zombie", 10], ["skeleton", 10], ["creeper", 10], ["slime", 10]]
+water = [["squid", 10]]
+
+# ---------------------------------------------------------------------------
+# Tree shapes (SPEC 11). `height = [base, spread]` means base + rand(spread).
+# ---------------------------------------------------------------------------
+[trees.oak]
+log = "oak_log"
+leaves = "oak_leaves"
+height = [4, 3]
+canopy = [2, 2, 1, 1]          # leaf-layer radii, bottom to top; top layer sits at y + h
+
+[trees.birch]
+log = "birch_log"
+leaves = "birch_leaves"
+height = [5, 3]
+canopy = [2, 2, 1, 1]
+
+[trees.taiga_a]                 # sparse "pine"
+log = "spruce_log"
+leaves = "spruce_leaves"
+height = [7, 5]
+bare_trunk = [3, 2]             # a = h - 3 - rand(2)
+
+[trees.taiga_b]                 # layered "spruce"
+log = "spruce_log"
+leaves = "spruce_leaves"
+height = [6, 4]
+bare_trunk = [1, 2]             # a = 1 + rand(2)
+max_radius = [2, 2]             # R = 2 + rand(2)
+
+[trees.big_oak]
+log = "oak_log"
+leaves = "oak_leaves"
+height = [5, 12]
+min_height = 6                  # trunk blocked below this many blocks -> fail
+trunk_ratio = 0.618
+branch_slope = 0.381
+foliage_density = 1.0
+branch_cutoff = 0.2
+level_cutoff = 0.3
+foliage_radii = [2.0, 3.0, 3.0, 3.0, 2.0]   # cluster layers bottom to top
+
+# ---------------------------------------------------------------------------
+# Biomes (SPEC 9.1). Ids are the per-column biome bytes exported to the
+# viewer. Rust variant = CamelCase of `name` with spaces removed.
+#
+# tree_noise  : add the noise-driven base count N (SPEC 10.3)
+# tree_bonus  : the biome term added to the count (5, 2, 0 or -20)
+# trees       : relative weights of tree kinds
+# plants      : patch attempts per 16x16 cell; a fraction f < 1 is one patch
+#               with probability f. fern_share = chance a tall-grass patch is
+#               ferns.
+# ---------------------------------------------------------------------------
+
+[[biome]]
+id = 0
+name = "Rainforest"
+top = "grass"
+filler = "dirt"
+map_color = "#1f7a4d"
+tree_noise = true
+tree_bonus = 5
+trees = { big_oak = 1, oak = 2 }
+plants = { dandelion = 0, rose = 0.5, tall_grass = 10, fern_share = 0.6666667, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#5fa83a", "#3fae4a", "#22a35a"]
+leaf_ramp = ["#3f9a2e", "#2a9440", "#18874c"]
+sky_ramp = ["#9cc4e8", "#86c3e6", "#6fc0e4"]
+
+[[biome]]
+id = 1
+name = "Swampland"
+top = "grass"
+filler = "dirt"
+map_color = "#4f6b3a"
+tree_noise = false
+tree_bonus = 0
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 0, rose = 0.5, tall_grass = 0, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#6f7f3e", "#5f7a3c", "#4e7240"]
+leaf_ramp = ["#5a7232", "#4a6a33", "#3c6338"]
+sky_ramp = ["#a9b8b4", "#9fb5b0", "#94b2aa"]
+
+[[biome]]
+id = 2
+name = "Seasonal Forest"
+top = "grass"
+filler = "dirt"
+map_color = "#6e9a2e"
+tree_noise = true
+tree_bonus = 2
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 4, rose = 0.5, tall_grass = 2, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#9aae3c", "#86b03c", "#6faa40"]
+leaf_ramp = ["#c08a2e", "#a49a2c", "#7e9a30"]
+sky_ramp = ["#a6c6e6", "#94c2e8", "#84bde8"]
+
+[[biome]]
+id = 3
+name = "Forest"
+top = "grass"
+filler = "dirt"
+map_color = "#2f6e2a"
+tree_noise = true
+tree_bonus = 5
+trees = { birch = 3, big_oak = 4, oak = 8 }
+plants = { dandelion = 2, rose = 0.5, tall_grass = 2, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#73a43a", "#5c9e38", "#4a9a3e"]
+leaf_ramp = ["#4f8d2c", "#3f852c", "#317e33"]
+sky_ramp = ["#a3c2e4", "#8fbbe6", "#7eb4e6"]
+
+[[biome]]
+id = 4
+name = "Savanna"
+top = "grass"
+filler = "dirt"
+map_color = "#b4a84a"
+tree_noise = false
+tree_bonus = 0
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 0, rose = 0.5, tall_grass = 0, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#bfae52", "#ada94c", "#98a448"]
+leaf_ramp = ["#8f9a38", "#7f9636", "#6c9136"]
+sky_ramp = ["#b9d0e6", "#a9cbe8", "#98c6ea"]
+
+[[biome]]
+id = 5
+name = "Shrubland"
+top = "grass"
+filler = "dirt"
+map_color = "#7f9a50"
+tree_noise = false
+tree_bonus = 0
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 0, rose = 0.5, tall_grass = 0, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#94a35a", "#82a052", "#6f9c4c"]
+leaf_ramp = ["#728f3e", "#62893c", "#53843c"]
+sky_ramp = ["#acc8e4", "#9cc2e6", "#8cbde6"]
+
+[[biome]]
+id = 6
+name = "Taiga"
+top = "grass"
+filler = "dirt"
+map_color = "#3b5e4c"
+tree_noise = true
+tree_bonus = 5
+trees = { taiga_a = 1, taiga_b = 2 }
+plants = { dandelion = 2, rose = 0.5, tall_grass = 1, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+extra_creatures = [["wolf", 2]]
+grass_ramp = ["#7d9a6a", "#6a9466", "#588d66"]
+leaf_ramp = ["#3f6a4c", "#33654c", "#295e4e"]
+sky_ramp = ["#c4d4e6", "#b2cbe6", "#a0c2e6"]
+
+[[biome]]
+id = 7
+name = "Desert"
+top = "sand"
+filler = "sand"
+map_color = "#e3cf8a"
+tree_noise = false
+tree_bonus = -20
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 0, rose = 0.5, tall_grass = 0, fern_share = 0, dead_bush = 2, cactus = 10, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#c9b45a", "#bcb056", "#acaa52"]
+leaf_ramp = ["#a8a040", "#999c3e", "#8a983e"]
+sky_ramp = ["#d6dce4", "#c8d8e8", "#b8d2ea"]
+
+[[biome]]
+id = 8
+name = "Plains"
+top = "grass"
+filler = "dirt"
+map_color = "#8fbc4f"
+tree_noise = false
+tree_bonus = -20
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 3, rose = 0.5, tall_grass = 10, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#9cbc4c", "#88b84a", "#74b24a"]
+leaf_ramp = ["#6ea03a", "#5e9a3a", "#4f933c"]
+sky_ramp = ["#a8cdee", "#96c6ee", "#84beec"]
+
+[[biome]]
+id = 9
+name = "Ice Desert"
+top = "sand"
+filler = "sand"
+map_color = "#e8eef0"
+tree_noise = false
+tree_bonus = 0
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 0, rose = 0.5, tall_grass = 0, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#a8b49a", "#9cb09a", "#90ac9a"]
+leaf_ramp = ["#7c9478", "#708e78", "#648878"]
+sky_ramp = ["#dfe6ee", "#d2deec", "#c4d6ea"]
+
+[[biome]]
+id = 10
+name = "Tundra"
+top = "grass"
+filler = "dirt"
+map_color = "#b8c8c4"
+tree_noise = false
+tree_bonus = -20
+trees = { big_oak = 1, oak = 9 }
+plants = { dandelion = 0, rose = 0.5, tall_grass = 0, fern_share = 0, dead_bush = 0, cactus = 0, sugar_cane = 10, pumpkin = 0.03125, brown_mushroom = 0.25, red_mushroom = 0.125 }
+grass_ramp = ["#8ea488", "#80a086", "#729a86"]
+leaf_ramp = ["#5e7e66", "#527866", "#467266"]
+sky_ramp = ["#d4dde8", "#c4d6ea", "#b4ceea"]

@@ -40,9 +40,18 @@ art/
   PROMPT.md           prompt and palette for the pixel-art textures
   batches_*.json      the tileset, one file per group of batches
   tools/              sheet builder, validator, export_textures.py
+data/
+  blocks.toml         every block: id, name, fire values, collision, opacity, colour
+  biomes.toml         biome table, lookup thresholds, plant counts, tree shapes,
+                      spawn lists, our own grass/leaf/sky colour ramps
 crates/
-  terrain/            the generator: no_std + alloc, zero dependencies
-    examples/stats.rs native timing, terrain statistics, PPM heightmap
+  terrain/            the generator: no_std + alloc, zero runtime dependencies
+    build.rs          turns data/*.toml into Rust constants at compile time
+    src/climate.rs    the one climate source + biome lookup
+    src/decorate.rs   decoration cells, passes, protected mask, snow
+    src/trees.rs      oak, birch, two taiga trees, big oak
+    src/plants.rs     flower / grass / dead bush / cane / cactus / pumpkin patches
+    examples/stats.rs native timing, biome and vegetation statistics, PPM map
   web/                wasm-bindgen wrapper used by the viewer
 viewer/
   index.html          single-file viewer (no frameworks)
@@ -53,34 +62,103 @@ viewer/
 ## The terrain crate
 
 ```rust
-use terrain::{generate_region, Block};
+use terrain::{generate_region, generate_decorated, Block};
 
-let region = generate_region(seed, x0, z0, width, depth);
+let terrain = generate_region(seed, x0, z0, width, depth);    // terrain only
+let world = generate_decorated(seed, x0, z0, width, depth);   // + trees, plants, snow
 // region.blocks: Vec<u8>, region.height == 128
 // index = ((z * width) + x) * 128 + y
 ```
 
-- **Blocks:** `Air = 0, Stone = 1, Dirt = 2, Grass = 3, Sand = 4, Gravel = 5, Water = 6`.
 - **Determinism:** a block's value depends only on the seed and its world
   coordinate, never on the region origin or size. Adjacent or overlapping
-  regions always agree.
-- **Heightmaps:** `generate_heightmap` returns the top block and height per
-  column without building the full block array.
-- **Density bias (extension point):** `generate_region_with_bias` takes a
-  list of `DensityBias` terms (any `Fn(i32, i32, i32) -> f64`). Their sum is
-  added to the terrain density just before the solid/air test, in world block
-  coordinates. Positive values add land and negative values carve it away.
-  This is where island bumps, spawn water and route channels will go.
+  regions always agree, with or without decoration.
+- **Heightmaps:** `generate_heightmap` (terrain) and
+  `generate_heightmap_with_biases(.., decorate)` return the top block and
+  height per column.
+- **Climate and biomes:** `climate_at(seed, x, z) -> (T, H)`,
+  `biome_at(seed, x, z) -> Biome`, and `generate_climate(..)` for a whole
+  region (T, H and biome id per column). `Climate` is the single climate
+  source; the density field, surface pass, sea ice, decoration and snow all
+  read it.
+- **Hooks:** `generate_region_with_biases(seed, x0, z0, w, d, &Biases, decorate)`
+  takes a `Biases` bundle:
+  - `density`: `DensityBias` terms (any `Fn(i32, i32, i32) -> f64`), added
+    to the terrain density just before the solid/air test (world
+    coordinates). Positive adds land, negative carves it. For island bumps,
+    spawn water and route channels.
+  - `temperature`: `TemperatureBias` terms (any `Fn(i32, i32) -> f64`),
+    added to T and clamped to [0, 1] before T is used anywhere.
+  - `protected`: an optional `ProtectedMask` (any `Fn(i32, i32, i32) -> bool`,
+    or the `ColumnMask` bitmask over `(x, z)` columns). Decoration never
+    modifies a protected cell; a tree that would touch one is skipped whole.
+  `generate_region_with_bias` (density only) still works as before.
+- **Decoration in place:** `decorate(&mut region, &generator, &biases)` runs
+  the vegetation pass over an existing region. It can't see beyond the
+  region's edges, so prefer the `generate_*` functions, which add a margin
+  and crop.
+- **Statistics:** `generate_decorated_with_stats` also returns per-biome
+  columns, tree attempts, trees grown, plants and snow.
 
-What it generates: 3D-noise terrain with overhangs and floating chunks,
-sea level at y = 64, grass and dirt over stone, sand and gravel beaches
-around y = 60–65, and sandy deserts. Caves, ores, trees, lakes and other
-decoration are out of scope.
+What it generates: 3D-noise terrain with overhangs and floating chunks, sea
+level at y = 64 with ice where it's cold, grass and dirt over stone, sand and
+gravel beaches, sandy deserts, eleven biomes, five kinds of tree, small
+plants and snow. Caves, ores, lakes, dungeons, clay and springs are out of
+scope.
+
+### Blocks
+
+| Id | Block | Id | Block | Id | Block |
+|---|---|---|---|---|---|
+| 0 | air | 9 | birch log | 18 | rose |
+| 1 | stone | 10 | spruce log | 19 | sugar cane |
+| 2 | dirt | 11 | oak leaves | 20 | cactus |
+| 3 | grass | 12 | birch leaves | 21 | brown mushroom |
+| 4 | sand | 13 | spruce leaves | 22 | red mushroom |
+| 5 | gravel | 14 | tall grass | 23 | pumpkin |
+| 6 | water | 15 | fern | 24 | snow layer |
+| 7 | ice | 16 | dead bush | | |
+| 8 | oak log | 17 | dandelion | | |
+
+Bedrock and sandstone are still written as stone and sand.
+
+### Data files
+
+`data/blocks.toml` and `data/biomes.toml` are read at compile time by
+`crates/terrain/build.rs`, which uses the `toml` crate as a build-dependency
+only and generates the `Block` and `Biome` enums, `BLOCK_INFO`, `BIOME_INFO`,
+the lookup thresholds, the tree shapes and `LEGEND_JSON`. The runtime crate
+and the wasm have no dependencies and parse no TOML. Edit a file and rebuild.
+
+- `blocks.toml`: one `[[block]]` per id with name, fire encouragement and
+  flammability (SPEC 16), collision (`none` / `full` / `inset`), light
+  opacity (leaves 1, water and ice 3), the opaque-cube flag and a flat
+  fallback colour.
+- `biomes.toml`: `[lookup]` thresholds for the SPEC 8.2 rules; shared
+  `[spawns]`; `[trees.*]` shapes (height ranges, canopy radii, big-oak
+  constants); and one `[[biome]]` per id with top/filler blocks, tree
+  count term and kind weights, plant patch counts, spawn extras, a map
+  colour and three-stop grass, leaf and sky ramps. The ramps are this
+  project's own colours. Grass and leaf ramps are indexed by humidity, sky
+  by temperature.
+
+### Decoration
+
+Features are anchored in world-aligned 16×16 cells, each with an RNG hashed
+from the seed and cell coordinates. Beta's +8 chunk offset isn't used.
+Cells run in four parity passes. Same-pass cells never touch, so a block
+depends on at most a 4-cell chain. Generation therefore decorates the region
+plus 4 cells and 8 blocks of margin, then crops, and the output is exactly
+position-deterministic. Biomes are chosen per feature at its own column
+(spec deviation B3), with per-cell counts that match the spec inside a
+single biome. A final per-column pass removes plants that a later tree left
+without support, then snow is laid down.
 
 ### Tests and native tools
 
 ```sh
-cargo test                     # noise ranges, determinism, overlap, sea fill
+cargo test                     # noise, determinism, overlap, sea fill, biome table,
+                               # vegetation rules, snow/ice, protected mask, tree density
 cargo run -p terrain --profile bench-native --example stats -- <seed> <x0> <z0> [out.ppm]
 ```
 
@@ -88,17 +166,30 @@ cargo run -p terrain --profile bench-native --example stats -- <seed> <x0> <z0> 
 
 `viewer/index.html` loads the wasm module and shows:
 
-- **Map:** a 512×512 top-down view, coloured by top block, shaded by slope
-  and height, with water tinted by depth. Hover to see a column's block and
-  height.
-- **3D view:** a WebGL2 render of a 64×64 area. Click the map to move it,
-  drag to orbit and scroll to zoom. Schools of fish swim in the sea (see
-  [Fish](#fish)).
-- **Stats:** map generation time and the `.wasm` size, raw and gzipped.
+- **Map:** a 512×512 top-down view of the decorated world
+  (`heightmap_decorated`), with four modes:
+  - *terrain*: coloured by top block using the legend colours from
+    `data/blocks.toml`, so trees (oak, birch and spruce leaves and logs),
+    plants, cactus, pumpkins, snow and ice each show in their own colour.
+    Land is shaded by slope and height; water is tinted by depth and ice is
+    drawn over the same tint.
+  - *biome*: a flat colour per biome (`map_color`), with a legend.
+  - *temperature* and *humidity*: sequential colour scales (dark violet to
+    pale yellow for cold to hot; pale yellow to deep blue for dry to wet),
+    with a 0–1 scale bar.
+  In the biome and climate modes the sea is darkened slightly so coastlines
+  stay readable. Hover to see a column's block, height (and floor under
+  water or ice), biome, T and H.
+- **3D view:** a WebGL2 render of a 64×64 area of `generate_region_decorated`.
+  Click the map to move it, drag to orbit and scroll to zoom. Schools of fish
+  swim in the sea (see [Fish](#fish)).
+- **Stats:** map generation time (heightmap plus climate maps) and the
+  `.wasm` size, raw and gzipped.
 
 URL parameters: `?seed=9&x0=100000&z0=100000&sx=150&sz=190&dist=70&yaw=0.8&pitch=0.15`
 (`sx`/`sz` place the 3D area within the map; `dist`, `yaw` and `pitch` set
-the camera). Text seeds are hashed to a number.
+the camera). Add `mode=biome`, `temperature` or `humidity` to open the map in
+that mode. Text seeds are hashed to a number.
 
 ### Textures in the 3D view
 
@@ -111,15 +202,44 @@ The viewer loads the full Mince Raft tileset. `build.sh` runs
 - writes everything, including the creature and person models, to
   `viewer/textures.json`.
 
-The 3D view currently uses these tiles from it:
+The 3D view uses these tiles from it:
 
 | Block / object | Top | Sides | Bottom |
 |---|---|---|---|
-| Grass | `grass_top` | `grass_side` | `dirt` |
+| Grass | `grass_top` (tinted) | `grass_side` (green part tinted) | `dirt` |
 | Dirt, stone, sand, gravel | own tile | own tile | own tile |
 | Water | `water_0`–`3`, animated | `water_flow_0`–`3`, animated | `water_0`–`3` |
+| Oak log | `log_top` | `log_side` | `log_top` |
+| Birch, spruce log | `log_top` | `log_side`'s shading over the legend colour | `log_top` |
+| Oak, birch, spruce leaves | `leaves` (cut-out, tinted) | same | same |
 | Sun | `sun_sky`, a sprite low in the north-west sky | | |
 | Fish | salmon, tuna and mackerel models from Batch 11 | | |
+
+The tileset has no tiles for the other decoration blocks, so they use their
+legend colour from `data/blocks.toml`:
+
+- **Plants** (tall grass, fern, dead bush, dandelion, rose, sugar cane, brown
+  and red mushroom) are two crossed quads, drawn from both sides, using a
+  small cut-out silhouette defined in the viewer (`SPRITES`) and filled with
+  the legend colour. Tall grass and fern are tinted like grass.
+- **Cactus** is a cube inset 1/16 on the sides, with faint ribs.
+- **Pumpkin** is a full cube with ribbed sides and a stem spot on top.
+- **Snow layer** is a flat white slab 1/8 of a block high.
+- **Ice** is a flat colour, drawn translucent after the water.
+
+Face culling: only full opaque cubes (stone, dirt, grass, sand, gravel, logs,
+pumpkin) hide their neighbours' faces. Leaves are cut-out, so the faces next
+to them, including leaf-to-leaf faces, are still drawn. Water shows faces
+only next to air, plants or leaves; ice only next to non-ice, non-opaque
+blocks.
+
+**Climate tinting:** grass tops, the green part of grass sides, leaves, tall
+grass and ferns take a per-column colour from that column's biome ramps in
+`legend()` (grass and leaf ramps, interpolated between their three stops by
+the column's humidity). Oak leaves use the leaf ramp as-is; birch and spruce
+leaves blend it with their own legend colour so the three kinds stay
+distinct. The sky and fog colour come from the sky ramp of the biome at the
+centre of the 3D area, by its temperature.
 
 How it works:
 
@@ -127,23 +247,30 @@ How it works:
   uploads them as one `TEXTURE_2D_ARRAY` with 16×16 layers. 8×8 tiles are
   scaled up 2×; the 16×16 sky tiles fit as they are. `.` pixels are
   transparent, and the shader discards them.
+- Tinted tiles store their green pixels as greyscale with alpha ~0.78. The
+  shader multiplies those texels by the vertex's tint colour and leaves
+  fully opaque texels alone.
 - Model faces get one layer each at their native size, in the layer's
   top-left corner. The rest of the layer repeats the face's edge pixels so
   mipmaps don't bleed transparency into small faces.
-- Each vertex carries a UV, a layer index and a shade. The water and
+- Each vertex carries a UV, a layer index, a shade and a tint. The water and
   flowing-water animations are runs of four layers. Every 300 ms the shader
   adds the current frame (0–3) to their layer.
+- The geometry is three meshes: opaque plus cut-out (leaves, plants), water
+  (alpha 0.45) and ice (alpha 0.72). The last two are drawn without depth
+  writes after the fish.
 - The sun is a camera-facing sprite, drawn first with no fog or depth so the
   terrain covers it. The orbit camera looks down, so orbit low (or use a small
   `pitch`) to see it.
 - Filtering is nearest-neighbour up close, with mipmaps so distant faces
   don't shimmer.
-- If `textures.json` is missing, the viewer falls back to flat colours and
-  says so above the 3D view.
+- If `textures.json` is missing, the viewer falls back to flat legend colours
+  (the plant silhouettes and climate tints still apply) and says so above the
+  3D view.
 
 To change a texture, edit the `art/batches_*.json` file that holds it and
 rerun `./build.sh`. To use another tile in the 3D view, add its name to
-`TILES` in `viewer/index.html`. Block faces are assigned in `tileFor()`. A
+`TILES` in `viewer/index.html` (and drop any stand-in from `EXTRA`). Block faces are assigned in `tileFor()`. A
 tile must be square with a side that divides 16 (4, 8 or 16).
 
 The rest of the tileset isn't drawn yet. That covers the raft and
@@ -153,8 +280,8 @@ the squid, player and villager models.
 ### Fish
 
 Each time the 3D area is built, the viewer spawns schools of 3–5 salmon,
-tuna or mackerel. It aims for one fish per ~70 sea-surface columns, up to 40
-in all.
+tuna or mackerel. It aims for one fish per ~70 open sea-surface columns, up
+to 40 in all. Ice-covered columns get no fish.
 
 - **Models:** each fish is its Batch 11 model, following the face
   conventions in `art/PROMPT.md`. The body is a box; the tail and dorsal fin
@@ -180,12 +307,18 @@ viewer-only; the terrain crate knows nothing about fish.
 
 For a 512×512 region (all 128 blocks of height):
 
-| | Time |
-|---|---|
-| Native, release | ~185 ms |
-| wasm in Node, warm | ~280 ms |
+| | Terrain only | Decorated |
+|---|---|---|
+| Native, release (`generate_region` / `generate_decorated`) | ~205 ms | ~405 ms |
+| wasm in Node, warm (`heightmap` / `heightmap_decorated`) | ~340 ms | ~580 ms |
 
-The `.wasm` is about 31 KB raw and 12 KB gzipped. The terrain crate is built
+Decoration costs little by itself. Most of the extra time is generating
+terrain for the 72-block margin (656×656 columns for a 512×512 region),
+which is what makes decorated output exactly position-deterministic. Terrain
+alone got slightly slower because every column now evaluates humidity for
+its biome.
+
+The `.wasm` is about 77 KB raw and 30 KB gzipped. The terrain crate is built
 at `opt-level = 3` while the rest of the release profile uses `"z"`. That
 costs about 6 KB but makes generation about 40% faster.
 
@@ -196,7 +329,11 @@ costs about 6 KB but makes generation about 40% faster.
 - `SPEC.md` describes the algorithm in prose and formulas only; no Java was
   pasted or transliterated into it.
 - The Rust code was written from `SPEC.md` alone, by a fresh agent that did
-  not have access to `./work/`.
+  not have access to `./work/`. The same goes for biomes and vegetation
+  (climate module, data files, trees, plants, snow and decoration), which
+  were written from SPEC.md Part II alone.
+- Colours in `data/*.toml` (block fallback colours and biome ramps) were
+  invented for this project and don't come from the original's colour maps.
 - `*.jar` is gitignored.
 - Exact seed parity with Beta is not a goal. The spec lists the original's
   quirks and which ones were deliberately left out.

@@ -25,11 +25,19 @@
 
 extern crate alloc;
 
+pub mod climate;
+pub mod data;
+pub mod decorate;
 pub mod noise;
+mod plants;
+mod trees;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use noise::{hash_f64, Axis, OctavePerlin, OctaveSimplex, Rng};
+pub use climate::{biome_at, biome_for, biome_lookup, climate_at, Climate, TemperatureBias};
+pub use data::{Biome, BiomeInfo, Block, BlockInfo, Collision, TreeKind, BIOME_INFO, BLOCK_INFO, LEGEND_JSON};
+pub use decorate::{decorate, ColumnMask, DecorationStats, ProtectedMask};
+use noise::{hash_f64, Axis, OctavePerlin, Rng};
 
 /// World height in blocks.
 pub const HEIGHT: usize = 128;
@@ -38,41 +46,14 @@ pub const SEA_LEVEL: i32 = 64;
 /// Number of vertical lattice levels (spacing 8 blocks).
 pub const LEVELS: usize = 17;
 
-/// Block palette (SPEC 6.2). Bedrock/ice/sandstone are substituted by
-/// Stone/Water/Sand.
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Block {
-    Air = 0,
-    Stone = 1,
-    Dirt = 2,
-    Grass = 3,
-    Sand = 4,
-    Gravel = 5,
-    Water = 6,
-}
-
-impl Block {
-    pub fn from_u8(v: u8) -> Block {
-        match v {
-            1 => Block::Stone,
-            2 => Block::Dirt,
-            3 => Block::Grass,
-            4 => Block::Sand,
-            5 => Block::Gravel,
-            6 => Block::Water,
-            _ => Block::Air,
-        }
-    }
-}
-
-const AIR: u8 = Block::Air as u8;
-const STONE: u8 = Block::Stone as u8;
-const DIRT: u8 = Block::Dirt as u8;
-const GRASS: u8 = Block::Grass as u8;
-const SAND: u8 = Block::Sand as u8;
-const GRAVEL: u8 = Block::Gravel as u8;
-const WATER: u8 = Block::Water as u8;
+pub(crate) const AIR: u8 = Block::Air as u8;
+pub(crate) const STONE: u8 = Block::Stone as u8;
+pub(crate) const DIRT: u8 = Block::Dirt as u8;
+pub(crate) const GRASS: u8 = Block::Grass as u8;
+pub(crate) const SAND: u8 = Block::Sand as u8;
+pub(crate) const GRAVEL: u8 = Block::Gravel as u8;
+pub(crate) const WATER: u8 = Block::Water as u8;
+pub(crate) const ICE: u8 = Block::Ice as u8;
 /// Internal marker used only during the surface pass; written out as Sand.
 const SANDSTONE: u8 = 0x80;
 
@@ -82,6 +63,9 @@ pub struct Region {
     pub width: u32,
     pub depth: u32,
     pub height: u32,
+    /// World coordinates of the region's minimum corner.
+    pub x0: i32,
+    pub z0: i32,
 }
 
 impl Region {
@@ -125,7 +109,23 @@ impl<F: Fn(i32, i32, i32) -> f64> DensityBias for F {
 // Public API
 // ===========================================================================
 
-/// Generate a `w x d` region whose minimum corner is world `(x0, z0)`.
+/// All optional generation hooks, bundled. `Biases::default()` is "none".
+///
+/// - `density`: density bias terms (SPEC 6.3), world `(x, y, z)`.
+/// - `temperature`: temperature bias terms, world `(x, z)`; added to T
+///   (then clamped to [0, 1]) before T is used anywhere: density, biome
+///   lookup, sea ice, decoration and snow.
+/// - `protected`: cells decoration must never modify (raft mask, spawn
+///   water). Terrain itself is not affected by the mask.
+#[derive(Clone, Copy, Default)]
+pub struct Biases<'a> {
+    pub density: &'a [&'a dyn DensityBias],
+    pub temperature: &'a [&'a dyn TemperatureBias],
+    pub protected: Option<&'a dyn ProtectedMask>,
+}
+
+/// Generate a `w x d` region of **terrain only** (Part I plus biome surfaces
+/// and sea ice; no vegetation) whose minimum corner is world `(x0, z0)`.
 pub fn generate_region(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Region {
     generate_region_with_bias(seed, x0, z0, w, d, &[])
 }
@@ -139,16 +139,56 @@ pub fn generate_region_with_bias(
     d: u32,
     biases: &[&dyn DensityBias],
 ) -> Region {
+    let b = Biases { density: biases, ..Biases::default() };
+    generate_region_with_biases(seed, x0, z0, w, d, &b, false)
+}
+
+/// Terrain plus vegetation, snow and ice (SPEC Part II), no biases.
+pub fn generate_decorated(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Region {
+    generate_region_with_biases(seed, x0, z0, w, d, &Biases::default(), true)
+}
+
+/// The full-control entry point: density and temperature biases, an optional
+/// protected mask, and whether to run the decoration pass.
+///
+/// With `decorate = true` the terrain is generated for the region plus a
+/// margin, decorated in world-aligned 16x16 cells and cropped, so the result
+/// is identical for any region origin and size (see [`decorate`]).
+pub fn generate_region_with_biases(
+    seed: u64,
+    x0: i32,
+    z0: i32,
+    w: u32,
+    d: u32,
+    biases: &Biases,
+    decorate: bool,
+) -> Region {
     let gen = Generator::new(seed);
+    if decorate {
+        return decorate::generate_decorated(&gen, x0, z0, w, d, biases).0;
+    }
     let mut blocks = vec![0u8; w as usize * d as usize * HEIGHT];
-    gen.for_each_column(x0, z0, w, d, biases, |cx, cz, col| {
+    gen.for_each_column(x0, z0, w, d, biases, |cx, cz, col, _, _| {
         let i = (cz as usize * w as usize + cx as usize) * HEIGHT;
         blocks[i..i + HEIGHT].copy_from_slice(col);
     });
-    Region { blocks, width: w, depth: d, height: HEIGHT as u32 }
+    Region { blocks, width: w, depth: d, height: HEIGHT as u32, x0, z0 }
 }
 
-/// Per-column summary without materialising the full block array.
+/// Decorated region plus per-biome decoration statistics for features
+/// anchored inside the region.
+pub fn generate_decorated_with_stats(
+    seed: u64,
+    x0: i32,
+    z0: i32,
+    w: u32,
+    d: u32,
+    biases: &Biases,
+) -> (Region, DecorationStats) {
+    decorate::generate_decorated(&Generator::new(seed), x0, z0, w, d, biases)
+}
+
+/// Per-column summary of the terrain without materialising the block array.
 ///
 /// Returns 4 bytes per column, columns in row order `z * w + x`:
 /// `[top_block, top_y, floor_y, floor_block]` where `top_*` is the highest
@@ -166,17 +206,75 @@ pub fn generate_heightmap_with_bias(
     d: u32,
     biases: &[&dyn DensityBias],
 ) -> Vec<u8> {
-    let gen = Generator::new(seed);
+    let b = Biases { density: biases, ..Biases::default() };
+    generate_heightmap_with_biases(seed, x0, z0, w, d, &b, false)
+}
+
+/// Heightmap (same 4-byte format as [`generate_heightmap`]) with biases and
+/// optional decoration; when decorated the top block may be a log, leaves,
+/// a plant or a snow layer.
+pub fn generate_heightmap_with_biases(
+    seed: u64,
+    x0: i32,
+    z0: i32,
+    w: u32,
+    d: u32,
+    biases: &Biases,
+    decorate: bool,
+) -> Vec<u8> {
     let mut out = vec![0u8; w as usize * d as usize * 4];
-    gen.for_each_column(x0, z0, w, d, biases, |cx, cz, col| {
+    let mut put = |cx: u32, cz: u32, col: &[u8]| {
         let i = (cz as usize * w as usize + cx as usize) * 4;
         let (tb, ty, fy, fb) = column_summary(col);
         out[i] = tb;
         out[i + 1] = ty;
         out[i + 2] = fy;
         out[i + 3] = fb;
-    });
+    };
+    let gen = Generator::new(seed);
+    if decorate {
+        let (r, _) = decorate::generate_decorated(&gen, x0, z0, w, d, biases);
+        for cz in 0..d {
+            for cx in 0..w {
+                let i = r.index(cx, 0, cz);
+                put(cx, cz, &r.blocks[i..i + HEIGHT]);
+            }
+        }
+    } else {
+        gen.for_each_column(x0, z0, w, d, biases, |cx, cz, col, _, _| put(cx, cz, col));
+    }
     out
+}
+
+/// Per-column climate for a region, row order `z * w + x`.
+pub struct ClimateMap {
+    pub temperature: Vec<f32>,
+    pub humidity: Vec<f32>,
+    /// [`Biome`] ids.
+    pub biome: Vec<u8>,
+}
+
+/// Temperature (biased), humidity and biome id for every column of a region.
+pub fn generate_climate(
+    seed: u64,
+    x0: i32,
+    z0: i32,
+    w: u32,
+    d: u32,
+    temperature: &[&dyn TemperatureBias],
+) -> ClimateMap {
+    let c = Climate::new(seed);
+    let n = w as usize * d as usize;
+    let mut m = ClimateMap { temperature: Vec::with_capacity(n), humidity: Vec::with_capacity(n), biome: Vec::with_capacity(n) };
+    for cz in 0..d {
+        for cx in 0..w {
+            let (t, h) = c.at(x0.wrapping_add(cx as i32), z0.wrapping_add(cz as i32), temperature);
+            m.temperature.push(t as f32);
+            m.humidity.push(h as f32);
+            m.biome.push(biome_for(t, h) as u8);
+        }
+    }
+    m
 }
 
 /// `(top_block, top_y, floor_y, floor_block)` for one 128-block column.
@@ -187,8 +285,8 @@ pub fn column_summary(col: &[u8]) -> (u8, u8, u8, u8) {
     }
     let top = col[y];
     let ty = y;
-    if top == WATER {
-        while y > 0 && col[y] == WATER {
+    if top == WATER || top == ICE {
+        while y > 0 && (col[y] == WATER || col[y] == ICE) {
             y -= 1;
         }
     }
@@ -210,6 +308,7 @@ const ID_SAND: u64 = 4;
 const ID_STONE: u64 = 5;
 const ID_SCALE: u64 = 6;
 const ID_DEPTH: u64 = 7;
+const ID_TREE: u64 = 8;
 
 /// All noise generators for one seed.
 pub struct Generator {
@@ -221,9 +320,10 @@ pub struct Generator {
     stone_depth: OctavePerlin,
     scale: OctavePerlin,
     depth: OctavePerlin,
-    temp: OctaveSimplex,
-    humid: OctaveSimplex,
-    blend: OctaveSimplex,
+    /// Tree-density noise (SPEC 10.3), 8 octaves.
+    pub(crate) tree: OctavePerlin,
+    /// The shared climate source (SPEC 7).
+    pub climate: Climate,
 }
 
 /// Density lattice for a region: `(ix * nz + iz) * LEVELS + ly`.
@@ -237,9 +337,6 @@ struct Lattice {
 impl Generator {
     pub fn new(seed: u64) -> Generator {
         let g = |id: u64, n: usize| OctavePerlin::new(&mut Rng::for_generator(seed, id), n);
-        let c = |m: u64, n: usize| {
-            OctaveSimplex::new(&mut Rng::for_generator(seed.wrapping_mul(m), 0x5EED_C11A), n)
-        };
         Generator {
             seed,
             low: g(ID_LOW, 16),
@@ -249,55 +346,36 @@ impl Generator {
             stone_depth: g(ID_STONE, 4),
             scale: g(ID_SCALE, 10),
             depth: g(ID_DEPTH, 16),
-            temp: c(9871, 4),
-            humid: c(39811, 4),
-            blend: c(543321, 2),
+            tree: g(ID_TREE, 8),
+            climate: Climate::new(seed),
         }
     }
 
-    /// Temperature and humidity at world block column (x, z) (SPEC 2).
+    /// Temperature and humidity at world block column (x, z) (SPEC 7), no
+    /// biases. Same as `self.climate.raw(x, z)`.
     pub fn climate(&self, x: i32, z: i32) -> (f64, f64) {
-        let (t, b) = self.temperature(x, z);
-        (t, self.humidity(x, z, b))
+        self.climate.raw(x, z)
     }
 
-    /// Returns (T, b) where b is the blend term shared with humidity.
-    fn temperature(&self, x: i32, z: i32) -> (f64, f64) {
-        let (x, z) = (x as f64, z as f64);
-        let tn = self.temp.sample(x, z, 0.025, 0.025, 0.25, 0.5);
-        let bn = self.blend.sample(x, z, 0.25, 0.25, 1.0 / 1.7, 0.5);
-        let b = bn * 1.1 + 0.5;
-        let mut t = (tn * 0.15 + 0.7) * 0.99 + b * 0.01;
-        t = 1.0 - (1.0 - t) * (1.0 - t);
-        (t.clamp(0.0, 1.0), b)
+    /// Biome at a block column (no biases).
+    pub fn biome(&self, x: i32, z: i32) -> Biome {
+        let (t, h) = self.climate.raw(x, z);
+        biome_for(t, h)
     }
 
-    fn humidity(&self, x: i32, z: i32, b: f64) -> f64 {
-        let hn = self.humid.sample(x as f64, z as f64, 0.05, 0.05, 1.0 / 3.0, 0.5);
-        ((hn * 0.15 + 0.5) * 0.998 + b * 0.002).clamp(0.0, 1.0)
-    }
-
-    /// Desert test at a block column; humidity is only evaluated when the
-    /// temperature already qualifies.
+    /// Desert test at a block column (kept for API compatibility).
     pub fn is_desert_at(&self, x: i32, z: i32) -> bool {
-        let (t, b) = self.temperature(x, z);
-        if noise::floor(t * 63.0) / 63.0 < 0.95 {
-            return false;
-        }
-        Self::is_desert(t, self.humidity(x, z, b))
+        self.biome(x, z) == Biome::Desert
     }
 
-    /// Desert test from the quantised climate (SPEC 2, "Biome lookup").
+    /// Desert test from an unquantised climate (SPEC 8 lookup).
     pub fn is_desert(t: f64, h: f64) -> bool {
-        let tq = noise::floor(t * 63.0) / 63.0;
-        let hq = noise::floor(h * 63.0) / 63.0;
-        let w = tq * hq;
-        tq >= 0.1 && w < 0.2 && tq >= 0.95
+        biome_for(t, h) == Biome::Desert
     }
 
     /// Per-lattice-column (center, scale) (SPEC 3.3).
-    fn column_terms(&self, lx: i64, lz: i64) -> (f64, f64) {
-        let (t, h) = self.climate((lx * 4) as i32, (lz * 4) as i32);
+    fn column_terms(&self, lx: i64, lz: i64, tb: &[&dyn TemperatureBias]) -> (f64, f64) {
+        let (t, h) = self.climate.at((lx * 4) as i32, (lz * 4) as i32, tb);
         let th = 1.0 - t * h;
         let a = 1.0 - th * th * th * th;
         let c = self.scale.sample2d(lx as f64 * 1.121, lz as f64 * 1.121);
@@ -330,7 +408,7 @@ impl Generator {
 
     /// Compute the density lattice covering block columns
     /// `x0..x0+w`, `z0..z0+d` (SPEC 3.1 - 3.4), all at once.
-    fn lattice(&self, x0: i32, z0: i32, w: u32, d: u32) -> Lattice {
+    fn lattice(&self, x0: i32, z0: i32, w: u32, d: u32, tb: &[&dyn TemperatureBias]) -> Lattice {
         let lx0 = (x0 as i64).div_euclid(4);
         let lz0 = (z0 as i64).div_euclid(4);
         let lx1 = (x0 as i64 + w.max(1) as i64 - 1).div_euclid(4) + 1;
@@ -378,7 +456,7 @@ impl Generator {
         // Combine into densities, reusing the `sel` buffer as output.
         for ix in 0..nx {
             for iz in 0..nz {
-                let (center, scale) = self.column_terms(lx0 + ix as i64, lz0 + iz as i64);
+                let (center, scale) = self.column_terms(lx0 + ix as i64, lz0 + iz as i64, tb);
                 let base = (ix * nz + iz) * LEVELS;
                 for ly in 0..LEVELS {
                     let i = base + ly;
@@ -410,19 +488,23 @@ impl Generator {
 
     /// Generate every column of the region and hand it to `f(cx, cz, col)`
     /// where `(cx, cz)` are region-relative offsets.
-    pub fn for_each_column<F: FnMut(u32, u32, &[u8; HEIGHT])>(
+    ///
+    /// The callback also receives the column's (biased) climate `(T, H)`.
+    pub fn for_each_column<F: FnMut(u32, u32, &[u8; HEIGHT], f64, f64)>(
         &self,
         x0: i32,
         z0: i32,
         w: u32,
         d: u32,
-        biases: &[&dyn DensityBias],
+        biases: &Biases,
         mut f: F,
     ) {
         if w == 0 || d == 0 {
             return;
         }
-        let lat = self.lattice(x0, z0, w, d);
+        let tb = biases.temperature;
+        let db = biases.density;
+        let lat = self.lattice(x0, z0, w, d, tb);
         let mut col = [0u8; HEIGHT];
         let mut lev = [0.0f64; LEVELS];
         // Per-row surface noise buffers (SPEC 4), computed with the grid path
@@ -431,6 +513,9 @@ impl Generator {
         let xs32: Vec<f64> = (0..wu).map(|i| x0.wrapping_add(i as i32) as f64 / 32.0).collect();
         let xs16: Vec<f64> = (0..wu).map(|i| x0.wrapping_add(i as i32) as f64 / 16.0).collect();
         let (mut sn, mut gn, mut dn) = (vec![0.0f64; wu], vec![0.0f64; wu], vec![0.0f64; wu]);
+        // Per-row climate, computed ahead of the column loop (keeps the hot
+        // fill loop small; noticeably faster in wasm).
+        let mut clim = vec![(0.0f64, 0.0f64); wu];
         let (mut ax, mut ay, mut az) = (Vec::new(), Vec::new(), Vec::new());
         for cz in 0..d {
             let wz = z0.wrapping_add(cz as i32);
@@ -445,6 +530,9 @@ impl Generator {
             // Dn: stone-depth, 2D path at block scale 1/16.
             self.stone_depth
                 .fill_grid(&xs16, &[0.0], &[zf / 16.0], &mut dn, None, &mut ax, &mut ay, &mut az);
+            for (i, c) in clim.iter_mut().enumerate() {
+                *c = self.climate.at(x0.wrapping_add(i as i32), wz, tb);
+            }
             let lz = (wz as i64).div_euclid(4);
             let tz = (wz as i64).rem_euclid(4) as f64 * 0.25;
             let iz = (lz - lat.lz0) as usize;
@@ -466,33 +554,51 @@ impl Generator {
                     lev[ly] = a + (b - a) * tz;
                 }
 
-                // Solid / water / air (SPEC 3.6).
+                let (t, h) = clim[cx as usize];
+                // Solid / water / air / sea ice (SPEC 3.6, 13).
                 for y in 0..HEIGHT {
                     let l = y >> 3;
                     let ty = (y & 7) as f64 * 0.125;
                     let mut rho = lev[l] + (lev[l + 1] - lev[l]) * ty;
                     // ---- density bias extension point (SPEC 6.3) ----
-                    for b in biases {
+                    for b in db {
                         rho += b.bias(wx, y as i32, wz);
                     }
                     col[y] = if rho > 0.0 {
                         STONE
+                    } else if (y as i32) == SEA_LEVEL - 1 && t < 0.5 {
+                        ICE
                     } else if (y as i32) < SEA_LEVEL {
-                        WATER // (ice at y = 63 when T < 0.5 -> Water)
+                        WATER
                     } else {
                         AIR
                     };
                 }
 
                 let ci = cx as usize;
-                self.surface(wx, wz, sn[ci], gn[ci], dn[ci], &mut col);
-                f(cx, cz, &col);
+                let biome = biome_for(t, h);
+                self.surface(wx, wz, sn[ci], gn[ci], dn[ci], biome, t < 0.5, &mut col);
+                f(cx, cz, &col, t, h);
             }
         }
     }
 
     /// Surface pass for one column (SPEC 4).
-    fn surface(&self, x: i32, z: i32, sn: f64, gn: f64, dn: f64, col: &mut [u8; HEIGHT]) {
+    ///
+    /// `frozen`: the column's T < 0.5, so a water top placed at y = 63 by the
+    /// beach/stone-patch rule becomes ice like the sea fill does.
+    #[allow(clippy::too_many_arguments)]
+    fn surface(
+        &self,
+        x: i32,
+        z: i32,
+        sn: f64,
+        gn: f64,
+        dn: f64,
+        biome: Biome,
+        frozen: bool,
+        col: &mut [u8; HEIGHT],
+    ) {
         let seed = self.seed;
         let r1 = hash_f64(seed, x, z, 0, 1);
         let r2 = hash_f64(seed, x, z, 0, 2);
@@ -502,7 +608,8 @@ impl Generator {
         // Q8: truncation toward zero (reproduced).
         let soil = (dn / 3.0 + 3.0 + r3 * 0.25) as i32;
 
-        let (btop, bfill) = if self.is_desert_at(x, z) { (SAND, SAND) } else { (GRASS, DIRT) };
+        let info = biome.info();
+        let (btop, bfill) = (info.top, info.filler);
         let mut top = btop;
         let mut filler = bfill;
         let mut run: i32 = -1;
@@ -516,7 +623,7 @@ impl Generator {
             }
             match col[yi] {
                 AIR => run = -1,
-                WATER => {}
+                WATER | ICE => {}
                 _ => {
                     if run == -1 {
                         if soil <= 0 {
@@ -535,7 +642,7 @@ impl Generator {
                             }
                         }
                         if y < SEA_LEVEL && top == AIR {
-                            top = WATER;
+                            top = if frozen && y == SEA_LEVEL - 1 { ICE } else { WATER };
                         }
                         // Spec says `run = soil`; a negative soil would set
                         // run back to -1 and re-trigger the surface rule on
@@ -563,3 +670,6 @@ impl Generator {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_veg;

@@ -35,7 +35,7 @@
     display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start;
   }
   .view { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
-  .view .cap { color: var(--muted); }
+  .view .cap { color: var(--muted); max-width: 512px; }
   .wrap { position: relative; width: 512px; max-width: calc(100vw - 32px); aspect-ratio: 1; }
   canvas { display: block; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 4px; }
   #map { image-rendering: pixelated; cursor: crosshair; }
@@ -45,12 +45,25 @@
   }
   #gl { cursor: grab; background: #9cc3e6; }
   #gl:active { cursor: grabbing; }
-  #hover { min-height: 1.4em; }
-  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); }
+  #hover { min-height: 2.8em; max-width: 512px; }
+  .modes { display: flex; gap: 0; }
+  .modes button {
+    background: var(--bg); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 0; font-weight: 400; padding: 4px 10px;
+  }
+  .modes button:first-child { border-radius: 4px 0 0 4px; }
+  .modes button:last-child { border-radius: 0 4px 4px 0; }
+  .modes button + button { border-left: 0; }
+  .modes button[aria-pressed="true"] { background: var(--accent); color: #10140c; font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); max-width: 512px; }
   .legend span::before {
     content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 4px;
     vertical-align: -1px; background: var(--c); border-radius: 2px;
   }
+  .legend .scale { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; width: 100%; }
+  .legend .scale::before { display: none; }
+  .legend .bar { grid-column: 1 / -1; height: 12px; border-radius: 2px; background: var(--g); }
+  .legend .mid { text-align: center; }
 </style>
 </head>
 <body>
@@ -65,13 +78,15 @@
 <main>
   <div class="view">
     <div class="cap">512×512 top-down map. Click to choose the 64×64 area for the 3D view.</div>
+    <div class="modes" role="group" aria-label="map mode">
+      <button data-mode="terrain" aria-pressed="true">terrain</button>
+      <button data-mode="biome" aria-pressed="false">biome</button>
+      <button data-mode="temperature" aria-pressed="false">temperature</button>
+      <button data-mode="humidity" aria-pressed="false">humidity</button>
+    </div>
     <div class="wrap"><canvas id="map" width="512" height="512"></canvas><div id="sel"></div></div>
     <div id="hover"></div>
-    <div class="legend">
-      <span style="--c:#5f9f35">grass</span><span style="--c:#dbcf8e">sand</span>
-      <span style="--c:#887e7e">gravel</span><span style="--c:#808080">stone</span>
-      <span style="--c:#86603f">dirt</span><span style="--c:#2a5ac8">water</span>
-    </div>
+    <div class="legend" id="legend"></div>
   </div>
   <div class="view">
     <div class="cap" id="cap3d">3D view: drag to orbit, wheel to zoom.</div>
@@ -79,20 +94,31 @@
   </div>
 </main>
 <script type="module">
-import init, { heightmap, generate_region } from './pkg/terrain_web.js';
+import init, {
+  heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend,
+} from './pkg/terrain_web.js';
 
 const $ = (id) => document.getElementById(id);
 const N = 512, AREA = 64, H = 128;
 const WASM_URL = './pkg/terrain_web_bg.wasm';
 
-// Block ids: 0 Air, 1 Stone, 2 Dirt, 3 Grass, 4 Sand, 5 Gravel, 6 Water
-const COLORS = [
-  [0, 0, 0], [128, 128, 128], [134, 96, 63], [95, 159, 53],
-  [219, 207, 142], [136, 126, 126], [42, 90, 200],
-];
-const NAMES = ['air', 'stone', 'dirt', 'grass', 'sand', 'gravel', 'water'];
+// Block ids (data/blocks.toml); names and colours come from legend().
+const B = {
+  air: 0, stone: 1, dirt: 2, grass: 3, sand: 4, gravel: 5, water: 6, ice: 7,
+  oak_log: 8, birch_log: 9, spruce_log: 10, oak_leaves: 11, birch_leaves: 12, spruce_leaves: 13,
+  tall_grass: 14, fern: 15, dead_bush: 16, dandelion: 17, rose: 18, sugar_cane: 19,
+  cactus: 20, brown_mushroom: 21, red_mushroom: 22, pumpkin: 23, snow_layer: 24,
+};
+let LEGEND, COLORS, NAMES, BIOMES;
 
-let state = { seed: 0n, x0: 0, z0: 0, hm: null, sel: null, wasmText: '' };
+const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
+// Full cubes that hide the faces of whatever is next to them.
+const OPAQUE = flags([B.stone, B.dirt, B.grass, B.sand, B.gravel, B.oak_log, B.birch_log, B.spruce_log, B.pumpkin]);
+// Drawn as two crossed quads.
+const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom]);
+const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
+
+let state = { seed: 0n, x0: 0, z0: 0, hm: null, sel: null, wasmText: '', mode: 'terrain' };
 
 function parseSeed(s) {
   s = s.trim();
@@ -123,38 +149,91 @@ function setStats(genMs) {
   $('stats').innerHTML = `map gen <b>${genMs.toFixed(0)} ms</b> · ${state.wasmText}`;
 }
 
+// ---------------------------------------------------------------- colour helpers
+const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+// Biome ramps have three stops at 0, 0.5 and 1.
+const ramp3 = (stops, v) => v < 0.5 ? lerp3(stops[0], stops[1], v * 2) : lerp3(stops[1], stops[2], (v - 0.5) * 2);
+// Sequential scales for the climate maps (5 even stops, 0..1).
+const SCALES = {
+  // cold = dark violet, hot = pale yellow (inferno-like)
+  temperature: [[22, 11, 57], [106, 23, 110], [188, 55, 84], [243, 120, 25], [252, 240, 160]],
+  // dry = pale yellow, wet = deep blue (YlGnBu-like)
+  humidity: [[255, 255, 217], [199, 233, 180], [65, 182, 196], [34, 94, 168], [8, 29, 88]],
+};
+function scale(stops, v) {
+  const f = Math.max(0, Math.min(1, v)) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(f));
+  return lerp3(stops[i], stops[i + 1], f - i);
+}
+const css = (c) => `rgb(${c.map((v) => Math.round(v)).join(',')})`;
+
 // ---------------------------------------------------------------- map
-function drawMap() {
+function terrainColor(i, x, z) {
   const hm = state.hm;
+  const tb = hm[i], ty = hm[i + 1], fy = hm[i + 2], fb = hm[i + 3];
+  if (tb === B.water || tb === B.ice) {
+    // water: tint by depth to the floor; ice: its own colour over the same depth tint
+    const depth = Math.min(ty - fy, 24) / 24;
+    const fc = COLORS[fb] || COLORS[B.stone];
+    const k = 0.35 * (1 - depth);
+    const w = [(20 + 30 * (1 - depth)) * (1 - k) + fc[0] * k,
+      (55 + 60 * (1 - depth)) * (1 - k) + fc[1] * k,
+      (140 + 70 * (1 - depth)) * (1 - k) + fc[2] * k];
+    return tb === B.ice ? lerp3(w, COLORS[B.ice], 0.7) : w;
+  }
+  const west = x > 0 ? hm[i - 4 + 1] : ty;
+  const north = z > 0 ? hm[i - N * 4 + 1] : ty;
+  let s = 1 + (ty - west) * 0.09 + (ty - north) * 0.09;
+  s = Math.max(0.55, Math.min(1.45, s)) * (0.72 + (ty - 40) / 150);
+  const c = COLORS[tb] || [255, 0, 255];
+  return [c[0] * s, c[1] * s, c[2] * s];
+}
+
+function drawMap() {
+  const hm = state.hm, mode = state.mode;
   const ctx = $('map').getContext('2d');
   const img = ctx.createImageData(N, N);
   const d = img.data;
   for (let z = 0; z < N; z++) {
     for (let x = 0; x < N; x++) {
-      const i = (z * N + x) * 4;
-      const tb = hm[i], ty = hm[i + 1], fy = hm[i + 2], fb = hm[i + 3];
-      let r, g, b;
-      if (tb === 6) {
-        // water: tint by depth to the floor
-        const depth = Math.min(ty - fy, 24) / 24;
-        const fc = COLORS[fb] || COLORS[1];
-        const k = 0.35 * (1 - depth);
-        r = (20 + 30 * (1 - depth)) * (1 - k) + fc[0] * k;
-        g = (55 + 60 * (1 - depth)) * (1 - k) + fc[1] * k;
-        b = (140 + 70 * (1 - depth)) * (1 - k) + fc[2] * k;
-      } else {
-        const west = x > 0 ? hm[i - 4 + 1] : ty;
-        const north = z > 0 ? hm[i - N * 4 + 1] : ty;
-        let s = 1 + (ty - west) * 0.09 + (ty - north) * 0.09;
-        s = Math.max(0.55, Math.min(1.45, s)) * (0.72 + (ty - 40) / 150);
-        const c = COLORS[tb];
-        r = c[0] * s; g = c[1] * s; b = c[2] * s;
+      const c = z * N + x, i = c * 4;
+      let col;
+      if (mode === 'terrain') col = terrainColor(i, x, z);
+      else {
+        if (mode === 'biome') col = BIOMES[state.biome[c]].map;
+        else col = scale(SCALES[mode], (mode === 'temperature' ? state.temp : state.hum)[c]);
+        // darken the sea a little so coastlines stay readable
+        if (hm[i] === B.water || hm[i] === B.ice) col = col.map((v) => v * 0.72);
       }
-      d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
+      d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
+  drawLegend();
 }
+
+function drawLegend() {
+  const el = $('legend');
+  const mode = state.mode;
+  if (mode === 'terrain') {
+    const shown = LEGEND.blocks.filter((b) => b.id !== B.air);
+    el.innerHTML = shown.map((b) => `<span style="--c:${css(b.color)}">${b.name.replace(/_/g, ' ')}</span>`).join('');
+  } else if (mode === 'biome') {
+    el.innerHTML = BIOMES.map((b) => `<span style="--c:${css(b.map)}">${b.name}</span>`).join('');
+  } else {
+    const stops = SCALES[mode];
+    const g = `linear-gradient(to right, ${stops.map(css).join(', ')})`;
+    const [lo, hi] = mode === 'temperature' ? ['0 cold', 'hot 1'] : ['0 dry', 'wet 1'];
+    el.innerHTML = `<div class="scale" style="--g:${g}"><div class="bar"></div>` +
+      `<div>${lo}</div><div class="mid">0.5</div><div>${hi}</div></div>`;
+  }
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  for (const b of document.querySelectorAll('.modes button')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  if (state.hm) drawMap();
+}
+for (const b of document.querySelectorAll('.modes button')) b.addEventListener('click', () => setMode(b.dataset.mode));
 
 function placeSel() {
   const el = $('sel');
@@ -176,11 +255,15 @@ function mapCoord(ev) {
 $('map').addEventListener('mousemove', (ev) => {
   if (!state.hm) return;
   const [x, z] = mapCoord(ev);
-  const i = (z * N + x) * 4;
+  const c = z * N + x, i = c * 4;
   const hm = state.hm;
-  let t = `x ${state.x0 + x}  z ${state.z0 + z}  ${NAMES[hm[i]]} y=${hm[i + 1]}`;
-  if (hm[i] === 6) t += `  (floor ${NAMES[hm[i + 3]]} y=${hm[i + 2]}, depth ${hm[i + 1] - hm[i + 2]})`;
-  $('hover').textContent = t;
+  const nm = (b) => (NAMES[b] || `#${b}`).replace(/_/g, ' ');
+  let t = `x ${state.x0 + x}  z ${state.z0 + z}  ${nm(hm[i])} y=${hm[i + 1]}`;
+  if (hm[i] === B.water || hm[i] === B.ice) {
+    t += `  (floor ${nm(hm[i + 3])} y=${hm[i + 2]}, depth ${hm[i + 1] - hm[i + 2]})`;
+  }
+  t += `\n${BIOMES[state.biome[c]].name}  T ${state.temp[c].toFixed(2)}  H ${state.hum[c].toFixed(2)}`;
+  $('hover').innerText = t;
 });
 
 $('map').addEventListener('click', (ev) => {
@@ -200,7 +283,11 @@ function regenerate() {
   $('stats').textContent = 'generating…';
   requestAnimationFrame(() => setTimeout(() => {
     const t0 = performance.now();
-    state.hm = heightmap(state.seed, state.x0, state.z0, N, N);
+    const { seed, x0, z0 } = state;
+    state.hm = heightmap_decorated(seed, x0, z0, N, N);
+    state.biome = biome_map(seed, x0, z0, N, N);
+    state.temp = temperature_map(seed, x0, z0, N, N);
+    state.hum = humidity_map(seed, x0, z0, N, N);
     const ms = performance.now() - t0;
     drawMap();
     setStats(ms);
@@ -217,8 +304,9 @@ for (const id of ['seed', 'x0', 'z0']) {
 
 // ---------------------------------------------------------------- 3D
 const gl = $('gl').getContext('webgl2', { antialias: true });
-let prog, opaque = null, water = null;
+let prog, opaque = null, water = null, ice = null;
 const cam = { yaw: 0.8, pitch: 0.55, dist: 95, ty: 68 };
+let sky = [0.61, 0.76, 0.9];
 
 function shader(type, src) {
   const s = gl.createShader(type);
@@ -234,11 +322,13 @@ function initGL() {
     layout(location=1) in vec2 uv;
     layout(location=2) in float layer;
     layout(location=3) in float shade;
+    layout(location=4) in vec3 tint;
     uniform mat4 mvp;
     uniform float waterFrame;
     out vec3 vuv;
     out float vshade;
     out float vdist;
+    out vec3 vtint;
     void main() {
       gl_Position = mvp * vec4(pos, 1.0);
       // animated tiles (water, flowing water) are runs of 4 layers starting
@@ -246,74 +336,144 @@ function initGL() {
       bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
       vuv = vec3(uv, anim ? layer + waterFrame : layer);
       vshade = shade;
+      vtint = tint;
       vdist = gl_Position.w;
     }`));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
     precision mediump sampler2DArray;
-    in vec3 vuv; in float vshade; in float vdist;
+    in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
     uniform sampler2DArray tex;
-    uniform float alpha; uniform float fogFar;
+    uniform float alpha; uniform float fogFar; uniform vec3 fogColor;
     out vec4 o;
     void main() {
       vec4 t = texture(tex, vuv);
-      if (t.a < 0.5) discard; // transparent pixels ('.') in sky sprites
-      vec3 c = t.rgb * vshade;
+      if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky
+      // texels stored with alpha ~0.78 are greyscale and take the climate tint
+      vec3 c = (t.a < 0.9 ? t.rgb * vtint : t.rgb) * vshade;
       float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, 0.6);
-      o = vec4(mix(c, vec3(0.61, 0.76, 0.9), f), alpha);
+      o = vec4(mix(c, fogColor, f), alpha);
     }`));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
 }
 
 // ---------------------------------------------------------------- textures
-// Faces sample a TEXTURE_2D_ARRAY built from the full Mince Raft tileset
-// (art/batches_*.json, exported to viewer/textures.json by build.sh).
-// Layers are 16x16: 8x8 tiles are scaled up 2x, the 16x16 sky tiles fit as-is.
+// Faces sample a TEXTURE_2D_ARRAY of 16x16 layers. Tiles come from the Mince
+// Raft tileset (art/batches_*.json, exported to viewer/textures.json by
+// build.sh); 8x8 tiles are scaled up 2x, the 16x16 sky tiles fit as-is.
+// Blocks with no tile use their flat legend colour; small plants with no
+// tile get a simple cut-out silhouette in their legend colour so the crossed
+// quads don't read as solid squares.
 const TILES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel',
   'water_0', 'water_1', 'water_2', 'water_3',
   'water_flow_0', 'water_flow_1', 'water_flow_2', 'water_flow_3',
-  'sun_sky'];
-const T = Object.fromEntries(TILES.map((n, i) => [n, i]));
+  'sun_sky', 'log_side', 'log_top', 'leaves'];
+// Greyscale-and-tint pixels (palette greens) for climate-tinted tiles.
+const TINTED = { grass_top: '89', grass_side: '89', leaves: '89' };
+// Layers built here rather than taken from the tileset.
+const EXTRA = ['birch_log_side', 'spruce_log_side', 'ice', 'snow', 'cactus_side', 'cactus_top',
+  'pumpkin_side', 'pumpkin_top', 'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose',
+  'sugar_cane', 'brown_mushroom', 'red_mushroom'];
+const LAYER_NAMES = [...TILES, ...EXTRA];
+const T = Object.fromEntries(LAYER_NAMES.map((n, i) => [n, i]));
 const ANIM_FIRST = T.water_0, ANIM_END = T.water_flow_3 + 1;
-// Layer for block id b on a face with vertical normal dy (1 top, -1 bottom, 0 side).
-function tileFor(b, dy) {
-  switch (b) {
-    case 1: return T.stone;
-    case 2: return T.dirt;
-    case 3: return dy > 0 ? T.grass_top : dy < 0 ? T.dirt : T.grass_side;
-    case 4: return T.sand;
-    case 5: return T.gravel;
-    default: return dy === 0 ? T.water_flow_0 : T.water_0;
-  }
-}
-// Flat colours per tile, used if textures.json can't be loaded.
-const FLAT = [COLORS[1], COLORS[2], COLORS[3], [118, 128, 60], COLORS[4], COLORS[5],
-  ...Array(8).fill(COLORS[6]), [232, 195, 58]];
+
+// Plant silhouettes (8x8, bottom row on the ground). Keys: g = tinted green
+// (grass ramp), G = darker tinted green, s = stem green, c = legend colour,
+// C = darker legend colour, w = pale stem/spots.
+const SPRITES = {
+  tall_grass: ['........', '.g....g.', '.g..g.g.', '.gg.g.G.', '..g.gGg.', '..gGg.g.', 'G.gGgg..', '.GgGgG.G'],
+  fern: ['...g....', '.g.g.g..', '..ggg...', 'g.gGg.g.', '.ggGgg..', '..gGg.g.', '.g.G.g..', '...G....'],
+  dead_bush: ['........', '.c....c.', '..c..c..', 'c..cc..c', '.c.cC.c.', '..cCCc..', '...CC...', '...CC...'],
+  dandelion: ['........', '........', '..ccc...', '.cCccc..', '..ccc...', '...s....', '..ss.s..', '...ss...'],
+  rose: ['........', '...cc...', '..cCcc..', '..ccCc..', '...cc...', '..s.s...', '...ss...', '...s....'],
+  sugar_cane: ['.c...c..', '.c..cc..', '.C...c..', '.c...C..', 'cc...c..', '.c..cc..', '.c...c..', '.C...C..'],
+  brown_mushroom: ['........', '........', '........', '..cccc..', '.ccCccc.', '...ww...', '...ww...', '...ww...'],
+  red_mushroom: ['........', '........', '..cccc..', '.cwccwc.', '.cccccc.', '...ww...', '...ww...', '...ww...'],
+};
+const TINT_A = 200; // alpha marking a greyscale, climate-tinted texel
 
 async function loadTextures() {
   const S = 16;
+  const col = (b) => COLORS[B[b]];
+  const dark = (c, k = 0.72) => c.map((v) => v * k);
+  const solid = (c, a = 255) => () => [...c, a];
   // Each layer is a function (x, y) -> [r, g, b, a] over the 16x16 layer.
-  const layers = [];
-  let textured = false;
+  const make = {};
+  let textured = false, all = {}, models = {}, pal = {};
   try {
     const set = await (await fetch('./textures.json')).json();
     const batches = Object.values(set.batches);
-    const all = Object.assign({}, ...batches.map((b) => b.textures || {}));
-    const models = Object.assign({}, ...batches.map((b) => b.models || {}));
-    const pal = Object.fromEntries(Object.entries(set.palette).map(([k, hex]) =>
+    all = Object.assign({}, ...batches.map((b) => b.textures || {}));
+    models = Object.assign({}, ...batches.map((b) => b.models || {}));
+    pal = Object.fromEntries(Object.entries(set.palette).map(([k, hex]) =>
       [k, [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))]));
+    for (const name of TILES) if (!all[name]) throw new Error(`missing tile ${name}`);
+    textured = true;
+  } catch (e) {
+    console.warn('textures unavailable, using flat colours:', e);
+  }
+  const lum = (c) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  const tileFn = (name, recolor) => {
+    const rows = all[name];
+    const k = S / rows.length; // 2 for 8x8 tiles, 1 for 16x16
+    if (k !== Math.floor(k) || rows[0].length * k !== S) throw new Error(`tile ${name} is not square`);
+    const tint = TINTED[name] || '';
+    const maxL = Math.max(1, ...[...tint].map((ch) => lum(pal[ch])));
+    return (x, y) => {
+      const ch = rows[Math.floor(y / k)][Math.floor(x / k)];
+      if (ch === '.') return [0, 0, 0, 0];
+      if (recolor) return [...recolor(pal[ch]), 255];
+      if (tint.includes(ch)) { const v = 255 * lum(pal[ch]) / maxL; return [v, v, v, TINT_A]; }
+      return [...pal[ch], 255];
+    };
+  };
+  if (textured) {
+    for (const name of TILES) make[name] = tileFn(name);
+    // Birch and spruce bark: the log_side tile's shading over the legend colour.
+    const meanL = (() => { let s = 0, n = 0; for (const r of all.log_side) for (const ch of r) { s += lum(pal[ch]); n++; } return s / n; })();
+    const bark = (c, contrast) => (p) => c.map((v) => Math.min(255, v * (1 + (lum(p) / meanL - 1) * contrast)));
+    make.birch_log_side = tileFn('log_side', bark(col('birch_log'), 1.6));
+    make.spruce_log_side = tileFn('log_side', bark(col('spruce_log'), 1.0));
+  } else {
+    // flat colours; tinted tiles are white so the tint gives the ramp colour
+    Object.assign(make, {
+      stone: solid(col('stone')), dirt: solid(col('dirt')), grass_top: solid([255, 255, 255], TINT_A),
+      grass_side: solid([118, 128, 60]), sand: solid(col('sand')), gravel: solid(col('gravel')),
+      sun_sky: solid([232, 195, 58]), log_side: solid(col('oak_log')), log_top: solid(dark(col('oak_log'), 1.25)),
+      leaves: solid([255, 255, 255], TINT_A),
+      birch_log_side: solid(col('birch_log')), spruce_log_side: solid(col('spruce_log')),
+    });
+    for (const n of TILES) if (n.startsWith('water')) make[n] = solid(col('water'));
+  }
+  // Blocks with no tile: flat legend colours (cactus and pumpkin get ribs so
+  // their faces read as blocks).
+  const ribs = (c, every, k) => (x) => (x % every === 0 ? dark(c, k) : c);
+  make.ice = solid(col('ice'));
+  make.snow = solid(col('snow_layer'));
+  make.cactus_side = (x) => [...ribs(col('cactus'), 4, 0.75)(x), 255];
+  make.cactus_top = (x, y) => [...((x === 0 || y === 0 || x === 15 || y === 15) ? dark(col('cactus'), 0.8) : col('cactus')), 255];
+  make.pumpkin_side = (x) => [...ribs(col('pumpkin'), 5, 0.8)(x + 2), 255];
+  make.pumpkin_top = (x, y) => [...((x > 6 && x < 9 && y > 6 && y < 9) ? [90, 120, 40] : dark(col('pumpkin'), 0.92)), 255];
+  for (const [name, rows] of Object.entries(SPRITES)) {
+    const c = col(name);
+    const map = { c, C: dark(c), s: [76, 130, 40], w: [232, 226, 210] };
+    make[name] = (x, y) => {
+      const ch = rows[y >> 1][x >> 1];
+      if (ch === '.') return [0, 0, 0, 0];
+      if (ch === 'g') return [235, 235, 235, TINT_A];
+      if (ch === 'G') return [170, 170, 170, TINT_A];
+      return [...map[ch], 255];
+    };
+  }
+  const layers = LAYER_NAMES.map((n) => make[n]);
+  // Fish model faces: one layer each, drawn at native size in the top-left
+  // corner. The rest of the layer repeats the edge pixels so mipmaps
+  // don't bleed transparent texels into small faces.
+  fishModels = {};
+  if (textured) {
     const px = (ch) => ch === '.' ? [0, 0, 0, 0] : [...pal[ch], 255];
-    for (const name of TILES) {
-      const rows = all[name];
-      if (!rows) throw new Error(`missing tile ${name}`);
-      const k = S / rows.length; // 2 for 8x8 tiles, 1 for 16x16
-      if (k !== Math.floor(k) || rows[0].length * k !== S) throw new Error(`tile ${name} is not square`);
-      layers.push((x, y) => px(rows[Math.floor(y / k)][Math.floor(x / k)]));
-    }
-    // Fish model faces: one layer each, drawn at native size in the top-left
-    // corner. The rest of the layer repeats the edge pixels so mipmaps
-    // don't bleed transparent texels into small faces.
     for (const sp of Object.keys(FISH_SPECIES)) {
       const m = models[sp];
       if (!m) { console.warn(`no model for ${sp}`); continue; }
@@ -329,12 +489,6 @@ async function loadTextures() {
         W: m.body_front[0].length, H: m.body_front.length, D: m.body_left[0].length,
       };
     }
-    textured = true;
-  } catch (e) {
-    console.warn('textures unavailable, using flat colours:', e);
-    layers.length = 0;
-    fishModels = {};
-    for (const c of FLAT) layers.push(() => [...c, 255]);
   }
   const data = new Uint8Array(S * S * 4 * layers.length);
   layers.forEach((f, L) => {
@@ -349,6 +503,27 @@ async function loadTextures() {
   gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
   return textured;
+}
+
+// Layer for block id b on a face with vertical normal dy (1 top, -1 bottom, 0 side).
+function tileFor(b, dy) {
+  switch (b) {
+    case B.stone: return T.stone;
+    case B.dirt: return T.dirt;
+    case B.grass: return dy > 0 ? T.grass_top : dy < 0 ? T.dirt : T.grass_side;
+    case B.sand: return T.sand;
+    case B.gravel: return T.gravel;
+    case B.water: return dy === 0 ? T.water_flow_0 : T.water_0;
+    case B.ice: return T.ice;
+    case B.oak_log: return dy ? T.log_top : T.log_side;
+    case B.birch_log: return dy ? T.log_top : T.birch_log_side;
+    case B.spruce_log: return dy ? T.log_top : T.spruce_log_side;
+    case B.oak_leaves: case B.birch_leaves: case B.spruce_leaves: return T.leaves;
+    case B.cactus: return dy ? T.cactus_top : T.cactus_side;
+    case B.pumpkin: return dy ? T.pumpkin_top : T.pumpkin_side;
+    case B.snow_layer: return T.snow;
+    default: return T[NAMES[b]] ?? T.stone; // cross plants
+  }
 }
 
 // Faces: [normal, 4 corner offsets, shade]
@@ -368,46 +543,114 @@ function faceUV(f, [a, b, c]) {
   return [f.d[0] !== 0 ? c : a, 1 - b];
 }
 
-function mesh(blocks) {
-  const verts = [[], []]; // per vertex: x y z u v layer shade
+const WHITE = [1, 1, 1];
+const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
+
+// Per-column climate tints for the 3D area: grass and leaf ramps by humidity.
+function columnTints(seed, wx, wz) {
+  const bio = biome_map(seed, wx, wz, AREA, AREA);
+  const hum = humidity_map(seed, wx, wz, AREA, AREA);
+  const tmp = temperature_map(seed, wx, wz, AREA, AREA);
+  const grass = [], leaf = [];
+  for (let c = 0; c < AREA * AREA; c++) {
+    const bi = BIOMES[bio[c]];
+    grass.push(ramp3(bi.grass, hum[c]).map((v) => v / 255));
+    leaf.push(ramp3(bi.leaf, hum[c]).map((v) => v / 255));
+  }
+  const mid = (AREA / 2) * AREA + AREA / 2;
+  return { grass, leaf, bio, tmp, centre: { biome: BIOMES[bio[mid]], t: tmp[mid] } };
+}
+
+function tintFor(b, tints, c) {
+  switch (b) {
+    case B.grass: case B.tall_grass: return tints.grass[c];
+    case B.fern: return tints.grass[c].map((v) => v * 0.88);
+    case B.oak_leaves: return tints.leaf[c];
+    case B.birch_leaves: return lerp3(tints.leaf[c], COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
+    case B.spruce_leaves: return lerp3(tints.leaf[c], COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
+    default: return WHITE;
+  }
+}
+
+function mesh(blocks, tints) {
+  const verts = [[], [], []]; // solid+cutout, water, ice; per vertex: x y z u v layer shade r g b
   // Clip solid ground well below the lowest surface so the view frames the
   // terrain; also find the mean surface height for the camera target.
   let minY = H, sumY = 0;
   for (let c = 0; c < AREA * AREA; c++) {
     let y = H - 1;
-    while (y > 0 && (blocks[c * H + y] === 0 || blocks[c * H + y] === 6)) y--;
+    while (y > 0 && (blocks[c * H + y] === B.air || blocks[c * H + y] === B.water || blocks[c * H + y] === B.ice)) y--;
     minY = Math.min(minY, y); sumY += y;
   }
   const y0 = Math.max(0, minY - 8);
   cam.ty = sumY / (AREA * AREA);
   const at = (x, y, z) => (x < 0 || z < 0 || x >= AREA || z >= AREA || y < y0 || y >= H)
     ? 0 : blocks[(z * AREA + x) * H + y];
+  const push = (L, x, y, z, p, uv, layer, k, tint) => {
+    for (const i of [0, 1, 2, 0, 2, 3]) {
+      verts[L].push(x + p[i][0] - AREA / 2, y + p[i][1] - 64, z + p[i][2] - AREA / 2,
+        uv[i][0], uv[i][1], layer, k, tint[0], tint[1], tint[2]);
+    }
+  };
+  // One face of the box lo..hi (block-local) for face f.
+  const boxFace = (L, x, y, z, f, lo, hi, layer, tint) => {
+    const p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
+    push(L, x, y, z, p, p.map((q) => faceUV(f, q)), layer, f.s * (0.75 + y / 256), tint);
+  };
+  const FULL_LO = [0, 0, 0], FULL_HI = [1, 1, 1];
+  const CACTUS_LO = [CACTUS_INSET, 0, CACTUS_INSET], CACTUS_HI = [1 - CACTUS_INSET, 1, 1 - CACTUS_INSET];
+  const SNOW_HI = [1, SNOW_H, 1];
+  const X1 = [[0.15, 1, 0.15], [0.85, 1, 0.85], [0.85, 0, 0.85], [0.15, 0, 0.15]];
+  const X2 = [[0.85, 1, 0.15], [0.15, 1, 0.85], [0.15, 0, 0.85], [0.85, 0, 0.15]];
+  const XUV = [[0, 0], [1, 0], [1, 1], [0, 1]];
   for (let z = 0; z < AREA; z++) for (let x = 0; x < AREA; x++) {
-    const base = (z * AREA + x) * H;
+    const c = z * AREA + x, base = c * H;
     for (let y = y0; y < H; y++) {
       const b = blocks[base + y];
-      if (b === 0) continue;
-      const isW = b === 6;
+      if (b === B.air) continue;
+      const tint = tintFor(b, tints, c);
+      if (CROSS[b]) {
+        // two crossed quads, wound both ways so they show from either side
+        const layer = tileFor(b, 0), k = 0.9 * (0.75 + y / 256);
+        for (const q of [X1, X2]) {
+          push(0, x, y, z, q, XUV, layer, k, tint);
+          push(0, x, y, z, [q[1], q[0], q[3], q[2]], [XUV[1], XUV[0], XUV[3], XUV[2]], layer, k, tint);
+        }
+        continue;
+      }
       for (const f of FACES) {
         if (y === y0 && f.d[1] < 0) continue;
         const n = at(x + f.d[0], y + f.d[1], z + f.d[2]);
-        // solid faces: visible next to air or water; water: only next to air
-        if (isW ? n !== 0 : !(n === 0 || n === 6)) continue;
         const layer = tileFor(b, f.d[1]);
-        const k = f.s * (0.75 + y / 256);
-        const L = isW ? 1 : 0;
-        for (const i of [0, 1, 2, 0, 2, 3]) {
-          const [a, bb, cc] = f.c[i];
-          const [u, v] = faceUV(f, f.c[i]);
-          verts[L].push(x + a - AREA / 2, y + bb - 64, z + cc - AREA / 2, u, v, layer, k);
+        if (b === B.water) {
+          // water: only next to air, plants or leaves (not water, ice or solids)
+          if (n === B.water || n === B.ice || OPAQUE[n]) continue;
+          boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
+        } else if (b === B.ice) {
+          if (n === B.ice || OPAQUE[n]) continue;
+          boxFace(2, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
+        } else if (b === B.cactus) {
+          // inset sides always show; top/bottom hidden by more cactus or solid ground
+          if (f.d[1] > 0 && n === B.cactus) continue;
+          if (f.d[1] < 0 && (n === B.cactus || OPAQUE[n])) continue;
+          boxFace(0, x, y, z, f, CACTUS_LO, CACTUS_HI, layer, tint);
+        } else if (b === B.snow_layer) {
+          if (f.d[1] < 0 && OPAQUE[n]) continue;
+          if (f.d[1] === 0 && (OPAQUE[n] || n === B.snow_layer)) continue;
+          boxFace(0, x, y, z, f, FULL_LO, SNOW_HI, layer, tint);
+        } else {
+          // full cubes and leaves: hidden only by opaque cubes, so leaves
+          // never hide their neighbours and leaf-leaf faces are drawn (cut-out)
+          if (OPAQUE[n]) continue;
+          boxFace(0, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
         }
       }
     }
   }
-  return [0, 1].map((L) => upload(new Float32Array(verts[L])));
+  return verts.map((v) => upload(new Float32Array(v)));
 }
 
-const STRIDE = 7;
+const STRIDE = 10;
 function upload(v) {
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
@@ -417,7 +660,7 @@ function upload(v) {
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, size, gl.FLOAT, false, STRIDE * 4, off * 4);
   };
-  attr(0, 3, 0); attr(1, 2, 3); attr(2, 1, 5); attr(3, 1, 6);
+  attr(0, 3, 0); attr(1, 2, 3); attr(2, 1, 5); attr(3, 1, 6); attr(4, 3, 7);
   gl.bindVertexArray(null);
   return { vao, n: v.length / STRIDE, bufs: [vb] };
 }
@@ -432,16 +675,21 @@ function build3d() {
   if (!state.sel) return;
   const wx = state.x0 + state.sel.x, wz = state.z0 + state.sel.z;
   const t0 = performance.now();
-  const blocks = generate_region(state.seed, wx, wz, AREA, AREA);
+  const blocks = generate_region_decorated(state.seed, wx, wz, AREA, AREA);
+  const tints = columnTints(state.seed, wx, wz);
   const t1 = performance.now();
-  free(opaque); free(water);
-  [opaque, water] = mesh(blocks);
+  free(opaque); free(water); free(ice);
+  [opaque, water, ice] = mesh(blocks, tints);
   state.blocks = blocks;
+  // sky and fog from the centre column's biome sky ramp (by temperature)
+  sky = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
+  $('gl').style.background = css(sky.map((v) => v * 255));
   spawnFish();
   const t2 = performance.now();
-  $('cap3d').textContent = `3D view of x ${wx}..${wx + AREA - 1}, z ${wz}..${wz + AREA - 1} · ` +
-    `gen ${(t1 - t0).toFixed(0)} ms, mesh ${(t2 - t1).toFixed(0)} ms, ` +
-    `${((opaque.n + water.n) / 6) | 0} faces, ${fish.length} fish · drag to orbit, wheel to zoom`;
+  $('cap3d').textContent = `3D view of x ${wx}..${wx + AREA - 1}, z ${wz}..${wz + AREA - 1} ` +
+    `(${tints.centre.biome.name} at centre) · gen ${(t1 - t0).toFixed(0)} ms, mesh ${(t2 - t1).toFixed(0)} ms, ` +
+    `${((opaque.n + water.n + ice.n) / 6) | 0} faces, ${fish.length} fish · drag to orbit, wheel to zoom` +
+    (state.textured ? '' : ' · textures.json not found; using flat colours');
   draw();
 }
 
@@ -470,7 +718,7 @@ function draw() {
   if (!opaque) return;
   const cv = $('gl');
   gl.viewport(0, 0, cv.width, cv.height);
-  gl.clearColor(0.61, 0.76, 0.9, 1);
+  gl.clearColor(sky[0], sky[1], sky[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
@@ -480,16 +728,19 @@ function draw() {
   const target = [0, cam.ty - 64, 0];
   const view = lookAt([eye[0], eye[1] + target[1], eye[2]], target, [0, 1, 0]);
   const mvp = mul(persp(0.9, cv.width / cv.height, 0.5, 2000), view);
-  gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'mvp'), false, new Float32Array(mvp));
-  gl.uniform1f(gl.getUniformLocation(prog, 'alpha'), 1);
-  gl.uniform1f(gl.getUniformLocation(prog, 'waterFrame'), waterFrame);
+  const u = (n) => gl.getUniformLocation(prog, n);
+  gl.uniformMatrix4fv(u('mvp'), false, new Float32Array(mvp));
+  gl.uniform1f(u('alpha'), 1);
+  gl.uniform1f(u('waterFrame'), waterFrame);
+  gl.uniform3f(u('fogColor'), sky[0], sky[1], sky[2]);
   gl.disable(gl.BLEND);
   // sun first, unfogged and behind everything
-  gl.uniform1f(gl.getUniformLocation(prog, 'fogFar'), 1e9);
+  gl.uniform1f(u('fogFar'), 1e9);
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
   drawSun(view, target);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
-  gl.uniform1f(gl.getUniformLocation(prog, 'fogFar'), cam.dist + 90);
+  gl.uniform1f(u('fogFar'), cam.dist + 90);
+  // opaque and cut-out geometry (leaves, plants) in one pass
   gl.bindVertexArray(opaque.vao); gl.drawArrays(gl.TRIANGLES, 0, opaque.n);
   // fish under the water surface; fins are flat, so draw both sides
   if (fish.length) {
@@ -497,11 +748,13 @@ function draw() {
     drawDynamic('fish', fishVerts());
     gl.enable(gl.CULL_FACE);
   }
-  // translucent water last, without depth writes
+  // translucent water, then ice, without depth writes
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
-  gl.uniform1f(gl.getUniformLocation(prog, 'alpha'), 0.45);
+  gl.uniform1f(u('alpha'), 0.45);
   gl.bindVertexArray(water.vao); gl.drawArrays(gl.TRIANGLES, 0, water.n);
+  gl.uniform1f(u('alpha'), 0.72);
+  gl.bindVertexArray(ice.vao); gl.drawArrays(gl.TRIANGLES, 0, ice.n);
   gl.depthMask(true);
   gl.bindVertexArray(null);
 }
@@ -517,7 +770,7 @@ function drawSun(view, target) {
   const corner = (sx, sy) => c.map((v, i) => v + (right[i] * sx + up[i] * sy) * R);
   const q = [[corner(-1, -1), 0, 1], [corner(1, -1), 1, 1], [corner(1, 1), 1, 0], [corner(-1, 1), 0, 0]];
   const v = [];
-  for (const i of [0, 1, 2, 0, 2, 3]) v.push(...q[i][0], q[i][1], q[i][2], T.sun_sky, 1);
+  for (const i of [0, 1, 2, 0, 2, 3]) v.push(...q[i][0], q[i][1], q[i][2], T.sun_sky, 1, 1, 1, 1);
   gl.disable(gl.CULL_FACE);
   drawDynamic('sun', new Float32Array(v));
   gl.enable(gl.CULL_FACE);
@@ -550,17 +803,25 @@ let fish = [], schools = [];
 function isWater(x, y, z) {
   const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
   if (ix < 0 || iz < 0 || ix >= AREA || iz >= AREA || iy < 0 || iy >= H) return false;
-  return state.blocks[(iz * AREA + ix) * H + iy] === 6;
+  return state.blocks[(iz * AREA + ix) * H + iy] === B.water;
+}
+
+function frozen(x, z) {
+  const base = (z * AREA + x) * H;
+  for (let y = 40; y < 72; y++) if (state.blocks[base + y] === B.ice) return true;
+  return false;
 }
 
 function spawnFish() {
   fish = []; schools = [];
   const kinds = Object.keys(fishModels);
   if (!kinds.length) return;
-  // Candidate spawn cells: water with water above, at least a block under the surface.
+  // Candidate spawn cells: open (unfrozen) water with water above, at least a
+  // block under the surface. Ice-covered columns get no fish.
   const cells = [];
   let surface = 0;
   for (let z = 0; z < AREA; z++) for (let x = 0; x < AREA; x++) {
+    if (frozen(x, z)) continue;
     if (isWater(x, 63, z)) surface++;
     for (let y = 40; y <= 61; y++) if (isWater(x, y, z) && isWater(x, y + 1, z)) cells.push([x, y, z]);
   }
@@ -575,7 +836,7 @@ function spawnFish() {
     for (let i = 0; i < size && fish.length < target; i++) {
       for (let tries = 0; tries < 8; tries++) {
         const p = [cx + 0.5 + (Math.random() - 0.5) * 3, cy + 0.5 + (Math.random() - 0.5), cz + 0.5 + (Math.random() - 0.5) * 3];
-        if (!isWater(...p) || p[1] > SURFACE) continue;
+        if (!isWater(...p) || p[1] > SURFACE || frozen(Math.floor(p[0]), Math.floor(p[2]))) continue;
         fish.push({
           school, pos: p, yaw: school.yaw, pitch: 0,
           jitter: (Math.random() - 0.5) * 0.4,
@@ -684,7 +945,7 @@ function fishVerts() {
       const { layer, w, h } = m.faces[name];
       const uv = [[0, 0], [w / 16, 0], [w / 16, h / 16], [0, h / 16]];
       const p = corners.map((c) => xf(c, tail));
-      for (const i of [0, 1, 2, 0, 2, 3]) out.push(...p[i], uv[i][0], uv[i][1], layer, shade);
+      for (const i of [0, 1, 2, 0, 2, 3]) out.push(...p[i], uv[i][0], uv[i][1], layer, shade, 1, 1, 1);
     }
   }
   return new Float32Array(out);
@@ -728,8 +989,15 @@ if (qs.has('dist')) cam.dist = +qs.get('dist');
 if (qs.has('yaw')) cam.yaw = +qs.get('yaw');
 if (qs.has('pitch')) cam.pitch = +qs.get('pitch');
 await init();
+LEGEND = JSON.parse(legend());
+COLORS = []; NAMES = [];
+for (const b of LEGEND.blocks) { COLORS[b.id] = b.color; NAMES[b.id] = b.name; }
+BIOMES = [];
+for (const b of LEGEND.biomes) BIOMES[b.id] = b;
+setMode(['terrain', 'biome', 'temperature', 'humidity'].includes(qs.get('mode')) ? qs.get('mode') : 'terrain');
 initGL();
-if (!await loadTextures()) $('cap3d').textContent = 'textures.json not found; using flat colours.';
+state.textured = await loadTextures();
+if (!state.textured) $('cap3d').textContent = 'textures.json not found; using flat colours.';
 state.wasmText = await wasmSize();
 regenerate();
 </script>

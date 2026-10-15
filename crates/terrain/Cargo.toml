@@ -5,3 +5,6 @@ edition = "2021"
 description = "Clean-room Beta-style overworld terrain generator (no_std + alloc)"
 
 [dependencies]
+
+[build-dependencies]
+toml = "0.5"

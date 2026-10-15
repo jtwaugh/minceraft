@@ -1,0 +1,242 @@
+# Block palette for the terrain generator (SPEC 6.2 + SPEC 16).
+#
+# Read at compile time by crates/terrain/build.rs, which generates the
+# `Block` enum and the `BLOCK_INFO` table. Ids are the byte values stored in
+# `Region::blocks`; keep them dense and starting at 0. The Rust variant name
+# is the CamelCase form of `name`.
+#
+# fire        = [encouragement, flammability] (SPEC 16; unlisted blocks 0 / 0)
+# collision   = "none" | "full" | "inset" (cactus: 1/16 inset on sides and top)
+#               Anything other than "none" is *movement-blocking* (SPEC 6 notation).
+# opacity     = light opacity for the vertical sky-light / heightmap rule
+#               (255 = fully opaque; leaves 1; water and ice 3).
+# opaque_cube = the "opaque cube" flag used by leaf placement and mushroom
+#               ground (leaves are opaque per quirk B6).
+# liquid      = still/flowing liquid (counts for the snow pass top scan).
+# color       = flat fallback colour (#rrggbb) for maps / untextured views.
+
+[[block]]
+id = 0
+name = "air"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#000000"
+
+[[block]]
+id = 1
+name = "stone"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#8a8a8e"
+
+[[block]]
+id = 2
+name = "dirt"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#86603f"
+
+[[block]]
+id = 3
+name = "grass"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#619f39"
+
+[[block]]
+id = 4
+name = "sand"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#dccf90"
+
+[[block]]
+id = 5
+name = "gravel"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#887e7d"
+
+[[block]]
+id = 6
+name = "water"
+fire = [0, 0]
+collision = "none"
+opacity = 3
+opaque_cube = false
+liquid = true
+color = "#2f5fc8"
+
+[[block]]
+id = 7
+name = "ice"
+fire = [0, 0]
+collision = "full"
+opacity = 3
+opaque_cube = false
+color = "#a6c8f2"
+
+[[block]]
+id = 8
+name = "oak_log"
+fire = [5, 5]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#6e5532"
+
+[[block]]
+id = 9
+name = "birch_log"
+fire = [5, 5]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#d6d2c4"
+
+[[block]]
+id = 10
+name = "spruce_log"
+fire = [5, 5]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#4a3420"
+
+[[block]]
+id = 11
+name = "oak_leaves"
+fire = [30, 60]
+collision = "full"
+opacity = 1
+opaque_cube = true
+color = "#3f8a2c"
+
+[[block]]
+id = 12
+name = "birch_leaves"
+fire = [30, 60]
+collision = "full"
+opacity = 1
+opaque_cube = true
+color = "#7aa84e"
+
+[[block]]
+id = 13
+name = "spruce_leaves"
+fire = [30, 60]
+collision = "full"
+opacity = 1
+opaque_cube = true
+color = "#2e5a3c"
+
+[[block]]
+id = 14
+name = "tall_grass"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#6fb043"
+
+[[block]]
+id = 15
+name = "fern"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4f8f3a"
+
+[[block]]
+id = 16
+name = "dead_bush"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#8c6a3c"
+
+[[block]]
+id = 17
+name = "dandelion"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#f2d53c"
+
+[[block]]
+id = 18
+name = "rose"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#d23a3a"
+
+[[block]]
+id = 19
+name = "sugar_cane"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#93c46a"
+
+[[block]]
+id = 20
+name = "cactus"
+fire = [0, 0]
+collision = "inset"
+opacity = 0
+opaque_cube = false
+color = "#2f7a33"
+
+[[block]]
+id = 21
+name = "brown_mushroom"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#9a7454"
+
+[[block]]
+id = 22
+name = "red_mushroom"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#c8302c"
+
+[[block]]
+id = 23
+name = "pumpkin"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#d9821e"
+
+[[block]]
+id = 24
+name = "snow_layer"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#f4f7fb"
