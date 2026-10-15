@@ -1,0 +1,67 @@
+# Default desktop bindings. See docs/design/basic-gameplay.md section 2.1.
+#
+# Key names follow the browser's KeyboardEvent.code, plus pseudo-keys for the
+# mouse: MouseLeft, MouseRight, MouseMove (pointer-lock motion), WheelUp and
+# WheelDown. Each action lists the keys bound to it; a key may appear only once
+# in the whole file.
+#
+# mode:
+#   hold       true while the key is down
+#   edge       latched once per press
+#   continuous analogue input sampled every frame
+
+[look]
+# Plain linear scale, radians of rotation per pixel of mouse motion. Beta's
+# curve is not in SPEC.md yet (issue #61).
+sensitivity = 0.0025
+fov_degrees = 70.0
+
+[actions.move_forward]
+keys = ["KeyW"]
+mode = "hold"
+
+[actions.move_left]
+keys = ["KeyA"]
+mode = "hold"
+
+[actions.move_back]
+keys = ["KeyS"]
+mode = "hold"
+
+[actions.move_right]
+keys = ["KeyD"]
+mode = "hold"
+
+[actions.look]
+keys = ["MouseMove"]
+mode = "continuous"
+
+[actions.jump]
+keys = ["Space"]
+mode = "hold"
+
+[actions.sneak]
+keys = ["ShiftLeft"]
+mode = "hold"
+
+[actions.primary]
+keys = ["MouseLeft"]
+mode = "edge"
+
+# Press edge, plus hold for repeat where an item says so.
+[actions.secondary]
+keys = ["MouseRight"]
+mode = "edge"
+hold_repeat = true
+
+[actions.interact]
+keys = ["KeyE"]
+mode = "edge"
+
+[actions.drop]
+keys = ["KeyQ"]
+mode = "edge"
+
+[actions.select_tool]
+keys = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "WheelUp", "WheelDown"]
+mode = "edge"
