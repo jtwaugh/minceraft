@@ -26,14 +26,20 @@ behaviour themselves.
    plans from an unmerged doc. The instructions it follows are in
    `.github/prompts/reconcile.md`.
 3. **Accept.** Review the PR, edit anything, merge. Merging is acceptance.
-4. **Plan.** `gh workflow run claude-plan.yml -f file=docs/design/<name>.md -f section="Phase A"`.
-   The planner only plans `accepted` docs, skips phases marked `done`, and
+4. **Plan (automatic).** Whenever an accepted doc changes on `master`
+   (it was just accepted, a decision was recorded, a phase was marked
+   done), the planner plans its next phase: the first one the header marks
+   `todo`, unless a "Plan:" issue already exists for it. So phases are
+   planned one at a time, in header order, each against the code the
+   previous one left behind. To plan by hand:
+   `gh workflow run claude-plan.yml -f file=docs/design/<name>.md` (next
+   phase) or add `-f section="Phase C"` for a specific one. The planner
    skips anything marked as game scope. Open questions become `decision`
    issues, answered with `/decide`.
 5. **Build.** Label tickets `factory`, as for SPEC work.
 6. **Keep it true.** When a plan's last ticket closes, the docs updater
    (`claude-docs.yml`) closes the plan and opens a PR marking the phase
-   `done`. Every Monday it also re-reconciles each `accepted` doc against
+   `done`; merging it plans the next phase. Every Monday it also re-reconciles each `accepted` doc against
    the code and opens a PR for any that have drifted.
 
 ## Format
