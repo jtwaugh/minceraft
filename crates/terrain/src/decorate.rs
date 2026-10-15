@@ -33,7 +33,7 @@ use crate::data::{
     blocks_movement, is_liquid, opacity, Biome, BiomeInfo, Block, Plants, TreeKind, BIOME_INFO,
 };
 use crate::noise::{mix64, Rng};
-use crate::{plants, trees, Biases, Generator, Region, HEIGHT, AIR, ICE, STONE};
+use crate::{plants, trees, Biases, Generator, Region, AIR, HEIGHT, ICE, STONE};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -81,7 +81,13 @@ pub struct ColumnMask {
 impl ColumnMask {
     pub fn new(x0: i32, z0: i32, w: u32, d: u32) -> ColumnMask {
         let n = w as usize * d as usize;
-        ColumnMask { x0, z0, w, d, bits: vec![0; (n + 63) / 64] }
+        ColumnMask {
+            x0,
+            z0,
+            w,
+            d,
+            bits: vec![0; n.div_ceil(64)],
+        }
     }
 
     /// From one byte per column (`z * w + x`, non-zero = protected).
@@ -114,7 +120,8 @@ impl ColumnMask {
     }
 
     pub fn get(&self, x: i32, z: i32) -> bool {
-        self.idx(x, z).map_or(false, |i| self.bits[i / 64] >> (i % 64) & 1 != 0)
+        self.idx(x, z)
+            .is_some_and(|i| self.bits[i / 64] >> (i % 64) & 1 != 0)
     }
 }
 
@@ -210,7 +217,7 @@ impl<'a> World<'a> {
 
     #[inline]
     fn is_protected(&self, x: i32, y: i32, z: i32) -> bool {
-        self.protected.map_or(false, |m| m.protected(x, y, z))
+        self.protected.is_some_and(|m| m.protected(x, y, z))
     }
 
     /// Write one block unless out of range or protected.
@@ -237,7 +244,9 @@ impl<'a> World<'a> {
     /// protected cell (deterministic skip). Returns whether they were applied.
     pub fn commit(&mut self) -> bool {
         let mut pending = core::mem::take(&mut self.pending);
-        let blocked = pending.iter().any(|&(x, y, z, _)| self.is_protected(x, y, z));
+        let blocked = pending
+            .iter()
+            .any(|&(x, y, z, _)| self.is_protected(x, y, z));
         if !blocked {
             for &(x, y, z, b) in &pending {
                 self.set(x, y, z, b);
@@ -263,7 +272,8 @@ impl<'a> World<'a> {
     }
 
     pub fn biome(&self, x: i32, z: i32) -> Biome {
-        self.col(x, z).map_or(Biome::Plains, |c| Biome::from_u8(self.biome[c]))
+        self.col(x, z)
+            .map_or(Biome::Plains, |c| Biome::from_u8(self.biome[c]))
     }
 
     /// Lowest y such that y and everything above has light opacity 0.
@@ -322,12 +332,19 @@ pub fn decorate(region: &mut Region, gen: &Generator, biases: &Biases) -> Decora
     let mut biome = Vec::with_capacity(n);
     for z in 0..d {
         for x in 0..w {
-            let (t, h) = gen.climate.at(region.x0 + x, region.z0 + z, biases.temperature);
+            let (t, h) = gen
+                .climate
+                .at(region.x0 + x, region.z0 + z, biases.temperature);
             temp.push(t);
             biome.push(biome_for(t, h) as u8);
         }
     }
-    let area = Area { x0: region.x0, z0: region.z0, x1: region.x0 + w, z1: region.z0 + d };
+    let area = Area {
+        x0: region.x0,
+        z0: region.z0,
+        x1: region.x0 + w,
+        z1: region.z0 + d,
+    };
     let mut world = World {
         blocks: &mut region.blocks,
         x0: area.x0,
@@ -362,7 +379,12 @@ pub(crate) fn generate_decorated(
     if w == 0 || d == 0 {
         return (out, DecorationStats::default());
     }
-    let area = Area { x0, z0, x1: x0 + w as i32, z1: z0 + d as i32 };
+    let area = Area {
+        x0,
+        z0,
+        x1: x0 + w as i32,
+        z1: z0 + d as i32,
+    };
     let pad = MARGIN_CELLS * 16 + READ_REACH;
     let bx0 = x0.div_euclid(16) * 16 - pad;
     let bz0 = z0.div_euclid(16) * 16 - pad;
@@ -373,12 +395,19 @@ pub(crate) fn generate_decorated(
     let mut blocks = vec![0u8; n * HEIGHT];
     let mut temp = vec![0.0f64; n];
     let mut biome = vec![0u8; n];
-    gen.for_each_column(bx0, bz0, bw as u32, bd as u32, biases, |cx, cz, col, t, h| {
-        let i = cz as usize * bw as usize + cx as usize;
-        blocks[i * HEIGHT..(i + 1) * HEIGHT].copy_from_slice(col);
-        temp[i] = t;
-        biome[i] = biome_for(t, h) as u8;
-    });
+    gen.for_each_column(
+        bx0,
+        bz0,
+        bw as u32,
+        bd as u32,
+        biases,
+        |cx, cz, col, t, h| {
+            let i = cz as usize * bw as usize + cx as usize;
+            blocks[i * HEIGHT..(i + 1) * HEIGHT].copy_from_slice(col);
+            temp[i] = t;
+            biome[i] = biome_for(t, h) as u8;
+        },
+    );
     let mut world = World {
         blocks: &mut blocks,
         x0: bx0,
@@ -462,7 +491,10 @@ impl Maxima {
     fn new() -> Maxima {
         let mut plants = [0u32; 9];
         for (i, g) in PLANT_GETTERS.iter().enumerate() {
-            let m = BIOME_INFO.iter().map(|b| g(&b.plants)).fold(0.0f64, f64::max);
+            let m = BIOME_INFO
+                .iter()
+                .map(|b| g(&b.plants))
+                .fold(0.0f64, f64::max);
             plants[i] = libm_ceil(m) as u32;
         }
         let tree_term = BIOME_INFO.iter().map(|b| b.tree_bonus).max().unwrap_or(0);
@@ -520,7 +552,9 @@ fn decorate_cell(
     let (bx, bz) = (cx * 16, cz * 16);
 
     // Step 13: trees. Density noise at the cell centre (B4).
-    let dn = gen.tree.sample2d((bx + 8) as f64 * 0.5, (bz + 8) as f64 * 0.5);
+    let dn = gen
+        .tree
+        .sample2d((bx + 8) as f64 * 0.5, (bz + 8) as f64 * 0.5);
     let n = ((dn / 8.0 + 4.0 * rng.next_f64() + 4.0) / 3.0) as i32; // trunc
     let extra = (rng.below(10) == 0) as i32;
     let count = |b: &BiomeInfo| extra + if b.tree_noise { n } else { 0 } + b.tree_bonus;

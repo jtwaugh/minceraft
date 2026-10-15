@@ -18,11 +18,15 @@ const BEHIND = 2;            // free chunks this long after they were last in vi
 export const PRI = { plan: 1, opening: 2, stream: 3 };
 
 const key = (cx, cz) => `${cx},${cz}`;
+const PARTS = ['opaque', 'cutout', 'water', 'ice'];
+// Chunks are meshed with fast leaves until the schedule's `full` time comes
+// within `ahead`; then a full-detail mesh replaces the fast one.
+const wantFast = (e, t) => e.full > t;
 
 export class ChunkStream {
   constructor(seed, env, schedule) {
     this.seed = seed; this.env = env; this.schedule = schedule;
-    this.loaded = new Map();   // key -> { cx, cz, parts, meanY }
+    this.loaded = new Map();   // key -> { cx, cz, fast, parts, meanY, minY }
     this.jobs = new Map();     // key -> pool job (queued or running)
     this.stats = { generated: 0, ms: 0 };
   }
@@ -38,11 +42,14 @@ export class ChunkStream {
       if (e.last < t - 0.5) continue;
       const k = key(e.cx, e.cz);
       want.add(k);
-      const pri = priority + Math.max(0, e.first - t) / 100;
-      if (this.loaded.has(k)) continue;
+      const fast = wantFast(e, t + ahead);
+      const pri = priority + Math.max(0, (fast ? e.first : Math.max(e.first, e.full)) - t) / 100;
+      const have = this.loaded.get(k);
+      if (have && (!have.fast || fast)) continue;
       const job = this.jobs.get(k);
-      if (job) { this.env.pool.reprioritise(job, pri); continue; }
-      this.request(e, k, pri);
+      if (job && job.args.fast === fast) { this.env.pool.reprioritise(job, pri); continue; }
+      job?.cancel();
+      this.request(e, k, pri, fast);
     }
     for (const [k, job] of this.jobs) if (!want.has(k)) { job.cancel(); this.jobs.delete(k); }
     const keepUntil = t + ahead + 4;
@@ -52,15 +59,17 @@ export class ChunkStream {
     }
   }
 
-  request(e, k, priority) {
-    const job = this.env.pool.run('chunk', { seed: this.seed, cx: e.cx, cz: e.cz }, priority);
+  request(e, k, priority, fast) {
+    const job = this.env.pool.run('chunk', { seed: this.seed, cx: e.cx, cz: e.cz, fast }, priority);
     this.jobs.set(k, job);
     job.promise.then((d) => {
       if (this.jobs.get(k) !== job || this.disposed) return;
       this.jobs.delete(k);
       const parts = {};
-      for (const name of ['opaque', 'water', 'ice']) parts[name] = this.env.upload(d[name]);
-      this.loaded.set(k, { cx: d.cx, cz: d.cz, parts, meanY: d.meanY });
+      for (const name of PARTS) parts[name] = this.env.upload(d[name]);
+      const old = this.loaded.get(k);
+      if (old) this.drop(k, old); // a fast mesh replaced by full detail
+      this.loaded.set(k, { cx: d.cx, cz: d.cz, fast: d.fast, parts, meanY: d.meanY, minY: d.minY });
       this.stats.generated++; this.stats.ms += job.ms || 0;
     }, () => {});
   }
@@ -70,13 +79,14 @@ export class ChunkStream {
     this.loaded.delete(k);
   }
 
-  /** [loaded, total] for the chunks in view between t0 and t1. */
+  /** [loaded, total] for the chunks in view between t0 and t1, at the detail they need by t1. */
   progress(t0, t1) {
     let n = 0, done = 0;
     for (const e of this.schedule) {
       if (e.first > t1) break;
       if (e.last < t0) continue;
-      n++; if (this.loaded.has(key(e.cx, e.cz))) done++;
+      const c = this.loaded.get(key(e.cx, e.cz));
+      n++; if (c && (!c.fast || wantFast(e, t1))) done++;
     }
     return [done, n];
   }

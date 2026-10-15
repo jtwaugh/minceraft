@@ -34,9 +34,7 @@ pub(crate) fn survives(w: &World, plant: u8, x: i32, y: i32, z: i32) -> bool {
     let below = w.get(x, y - 1, z);
     match plant {
         DEAD_BUSH => below == SAND && lit(w, x, y, z),
-        BROWN | RED => {
-            (0..128).contains(&y) && is_opaque_cube(below) && w.light(x, y, z) < 13
-        }
+        BROWN | RED => (0..128).contains(&y) && is_opaque_cube(below) && w.light(x, y, z) < 13,
         CANE => {
             below == CANE
                 || ((below == GRASS || below == DIRT)

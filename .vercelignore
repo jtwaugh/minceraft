@@ -1,0 +1,5 @@
+# Only the static viewer gets uploaded (it's prebuilt locally by ./build.sh;
+# viewer/pkg and viewer/textures.json are gitignored but still need to ship).
+/*
+!/viewer
+!/vercel.json

@@ -17,7 +17,10 @@ fn perlin_single_octave_range() {
         hi = hi.max(v);
     }
     assert!(lo >= -1.1 && hi <= 1.1, "perlin range {lo}..{hi}");
-    assert!(lo < -0.5 && hi > 0.5, "perlin range suspiciously small {lo}..{hi}");
+    assert!(
+        lo < -0.5 && hi > 0.5,
+        "perlin range suspiciously small {lo}..{hi}"
+    );
 }
 
 #[test]
@@ -103,7 +106,10 @@ fn overlapping_regions_agree() {
             let i = small.index(x, 0, z);
             let s = column_summary(&small.blocks[i..i + 128]);
             let j = ((z * 29 + x) * 4) as usize;
-            assert_eq!((s.0, s.1, s.2, s.3), (hm[j], hm[j + 1], hm[j + 2], hm[j + 3]));
+            assert_eq!(
+                (s.0, s.1, s.2, s.3),
+                (hm[j], hm[j + 1], hm[j + 2], hm[j + 3])
+            );
         }
     }
 }
@@ -150,7 +156,11 @@ fn bias_extension_point() {
 fn gradient_table_matches_spec() {
     for h in 0..16u8 {
         let (x, y, z) = (0.3, -0.7, 1.9);
-        assert_eq!(noise::grad_reference(h, x, y, z), noise::grad_table(h, x, y, z), "h={h}");
+        assert_eq!(
+            noise::grad_reference(h, x, y, z),
+            noise::grad_table(h, x, y, z),
+            "h={h}"
+        );
     }
 }
 
@@ -191,8 +201,14 @@ fn coarse_heightmap_matches_full_terrain() {
             if coarse[o] as u32 == top && coarse[o + 2] == gaps {
                 same += 1;
             }
-            assert_eq!(coarse[o + 1], biome_at(seed, ax + x as i32, az + z as i32) as u8);
+            assert_eq!(
+                coarse[o + 1],
+                biome_at(seed, ax + x as i32, az + z as i32) as u8
+            );
         }
     }
-    assert!(same * 100 >= total * 98, "coarse heights matched {same}/{total}");
+    assert!(
+        same * 100 >= total * 98,
+        "coarse heights matched {same}/{total}"
+    );
 }

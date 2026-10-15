@@ -35,7 +35,9 @@ mod trees;
 use alloc::vec;
 use alloc::vec::Vec;
 pub use climate::{biome_at, biome_for, biome_lookup, climate_at, Climate, TemperatureBias};
-pub use data::{Biome, BiomeInfo, Block, BlockInfo, Collision, TreeKind, BIOME_INFO, BLOCK_INFO, LEGEND_JSON};
+pub use data::{
+    Biome, BiomeInfo, Block, BlockInfo, Collision, TreeKind, BIOME_INFO, BLOCK_INFO, LEGEND_JSON,
+};
 pub use decorate::{decorate, ColumnMask, DecorationStats, ProtectedMask};
 use noise::{hash_f64, Axis, OctavePerlin, Rng};
 
@@ -139,7 +141,10 @@ pub fn generate_region_with_bias(
     d: u32,
     biases: &[&dyn DensityBias],
 ) -> Region {
-    let b = Biases { density: biases, ..Biases::default() };
+    let b = Biases {
+        density: biases,
+        ..Biases::default()
+    };
     generate_region_with_biases(seed, x0, z0, w, d, &b, false)
 }
 
@@ -172,7 +177,14 @@ pub fn generate_region_with_biases(
         let i = (cz as usize * w as usize + cx as usize) * HEIGHT;
         blocks[i..i + HEIGHT].copy_from_slice(col);
     });
-    Region { blocks, width: w, depth: d, height: HEIGHT as u32, x0, z0 }
+    Region {
+        blocks,
+        width: w,
+        depth: d,
+        height: HEIGHT as u32,
+        x0,
+        z0,
+    }
 }
 
 /// Decorated region plus per-biome decoration statistics for features
@@ -206,7 +218,10 @@ pub fn generate_heightmap_with_bias(
     d: u32,
     biases: &[&dyn DensityBias],
 ) -> Vec<u8> {
-    let b = Biases { density: biases, ..Biases::default() };
+    let b = Biases {
+        density: biases,
+        ..Biases::default()
+    };
     generate_heightmap_with_biases(seed, x0, z0, w, d, &b, false)
 }
 
@@ -265,10 +280,18 @@ pub fn generate_climate(
 ) -> ClimateMap {
     let c = Climate::new(seed);
     let n = w as usize * d as usize;
-    let mut m = ClimateMap { temperature: Vec::with_capacity(n), humidity: Vec::with_capacity(n), biome: Vec::with_capacity(n) };
+    let mut m = ClimateMap {
+        temperature: Vec::with_capacity(n),
+        humidity: Vec::with_capacity(n),
+        biome: Vec::with_capacity(n),
+    };
     for cz in 0..d {
         for cx in 0..w {
-            let (t, h) = c.at(x0.wrapping_add(cx as i32), z0.wrapping_add(cz as i32), temperature);
+            let (t, h) = c.at(
+                x0.wrapping_add(cx as i32),
+                z0.wrapping_add(cz as i32),
+                temperature,
+            );
             m.temperature.push(t as f32);
             m.humidity.push(h as f32);
             m.biome.push(biome_for(t, h) as u8);
@@ -291,7 +314,14 @@ pub fn generate_climate(
 /// is the tallest such gap in blocks.
 /// Much cheaper per area than [`generate_heightmap`]: one lattice point per
 /// sample instead of `step * step` interpolated columns.
-pub fn generate_coarse_heightmap(seed: u64, x0: i32, z0: i32, step: u32, nx: u32, nz: u32) -> Vec<u8> {
+pub fn generate_coarse_heightmap(
+    seed: u64,
+    x0: i32,
+    z0: i32,
+    step: u32,
+    nx: u32,
+    nz: u32,
+) -> Vec<u8> {
     let gen = Generator::new(seed);
     let ls = (step.max(1) as i64 + 3) / 4;
     let lx0 = (x0 as i64).div_euclid(4);
@@ -522,16 +552,33 @@ impl Generator {
 
         let (mx, my, mz) = (scaled(&lxs, S), scaled(&lys, S), scaled(&lzs, S));
         let mut lo = vec![0.0f64; n];
-        self.low
-            .fill_grid(&mx, &my, &mz, &mut lo, Some(&need_lo), &mut ax, &mut ay, &mut az);
+        self.low.fill_grid(
+            &mx,
+            &my,
+            &mz,
+            &mut lo,
+            Some(&need_lo),
+            &mut ax,
+            &mut ay,
+            &mut az,
+        );
         let mut hi = vec![0.0f64; n];
-        self.high
-            .fill_grid(&mx, &my, &mz, &mut hi, Some(&need_hi), &mut ax, &mut ay, &mut az);
+        self.high.fill_grid(
+            &mx,
+            &my,
+            &mz,
+            &mut hi,
+            Some(&need_hi),
+            &mut ax,
+            &mut ay,
+            &mut az,
+        );
 
         // Combine into densities, reusing the `sel` buffer as output.
         for ix in 0..nx {
             for iz in 0..nz {
-                let (center, scale) = self.column_terms(lx0 + ix as i64 * step, lz0 + iz as i64 * step, tb);
+                let (center, scale) =
+                    self.column_terms(lx0 + ix as i64 * step, lz0 + iz as i64 * step, tb);
                 let base = (ix * nz + iz) * LEVELS;
                 for ly in 0..LEVELS {
                     let i = base + ly;
@@ -558,7 +605,12 @@ impl Generator {
                 }
             }
         }
-        Lattice { lx0, lz0, nz, data: sel }
+        Lattice {
+            lx0,
+            lz0,
+            nz,
+            data: sel,
+        }
     }
 
     /// Generate every column of the region and hand it to `f(cx, cz, col)`
@@ -585,8 +637,12 @@ impl Generator {
         // Per-row surface noise buffers (SPEC 4), computed with the grid path
         // so per-axis floor/fade work is shared along the row.
         let wu = w as usize;
-        let xs32: Vec<f64> = (0..wu).map(|i| x0.wrapping_add(i as i32) as f64 / 32.0).collect();
-        let xs16: Vec<f64> = (0..wu).map(|i| x0.wrapping_add(i as i32) as f64 / 16.0).collect();
+        let xs32: Vec<f64> = (0..wu)
+            .map(|i| x0.wrapping_add(i as i32) as f64 / 32.0)
+            .collect();
+        let xs16: Vec<f64> = (0..wu)
+            .map(|i| x0.wrapping_add(i as i32) as f64 / 16.0)
+            .collect();
         let (mut sn, mut gn, mut dn) = (vec![0.0f64; wu], vec![0.0f64; wu], vec![0.0f64; wu]);
         // Per-row climate, computed ahead of the column loop (keeps the hot
         // fill loop small; noticeably faster in wasm).
@@ -599,12 +655,38 @@ impl Generator {
                 *v = 0.0;
             }
             // Sn: 3D noise on the plane (x, z, 0) - world Z on the noise Y axis.
-            self.sand.fill_grid(&xs32, &[zf / 32.0], &[0.0], &mut sn, None, &mut ax, &mut ay, &mut az);
+            self.sand.fill_grid(
+                &xs32,
+                &[zf / 32.0],
+                &[0.0],
+                &mut sn,
+                None,
+                &mut ax,
+                &mut ay,
+                &mut az,
+            );
             // Gn: 2D path, i.e. 3D at (x, 0, z).
-            self.sand.fill_grid(&xs32, &[0.0], &[zf / 32.0], &mut gn, None, &mut ax, &mut ay, &mut az);
+            self.sand.fill_grid(
+                &xs32,
+                &[0.0],
+                &[zf / 32.0],
+                &mut gn,
+                None,
+                &mut ax,
+                &mut ay,
+                &mut az,
+            );
             // Dn: stone-depth, 2D path at block scale 1/16.
-            self.stone_depth
-                .fill_grid(&xs16, &[0.0], &[zf / 16.0], &mut dn, None, &mut ax, &mut ay, &mut az);
+            self.stone_depth.fill_grid(
+                &xs16,
+                &[0.0],
+                &[zf / 16.0],
+                &mut dn,
+                None,
+                &mut ax,
+                &mut ay,
+                &mut az,
+            );
             for (i, c) in clim.iter_mut().enumerate() {
                 *c = self.climate.at(x0.wrapping_add(i as i32), wz, tb);
             }
@@ -717,7 +799,11 @@ impl Generator {
                             }
                         }
                         if y < SEA_LEVEL && top == AIR {
-                            top = if frozen && y == SEA_LEVEL - 1 { ICE } else { WATER };
+                            top = if frozen && y == SEA_LEVEL - 1 {
+                                ICE
+                            } else {
+                                WATER
+                            };
                         }
                         // Spec says `run = soil`; a negative soil would set
                         // run back to -1 and re-trigger the surface rule on

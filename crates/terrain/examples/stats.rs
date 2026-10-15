@@ -27,7 +27,10 @@ fn main() {
     println!("generate_region 512x512 (terrain only): {:.1} ms", ms(t));
     let t = Instant::now();
     let (r, _) = generate_decorated_with_stats(seed, x0, z0, w, d, &Biases::default());
-    println!("generate_decorated 512x512 (terrain + margin + decoration): {:.1} ms", ms(t));
+    println!(
+        "generate_decorated 512x512 (terrain + margin + decoration): {:.1} ms",
+        ms(t)
+    );
     let t = Instant::now();
     let hm = generate_heightmap_with_biases(seed, x0, z0, w, d, &Biases::default(), true);
     println!("heightmap 512x512 (decorated): {:.1} ms", ms(t));
@@ -50,11 +53,18 @@ fn main() {
             }
         }
     }
-    println!("water/ice columns: {:.1}%", 100.0 * water_cols as f64 / n as f64);
+    println!(
+        "water/ice columns: {:.1}%",
+        100.0 * water_cols as f64 / n as f64
+    );
     print!("top block:");
     for (i, c) in top_counts.iter().enumerate() {
         if *c > 0 {
-            print!(" {}={:.2}%", BLOCK_INFO[i].name, 100.0 * *c as f64 / n as f64);
+            print!(
+                " {}={:.2}%",
+                BLOCK_INFO[i].name,
+                100.0 * *c as f64 / n as f64
+            );
         }
     }
     println!();
@@ -78,11 +88,18 @@ fn main() {
         }
     }
     let total = (side * side) as f64;
-    println!("biome distribution over {side}x{side} columns ({:.0} ms):", ms(t));
+    println!(
+        "biome distribution over {side}x{side} columns ({:.0} ms):",
+        ms(t)
+    );
     let mut order: Vec<usize> = (0..Biome::COUNT).collect();
     order.sort_by_key(|&i| std::cmp::Reverse(hist[i]));
     for i in order {
-        println!("  {:<16} {:6.2}%", BIOME_INFO[i].name, 100.0 * hist[i] as f64 / total);
+        println!(
+            "  {:<16} {:6.2}%",
+            BIOME_INFO[i].name,
+            100.0 * hist[i] as f64 / total
+        );
     }
 
     // ---- trees per chunk per biome over a 2048 x 2048 decorated area ----
@@ -108,8 +125,14 @@ fn main() {
             }
         }
     }
-    println!("vegetation over 2048x2048 ({:.0} ms), per 256 columns of each biome:", ms(t));
-    println!("  {:<16} {:>8} {:>9} {:>7} {:>8} {:>7}", "biome", "chunks", "attempts", "trees", "plants", "snow%");
+    println!(
+        "vegetation over 2048x2048 ({:.0} ms), per 256 columns of each biome:",
+        ms(t)
+    );
+    println!(
+        "  {:<16} {:>8} {:>9} {:>7} {:>8} {:>7}",
+        "biome", "chunks", "attempts", "trees", "plants", "snow%"
+    );
     for b in Biome::ALL {
         let s = stats.biomes[b as usize];
         if s.columns == 0 {

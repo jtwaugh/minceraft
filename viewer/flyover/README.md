@@ -83,7 +83,8 @@ node viewer/flyover/preview.mjs 2026 0 0 route.ppm   # plan only, no browser
    measures how long its point is in the middle 80% of the frame, within 140
    blocks and not hidden by terrain. A feature in view for under 2.5 s is
    swapped for the next candidate (twice at most). Each plan carries the
-   result (`plan.coverage`), and the page lists it under the view.
+   result (`plan.coverage`, with the `first` second each feature is in view),
+   and the page lists it under the view as chapters you can seek to.
 9. **Visibility schedule** (`visibilitySchedule`): from the path sampled every
    0.25 s, each 64×64 chunk with any point inside the 16:9 view before the fog
    gets a `first` and `last` time in view, padded by 1 s. That's 72–141 chunks
@@ -158,14 +159,41 @@ came out as a map with **half of it ocean at height 0 and the other half all
 
 Decorated 64×64 chunks have **10,000 to 60,000 faces each**, about 25,000 on
 average. The old vertex format (240 bytes per face) would need 6–14 MB per
-chunk. `mesh.js` writes **indexed quads with 16-byte vertices**, about 88
-bytes per face:
+chunk. `mesh.js` writes **quads with 16-byte vertices**, 64 bytes per face:
 - int16 positions in 1/16 block;
 - uint8 uv, layer and shade;
 - normalised uint8 tint.
 
 The shader rescales them with an `unpack` uniform and places each chunk with
-an `offset` uniform.
+an `offset` uniform. Every quad has the same index pattern, so the page
+keeps **one shared index buffer** (`quadIndices`) instead of 24 bytes of
+indices per face in every chunk.
+
+### Fast leaves in the distance
+
+Leaves are most of a forest chunk's faces (70% on seed 12345), and three
+quarters of leaf faces face another leaf. Each schedule entry has a `full`
+time: the first time the camera comes within `FULL_DETAIL` (80) blocks of
+the chunk. Until then the chunk is meshed with **fast leaves**
+(`meshBlocks(.., { fast: true })`):
+- leaves hide their neighbours like solid blocks;
+- they use `leaves_fast`, the leaves tile with its holes filled in dark
+  green;
+- they join the opaque part.
+
+That's about 14,000 faces instead of 32,000 for a forest chunk, and 0.9 MB
+instead of 2 MB. The player requests the full-detail mesh `LOOKAHEAD`
+seconds before `full` and swaps it in when it arrives. The clock waits for
+it, as it waits for any chunk.
+
+### Drawing order and culling
+
+Each frame `renderFly` draws only the chunks whose box is inside the view
+frustum and nearer than solid fog. They're drawn nearest first:
+1. the opaque parts, with a shader that never discards, so the GPU can
+   reject hidden pixels before shading them;
+2. the cut-outs (leaves, plants);
+3. water and ice, back to front.
 
 ### Chunk seams: mesh with a one-block ring
 
@@ -193,8 +221,8 @@ The occlusion test ray-marched a 5×5 grid of points per chunk over a 4-block
 height survey. The camera flies above the ground looking at most about 25°
 down, so some part of nearly every chunk in view is visible, and occlusion
 removed nothing. The frustum alone saves 18–47%. Rendering the whole flight
-up front doesn't fit in memory either: 80–150 chunks at ~2.2 MB is
-200–330 MB. Hence the schedule: render the opening in the background, stream
+up front doesn't fit in memory either: 80–150 chunks at ~2 MB is
+160–300 MB. Hence the schedule: render the opening in the background, stream
 the rest just ahead.
 
 ### "Points at the feature" has to be measured, not assumed

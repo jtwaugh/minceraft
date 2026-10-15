@@ -5,3 +5,4 @@
 *.jar
 /viewer/textures.json
 /art/build/
+.vercel

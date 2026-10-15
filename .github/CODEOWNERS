@@ -1,0 +1,25 @@
+# Changes to these paths need the maintainer's review before merging.
+# Takes effect only with branch protection on main and
+# "Require review from Code Owners" turned on.
+#
+# There is deliberately no catch-all (*) rule, so ordinary changes (art
+# batches, for example) can later be merged on green checks alone.
+
+# The spec is the clean-room boundary.
+/SPEC.md                @jtwaugh
+
+# Agent instructions and this file.
+/CLAUDE.md              @jtwaugh
+/.github/               @jtwaugh
+
+# Rules for what may enter the repo.
+/.gitignore             @jtwaugh
+/.vercelignore          @jtwaugh
+/vercel.json            @jtwaugh
+
+# Briefs that steer generated work.
+/art/PROMPT.md          @jtwaugh
+
+# Never committed; listed so any attempt is flagged for review.
+/work/                  @jtwaugh
+*.jar                   @jtwaugh

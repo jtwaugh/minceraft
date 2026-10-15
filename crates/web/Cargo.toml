@@ -12,3 +12,6 @@ wasm-bindgen = "0.2"
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
+
+[lints]
+workspace = true

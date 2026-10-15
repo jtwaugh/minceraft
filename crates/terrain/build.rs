@@ -29,7 +29,11 @@ fn main() {
     );
     gen_lookup(&biomes, &mut out);
     gen_trees(&biomes, &block_names, &mut out);
-    writeln!(out, "/// Legend for viewers: blocks and biomes with colours and ramps (JSON).").unwrap();
+    writeln!(
+        out,
+        "/// Legend for viewers: blocks and biomes with colours and ramps (JSON)."
+    )
+    .unwrap();
     writeln!(out, "pub const LEGEND_JSON: &str = {:?};", json).unwrap();
 
     let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("data.rs");
@@ -42,7 +46,7 @@ fn read(p: &PathBuf) -> Value {
 }
 
 fn camel(name: &str) -> String {
-    name.split(|c| c == '_' || c == ' ')
+    name.split(['_', ' '])
         .filter(|w| !w.is_empty())
         .map(|w| {
             let mut c = w.chars();
@@ -61,15 +65,22 @@ fn color(v: &Value) -> [u8; 3] {
 }
 
 fn int(v: &Value, key: &str) -> i64 {
-    v.get(key).and_then(Value::as_integer).unwrap_or_else(|| panic!("missing integer {key}"))
+    v.get(key)
+        .and_then(Value::as_integer)
+        .unwrap_or_else(|| panic!("missing integer {key}"))
 }
 
 fn num(v: &Value) -> f64 {
-    v.as_float().or_else(|| v.as_integer().map(|i| i as f64)).expect("number")
+    v.as_float()
+        .or_else(|| v.as_integer().map(|i| i as f64))
+        .expect("number")
 }
 
 fn pair(v: &Value, key: &str) -> (i64, i64) {
-    let a = v.get(key).and_then(Value::as_array).unwrap_or_else(|| panic!("missing {key}"));
+    let a = v
+        .get(key)
+        .and_then(Value::as_array)
+        .unwrap_or_else(|| panic!("missing {key}"));
     (a[0].as_integer().unwrap(), a[1].as_integer().unwrap())
 }
 
@@ -78,7 +89,11 @@ fn gen_blocks(doc: &Value, out: &mut String, json: &mut String) -> Vec<String> {
     let mut names = Vec::new();
     let mut infos = String::new();
     for (i, b) in list.iter().enumerate() {
-        assert_eq!(int(b, "id") as usize, i, "block ids must be dense and in order");
+        assert_eq!(
+            int(b, "id") as usize,
+            i,
+            "block ids must be dense and in order"
+        );
         let name = b["name"].as_str().unwrap().to_string();
         let fire = b["fire"].as_array().unwrap();
         let collision = b["collision"].as_str().unwrap();
@@ -113,24 +128,39 @@ fn gen_blocks(doc: &Value, out: &mut String, json: &mut String) -> Vec<String> {
     }
     let n = names.len();
     writeln!(out, "/// Block palette, generated from `data/blocks.toml`.").unwrap();
-    writeln!(out, "#[repr(u8)]\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\npub enum Block {{").unwrap();
+    writeln!(
+        out,
+        "#[repr(u8)]\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\npub enum Block {{"
+    )
+    .unwrap();
     for (i, nm) in names.iter().enumerate() {
         writeln!(out, "    {} = {i},", camel(nm)).unwrap();
     }
-    writeln!(out, "}}\n\nimpl Block {{\n    pub const COUNT: usize = {n};").unwrap();
+    writeln!(
+        out,
+        "}}\n\nimpl Block {{\n    pub const COUNT: usize = {n};"
+    )
+    .unwrap();
     write!(out, "    pub const ALL: [Block; {n}] = [").unwrap();
     for nm in &names {
         write!(out, "Block::{}, ", camel(nm)).unwrap();
     }
     writeln!(out, "];\n}}\n").unwrap();
     writeln!(out, "/// Per-block properties indexed by block id.").unwrap();
-    writeln!(out, "pub static BLOCK_INFO: [BlockInfo; {n}] = [\n{infos}];\n").unwrap();
+    writeln!(
+        out,
+        "pub static BLOCK_INFO: [BlockInfo; {n}] = [\n{infos}];\n"
+    )
+    .unwrap();
     names
 }
 
 fn block_id(names: &[String], v: &Value) -> usize {
     let s = v.as_str().expect("block name");
-    names.iter().position(|n| n == s).unwrap_or_else(|| panic!("unknown block {s}"))
+    names
+        .iter()
+        .position(|n| n == s)
+        .unwrap_or_else(|| panic!("unknown block {s}"))
 }
 
 fn species(v: Option<&Value>) -> String {
@@ -138,7 +168,13 @@ fn species(v: Option<&Value>) -> String {
     if let Some(a) = v.and_then(Value::as_array) {
         for e in a {
             let e = e.as_array().unwrap();
-            write!(s, "({:?}, {}), ", e[0].as_str().unwrap(), e[1].as_integer().unwrap()).unwrap();
+            write!(
+                s,
+                "({:?}, {}), ",
+                e[0].as_str().unwrap(),
+                e[1].as_integer().unwrap()
+            )
+            .unwrap();
         }
     }
     s.push(']');
@@ -165,7 +201,11 @@ fn gen_biomes(doc: &Value, blocks: &[String], out: &mut String, json: &mut Strin
     let mut names = Vec::new();
     let mut infos = String::new();
     for (i, b) in list.iter().enumerate() {
-        assert_eq!(int(b, "id") as usize, i, "biome ids must be dense and in order");
+        assert_eq!(
+            int(b, "id") as usize,
+            i,
+            "biome ids must be dense and in order"
+        );
         let name = b["name"].as_str().unwrap().to_string();
         let top = block_id(blocks, &b["top"]);
         let filler = block_id(blocks, &b["filler"]);
@@ -173,7 +213,10 @@ fn gen_biomes(doc: &Value, blocks: &[String], out: &mut String, json: &mut Strin
         let trees = b["trees"].as_table().unwrap();
         let mut w = [0i64; 5];
         for (k, v) in trees {
-            let idx = TREE_KINDS.iter().position(|t| t == k).unwrap_or_else(|| panic!("tree {k}"));
+            let idx = TREE_KINDS
+                .iter()
+                .position(|t| t == k)
+                .unwrap_or_else(|| panic!("tree {k}"));
             w[idx] = v.as_integer().unwrap();
         }
         let plants = b["plants"].as_table().unwrap();
@@ -221,18 +264,30 @@ fn gen_biomes(doc: &Value, blocks: &[String], out: &mut String, json: &mut Strin
     }
     let n = names.len();
     writeln!(out, "/// Biomes, generated from `data/biomes.toml`.").unwrap();
-    writeln!(out, "#[repr(u8)]\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\npub enum Biome {{").unwrap();
+    writeln!(
+        out,
+        "#[repr(u8)]\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\npub enum Biome {{"
+    )
+    .unwrap();
     for (i, nm) in names.iter().enumerate() {
         writeln!(out, "    {} = {i},", camel(nm)).unwrap();
     }
-    writeln!(out, "}}\n\nimpl Biome {{\n    pub const COUNT: usize = {n};").unwrap();
+    writeln!(
+        out,
+        "}}\n\nimpl Biome {{\n    pub const COUNT: usize = {n};"
+    )
+    .unwrap();
     write!(out, "    pub const ALL: [Biome; {n}] = [").unwrap();
     for nm in &names {
         write!(out, "Biome::{}, ", camel(nm)).unwrap();
     }
     writeln!(out, "];\n}}\n").unwrap();
     writeln!(out, "/// Per-biome data indexed by biome id.").unwrap();
-    writeln!(out, "pub static BIOME_INFO: [BiomeInfo; {n}] = [\n{infos}];\n").unwrap();
+    writeln!(
+        out,
+        "pub static BIOME_INFO: [BiomeInfo; {n}] = [\n{infos}];\n"
+    )
+    .unwrap();
     writeln!(
         out,
         "/// Spawn caps (creatures, monsters, water creatures).\npub const SPAWN_CAPS: [u32; 3] = [{}, {}, {}];\n",
@@ -249,14 +304,31 @@ fn fmt_ramp(r: &[[u8; 3]; 3]) -> String {
 
 fn gen_lookup(doc: &Value, out: &mut String) {
     let t = doc["lookup"].as_table().unwrap();
-    writeln!(out, "/// Biome lookup thresholds (SPEC 8.2), from `[lookup]` in `data/biomes.toml`.").unwrap();
+    writeln!(
+        out,
+        "/// Biome lookup thresholds (SPEC 8.2), from `[lookup]` in `data/biomes.toml`."
+    )
+    .unwrap();
     writeln!(out, "pub mod lookup {{").unwrap();
     for k in [
-        "cold_t", "cool_t", "swamp_t", "hot_t", "very_hot_t", "dry_w", "shrub_w", "plains_w",
-        "swamp_w", "seasonal_w",
+        "cold_t",
+        "cool_t",
+        "swamp_t",
+        "hot_t",
+        "very_hot_t",
+        "dry_w",
+        "shrub_w",
+        "plains_w",
+        "swamp_w",
+        "seasonal_w",
     ] {
         let v = num(t.get(k).unwrap_or_else(|| panic!("lookup.{k} missing")));
-        writeln!(out, "    pub const {}: f64 = {v:?};", k.to_ascii_uppercase()).unwrap();
+        writeln!(
+            out,
+            "    pub const {}: f64 = {v:?};",
+            k.to_ascii_uppercase()
+        )
+        .unwrap();
     }
     writeln!(out, "}}\n").unwrap();
 }
@@ -264,13 +336,21 @@ fn gen_lookup(doc: &Value, out: &mut String) {
 fn gen_trees(doc: &Value, blocks: &[String], out: &mut String) {
     let t = &doc["trees"];
     let lw = |v: &Value| (block_id(blocks, &v["log"]), block_id(blocks, &v["leaves"]));
-    writeln!(out, "/// Tree shape parameters (SPEC 11), from `[trees.*]` in `data/biomes.toml`.").unwrap();
+    writeln!(
+        out,
+        "/// Tree shape parameters (SPEC 11), from `[trees.*]` in `data/biomes.toml`."
+    )
+    .unwrap();
     writeln!(out, "pub mod tree_params {{\n    use super::*;").unwrap();
     for (name, key) in [("OAK", "oak"), ("BIRCH", "birch")] {
         let v = &t[key];
         let (log, leaves) = lw(v);
-        let canopy: Vec<i64> =
-            v["canopy"].as_array().unwrap().iter().map(|c| c.as_integer().unwrap()).collect();
+        let canopy: Vec<i64> = v["canopy"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c.as_integer().unwrap())
+            .collect();
         writeln!(
             out,
             "    pub const {name}: SmallTree = SmallTree {{ log: {log}, leaves: {leaves}, height: {:?}, canopy: &{canopy:?} }};",
@@ -299,7 +379,12 @@ fn gen_trees(doc: &Value, blocks: &[String], out: &mut String) {
     .unwrap();
     let v = &t["big_oak"];
     let (log, leaves) = lw(v);
-    let radii: Vec<f64> = v["foliage_radii"].as_array().unwrap().iter().map(num).collect();
+    let radii: Vec<f64> = v["foliage_radii"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(num)
+        .collect();
     writeln!(
         out,
         "    pub const BIG_OAK: BigOak = BigOak {{ log: {log}, leaves: {leaves}, height: {:?}, min_height: {}, trunk_ratio: {:?}, branch_slope: {:?}, foliage_density: {:?}, branch_cutoff: {:?}, level_cutoff: {:?}, foliage_radii: &{radii:?} }};",

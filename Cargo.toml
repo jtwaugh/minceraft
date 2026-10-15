@@ -17,3 +17,16 @@ opt-level = 3
 # is a few KB of wasm.
 [profile.release.package.terrain]
 opt-level = 3
+
+# Clippy runs in CI with -D warnings. These lints are allowed on purpose:
+# - if_same_then_else: rule chains mirror SPEC 8.2 line by line, even where
+#   two rules give the same biome.
+# - unusual_byte_groupings: hex salts are grouped to read as words.
+# - too_many_arguments, type_complexity, needless_range_loop: style only;
+#   the noise and lattice code reads closer to the spec as written.
+[workspace.lints.clippy]
+if_same_then_else = "allow"
+unusual_byte_groupings = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"
+needless_range_loop = "allow"

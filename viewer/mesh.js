@@ -1,5 +1,6 @@
 // Block meshing shared by the 3D view (main thread) and the flyover chunk
-// workers. Produces indexed quads in a compact 16-byte vertex format:
+// workers. Produces quads (4 vertices each) in a compact 16-byte vertex
+// format, drawn with one shared index buffer (quadIndices):
 //
 //   bytes 0-5   position x, y, z  int16, in 1/16 block (POS_SCALE)
 //   bytes 6-7   uv                uint8, in 1/16 (UV_SCALE)
@@ -25,7 +26,11 @@ export const B = {
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
 // Full cubes that hide the faces of whatever is next to them.
-export const OPAQUE = flags([B.stone, B.dirt, B.grass, B.sand, B.gravel, B.oak_log, B.birch_log, B.spruce_log, B.pumpkin]);
+const SOLID = [B.stone, B.dirt, B.grass, B.sand, B.gravel, B.oak_log, B.birch_log, B.spruce_log, B.pumpkin];
+export const OPAQUE = flags(SOLID);
+export const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
+// With fast leaves, leaves count as solid too.
+const OPAQUE_FAST = flags([...SOLID, B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom]);
 
@@ -44,14 +49,31 @@ export function legendContext(json, faceLayer = null) {
 
 /**
  * Face-to-layer table from a tileFor(block, dy) function: entry
- * block * 3 + (0 top, 1 side, 2 bottom).
+ * block * 3 + (0 top, 1 side, 2 bottom). Entries from 768 on are the same
+ * for fast leaves (tileFor(block, dy, true)).
  */
 export function faceLayers(tileFor) {
-  const t = new Uint8Array(256 * 3);
-  for (let b = 0; b < 256; b++) { t[b * 3] = tileFor(b, 1); t[b * 3 + 1] = tileFor(b, 0); t[b * 3 + 2] = tileFor(b, -1); }
+  const t = new Uint8Array(256 * 3 * 2);
+  for (let k = 0; k < 2; k++) for (let b = 0; b < 256; b++) {
+    const o = k * 768 + b * 3;
+    t[o] = tileFor(b, 1, !!k); t[o + 1] = tileFor(b, 0, !!k); t[o + 2] = tileFor(b, -1, !!k);
+  }
   return t;
 }
-const layerOf = (ctx, b, dy) => ctx.faceLayer[b * 3 + (dy > 0 ? 0 : dy < 0 ? 2 : 1)];
+const layerOf = (ctx, b, dy, fast = false) => ctx.faceLayer[(fast ? 768 : 0) + b * 3 + (dy > 0 ? 0 : dy < 0 ? 2 : 1)];
+
+/**
+ * Indices for `quads` quads of 4 vertices (two triangles each). Every mesh
+ * uses the same pattern, so the renderer keeps one buffer of these for all.
+ */
+export function quadIndices(quads) {
+  const idx = new Uint32Array(quads * 6);
+  for (let q = 0; q < quads; q++) {
+    const v = q * 4, o = q * 6;
+    idx[o] = v; idx[o + 1] = v + 1; idx[o + 2] = v + 2; idx[o + 3] = v; idx[o + 4] = v + 2; idx[o + 5] = v + 3;
+  }
+  return idx;
+}
 
 export const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 // Biome ramps have three stops at 0, 0.5 and 1.
@@ -128,14 +150,7 @@ class Quads {
     }
     this.n += 4;
   }
-  done() {
-    const quads = this.n / 4, idx = new Uint32Array(quads * 6);
-    for (let q = 0; q < quads; q++) {
-      const v = q * 4, o = q * 6;
-      idx[o] = v; idx[o + 1] = v + 1; idx[o + 2] = v + 2; idx[o + 3] = v; idx[o + 4] = v + 2; idx[o + 5] = v + 3;
-    }
-    return { verts: this.buf.slice(0, this.n * VERTEX_BYTES), idx, faces: quads };
-  }
+  done() { return { verts: this.buf.slice(0, this.n * VERTEX_BYTES), faces: this.n / 4 }; }
 }
 
 /**
@@ -146,10 +161,17 @@ class Quads {
  * view's free-standing block of terrain). `tints` are for the inner columns.
  *
  * Solid ground is clipped 8 blocks under the lowest surface. Returns
- * { opaque, water, ice } (each { verts, idx, faces }), and the mean and
- * lowest surface heights.
+ * { opaque, cutout, water, ice } (each { verts, faces }), and the mean and
+ * lowest surface heights. `opaque` has no transparent texels, so it can be
+ * drawn without discard; `cutout` is leaves and plants.
+ *
+ * `fast`: fast leaves, for terrain seen from afar. Leaves hide each other
+ * and the faces next to them like solid blocks, and use the hole-free
+ * leaves_fast tile, so they move to `opaque`. In a forest that's about half
+ * the faces.
  */
-export function meshBlocks(ctx, blocks, tints, size, pad = 0) {
+export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false } = {}) {
+  const SOLID_N = fast ? OPAQUE_FAST : OPAQUE;
   const w = size + 2 * pad;
   const col = (x, z) => ((z + pad) * w + x + pad) * H;
   let minY = H, sumY = 0;
@@ -162,7 +184,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0) {
   const y0 = Math.max(0, minY - 8);
   const at = (x, y, z) => (x < -pad || z < -pad || x >= size + pad || z >= size + pad || y < y0 || y >= H)
     ? 0 : blocks[col(x, z) + y];
-  const out = [new Quads(), new Quads(), new Quads()]; // solid+cutout, water, ice
+  const out = [new Quads(), new Quads(), new Quads(), new Quads()]; // opaque, water, ice, cutout
   // One face of the box lo..hi (block-local) for face f.
   const boxFace = (L, x, y, z, f, lo, hi, layer, tint) => {
     const p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
@@ -184,40 +206,41 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0) {
         // two crossed quads, wound both ways so they show from either side
         const layer = layerOf(ctx, b, 0), k = 0.9 * (0.75 + y / 256);
         for (const q of [X1, X2]) {
-          out[0].quad(x, y, z, q, XUV, layer, k, tint);
-          out[0].quad(x, y, z, [q[1], q[0], q[3], q[2]], [XUV[1], XUV[0], XUV[3], XUV[2]], layer, k, tint);
+          out[3].quad(x, y, z, q, XUV, layer, k, tint);
+          out[3].quad(x, y, z, [q[1], q[0], q[3], q[2]], [XUV[1], XUV[0], XUV[3], XUV[2]], layer, k, tint);
         }
         continue;
       }
       for (const f of FACES) {
         if (y === y0 && f.d[1] < 0) continue;
         const n = at(x + f.d[0], y + f.d[1], z + f.d[2]);
-        const layer = layerOf(ctx, b, f.d[1]);
+        const layer = layerOf(ctx, b, f.d[1], fast);
         if (b === B.water) {
           // water: only next to air, plants or leaves (not water, ice or solids)
-          if (n === B.water || n === B.ice || OPAQUE[n]) continue;
+          if (n === B.water || n === B.ice || SOLID_N[n]) continue;
           boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
         } else if (b === B.ice) {
-          if (n === B.ice || OPAQUE[n]) continue;
+          if (n === B.ice || SOLID_N[n]) continue;
           boxFace(2, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
         } else if (b === B.cactus) {
           // inset sides always show; top/bottom hidden by more cactus or solid ground
           if (f.d[1] > 0 && n === B.cactus) continue;
-          if (f.d[1] < 0 && (n === B.cactus || OPAQUE[n])) continue;
+          if (f.d[1] < 0 && (n === B.cactus || SOLID_N[n])) continue;
           boxFace(0, x, y, z, f, CACTUS_LO, CACTUS_HI, layer, tint);
         } else if (b === B.snow_layer) {
-          if (f.d[1] < 0 && OPAQUE[n]) continue;
-          if (f.d[1] === 0 && (OPAQUE[n] || n === B.snow_layer)) continue;
+          if (f.d[1] < 0 && SOLID_N[n]) continue;
+          if (f.d[1] === 0 && (SOLID_N[n] || n === B.snow_layer)) continue;
           boxFace(0, x, y, z, f, FULL_LO, SNOW_HI, layer, tint);
         } else {
-          // full cubes and leaves: hidden only by opaque cubes, so leaves
-          // never hide their neighbours and leaf-leaf faces are drawn (cut-out)
-          if (OPAQUE[n]) continue;
-          boxFace(0, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
+          // full cubes and leaves: hidden only by opaque cubes, so (unless
+          // fast) leaves never hide their neighbours and leaf-leaf faces are
+          // drawn, as cut-outs
+          if (SOLID_N[n]) continue;
+          boxFace(LEAVES[b] && !fast ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
         }
       }
     }
   }
-  const [opaque, water, ice] = out.map((q) => q.done());
-  return { opaque, water, ice, meanY: sumY / (size * size), minY };
+  const [opaque, water, ice, cutout] = out.map((q) => q.done());
+  return { opaque, cutout, water, ice, meanY: sumY / (size * size), minY };
 }

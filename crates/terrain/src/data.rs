@@ -82,8 +82,13 @@ pub enum TreeKind {
 }
 
 impl TreeKind {
-    pub const ALL: [TreeKind; 5] =
-        [TreeKind::Oak, TreeKind::Birch, TreeKind::TaigaA, TreeKind::TaigaB, TreeKind::BigOak];
+    pub const ALL: [TreeKind; 5] = [
+        TreeKind::Oak,
+        TreeKind::Birch,
+        TreeKind::TaigaA,
+        TreeKind::TaigaB,
+        TreeKind::BigOak,
+    ];
 }
 
 /// Oak / birch shape. `height = (base, spread)`: `base + rand(spread)`.
@@ -167,15 +172,17 @@ pub fn opacity(b: u8) -> u8 {
 /// Movement-blocking: any collision except none (SPEC Part II notation).
 #[inline]
 pub fn blocks_movement(b: u8) -> bool {
-    BLOCK_INFO.get(b as usize).map_or(false, |i| i.collision != Collision::None)
+    BLOCK_INFO
+        .get(b as usize)
+        .is_some_and(|i| i.collision != Collision::None)
 }
 
 #[inline]
 pub fn is_opaque_cube(b: u8) -> bool {
-    BLOCK_INFO.get(b as usize).map_or(false, |i| i.opaque_cube)
+    BLOCK_INFO.get(b as usize).is_some_and(|i| i.opaque_cube)
 }
 
 #[inline]
 pub fn is_liquid(b: u8) -> bool {
-    BLOCK_INFO.get(b as usize).map_or(false, |i| i.liquid)
+    BLOCK_INFO.get(b as usize).is_some_and(|i| i.liquid)
 }

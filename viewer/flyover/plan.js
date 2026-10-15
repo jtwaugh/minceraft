@@ -580,14 +580,19 @@ export const CHUNK = 64;
  * fog, plus every chunk within `near` blocks of the camera. Each interval is
  * padded by `pad` seconds. Terrain occlusion is not tested: the camera flies
  * above the ground and some part of nearly every chunk in view shows (see
- * README). Returns [{ cx, cz, first, last }] sorted by first.
+ * README). `full` is the first time (padded the same way) the camera comes
+ * within FULL_DETAIL blocks of the chunk, or Infinity; before that it's drawn
+ * with fast leaves. Returns [{ cx, cz, first, last, full }] sorted by first.
  */
+export const FULL_DETAIL = 80;
 export function visibilitySchedule(path, g, { step = 0.25, pad = 1, near = 40, margin = 4 } = {}) {
   const tanV = Math.tan(VIEW.fovY / 2), tanH = tanV * VIEW.aspect, far = VIEW.fogEnd;
   const seen = new Map();
-  const mark = (cx, cz, t) => {
-    const k = cx + ',' + cz, e = seen.get(k);
-    if (e) { e.first = Math.min(e.first, t); e.last = Math.max(e.last, t); } else seen.set(k, { cx, cz, first: t, last: t });
+  const mark = (cx, cz, t, d) => {
+    const k = cx + ',' + cz;
+    let e = seen.get(k);
+    if (e) { e.first = Math.min(e.first, t); e.last = Math.max(e.last, t); } else seen.set(k, e = { cx, cz, first: t, last: t, full: Infinity });
+    if (d <= FULL_DETAIL) e.full = Math.min(e.full, t);
   };
   for (let t = 0; t <= path.duration + 1e-9; t += step) {
     const { eye, target } = path.at(t);
@@ -612,10 +617,11 @@ export function visibilitySchedule(path, g, { step = 0.25, pad = 1, near = 40, m
           const x = cx * CHUNK + a * 16, z = cz * CHUNK + b * 16, y = Math.max(SEA, heightAt(g, x, z)) + 2;
           vis = inView(x, y, z) || inView(x, y + 10, z);
         }
-        if (vis) mark(cx, cz, t);
+        if (vis) mark(cx, cz, t, d);
       }
   }
-  return [...seen.values()].map((e) => ({ ...e, first: Math.max(0, e.first - pad), last: Math.min(path.duration, e.last + pad) }))
+  return [...seen.values()].map((e) => ({ ...e, first: Math.max(0, e.first - pad), last: Math.min(path.duration, e.last + pad),
+    full: Math.max(0, e.full - pad) }))
     .sort((a, b) => a.first - b.first);
 }
 const norm3 = (v) => { const l = Math.hypot(...v) || 1; return v.map((c) => c / l); };
@@ -628,7 +634,7 @@ const norm3 = (v) => { const l = Math.hypot(...v) || 1; return v.map((c) => c / 
  */
 export function featureCoverage(path, features, g, { step = 0.1, far = 140, frac = 0.8 } = {}) {
   const tanV = Math.tan(VIEW.fovY / 2) * frac, tanH = Math.tan(VIEW.fovY / 2) * VIEW.aspect * frac;
-  const out = features.map((f) => ({ feature: f, seconds: 0, minAngle: 180 }));
+  const out = features.map((f) => ({ feature: f, seconds: 0, first: -1, minAngle: 180 }));
   for (let t = 0; t <= path.duration; t += step) {
     const { eye, target } = path.at(t);
     const fw = norm3(target.map((v, i) => v - eye[i]));
@@ -647,6 +653,7 @@ export function featureCoverage(path, features, g, { step = 0.1, far = 140, frac
         const q = eye.map((v, i) => v + d[i] * k / n);
         if (heightAt(g, q[0], q[2]) > q[1] + 1) return;
       }
+      if (o.first < 0) o.first = t;
       o.seconds += step;
     });
   }
@@ -737,7 +744,7 @@ export function planData(wasm, seed, cx, cz, { bounds = null, ...opts } = {}) {
     : null;
   const { cells, ...islandInfo } = island;
   return { survey: g, ground, island: { ...islandInfo, cells: Int32Array.from(cells) }, chosen, keys, schedule,
-    coverage: coverage.map((c) => ({ label: c.feature.label, seconds: c.seconds, minAngle: c.minAngle })),
+    coverage: coverage.map((c) => ({ label: c.feature.label, seconds: c.seconds, first: c.first, minAngle: c.minAngle })),
     islandCount: islands.length, featureCount: features.length, moved, mapOrigin, ms: Date.now() - t0 };
 }
 

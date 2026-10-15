@@ -39,9 +39,16 @@ pub struct Climate {
 impl Climate {
     pub fn new(seed: u64) -> Climate {
         let c = |m: u64, n: usize| {
-            OctaveSimplex::new(&mut Rng::for_generator(seed.wrapping_mul(m), 0x5EED_C11A), n)
+            OctaveSimplex::new(
+                &mut Rng::for_generator(seed.wrapping_mul(m), 0x5EED_C11A),
+                n,
+            )
         };
-        Climate { temp: c(9871, 4), humid: c(39811, 4), blend: c(543321, 2) }
+        Climate {
+            temp: c(9871, 4),
+            humid: c(39811, 4),
+            blend: c(543321, 2),
+        }
     }
 
     /// Unbiased `(T, H)` at world block column (x, z) (SPEC 7).

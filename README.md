@@ -204,14 +204,15 @@ cargo run -p terrain --profile bench-native --example stats -- <seed> <x0> <z0> 
     MP4 or WebM file. The route and camera are drawn on the map. The flyover
     for the current map is prepared in the background, so it usually starts
     at once. See [`viewer/flyover/README.md`](viewer/flyover/README.md).
-- **Stats:** map generation time, tiles generated and cached, and the
-  `.wasm` size, raw and gzipped.
+- **Stats** (the `stats` button, or `debug=1`): map generation time, tiles
+  generated and cached, the `.wasm` size raw and gzipped, 3D preview timings,
+  and flyover planning and chunk counts. Kept out of the main view.
 
 URL parameters: `?seed=9&x0=100000&z0=100000&sx=150&sz=190&dist=70&yaw=0.8&pitch=0.15`
 (`sx`/`sz` place the 3D area within the map; `dist`, `yaw` and `pitch` set
 the camera). Add `mode=biome`, `temperature` or `humidity` to open the map in
 that mode. Text seeds are hashed to a number. Add `fly=1` to open the 3D
-view in flyover mode.
+view in flyover mode, and `debug=1` to open the stats panel.
 
 ### Textures in the 3D view
 
@@ -256,7 +257,9 @@ shading over their legend colour, and to `log_top`.
 
 Face culling: only full opaque cubes (stone, dirt, grass, sand, gravel, logs,
 pumpkin) hide their neighbours' faces. Leaves are cut-out, so the faces next
-to them, including leaf-to-leaf faces, are still drawn. Water shows faces
+to them, including leaf-to-leaf faces, are still drawn. The exception is
+distant flyover chunks, which use fast leaves: solid, hole-free and hiding
+each other (see the flyover README). Water shows faces
 only next to air, plants or leaves; ice only next to non-ice, non-opaque
 blocks.
 
@@ -283,9 +286,14 @@ How it works:
 - Each vertex carries a UV, a layer index, a shade and a tint. The water and
   flowing-water animations are runs of four layers. Every 300 ms the shader
   adds the current frame (0–3) to their layer.
-- The geometry is three meshes: opaque plus cut-out (leaves, plants), water
-  (alpha 0.45) and ice (alpha 0.72). The last two are drawn without depth
-  writes after the fish.
+- The geometry is four meshes:
+  - opaque, drawn with a shader variant that never discards, so the GPU can
+    skip hidden pixels early;
+  - cut-out (leaves, plants);
+  - water (alpha 0.45) and ice (alpha 0.72), drawn without depth writes
+    after the fish.
+
+  All of them share one quad index buffer.
 - The sun is a camera-facing sprite, drawn first with no fog or depth so the
   terrain covers it. The orbit camera looks down, so orbit low (or use a small
   `pitch`) to see it.

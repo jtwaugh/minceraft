@@ -7,7 +7,8 @@
 //   tile   { seed, x, z, size }          decorated map tile: heightmap, biome, temperature, humidity
 //   coarse { seed, x0, z0, step, nx, nz } coarse_heightmap survey (the map's quick first draft)
 //   plan   { seed, cx, cz, bounds }      flyover plan data (flyover/plan.js planData)
-//   chunk  { seed, cx, cz }              decorated 64x64 chunk (plus a one-block ring), meshed
+//   chunk  { seed, cx, cz, fast }        decorated 64x64 chunk (plus a one-block ring), meshed
+//                                        (fast: fast leaves, for chunks seen only from afar)
 import init, * as wasm from './pkg/terrain_web.js';
 import { legendContext, columnTints, meshBlocks } from './mesh.js';
 import { planData, CHUNK } from './flyover/plan.js';
@@ -31,13 +32,13 @@ const tasks = {
   plan({ seed, cx, cz, bounds }) {
     return [planData(wasm, seed, cx, cz, { bounds }), []];
   },
-  chunk({ seed, cx, cz }, ctx) {
+  chunk({ seed, cx, cz, fast = false }, ctx) {
     const x = cx * CHUNK, z = cz * CHUNK;
     const blocks = wasm.generate_region_decorated(seed, x - 1, z - 1, CHUNK + 2, CHUNK + 2);
     const tints = columnTints(wasm, ctx, seed, x, z, CHUNK);
-    const m = meshBlocks(ctx, blocks, tints, CHUNK, 1);
-    const parts = { opaque: m.opaque, water: m.water, ice: m.ice };
-    return [{ cx, cz, ...parts, meanY: m.meanY }, Object.values(parts).flatMap((q) => [q.verts, q.idx.buffer])];
+    const m = meshBlocks(ctx, blocks, tints, CHUNK, 1, { fast });
+    const parts = { opaque: m.opaque, cutout: m.cutout, water: m.water, ice: m.ice };
+    return [{ cx, cz, fast, ...parts, meanY: m.meanY, minY: m.minY }, Object.values(parts).map((q) => q.verts)];
   },
 };
 

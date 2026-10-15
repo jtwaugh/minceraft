@@ -27,7 +27,7 @@ fn is_log(b: u8) -> bool {
 std::thread_local! {
     /// Test hook: trunk-column log cells of every tree grown on this thread.
     pub(crate) static TRUNKS: core::cell::RefCell<alloc::vec::Vec<alloc::vec::Vec<(i32, i32, i32, u8)>>> =
-        core::cell::RefCell::new(alloc::vec::Vec::new());
+        const { core::cell::RefCell::new(alloc::vec::Vec::new()) };
 }
 
 #[inline]
@@ -163,7 +163,14 @@ fn taiga_a(w: &mut World, rng: &mut Rng, x: i32, y: i32, z: i32) -> bool {
     if y < 1 || y + h + 1 > H {
         return false;
     }
-    if !clear(w, x, y, z, y + h + 1, |yy| if yy < y + a { 0 } else { rmax }) {
+    if !clear(
+        w,
+        x,
+        y,
+        z,
+        y + h + 1,
+        |yy| if yy < y + a { 0 } else { rmax },
+    ) {
         return false;
     }
     if !ground(w, x, y, z, h) {
@@ -193,7 +200,14 @@ fn taiga_b(w: &mut World, rng: &mut Rng, x: i32, y: i32, z: i32) -> bool {
     if y < 1 || y + h + 1 > H {
         return false;
     }
-    if !clear(w, x, y, z, y + h + 1, |yy| if yy < y + a { 0 } else { rmax }) {
+    if !clear(
+        w,
+        x,
+        y,
+        z,
+        y + h + 1,
+        |yy| if yy < y + a { 0 } else { rmax },
+    ) {
         return false;
     }
     if !ground(w, x, y, z, h) {
@@ -257,7 +271,9 @@ fn line(p: [i32; 3], q: [i32; 3], round: bool, mut f: impl FnMut([i32; 3]) -> bo
 }
 
 fn line_clear(w: &World, p: [i32; 3], q: [i32; 3]) -> Option<i32> {
-    line(p, q, false, |c| (0..H).contains(&c[1]) && air_or_leaves(w.get(c[0], c[1], c[2])))
+    line(p, q, false, |c| {
+        (0..H).contains(&c[1]) && air_or_leaves(w.get(c[0], c[1], c[2]))
+    })
 }
 
 fn big_oak(w: &mut World, rng: &mut Rng, x: i32, y: i32, z: i32) -> bool {
@@ -291,12 +307,18 @@ fn big_oak(w: &mut World, rng: &mut Rng, x: i32, y: i32, z: i32) -> bool {
     while lvl >= 0 {
         let lf = lvl as f64;
         if lf >= p.level_cutoff * hf {
-            let s = if lf == m { 0.5 * m } else { 0.5 * libm_sqrt(m * m - (m - lf) * (m - lf)) };
+            let s = if lf == m {
+                0.5 * m
+            } else {
+                0.5 * libm_sqrt(m * m - (m - lf) * (m - lf))
+            };
             let cy = y + lvl - 1; // B7: shape uses l, position l - 1
             for _ in 0..per_level {
                 let u1 = r.next_f64();
                 let u2 = r.next_f64();
                 let len = s * (u1 + 0.328);
+                // SPEC 11.5 specifies 3.14159, not PI; using PI would change world output.
+                #[allow(clippy::approx_constant)]
                 let th = u2 * 2.0 * 3.14159;
                 let cx = floor(x as f64 + len * libm_sin(th) + 0.5) as i32;
                 let cz = floor(z as f64 + len * libm_cos(th) + 0.5) as i32;

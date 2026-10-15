@@ -78,7 +78,7 @@ fn biome_at_deterministic_and_shared_climate() {
     }
 }
 
-fn col<'a>(r: &'a Region, x: u32, z: u32) -> &'a [u8] {
+fn col(r: &Region, x: u32, z: u32) -> &[u8] {
     let i = r.index(x, 0, z);
     &r.blocks[i..i + 128]
 }
@@ -118,18 +118,25 @@ fn check_plants(r: &Region) -> [usize; Block::COUNT] {
                                 && [(1, 0), (-1, 0), (0, 1), (0, -1)]
                                     .iter()
                                     // Unknown (outside the region) counts as possible water.
-                                    .any(|&(dx, dz)| at(x + dx, y - 1, z + dz).map_or(true, |n| n == WATER))
+                                    .any(|&(dx, dz)| {
+                                        at(x + dx, y - 1, z + dz).is_none_or(|n| n == WATER)
+                                    })
                         }
                     }
                     Block::Cactus => {
                         (below == SAND || below == b)
                             && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().all(|&(dx, dz)| {
-                                at(x + dx, y, z + dz).map_or(true, |n| !blocks_movement(n))
+                                at(x + dx, y, z + dz).is_none_or(|n| !blocks_movement(n))
                             })
                     }
                     _ => true,
                 };
-                assert!(ok, "{:?} at region ({x},{y},{z}) on {:?}", blk, Block::from_u8(below));
+                assert!(
+                    ok,
+                    "{:?} at region ({x},{y},{z}) on {:?}",
+                    blk,
+                    Block::from_u8(below)
+                );
             }
         }
     }
@@ -140,14 +147,24 @@ fn check_plants(r: &Region) -> [usize; Block::COUNT] {
 fn plants_have_valid_ground_and_rules() {
     let mut total = [0usize; Block::COUNT];
     // A few areas, including desert (cactus/dead bush) and wet ones (cane).
-    for &(seed, x0, z0) in &[(12345u64, 0, 0), (12345, 1400, -300), (7, -900, 600), (99, 300, 2200)] {
+    for &(seed, x0, z0) in &[
+        (12345u64, 0, 0),
+        (12345, 1400, -300),
+        (7, -900, 600),
+        (99, 300, 2200),
+    ] {
         let r = generate_decorated(seed, x0, z0, 160, 160);
         let s = check_plants(&r);
         for i in 0..Block::COUNT {
             total[i] += s[i];
         }
     }
-    for b in [Block::TallGrass, Block::Rose, Block::OakLeaves, Block::OakLog] {
+    for b in [
+        Block::TallGrass,
+        Block::Rose,
+        Block::OakLeaves,
+        Block::OakLog,
+    ] {
         assert!(total[b as usize] > 0, "no {:?} generated", b);
     }
 }
@@ -224,13 +241,20 @@ fn desert_columns_have_sand_surface() {
             if ty > 65 {
                 desert += 1;
                 // Sand, or a bare-stone patch (soil <= 0).
-                assert!(tb == SAND || tb == STONE, "desert top {:?}", Block::from_u8(tb));
+                assert!(
+                    tb == SAND || tb == STONE,
+                    "desert top {:?}",
+                    Block::from_u8(tb)
+                );
                 sand += (tb == SAND) as u32;
             }
         }
     }
     assert!(desert > 500, "sample has too little desert ({desert})");
-    assert!(sand * 10 > desert * 8, "only {sand}/{desert} desert columns are sand");
+    assert!(
+        sand * 10 > desert * 8,
+        "only {sand}/{desert} desert columns are sand"
+    );
 }
 
 /// Snow and ice per SPEC 13, checked against the shared climate.
@@ -273,7 +297,11 @@ fn check_snow_ice(r: &Region, cm: &ClimateMap) -> (usize, usize) {
                     Block::from_u8(at)
                 );
             } else {
-                assert_ne!(at, Block::SnowLayer as u8, "unexpected snow at ({x},{top},{z})");
+                assert_ne!(
+                    at,
+                    Block::SnowLayer as u8,
+                    "unexpected snow at ({x},{top},{z})"
+                );
             }
             snow += (at == Block::SnowLayer as u8) as usize;
         }
@@ -291,7 +319,10 @@ fn snow_and_ice_follow_temperature() {
     // Forced cold: snow on all exposed land and ice on the sea.
     let cold = |_x: i32, _z: i32| -0.8;
     let tb: [&dyn TemperatureBias; 1] = [&cold];
-    let b = Biases { temperature: &tb, ..Biases::default() };
+    let b = Biases {
+        temperature: &tb,
+        ..Biases::default()
+    };
     let r = generate_region_with_biases(12345, x0, z0, w, d, &b, true);
     let cm = generate_climate(12345, x0, z0, w, d, &tb);
     let (snow, ice) = check_snow_ice(&r, &cm);
@@ -311,12 +342,18 @@ fn temperature_bias_shifts_biomes() {
         let cm = generate_climate(5, x0, z0, w, d, &[&f]);
         cm.biome.iter().filter(|&&v| v == b as u8).count()
     };
-    assert!(count(-0.6, Biome::Tundra) + count(-0.6, Biome::Taiga) > count(0.0, Biome::Tundra) + count(0.0, Biome::Taiga));
+    assert!(
+        count(-0.6, Biome::Tundra) + count(-0.6, Biome::Taiga)
+            > count(0.0, Biome::Tundra) + count(0.0, Biome::Taiga)
+    );
     assert_eq!(count(-1.0, Biome::Forest), 0);
     assert_eq!(count(1.0, Biome::Tundra), 0);
     // The bias also reaches the terrain (density uses the same climate).
     let hot = |_x: i32, _z: i32| 0.5;
-    let b = Biases { temperature: &[&hot], ..Biases::default() };
+    let b = Biases {
+        temperature: &[&hot],
+        ..Biases::default()
+    };
     let a = generate_region_with_biases(5, x0, z0, 64, 64, &b, false);
     let n = generate_region(5, x0, z0, 64, 64);
     assert_ne!(a.blocks, n.blocks);
@@ -338,8 +375,14 @@ fn decoration_respects_protected_mask() {
     let strip = |x: i32, y: i32, _z: i32| x >= x0 && x < x0 + 30 && y >= 70;
     let terrain = generate_region(seed, x0, z0, w, d);
     let full = generate_decorated(seed, x0, z0, w, d);
-    for (m, name) in [(&mask as &dyn ProtectedMask, "columns"), (&strip as &dyn ProtectedMask, "strip")] {
-        let b = Biases { protected: Some(m), ..Biases::default() };
+    for (m, name) in [
+        (&mask as &dyn ProtectedMask, "columns"),
+        (&strip as &dyn ProtectedMask, "strip"),
+    ] {
+        let b = Biases {
+            protected: Some(m),
+            ..Biases::default()
+        };
         let r = generate_region_with_biases(seed, x0, z0, w, d, &b, true);
         let mut changed_unprotected = 0;
         for z in 0..d {
@@ -348,7 +391,10 @@ fn decoration_respects_protected_mask() {
                     let i = r.index(x, y, z);
                     let (wx, wz) = (x0 + x as i32, z0 + z as i32);
                     if m.protected(wx, y as i32, wz) {
-                        assert_eq!(r.blocks[i], terrain.blocks[i], "{name}: protected ({wx},{y},{wz}) modified");
+                        assert_eq!(
+                            r.blocks[i], terrain.blocks[i],
+                            "{name}: protected ({wx},{y},{wz}) modified"
+                        );
                     } else if r.blocks[i] != terrain.blocks[i] {
                         changed_unprotected += 1;
                     }
@@ -380,7 +426,13 @@ fn overlapping_decorated_regions_agree() {
             for x in 0..w {
                 let a = col(&small, x, z);
                 let b = col(&big, (ox - bx) as u32 + x, (oz - bz) as u32 + z);
-                assert_eq!(a, b, "column ({}, {}) differs", ox + x as i32, oz + z as i32);
+                assert_eq!(
+                    a,
+                    b,
+                    "column ({}, {}) differs",
+                    ox + x as i32,
+                    oz + z as i32
+                );
             }
         }
     }
@@ -391,7 +443,10 @@ fn overlapping_decorated_regions_agree() {
         for x in 0..29u32 {
             let s = column_summary(col(&small, x, z));
             let j = ((z * 29 + x) * 4) as usize;
-            assert_eq!((s.0, s.1, s.2, s.3), (hm[j], hm[j + 1], hm[j + 2], hm[j + 3]));
+            assert_eq!(
+                (s.0, s.1, s.2, s.3),
+                (hm[j], hm[j + 1], hm[j + 2], hm[j + 3])
+            );
         }
     }
     let _ = is_log;
@@ -432,7 +487,11 @@ fn tree_density_matches_spec_formula() {
             Biome::Savanna | Biome::Shrubland | Biome::Swampland | Biome::IceDesert => (0.03, 0.2),
             _ => (0.0, 0.0),
         };
-        assert!(a >= lo && a <= hi, "{:?}: {a:.2} attempts/chunk outside [{lo}, {hi}]", b);
+        assert!(
+            a >= lo && a <= hi,
+            "{:?}: {a:.2} attempts/chunk outside [{lo}, {hi}]",
+            b
+        );
     }
     assert!(enough(Biome::Forest), "sample has too little forest");
     assert!(stats.trees_per_chunk(Biome::Forest) > 1.5);

@@ -25,7 +25,12 @@ impl Rng {
 
     /// Independent stream for `(seed, generator_id)` (SPEC 1.1, last paragraph).
     pub fn for_generator(seed: u64, id: u64) -> Self {
-        Rng(mix64(seed ^ mix64(id.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(0x1234_5678))))
+        Rng(mix64(
+            seed ^ mix64(
+                id.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                    .wrapping_add(0x1234_5678),
+            ),
+        ))
     }
 
     #[inline]
@@ -51,9 +56,8 @@ impl Rng {
 #[inline]
 pub fn hash_f64(seed: u64, x: i32, z: i32, y: i32, k: u64) -> f64 {
     let h = mix64(
-        seed ^ mix64(
-            (x as u32 as u64) | ((z as u32 as u64) << 32),
-        ) ^ mix64(((y as u32 as u64) << 8 | k).wrapping_add(0xD1B5_4A32_D192_ED03)),
+        seed ^ mix64((x as u32 as u64) | ((z as u32 as u64) << 32))
+            ^ mix64(((y as u32 as u64) << 8 | k).wrapping_add(0xD1B5_4A32_D192_ED03)),
     );
     (h >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
 }
@@ -97,7 +101,11 @@ impl Axis {
     pub fn new(c: f64) -> Axis {
         let fl = floor(c);
         let f = c - fl;
-        Axis { i: ((fl as i64) & 255) as usize, f, s: fade(f) }
+        Axis {
+            i: ((fl as i64) & 255) as usize,
+            f,
+            s: fade(f),
+        }
     }
 }
 
@@ -211,13 +219,29 @@ impl Perlin {
         let z1 = fz - 1.0;
         let lo = lerp(
             v,
-            lerp(u, grad(p[aa & 511], fx, fy, fz), grad(p[ba & 511], x1, fy, fz)),
-            lerp(u, grad(p[ab & 511], fx, y1, fz), grad(p[bb & 511], x1, y1, fz)),
+            lerp(
+                u,
+                grad(p[aa & 511], fx, fy, fz),
+                grad(p[ba & 511], x1, fy, fz),
+            ),
+            lerp(
+                u,
+                grad(p[ab & 511], fx, y1, fz),
+                grad(p[bb & 511], x1, y1, fz),
+            ),
         );
         let hi = lerp(
             v,
-            lerp(u, grad(p[(aa + 1) & 511], fx, fy, z1), grad(p[(ba + 1) & 511], x1, fy, z1)),
-            lerp(u, grad(p[(ab + 1) & 511], fx, y1, z1), grad(p[(bb + 1) & 511], x1, y1, z1)),
+            lerp(
+                u,
+                grad(p[(aa + 1) & 511], fx, fy, z1),
+                grad(p[(ba + 1) & 511], x1, fy, z1),
+            ),
+            lerp(
+                u,
+                grad(p[(ab + 1) & 511], fx, y1, z1),
+                grad(p[(bb + 1) & 511], x1, y1, z1),
+            ),
         );
         lerp(w, lo, hi)
     }

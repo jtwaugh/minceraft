@@ -7,7 +7,10 @@
 <style>
   :root {
     --bg: #15171a; --panel: #1e2125; --line: #30353b; --text: #d8dde3;
-    --muted: #8a939d; --accent: #7fb35a;
+    --muted: #8a939d; --accent: #7fb35a; --warn: #e0a84a; --marker: #ff5a4a;
+    --scrim: rgba(16, 18, 20, 0.78);
+    /* both stages share this height; the map is this square */
+    --stage: clamp(300px, min(calc(100vh - 170px), calc((100vw - 48px) * 0.42)), 640px);
   }
   * { box-sizing: border-box; }
   body {
@@ -19,6 +22,8 @@
     padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
   }
   header h1 { font-size: 14px; margin: 0 8px 0 0; letter-spacing: .04em; }
+  header .end { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+  #warn { color: var(--warn); }
   label { color: var(--muted); }
   input {
     background: var(--bg); color: var(--text); border: 1px solid var(--line);
@@ -29,37 +34,62 @@
     background: var(--accent); color: #10140c; border: 0; border-radius: 4px;
     padding: 5px 12px; font: inherit; font-weight: 600; cursor: pointer;
   }
-  #stats { color: var(--muted); margin-left: auto; }
-  #stats b { color: var(--text); font-weight: 600; }
+  button.ghost { background: var(--bg); color: var(--text); border: 1px solid var(--line); font-weight: 400; padding: 4px 10px; }
+  a { color: var(--accent); }
+
   main {
-    display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start;
+    display: grid; grid-template-columns: var(--stage) minmax(0, 1fr); gap: 16px; padding: 16px; align-items: start;
   }
-  .view { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
-  .view .cap { color: var(--muted); max-width: 512px; }
-  .wrap { position: relative; width: 512px; max-width: calc(100vw - 32px); aspect-ratio: 1; }
-  canvas { display: block; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 4px; }
+  @media (max-width: 900px) {
+    :root { --stage: min(calc(100vw - 32px), 640px); }
+    main { grid-template-columns: minmax(0, 1fr); }
+  }
+  /* Both panels: toolbar, stage, footer. */
+  .panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .toolbar { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+  .stage {
+    position: relative; height: var(--stage); overflow: hidden;
+    border: 1px solid var(--line); border-radius: 4px; background: #101214;
+  }
+  #mapstage { width: var(--stage); }
+  .footer { min-height: 2.8em; color: var(--muted); }
+  canvas { display: block; width: 100%; height: 100%; }
   #map { image-rendering: pixelated; cursor: crosshair; }
+  #overlay { position: absolute; inset: 0; pointer-events: none; }
   #sel {
     position: absolute; border: 2px solid #fff; pointer-events: none;
     box-shadow: 0 0 0 1px #000; display: none;
   }
   #gl { cursor: grab; background: #9cc3e6; }
   #gl:active { cursor: grabbing; }
-  #hover { min-height: 2.8em; max-width: 512px; }
-  #overlay { position: absolute; inset: 0; pointer-events: none; border-color: transparent; }
-  .wrap.wide { width: 912px; aspect-ratio: 16 / 9; }
-  #flyout { display: none; }
-  .flying #gl { display: none; }
+  #flyout { display: none; object-fit: contain; }
+  .flying #gl, .flying #sel, .flying #label3d, .flying #hint { display: none !important; }
   .flying #flyout { display: block; }
-  .flying #sel { display: none !important; }
-  #flybar { display: none; flex-wrap: wrap; gap: 6px 12px; align-items: center; max-width: 912px; }
-  .flying #flybar { display: flex; }
-  #flystatus, #flyinfo { color: var(--muted); }
-  #flyinfo { display: none; white-space: pre-line; max-width: 912px; }
-  .flying #flyinfo { display: block; }
-  button.ghost { background: var(--bg); color: var(--text); border: 1px solid var(--line); font-weight: 400; }
-  #flybar a { color: var(--accent); }
-  input[type=range] { width: 220px; padding: 0; }
+
+  /* Small labels laid over the stages. */
+  .tag {
+    position: absolute; background: var(--scrim); padding: 3px 8px; border-radius: 4px;
+    pointer-events: none; white-space: nowrap; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis;
+  }
+  #hover { left: 8px; bottom: 8px; display: none; }
+  #label3d { left: 8px; top: 8px; }
+  #hint { left: 50%; bottom: 8px; transform: translateX(-50%); color: var(--muted); transition: opacity .8s; }
+  #hint.gone { opacity: 0; }
+  #flymsg { left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: normal; text-align: center; }
+  #flymsg:empty { display: none; }
+
+  /* Flyover transport, video-player style along the bottom of the stage. */
+  .transport {
+    position: absolute; left: 8px; right: 8px; bottom: 8px; display: none; align-items: center; gap: 10px;
+    background: var(--scrim); padding: 6px 10px; border-radius: 6px;
+  }
+  .flying .transport { display: flex; }
+  .transport button { min-width: 64px; }
+  .seek { position: relative; flex: 1; min-width: 80px; }
+  .seek input { width: 100%; padding: 0; margin: 0; display: block; accent-color: var(--accent); }
+  .seek .tick { position: absolute; top: 100%; width: 2px; height: 5px; margin-left: -1px; background: var(--marker); pointer-events: none; }
+  #flytime { color: var(--muted); white-space: nowrap; }
+
   .modes { display: flex; gap: 0; }
   .modes button {
     background: var(--bg); color: var(--muted); border: 1px solid var(--line);
@@ -69,7 +99,8 @@
   .modes button:last-child { border-radius: 0 4px 4px 0; }
   .modes button + button { border-left: 0; }
   .modes button[aria-pressed="true"] { background: var(--accent); color: #10140c; font-weight: 600; }
-  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); max-width: 512px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
   .legend span::before {
     content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 4px;
     vertical-align: -1px; background: var(--c); border-radius: 2px;
@@ -78,6 +109,20 @@
   .legend .scale::before { display: none; }
   .legend .bar { grid-column: 1 / -1; height: 12px; border-radius: 2px; background: var(--g); }
   .legend .mid { text-align: center; }
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 400; }
+
+  /* Flyover route: the island, then the features numbered as on the map. */
+  .route { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+  .route b { color: var(--text); font-weight: 600; margin-right: 4px; }
+  .route button { background: var(--bg); color: var(--text); border: 1px solid var(--line); font-weight: 400; padding: 2px 8px; }
+  .route button i { font-style: normal; color: var(--marker); margin-right: 4px; }
+
+  /* Timings and counts, for development. */
+  #dev { margin: 0 16px 16px; color: var(--muted); }
+  #dev summary { cursor: pointer; width: max-content; }
+  #dev dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 16px; margin: 8px 0 0; }
+  #dev dt { color: var(--muted); }
+  #dev dd { margin: 0; color: var(--text); }
 </style>
 </head>
 <body>
@@ -87,47 +132,80 @@
   <label>x <input id="x0" type="number" value="0" step="64"></label>
   <label>z <input id="z0" type="number" value="0" step="64"></label>
   <button id="go">regenerate</button>
-  <div id="stats">loading…</div>
+  <div class="end">
+    <span id="warn" hidden></span>
+    <span id="busy"></span>
+    <button id="devbtn" class="ghost" title="timings and counts">stats</button>
+  </div>
 </header>
 <main>
-  <div class="view">
-    <div class="cap">Top-down map of 1024×1024 blocks (2 per pixel). Click to choose the 64×64 area for the 3D view.</div>
-    <div class="modes" role="group" aria-label="map mode">
-      <button data-mode="terrain" aria-pressed="true">terrain</button>
-      <button data-mode="biome" aria-pressed="false">biome</button>
-      <button data-mode="temperature" aria-pressed="false">temperature</button>
-      <button data-mode="humidity" aria-pressed="false">humidity</button>
+  <section class="panel">
+    <div class="toolbar">
+      <div class="modes" role="group" aria-label="map mode">
+        <button data-mode="terrain" aria-pressed="true">terrain</button>
+        <button data-mode="biome" aria-pressed="false">biome</button>
+        <button data-mode="temperature" aria-pressed="false">temperature</button>
+        <button data-mode="humidity" aria-pressed="false">humidity</button>
+      </div>
     </div>
-    <div class="wrap"><canvas id="map" width="512" height="512"></canvas><canvas id="overlay" width="512" height="512"></canvas><div id="sel"></div></div>
-    <div id="hover"></div>
-    <div class="legend" id="legend"></div>
-  </div>
-  <div class="view" id="view3d">
-    <div class="modes" role="group" aria-label="3D view">
-      <button data-view="preview" aria-pressed="true">chunk preview</button>
-      <button data-view="flyover" aria-pressed="false" title="find an island near the map and fly a tour of the terrain around it">flyover</button>
+    <div class="stage" id="mapstage">
+      <canvas id="map" width="512" height="512" title="1024×1024 blocks, 2 per pixel. Click to show that spot in 3D."></canvas>
+      <canvas id="overlay" width="512" height="512"></canvas>
+      <div id="sel"></div>
+      <div id="hover" class="tag"></div>
     </div>
-    <div class="cap" id="cap3d">3D view: drag to orbit, wheel to zoom.</div>
-    <div id="flybar">
-      <button id="flyplay">play</button>
-      <button id="flyrec" class="ghost" title="play from the start and record the view to a video file">record video</button>
-      <input id="flyseek" type="range" min="0" max="1000" value="0" aria-label="position in flight">
-      <span id="flystatus"></span>
-      <span id="flydl"></span>
+    <div class="footer legend" id="legend"></div>
+  </section>
+  <section class="panel" id="view3d">
+    <div class="toolbar">
+      <div class="modes" role="group" aria-label="3D view">
+        <button data-view="preview" aria-pressed="true">chunk preview</button>
+        <button data-view="flyover" aria-pressed="false" title="find an island near the map and fly a tour of the terrain around it">flyover</button>
+      </div>
     </div>
-    <div class="wrap" id="stage3d"><canvas id="gl" width="1024" height="1024"></canvas><canvas id="flyout" width="1280" height="720"></canvas></div>
-    <div id="flyinfo"></div>
-  </div>
+    <div class="stage" id="stage3d">
+      <canvas id="gl" width="1024" height="1024"></canvas>
+      <canvas id="flyout" width="1280" height="720"></canvas>
+      <div id="label3d" class="tag"></div>
+      <div id="hint" class="tag">drag to orbit · wheel to zoom</div>
+      <div id="flymsg" class="tag"></div>
+      <div class="transport">
+        <button id="flyplay">play</button>
+        <div class="seek" id="seekwrap"><input id="flyseek" type="range" min="0" max="1000" value="0" aria-label="position in flight"></div>
+        <span id="flytime"></span>
+        <button id="flyrec" class="ghost" title="play from the start and record the view to a video file">record</button>
+        <span id="flydl"></span>
+      </div>
+    </div>
+    <div class="footer" id="route"></div>
+  </section>
 </main>
+<details id="dev"><summary>stats</summary><dl id="devgrid"></dl></details>
 <script type="module">
 import init, * as wasm from './pkg/terrain_web.js';
-import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, columnTints, meshBlocks } from './mesh.js';
+import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
 const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend } = wasm;
 
 const $ = (id) => document.getElementById(id);
+
+// Timings and counts go to the collapsed stats panel (open it with ?debug=1),
+// not into the page; it renders only while open.
+const devStats = new Map();
+function dev(key, html) {
+  devStats.set(key, html);
+  if ($('dev').open) renderDev();
+}
+function renderDev() {
+  $('devgrid').innerHTML = [...devStats].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+$('dev').addEventListener('toggle', renderDev);
+$('devbtn').addEventListener('click', () => {
+  $('dev').open = !$('dev').open;
+  if ($('dev').open) $('dev').scrollIntoView({ behavior: 'smooth', block: 'end' });
+});
 // The map covers MAP x MAP blocks drawn at PX x PX pixels. It's built from
 // TILE x TILE tiles on a fixed world grid, generated in workers and cached.
 const MAP = 1024, PX = 512, K = MAP / PX, TILE = 512, AREA = 64, H = 128;
@@ -142,7 +220,7 @@ const B = {
 };
 let LEGEND, COLORS, NAMES, BIOMES, CTX; // CTX: mesh.js context (legend + face layers)
 
-let state = { seed: 0n, x0: 0, z0: 0, hm: null, sel: null, wasmText: '', mode: 'terrain' };
+let state = { seed: 0n, x0: 0, z0: 0, hm: null, sel: null, mode: 'terrain', legendAll: false };
 
 function parseSeed(s) {
   s = s.trim();
@@ -159,11 +237,11 @@ function parseSeed(s) {
 async function wasmSize() {
   try {
     const buf = await (await fetch(WASM_URL)).arrayBuffer();
-    let txt = `wasm <b>${(buf.byteLength / 1024).toFixed(1)} KB</b>`;
+    let txt = `${(buf.byteLength / 1024).toFixed(1)} KB`;
     if (typeof CompressionStream !== 'undefined') {
       const gz = await new Response(new Blob([buf]).stream()
         .pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
-      txt += ` (gzip <b>${(gz.byteLength / 1024).toFixed(1)} KB</b>)`;
+      txt += ` (gzip ${(gz.byteLength / 1024).toFixed(1)} KB)`;
     }
     return txt;
   } catch { return ''; }
@@ -250,14 +328,33 @@ function drawMap() {
   drawLegend();
 }
 
+// How many map cells show each top block (terrain) or biome, among the
+// tiles that are in so far.
+function legendCounts(mode) {
+  const n = new Uint32Array(256), f = state.filled;
+  if (mode === 'terrain') { for (let c = 0; c < f.length; c++) if (f[c]) n[state.hm[c * 4]]++; }
+  else for (let c = 0; c < f.length; c++) if (f[c]) n[state.biome[c]]++;
+  return n;
+}
+
+// Terrain and biome legends list what's on the map, most common first: the
+// first LEGEND_TOP, then the rest behind "+N more".
+const LEGEND_TOP = 8;
 function drawLegend() {
   const el = $('legend');
   const mode = state.mode;
-  if (mode === 'terrain') {
-    const shown = LEGEND.blocks.filter((b) => b.id !== B.air);
-    el.innerHTML = shown.map((b) => `<span style="--c:${css(b.color)}">${b.name.replace(/_/g, ' ')}</span>`).join('');
-  } else if (mode === 'biome') {
-    el.innerHTML = BIOMES.map((b) => `<span style="--c:${css(b.map)}">${b.name}</span>`).join('');
+  if (mode === 'terrain' || mode === 'biome') {
+    const n = legendCounts(mode);
+    const items = (mode === 'terrain'
+      ? LEGEND.blocks.map((b) => ({ id: b.id, name: b.name.replace(/_/g, ' '), c: b.color }))
+      : BIOMES.map((b) => ({ id: b.id, name: b.name, c: b.map })))
+      .filter((it) => n[it.id]).sort((a, b) => n[b.id] - n[a.id]);
+    const total = items.reduce((t, it) => t + n[it.id], 0) || 1;
+    const shown = state.legendAll ? items : items.slice(0, LEGEND_TOP);
+    const rest = items.length - LEGEND_TOP;
+    el.innerHTML = shown.map((it) => `<span style="--c:${css(it.c)}" title="${(n[it.id] / total * 100).toFixed(1)}% of the map">${it.name}</span>`).join('') +
+      (rest > 0 ? `<button class="linkish" id="legendmore">${state.legendAll ? 'fewer' : `+${rest} more`}</button>` : '');
+    $('legendmore')?.addEventListener('click', () => { state.legendAll = !state.legendAll; drawLegend(); });
   } else {
     const stops = SCALES[mode];
     const g = `linear-gradient(to right, ${stops.map(css).join(', ')})`;
@@ -298,13 +395,15 @@ $('map').addEventListener('mousemove', (ev) => {
   const c = z * MAP + x, i = c * 4;
   const hm = state.hm;
   const nm = (b) => (NAMES[b] || `#${b}`).replace(/_/g, ' ');
-  let t = `x ${state.x0 + x}  z ${state.z0 + z}  ${nm(hm[i])} y=${hm[i + 1]}`;
-  if (hm[i] === B.water || hm[i] === B.ice) {
-    t += `  (floor ${nm(hm[i + 3])} y=${hm[i + 2]}, depth ${hm[i + 1] - hm[i + 2]})`;
-  }
-  t += `\n${BIOMES[state.biome[c]].name}  T ${state.temp[c].toFixed(2)}  H ${state.hum[c].toFixed(2)}`;
-  $('hover').innerText = t;
+  let t = `x ${state.x0 + x} z ${state.z0 + z} · ${nm(hm[i])} y ${hm[i + 1]}`;
+  if (hm[i] === B.water || hm[i] === B.ice) t += `, ${hm[i + 1] - hm[i + 2]} deep over ${nm(hm[i + 3])}`;
+  t += ` · ${BIOMES[state.biome[c]].name}`;
+  if (state.mode === 'temperature') t += ` · T ${state.temp[c].toFixed(2)}`;
+  if (state.mode === 'humidity') t += ` · H ${state.hum[c].toFixed(2)}`;
+  $('hover').textContent = t;
+  $('hover').style.display = 'block';
 });
+$('map').addEventListener('mouseleave', () => { $('hover').style.display = 'none'; });
 
 function selectAt(x, z) {
   state.sel = {
@@ -344,7 +443,7 @@ async function regenerate() {
   if (!state.sel) state.sel = { x: (MAP - AREA) / 2, z: (MAP - AREA) / 2 };
   placeSel();
   const t0 = performance.now();
-  $('stats').textContent = 'generating map…';
+  $('busy').textContent = 'generating map…';
   drawMap();
   setTimeout(() => { if (id === genId && !document.body.classList.contains('flying')) build3d(); }, 0);
   prepareFlyover();
@@ -380,7 +479,8 @@ async function regenerate() {
   try { await Promise.all(work); } catch { return false; }
   if (id !== genId) return false;
   const ms = performance.now() - t0;
-  $('stats').innerHTML = `map <b>${ms.toFixed(0)} ms</b> (${tiles.length} tiles, ${cached} cached) · ${state.wasmText}`;
+  $('busy').textContent = '';
+  dev('map', `${ms.toFixed(0)} ms (${tiles.length} tiles, ${cached} cached)`);
   return true;
 }
 
@@ -407,7 +507,10 @@ for (const id of ['seed', 'x0', 'z0']) {
 
 // ---------------------------------------------------------------- 3D
 const gl = $('gl').getContext('webgl2', { antialias: true });
-let prog, opaque = null, water = null, ice = null;
+// Two programs from one shader: `cut` discards transparent texels (leaves,
+// plants, sprites); `solid` doesn't, so the GPU can reject hidden pixels
+// before shading them. `prog` is the one in use.
+let prog, progs, opaque = null, cutout = null, water = null, ice = null;
 const cam = { yaw: 0.8, pitch: 0.55, dist: 95, ty: 68 };
 let sky = [0.61, 0.76, 0.9];
 
@@ -419,7 +522,12 @@ function shader(type, src) {
 }
 
 function initGL() {
-  prog = gl.createProgram();
+  progs = { cut: program(true), solid: program(false) };
+  useProg(progs.cut);
+}
+
+function program(cut) {
+  const prog = gl.createProgram();
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, `#version 300 es
     layout(location=0) in vec3 pos;
     layout(location=1) in vec2 uv;
@@ -454,7 +562,7 @@ function initGL() {
     out vec4 o;
     void main() {
       vec4 t = texture(tex, vuv);
-      if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky
+      ${cut ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
       // texels stored with alpha ~0.78 are greyscale and take the climate tint
       vec3 c = (t.a < 0.9 ? t.rgb * vtint : t.rgb) * vshade;
       float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, fogMax);
@@ -462,6 +570,31 @@ function initGL() {
     }`));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  prog.locs = new Map();
+  return prog;
+}
+
+// Uniforms are set by name through setU, which remembers the values so that
+// switching program (useProg) carries them over.
+const U = new Map();
+function uloc(name) {
+  let l = prog.locs.get(name);
+  if (l === undefined) prog.locs.set(name, l = gl.getUniformLocation(prog, name));
+  return l;
+}
+function applyU(name, v) {
+  const l = uloc(name);
+  if (l === null) return;
+  if (name === 'mvp') gl.uniformMatrix4fv(l, false, v);
+  else if (typeof v === 'number') gl.uniform1f(l, v);
+  else gl.uniform3fv(l, v);
+}
+function setU(name, v) { U.set(name, v); applyU(name, v); }
+function useProg(p) {
+  if (prog === p) return;
+  prog = p;
+  gl.useProgram(p);
+  for (const [name, v] of U) applyU(name, v);
 }
 
 // ---------------------------------------------------------------- textures
@@ -482,7 +615,8 @@ const BIOME_TILES = ['birch_log_side', 'birch_log_top', 'spruce_log_side', 'spru
   'brown_mushroom', 'red_mushroom'];
 // Greyscale-and-tint pixels (palette greens) for climate-tinted tiles.
 const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89' };
-const LAYER_NAMES = [...TILES, ...BIOME_TILES];
+// leaves_fast: the leaves tile with its holes filled, for fast leaves.
+const LAYER_NAMES = [...TILES, ...BIOME_TILES, 'leaves_fast'];
 const T = Object.fromEntries(LAYER_NAMES.map((n, i) => [n, i]));
 const ANIM_FIRST = T.water_0, ANIM_END = T.water_flow_3 + 1;
 
@@ -578,6 +712,10 @@ async function loadTextures() {
   }
   // Biome tiles from the tileset replace the stand-ins above.
   if (textured) for (const name of BIOME_TILES) if (all[name]) make[name] = tileFn(name);
+  // Fast leaves: holes filled with a dark tinted grey, so the tile is solid
+  // (no discard) and its mipmaps keep the tint marker alpha throughout.
+  const leaf = make.leaves;
+  make.leaves_fast = (x, y) => { const p = leaf(x, y); return p[3] ? p : [96, 96, 96, TINT_A]; };
   const layers = LAYER_NAMES.map((n) => make[n]);
   // Fish model faces: one layer each, drawn at native size in the top-left
   // corner. The rest of the layer repeats the edge pixels so mipmaps
@@ -616,8 +754,9 @@ async function loadTextures() {
   return textured;
 }
 
-// Layer for block id b on a face with vertical normal dy (1 top, -1 bottom, 0 side).
-function tileFor(b, dy) {
+// Layer for block id b on a face with vertical normal dy (1 top, -1 bottom,
+// 0 side); `fast` for fast leaves (see mesh.js).
+function tileFor(b, dy, fast = false) {
   switch (b) {
     case B.stone: return T.stone;
     case B.dirt: return T.dirt;
@@ -629,7 +768,7 @@ function tileFor(b, dy) {
     case B.oak_log: return dy ? T.log_top : T.log_side;
     case B.birch_log: return dy ? T.birch_log_top : T.birch_log_side;
     case B.spruce_log: return dy ? T.spruce_log_top : T.spruce_log_side;
-    case B.oak_leaves: case B.birch_leaves: case B.spruce_leaves: return T.leaves;
+    case B.oak_leaves: case B.birch_leaves: case B.spruce_leaves: return fast ? T.leaves_fast : T.leaves;
     case B.cactus: return dy ? T.cactus_top : T.cactus_side;
     case B.pumpkin: return dy ? T.pumpkin_top : T.pumpkin_side;
     case B.snow_layer: return T.snow;
@@ -652,13 +791,29 @@ function upload(v) {
   return { vao, n: v.length / STRIDE, bufs: [vb] };
 }
 
-// A packed mesh part from mesh.js ({ verts, idx }): 16-byte vertices, indexed quads.
-function uploadPacked({ verts, idx }) {
+// One index buffer for every packed mesh: they're all quads with the same
+// index pattern (mesh.js quadIndices). It grows by replacement; meshes made
+// earlier keep the smaller one they were set up with.
+let quadIB = null, quadIBSize = 0;
+function quadIndexBuffer(quads) {
+  if (quads > quadIBSize) {
+    quadIBSize = Math.max(quads, quadIBSize * 2, 1 << 16);
+    quadIB = gl.createBuffer();
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIB);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices(quadIBSize), gl.STATIC_DRAW);
+  }
+  return quadIB;
+}
+
+// A packed mesh part from mesh.js ({ verts, faces }): 16-byte vertices, quads.
+function uploadPacked({ verts, faces }) {
+  const ib = quadIndexBuffer(faces);
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
-  const vb = gl.createBuffer(), ib = gl.createBuffer();
+  const vb = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
   const attr = (loc, size, type, normalized, off) => {
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, size, type, normalized, VERTEX_BYTES, off);
@@ -666,16 +821,15 @@ function uploadPacked({ verts, idx }) {
   attr(0, 3, gl.SHORT, false, 0); attr(1, 2, gl.UNSIGNED_BYTE, false, 6); attr(2, 1, gl.UNSIGNED_BYTE, false, 8);
   attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10);
   gl.bindVertexArray(null);
-  return { vao, n: idx.length, faces: idx.length / 6, packed: true, bufs: [vb, ib] };
+  return { vao, n: faces * 6, faces, packed: true, bufs: [vb] };
 }
 
-const uloc = (n) => gl.getUniformLocation(prog, n);
 const PACKED = [POS_SCALE, UV_SCALE, SHADE_SCALE];
 // Draw a mesh: packed (mesh.js, placed at `off`) or float (sun, fish).
 function drawMesh(m, off = [0, 0, 0]) {
   if (!m || !m.n) return;
-  gl.uniform3fv(uloc('unpack'), m.packed ? PACKED : [1, 1, 1]);
-  gl.uniform3fv(uloc('offset'), m.packed ? off : [0, 0, 0]);
+  setU('unpack', m.packed ? PACKED : [1, 1, 1]);
+  setU('offset', m.packed ? off : [0, 0, 0]);
   gl.bindVertexArray(m.vao);
   if (m.packed) gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_INT, 0);
   else gl.drawArrays(gl.TRIANGLES, 0, m.n);
@@ -694,9 +848,9 @@ function build3d() {
   const blocks = generate_region_decorated(state.seed, wx, wz, AREA, AREA);
   const tints = columnTints(wasm, CTX, state.seed, wx, wz, AREA);
   const t1 = performance.now();
-  free(opaque); free(water); free(ice);
+  free(opaque); free(cutout); free(water); free(ice);
   const m = meshBlocks(CTX, blocks, tints, AREA);
-  [opaque, water, ice] = [m.opaque, m.water, m.ice].map(uploadPacked);
+  [opaque, cutout, water, ice] = [m.opaque, m.cutout, m.water, m.ice].map(uploadPacked);
   cam.ty = m.meanY;
   state.blocks = blocks;
   // sky and fog from the centre column's biome sky ramp (by temperature)
@@ -704,10 +858,9 @@ function build3d() {
   $('gl').style.background = css(sky.map((v) => v * 255));
   spawnFish();
   const t2 = performance.now();
-  $('cap3d').textContent = `3D view of x ${wx}..${wx + AREA - 1}, z ${wz}..${wz + AREA - 1} ` +
-    `(${tints.centre.biome.name} at centre) · gen ${(t1 - t0).toFixed(0)} ms, mesh ${(t2 - t1).toFixed(0)} ms, ` +
-    `${opaque.faces + water.faces + ice.faces} faces, ${fish.length} fish · drag to orbit, wheel to zoom` +
-    (state.textured ? '' : ' · textures.json not found; using flat colours');
+  $('label3d').textContent = `x ${wx}..${wx + AREA - 1} z ${wz}..${wz + AREA - 1} · ${tints.centre.biome.name}`;
+  dev('3D preview', `gen ${(t1 - t0).toFixed(0)} ms, mesh ${(t2 - t1).toFixed(0)} ms, ` +
+    `${opaque.faces + cutout.faces + water.faces + ice.faces} faces, ${fish.length} fish`);
   draw();
 }
 
@@ -725,6 +878,25 @@ function lookAt(e, t, u) {
   return [xA[0], yA[0], zA[0], 0, xA[1], yA[1], zA[1], 0, xA[2], yA[2], zA[2], 0,
     -dot(xA, e), -dot(yA, e), -dot(zA, e), 1];
 }
+// The six clip planes of a view-projection matrix, as [a, b, c, d] with
+// inside where a x + b y + c z + d >= 0.
+function frustumPlanes(m) {
+  const row = (i) => [m[i], m[4 + i], m[8 + i], m[12 + i]];
+  const w = row(3), out = [];
+  for (const i of [0, 1, 2]) {
+    const r = row(i);
+    out.push(w.map((v, k) => v + r[k]), w.map((v, k) => v - r[k]));
+  }
+  return out;
+}
+// False when the box lo..hi is wholly outside one of the planes.
+function boxVisible(planes, lo, hi) {
+  for (const p of planes) {
+    const x = p[0] > 0 ? hi[0] : lo[0], y = p[1] > 0 ? hi[1] : lo[1], z = p[2] > 0 ? hi[2] : lo[2];
+    if (p[0] * x + p[1] * y + p[2] * z + p[3] < 0) return false;
+  }
+  return true;
+}
 function mul(a, b) {
   const o = new Array(16).fill(0);
   for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
@@ -740,28 +912,30 @@ function draw() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
-  gl.useProgram(prog);
+  useProg(progs.cut);
   const cp = Math.cos(cam.pitch);
   const eye = [cam.dist * cp * Math.cos(cam.yaw), cam.dist * Math.sin(cam.pitch), cam.dist * cp * Math.sin(cam.yaw)];
   const target = [0, cam.ty - 64, 0];
   const view = lookAt([eye[0], eye[1] + target[1], eye[2]], target, [0, 1, 0]);
   const mvp = mul(persp(0.9, cv.width / cv.height, 0.5, 2000), view);
-  const u = uloc;
-  gl.uniformMatrix4fv(u('mvp'), false, new Float32Array(mvp));
-  gl.uniform1f(u('fogMax'), 0.6);
-  gl.uniform1f(u('alpha'), 1);
-  gl.uniform1f(u('waterFrame'), waterFrame);
-  gl.uniform3f(u('fogColor'), sky[0], sky[1], sky[2]);
+  setU('mvp', new Float32Array(mvp));
+  setU('fogMax', 0.6);
+  setU('alpha', 1);
+  setU('waterFrame', waterFrame);
+  setU('fogColor', sky);
   gl.disable(gl.BLEND);
   // sun first, unfogged and behind everything
-  gl.uniform1f(u('fogFar'), 1e9);
+  setU('fogFar', 1e9);
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
   drawSun(view, target);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
-  gl.uniform1f(u('fogFar'), cam.dist + 90);
-  // opaque and cut-out geometry (leaves, plants) in one pass
+  setU('fogFar', cam.dist + 90);
+  // solid geometry without discard, then cut-outs (leaves, plants)
   const AT = [-AREA / 2, -64, -AREA / 2]; // packed meshes are in area-local coordinates
+  useProg(progs.solid);
   drawMesh(opaque, AT);
+  useProg(progs.cut);
+  drawMesh(cutout, AT);
   // fish under the water surface; fins are flat, so draw both sides
   if (fish.length) {
     gl.disable(gl.CULL_FACE);
@@ -771,9 +945,9 @@ function draw() {
   // translucent water, then ice, without depth writes
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
-  gl.uniform1f(u('alpha'), 0.45);
+  setU('alpha', 0.45);
   drawMesh(water, AT);
-  gl.uniform1f(u('alpha'), 0.72);
+  setU('alpha', 0.72);
   drawMesh(ice, AT);
   gl.depthMask(true);
   gl.bindVertexArray(null);
@@ -986,8 +1160,21 @@ function tick(t) {
 }
 if (!matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(tick);
 
+// The preview canvas matches the stage's shape and pixel density (the
+// flyover renders at a fixed FLY_W x FLY_H instead).
+function sizeGL() {
+  if (flying) return;
+  const st = $('stage3d'), k = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.round(st.clientWidth * k), h = Math.round(st.clientHeight * k);
+  if (!w || !h || ($('gl').width === w && $('gl').height === h)) return;
+  $('gl').width = w; $('gl').height = h;
+  draw();
+}
+new ResizeObserver(sizeGL).observe($('stage3d'));
+
+const hideHint = () => $('hint').classList.add('gone');
 let drag = null;
-$('gl').addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; $('gl').setPointerCapture(e.pointerId); });
+$('gl').addEventListener('pointerdown', (e) => { hideHint(); drag = [e.clientX, e.clientY]; $('gl').setPointerCapture(e.pointerId); });
 $('gl').addEventListener('pointerup', () => { drag = null; });
 $('gl').addEventListener('pointermove', (e) => {
   if (!drag) return;
@@ -998,6 +1185,7 @@ $('gl').addEventListener('pointermove', (e) => {
 });
 $('gl').addEventListener('wheel', (e) => {
   e.preventDefault();
+  hideHint();
   cam.dist = Math.max(10, Math.min(400, cam.dist * Math.exp(e.deltaY * 0.001)));
   draw();
 }, { passive: false });
@@ -1014,12 +1202,14 @@ $('gl').addEventListener('wheel', (e) => {
 let pool;              // WorkerPool, created at startup
 let prep = null;       // { key, seed, job, ready, plan, player, origin, sky, ... } for the current map
 let flying = false;    // the 3D view is in flyover mode
+let flyDrawn = 0;      // chunks drawn in the last flyover frame (after culling)
 let markStarted;
 const started = new Promise((r) => { markStarted = r; }); // the page has a map and a pool
 const FLY_W = 1280, FLY_H = 720;
 const FLY_FOG = VIEW.fogEnd / 1.15; // the shader's fog is solid at 1.15 x fogFar
 
-function flyStatus(text) { $('flystatus').textContent = text; }
+// Planning and error messages, centred on the stage ('' hides it).
+function flyStatus(text) { $('flymsg').textContent = text; }
 
 const flyEnv = () => ({ pool, canvas: $('flyout'), upload: uploadPacked, free, render: (f) => renderFly(f) });
 
@@ -1051,15 +1241,14 @@ function cancelPrep() {
 function setView(view) {
   for (const b of document.querySelectorAll('button[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === view));
   document.body.classList.toggle('flying', view === 'flyover');
-  $('stage3d').classList.toggle('wide', view === 'flyover');
 }
 
 async function startFlyover() {
   if (flying) return;
   flying = true;
   setView('flyover');
-  $('flydl').textContent = ''; $('flyinfo').textContent = '';
-  $('cap3d').textContent = 'Flyover: an island on the map, then a tour of the terrain around it.';
+  $('flydl').textContent = ''; $('flytime').textContent = '';
+  renderRoute(null);
   $('gl').width = FLY_W; $('gl').height = FLY_H;
   flyStatus('planning the flyover…');
   requestAnimationFrame(flyLoop);
@@ -1073,6 +1262,7 @@ async function startFlyover() {
     if (prep === p) break;
   }
   if (!p.plan) { flyStatus('no island within 1024 blocks of the map centre; try another x/z or seed'); return; }
+  flyStatus('');
   if (p.plan.moved) {
     // No route fits this map: move the map to the route, keeping this plan.
     const [mx, mz] = p.plan.mapOrigin;
@@ -1082,7 +1272,7 @@ async function startFlyover() {
     regenerate();
   }
   selectAt(p.plan.island.cx - state.x0, p.plan.island.cz - state.z0);
-  $('flyinfo').textContent = flyInfo(p.plan);
+  renderRoute(p.plan);
   p.player.play();
 }
 
@@ -1094,17 +1284,45 @@ function stopFlyover() {
   setView('preview');
   $('overlay').getContext('2d').clearRect(0, 0, PX, PX);
   prep?.player?.pause();
-  $('gl').width = 1024; $('gl').height = 1024;
+  flyStatus('');
+  renderRoute(null);
+  sizeGL();
   build3d();
 }
 
-function flyInfo(plan) {
-  const i = plan.island;
-  const lines = [`${i.label} at x ${Math.round(i.cx)} z ${Math.round(i.cz)}, ${i.blocks} m², top y ${i.maxH}`,
-    `(${plan.islandCount} islands and ${plan.featureCount} features surveyed, ${plan.schedule.length} chunks in view, planned in ${plan.ms} ms)`];
-  plan.chosen.forEach((f, n) => lines.push(`${n + 1}. ${f.label}  (x ${f.x} z ${f.z}) · in view ${plan.coverage[n].seconds.toFixed(1)} s`));
-  lines.push(`${plan.path.duration.toFixed(0)} s flight`);
-  return lines.join('\n');
+// The route under the view: the island, then each feature numbered as on the
+// map; a feature seeks to the moment it comes into view. The same moments
+// are ticks under the seek bar.
+function renderRoute(plan) {
+  const el = $('route'), wrap = $('seekwrap');
+  wrap.querySelectorAll('.tick').forEach((t) => t.remove());
+  el.replaceChildren();
+  if (!plan) return;
+  const i = plan.island, dur = plan.path.duration;
+  dev('flyover plan', `${plan.islandCount} islands and ${plan.featureCount} features surveyed, ` +
+    `${plan.schedule.length} chunks in view, planned in ${plan.ms} ms`);
+  const box = document.createElement('div');
+  box.className = 'route';
+  const head = document.createElement('b');
+  head.textContent = i.label;
+  head.title = `x ${Math.round(i.cx)} z ${Math.round(i.cz)}, ${i.blocks} m², top y ${i.maxH} · ${dur.toFixed(0)} s flight`;
+  box.append(head);
+  plan.chosen.forEach((f, n) => {
+    const cov = plan.coverage[n], at = Math.max(0, cov.first ?? 0);
+    const b = document.createElement('button');
+    b.innerHTML = `<i>${n + 1}</i>`;
+    b.append(f.label);
+    b.title = `x ${f.x} z ${f.z} · in view ${cov.seconds.toFixed(1)} s from ${at.toFixed(1)} s`;
+    b.addEventListener('click', () => { const p = prep?.player; if (flying && p) p.seek(at); });
+    box.append(b);
+    if (cov.first >= 0) {
+      const t = document.createElement('div');
+      t.className = 'tick';
+      t.style.left = `${at / dur * 100}%`;
+      wrap.append(t);
+    }
+  });
+  el.append(box);
 }
 
 function onFlyState(s) {
@@ -1124,14 +1342,19 @@ function flyLoop(now) {
     const [d, n] = pl.opening;
     pl.frame(now); // keeps loading; its picture is replaced below
     loadingCard(d, n);
-    flyStatus(`loading flyover render… ${d}/${n} chunks`);
+    flyStatus('');
+    $('flytime').textContent = `loading ${d}/${n}`;
     drawRoute(pl.plan.path.at(0));
     return;
   }
   pl.frame(now);
-  const label = { loading: 'loading chunks…', playing: 'playing', paused: 'paused', done: 'done' }[pl.state];
-  flyStatus(`${pl.t.toFixed(1)} / ${pl.duration.toFixed(1)} s · ${label} · ${st.loaded.size} chunks loaded, ` +
-    `${st.jobs.size} queued` + (pl.recorder ? ' · recording' : ''));
+  $('flytime').textContent = `${pl.t.toFixed(1)} / ${pl.duration.toFixed(0)} s` +
+    (pl.state === 'loading' ? ' · loading' : '') + (pl.recorder ? ' · ● rec' : '');
+  if (pl.frameNo % 15 === 0) {
+    let fast = 0;
+    for (const c of st.loaded.values()) if (c.fast) fast++;
+    dev('flyover chunks', `${st.loaded.size} loaded (${fast} with fast leaves), ${flyDrawn} drawn, ${st.jobs.size} queued`);
+  }
   if (!seeking) $('flyseek').value = String(Math.round(pl.t / pl.duration * 1000));
 }
 
@@ -1169,34 +1392,44 @@ function renderFly(f) {
   gl.clearColor(skyC[0], skyC[1], skyC[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
-  gl.useProgram(prog);
+  useProg(progs.cut);
   const view = lookAt(eye, tgt, [0, 1, 0]);
-  gl.uniformMatrix4fv(uloc('mvp'), false, new Float32Array(mul(persp(1.0, FLY_W / FLY_H, 0.3, 1000), view)));
-  gl.uniform1f(uloc('alpha'), 1);
-  gl.uniform1f(uloc('waterFrame'), waterFrame);
-  gl.uniform3f(uloc('fogColor'), skyC[0], skyC[1], skyC[2]);
-  gl.uniform1f(uloc('fogMax'), 1);
-  gl.uniform1f(uloc('fogFar'), 1e9);
+  const mvp = mul(persp(1.0, FLY_W / FLY_H, 0.3, 1000), view);
+  setU('mvp', new Float32Array(mvp));
+  setU('alpha', 1);
+  setU('waterFrame', waterFrame);
+  setU('fogColor', skyC);
+  setU('fogMax', 1);
+  setU('fogFar', 1e9);
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
   drawSun(view, eye);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
-  gl.uniform1f(uloc('fogFar'), FLY_FOG);
-  // chunks in front of the camera (or under it), opaque first, then water and ice
-  const fwd = [tgt[0] - eye[0], tgt[2] - eye[2]], fl = Math.hypot(...fwd) || 1;
+  setU('fogFar', FLY_FOG);
+  // Chunks whose box is in the view frustum and nearer than solid fog,
+  // nearest first.
+  const planes = frustumPlanes(mvp);
   const vis = [];
   for (const c of f.chunks) {
-    const off = [c.cx * CHUNK - o[0], -64, c.cz * CHUNK - o[2]];
-    const dx = off[0] + CHUNK / 2 - eye[0], dz = off[2] + CHUNK / 2 - eye[2];
-    if ((dx * fwd[0] + dz * fwd[1]) / fl < -CHUNK * 0.75) continue;
-    vis.push([c, off]);
+    const lo = [c.cx * CHUNK - o[0], (c.minY ?? 0) - 8 - 64, c.cz * CHUNK - o[2]];
+    const hi = [lo[0] + CHUNK, H - 64, lo[2] + CHUNK];
+    const d = Math.hypot(...[0, 1, 2].map((i) => Math.max(lo[i] - eye[i], 0, eye[i] - hi[i])));
+    if (d > VIEW.fogEnd || !boxVisible(planes, lo, hi)) continue;
+    vis.push({ c, off: [lo[0], -64, lo[2]], d });
   }
-  for (const [c, off] of vis) drawMesh(c.parts.opaque, off);
+  vis.sort((a, b) => a.d - b.d);
+  flyDrawn = vis.length;
+  // solid front to back (hidden pixels are rejected early), cut-outs, then
+  // water and ice back to front
+  useProg(progs.solid);
+  for (const { c, off } of vis) drawMesh(c.parts.opaque, off);
+  useProg(progs.cut);
+  for (const { c, off } of vis) drawMesh(c.parts.cutout, off);
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
-  gl.uniform1f(uloc('alpha'), 0.45);
-  for (const [c, off] of vis) drawMesh(c.parts.water, off);
-  gl.uniform1f(uloc('alpha'), 0.72);
-  for (const [c, off] of vis) drawMesh(c.parts.ice, off);
+  setU('alpha', 0.45);
+  for (let i = vis.length - 1; i >= 0; i--) drawMesh(vis[i].c.parts.water, vis[i].off);
+  setU('alpha', 0.72);
+  for (let i = vis.length - 1; i >= 0; i--) drawMesh(vis[i].c.parts.ice, vis[i].off);
   gl.depthMask(true);
   gl.bindVertexArray(null);
   composeFly(f);
@@ -1279,7 +1512,8 @@ $('flyrec').addEventListener('click', async () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `flyover-${$('seed').value.trim().replace(/[^\w-]+/g, '_')}.${ext}`;
-    a.textContent = `save ${a.download} (${(blob.size / 1048576).toFixed(1)} MB)`;
+    a.textContent = `save (${(blob.size / 1048576).toFixed(1)} MB)`;
+    a.title = a.download;
     $('flydl').replaceChildren(a);
   } catch (e) {
     $('flydl').textContent = String(e.message || e);
@@ -1293,6 +1527,7 @@ if (qs.has('sx') && qs.has('sz')) state.sel = { x: +qs.get('sx'), z: +qs.get('sz
 if (qs.has('dist')) cam.dist = +qs.get('dist');
 if (qs.has('yaw')) cam.yaw = +qs.get('yaw');
 if (qs.has('pitch')) cam.pitch = +qs.get('pitch');
+if (qs.has('debug')) $('dev').open = true; // ?debug=1 opens the stats panel
 // Compile the wasm once; the workers get the same module instead of each
 // compiling (and warming up) their own.
 const wasmModule = await WebAssembly.compileStreaming(fetch(WASM_URL));
@@ -1307,8 +1542,12 @@ pool = new WorkerPool({ faceLayer: CTX.faceLayer, module: wasmModule });
 setMode(['terrain', 'biome', 'temperature', 'humidity'].includes(qs.get('mode')) ? qs.get('mode') : 'terrain');
 initGL();
 state.textured = await loadTextures();
-if (!state.textured) $('cap3d').textContent = 'textures.json not found; using flat colours.';
-state.wasmText = await wasmSize();
+if (!state.textured) {
+  $('warn').hidden = false;
+  $('warn').textContent = '⚠ flat colours';
+  $('warn').title = 'textures.json not found (run ./build.sh); using flat colours';
+}
+dev('wasm', await wasmSize());
 regenerate();
 markStarted();
 if (qs.has('fly')) startFlyover(); // ?fly=1 opens the flyover straight away
