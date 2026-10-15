@@ -2,3 +2,4 @@
 //! See docs/design/basic-gameplay.md.
 
 pub mod bindings;
+pub mod input;
