@@ -1,0 +1,54 @@
+# Spec editor: turns the maintainer's answer to a spec question into a
+# SPEC.md pull request.
+#
+# On an issue labelled both "spec-question" and "decision", comment:
+#   /decide A
+#   optional reasoning on the following lines
+#
+# Claude writes the smallest SPEC.md change that records the decision and
+# opens a PR that changes only SPEC.md and closes the issue. Merging it runs
+# the planner on the changed sections (see claude-plan.yml).
+#
+# "research" questions (what does the original do?) need work/ and are
+# answered locally, not here.
+name: Claude spec editor
+
+on:
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: claude-spec-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  edit-spec:
+    if: |
+      github.event.sender.login == 'jtwaugh' &&
+      !github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/decide') &&
+      contains(github.event.issue.labels.*.name, 'spec-question') &&
+      contains(github.event.issue.labels.*.name, 'decision')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          trigger_phrase: /decide
+          branch_prefix: spec/
+          track_progress: true
+          include_comments_by_actor: jtwaugh,claude[bot]
+          claude_args: |
+            --max-turns 30
+            --allowedTools "Read,Glob,Grep,Edit,Bash(git status:*),Bash(git diff:*),Bash(gh issue view:*),Bash(gh pr create:*)"
+            --append-system-prompt "You are the spec editor for this repository, the one agent allowed to edit SPEC.md. The maintainer has answered the spec question in this issue with a /decide comment. Your job is to record that decision in SPEC.md. Rules: (1) Change only SPEC.md. Touch no other file, not even CLAUDE.md or README.md. (2) Record the maintainer's decision, nothing more: a project policy or a clarification of wording. Never add facts about how the original game or its code behaves, not from memory and not as examples; if the decision seems to need such a fact, stop and say in the issue that it needs a research answer from the maintainer locally. (3) Make the smallest edit that removes the ambiguity, in the section the question is about, in the spec's existing style. End the changed paragraph with '(Decided in #<issue>.)'. (4) If the decision means the code no longer matches the spec, add nothing to the spec about the code; the planner will pick that up after merge. (5) If the /decide comment is unclear or contradicts the options in the issue, don't edit anything; ask one question in the issue instead. When done, open a pull request with gh pr create titled 'SPEC <section>: <decision in a few words>' whose body quotes the decision, explains the edit in one or two sentences, and says 'Closes #<issue>'."

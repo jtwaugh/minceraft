@@ -4,11 +4,17 @@
 # Run it from the Actions tab ("Claude planner" -> Run workflow), or:
 #   gh workflow run claude-plan.yml -f section="15" -f notes="..."
 #
+# It also runs by itself when a change to SPEC.md lands on master (usually a
+# spec-editor PR), planning only the sections that changed.
+#
 # It opens issues labelled "planned". Read them, edit as needed, and add the
 # "factory" label to the ones you want built, in dependency order.
 name: Claude planner
 
 on:
+  push:
+    branches: [master]
+    paths: [SPEC.md]
   workflow_dispatch:
     inputs:
       section:
@@ -36,12 +42,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
         env:
           SECTION: ${{ inputs.section }}
           NOTES: ${{ inputs.notes }}
+          # Set on push runs: the SPEC.md change to plan from.
+          SPEC_BEFORE: ${{ github.event.before }}
+          SPEC_AFTER: ${{ github.event.after }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -53,7 +62,16 @@ jobs:
 
             The section to plan is in the environment variable SECTION, and
             optional guidance from the maintainer is in NOTES. Read them with
-            `printenv SECTION NOTES`.
+            `printenv SECTION NOTES SPEC_BEFORE SPEC_AFTER`.
+
+            If SECTION is empty, this run was started by a change to SPEC.md
+            on master. Run `git diff "$SPEC_BEFORE" "$SPEC_AFTER" -- SPEC.md`
+            and plan only the sections that diff touches, treating the new
+            text as the decision to implement. Look for the
+            "(Decided in #N.)" note: read issue #N for context, and mention it
+            in each ticket. If the change needs no code change (the code
+            already does what the spec now says), create no tickets, only the
+            Plan issue saying so.
 
             ## Read first
 
@@ -74,10 +92,19 @@ jobs:
             ## Ambiguities
 
             Where the spec is ambiguous, incomplete or contradicts itself,
-            don't guess. Open an issue labelled `spec-question` that quotes
-            the sentence, says what's unclear and what the options are, and
-            leave that part out of the tickets (or make the dependent ticket
-            say "Blocked by #n").
+            don't guess. Open an issue that quotes the sentence, says what's
+            unclear and lists the options as A, B, ..., and leave that part
+            out of the tickets (or make the dependent ticket say
+            "Blocked by #n"). Label it `spec-question` plus exactly one of:
+
+            - `decision`: a choice about this project that can be made
+              without knowing how the original game behaves (policy,
+              trade-offs, which of two readings to adopt). End the body with:
+              "Answer by commenting `/decide <option>` with any reasoning;
+              the spec editor will draft the SPEC.md change."
+            - `research`: answering needs facts about the original game's
+              behaviour that SPEC.md doesn't state. End the body with:
+              "Needs research from the maintainer's local spec lane."
 
             ## Tickets
 
@@ -127,4 +154,4 @@ jobs:
             that after reviewing.
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(git log:*)"
+            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(git log:*),Bash(git diff:*)"

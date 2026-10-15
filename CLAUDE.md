@@ -22,11 +22,16 @@ contaminate the codebase in a way that can't be undone.
 - **Never read or touch `work/` or any `*.jar`.** They exist only on the
   maintainer's machine, are gitignored, and must never be committed,
   copied, quoted or summarised.
-- **Never edit `SPEC.md` in an implementation change.** Spec changes come
-  only from the maintainer, in PRs that change nothing else.
+- **Never edit `SPEC.md` in an implementation change.** Spec changes are
+  decided and merged by the maintainer, in PRs that change nothing else.
+  The only agent that drafts them is the spec editor
+  (`.github/workflows/claude-spec.yml`), which records the maintainer's
+  `/decide` answers and never adds facts about the original game.
 - **If the spec is ambiguous, incomplete or seems wrong, stop.** Open an
-  issue labelled `spec-question` that quotes the section and states what's
-  unclear, then link it from the PR (or leave the task undone). Don't fill
+  issue labelled `spec-question` that quotes the section, states what's
+  unclear and lists the options, plus `decision` (a project choice) or
+  `research` (needs facts about the original), then link it from the PR
+  (or leave the task undone). Don't fill
   gaps with your own knowledge of how Minecraft does it.
 - Never add Mojang assets. Colours in `data/*.toml` and every texture in
   `art/` are this project's own.
@@ -34,8 +39,21 @@ contaminate the codebase in a way that can't be undone.
 
 ## Lanes
 
-- **Spec lane (local only):** `SPEC.md`, `work/`. Maintainer only.
+- **Spec lane:** `SPEC.md`. Research (anything needing `work/`) happens
+  only on the maintainer's machine. Decisions on `decision` questions are
+  drafted by the spec editor on GitHub and merged by the maintainer.
 - **Implementation lane:** everything else. This is where agents work.
+
+## The loop
+
+1. The planner (`claude-plan.yml`) turns a SPEC section into `planned`
+   issues and `spec-question` issues. It also runs when SPEC.md changes on
+   `master`.
+2. The maintainer labels tickets `factory`; the implementer (`claude.yml`)
+   opens a PR; CI and the reviewer (`claude-review.yml`) check it.
+3. The maintainer answers `decision` questions with `/decide <option>`; the
+   spec editor (`claude-spec.yml`) opens a SPEC.md-only PR; merging it
+   re-runs the planner on the changed sections.
 
 ## Commands
 
