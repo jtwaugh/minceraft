@@ -34,7 +34,9 @@ mod trees;
 
 use alloc::vec;
 use alloc::vec::Vec;
-pub use climate::{biome_at, biome_for, biome_lookup, climate_at, Climate, TemperatureBias};
+pub use climate::{
+    biome_at, biome_for, biome_lookup, climate_at, Climate, HumidityBias, TemperatureBias,
+};
 pub use data::{
     Biome, BiomeInfo, Block, BlockInfo, Collision, TreeKind, BIOME_INFO, BLOCK_INFO, LEGEND_JSON,
 };
@@ -142,6 +144,8 @@ impl<F: Fn(i32, i32) -> f64> BaseHeightBias for F {
 /// - `temperature`: temperature bias terms, world `(x, z)`; added to T
 ///   (then clamped to [0, 1]) before T is used anywhere: density, biome
 ///   lookup, sea ice, decoration and snow.
+/// - `humidity`: humidity bias terms, world `(x, z)`; added to H (then
+///   clamped to [0, 1]) before H is used anywhere.
 /// - `base_height`: per-column base-height terms, world `(x, z)`, in blocks;
 ///   their sum / 8 is added to the column `center` (SPEC 3.3 step 6).
 /// - `protected`: cells decoration must never modify (raft mask, spawn
@@ -150,6 +154,7 @@ impl<F: Fn(i32, i32) -> f64> BaseHeightBias for F {
 pub struct Biases<'a> {
     pub density: &'a [&'a dyn DensityBias],
     pub temperature: &'a [&'a dyn TemperatureBias],
+    pub humidity: &'a [&'a dyn HumidityBias],
     pub base_height: &'a [&'a dyn BaseHeightBias],
     pub protected: Option<&'a dyn ProtectedMask>,
 }
@@ -323,7 +328,7 @@ pub struct ClimateMap {
     pub biome: Vec<u8>,
 }
 
-/// Temperature (biased), humidity and biome id for every column of a region.
+/// Temperature and humidity (both biased) and biome id for every column of a region.
 ///
 /// Chunk boundaries (SPEC 15): climate is sampled per column at fixed world
 /// positions, so there is no margin and no cropping.
@@ -334,6 +339,7 @@ pub fn generate_climate(
     w: u32,
     d: u32,
     temperature: &[&dyn TemperatureBias],
+    humidity: &[&dyn HumidityBias],
 ) -> ClimateMap {
     let c = Climate::new(seed);
     let n = w as usize * d as usize;
@@ -348,6 +354,7 @@ pub fn generate_climate(
                 x0.wrapping_add(cx as i32),
                 z0.wrapping_add(cz as i32),
                 temperature,
+                humidity,
             );
             m.temperature.push(t as f32);
             m.humidity.push(h as f32);
@@ -526,7 +533,7 @@ impl Generator {
     /// Per-lattice-column (center, scale) (SPEC 3.3).
     fn column_terms(&self, lx: i64, lz: i64, biases: &Biases) -> (f64, f64) {
         let (wx, wz) = ((lx * 4) as i32, (lz * 4) as i32);
-        let (t, h) = self.climate.at(wx, wz, biases.temperature);
+        let (t, h) = self.climate.at(wx, wz, biases.temperature, biases.humidity);
         let th = 1.0 - t * h;
         let a = 1.0 - th * th * th * th;
         let c = self.scale.sample2d(lx as f64 * 1.121, lz as f64 * 1.121);
@@ -695,6 +702,7 @@ impl Generator {
             return;
         }
         let tb = biases.temperature;
+        let hb = biases.humidity;
         let db = biases.density;
         let lat = self.lattice(x0, z0, w, d, biases);
         let mut col = [0u8; HEIGHT];
@@ -753,7 +761,7 @@ impl Generator {
                 &mut az,
             );
             for (i, c) in clim.iter_mut().enumerate() {
-                *c = self.climate.at(x0.wrapping_add(i as i32), wz, tb);
+                *c = self.climate.at(x0.wrapping_add(i as i32), wz, tb, hb);
             }
             let lz = (wz as i64).div_euclid(4);
             let tz = (wz as i64).rem_euclid(4) as f64 * 0.25;
