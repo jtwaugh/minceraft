@@ -1,8 +1,10 @@
 # minceraft
 
-The world generator for **Mince Raft**: a Beta-1.7.3-style overworld terrain
-generator written in Rust, compiled to WebAssembly, with a small browser
-viewer that renders it using the game's own 8×8 tileset.
+**Mince Raft**, a small voxel game about living on a raft, and its world
+generator: a Beta-1.7.3-style overworld terrain generator written in Rust,
+compiled to WebAssembly, with a small browser viewer that renders it using
+the game's own 8×8 tileset. The game itself is being built here, phase by
+phase, from the design docs in [`docs/design/`](docs/design/).
 
 The generator is a clean-room implementation written from [`SPEC.md`](SPEC.md),
 a prose description of the algorithm. No Mojang code or assets are in this

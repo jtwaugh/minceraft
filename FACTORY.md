@@ -48,7 +48,7 @@ with its own instructions and its own narrow set of allowed tools.
 | Reconciler | [`claude-idea.yml`](.github/workflows/claude-idea.yml) | An issue is labelled `idea` | Checks the idea against the code, SPEC.md and other docs; opens a PR adding it as a design doc | Change anything but that one doc |
 | Planner | [`claude-plan.yml`](.github/workflows/claude-plan.yml) | SPEC.md or a design doc changes on `master` | Breaks the next phase or changed sections into small tickets and questions | Write code, or add the `factory` label |
 | Spec editor | [`claude-spec.yml`](.github/workflows/claude-spec.yml) | The maintainer comments `/decide <option>` on a question | Records the answer in the spec or doc it's about | Add facts about the original game; touch any other file |
-| Implementer | [`claude.yml`](.github/workflows/claude.yml) | A ticket is labelled `factory`, or `@claude` in a comment | Writes the code and tests, runs every check, opens a PR | Edit SPEC.md, design docs or workflows |
+| Implementer | [`claude.yml`](.github/workflows/claude.yml) | A ticket is labelled `factory` and its dependencies are closed; any issue closing (it starts tickets that just became unblocked); `@claude` in a comment | Writes the code and tests, runs every check, opens a PR | Edit SPEC.md, design docs or workflows; rebase or force-push |
 | Reviewer | [`claude-review.yml`](.github/workflows/claude-review.yml) | A PR opens or changes | Reviews it against the spec, the rules in CLAUDE.md, and determinism | Approve or merge |
 | Docs updater | [`claude-docs.yml`](.github/workflows/claude-docs.yml) | A phase's last ticket closes; every Monday | Marks finished phases done; re-checks docs against the code | Change anything but design docs |
 
@@ -62,8 +62,8 @@ checks that every PR must pass.
 2. **Reconcile.** The reconciler reads the idea against the actual code.
    It opens a PR adding `docs/design/<name>.md` with two new sections at
    the top: *Current state* (what already exists, with file paths) and
-   *Reconciliation notes* (where the idea and the code disagree, what's
-   game-side rather than this repo, which criteria no test could check). It
+   *Reconciliation notes* (where the idea and the code disagree, what lives
+   outside this repo, which criteria no test could check). It
    never deletes or rewrites the author's text; it only adds notes beside
    it.
 3. **Accept.** The maintainer reviews and merges. Merging is acceptance.
@@ -76,9 +76,12 @@ checks that every PR must pass.
 5. **Decide.** Each question lists options. The maintainer comments
    `/decide B`, and the spec editor opens a PR writing that answer into the
    document, marked "(Decided in #N)".
-6. **Build.** The maintainer labels tickets `factory`. The implementer
-   writes the code, runs the same checks as CI, and opens a PR that cites
-   the spec sections it implements and says whether generated worlds change.
+6. **Build.** The maintainer labels tickets `factory`, all at once if they
+   like. A ticket whose dependencies are still open says what it's waiting
+   on; whenever an issue closes, every approved ticket that has just become
+   unblocked starts by itself. The implementer writes the code, runs the
+   same checks as CI, and opens a PR that cites the spec sections it
+   implements and says whether generated worlds change.
 7. **Review.** CI runs the checks. A separate reviewer agent, which did not
    write the code, reviews it and posts "ready to merge" or "changes
    needed".
@@ -222,8 +225,17 @@ Workflows fail, get cancelled, or run twice. The planner creates its
 "Plan:" issue first, with a hidden marker naming the document and phase,
 and only then the tickets; the next run sees the marker and doesn't plan
 the same phase again. Ticket progress lives in GitHub's sub-issues, not a
-hand-maintained checklist. Choosing what to plan is a plain script, not an
-agent, so it behaves the same every time.
+hand-maintained checklist. The mechanical parts are plain scripts, not
+agents, so they behave the same every time: choosing what to plan
+([`plan_targets.py`](.github/scripts/plan_targets.py)), attaching tickets
+to their plan ([`attach_subissues.py`](.github/scripts/attach_subissues.py)),
+and deciding which tickets are unblocked
+([`tickets.py`](.github/scripts/tickets.py)).
+
+That last split came from a real bug: the planner was asked to attach
+sub-issues itself, but the tool permission it was given didn't match the
+command it ran, so it silently skipped the step and no phase could ever
+finish. A script after the agent now does it every time.
 
 ### 11. Safe on a public repository
 
@@ -265,20 +277,24 @@ repositories.
 | Plan a doc's next phase by hand | `gh workflow run claude-plan.yml -f file=docs/design/<name>.md` |
 | Plan a SPEC.md section | `gh workflow run claude-plan.yml -f section="15"` |
 | Answer a question | Comment `/decide B` on it, with reasoning on the next lines |
-| Build a ticket | Label it `factory` |
+| Build tickets | Label them `factory`; each starts once its dependencies are closed |
 | Ask for a fix on a PR | Comment `@claude <what to change>` |
+| Bring a stuck PR up to date | Click "Update branch", or comment `@claude merge master into this branch and resolve the conflicts` |
 | See what's waiting | `gh issue list -l planned` |
 
 ## Map of the files
 
 ```
 CLAUDE.md                       rules every agent follows
+.github/actions/toolchain/      the Rust, wasm and Node setup agents share with CI
 FACTORY.md                      this page
 SPEC.md                         clean-room spec of Beta terrain
 docs/design/                    design docs (README.md: format and lifecycle)
 .github/CODEOWNERS              files that need the maintainer's review
 .github/prompts/reconcile.md    how to reconcile a design doc
 .github/scripts/plan_targets.py which phase or section to plan next
+.github/scripts/attach_subissues.py  attaches tickets to their plan
+.github/scripts/tickets.py      which approved tickets are unblocked
 .github/workflows/
   ci.yml                        checks on every PR
   claude-idea.yml               reconciler

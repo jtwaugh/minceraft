@@ -81,8 +81,8 @@ jobs:
                   bad.append(f"{p}: header needs a title")
               if not st or st.group(1) not in {"idea", "accepted", "done", "superseded"}:
                   bad.append(f"{p}: status must be idea, accepted, done or superseded")
-              if not sc or sc.group(1) not in {"repo", "game", "both"}:
-                  bad.append(f"{p}: scope must be repo, game or both")
+              if not sc or sc.group(1) not in {"generator", "game", "both"}:
+                  bad.append(f"{p}: scope must be generator, game or both")
               for ph, v in re.findall(r"^\s+([A-Za-z0-9]+):\s*([a-z]+)", head.split("phases:", 1)[1] if "phases:" in head else "", re.M):
                   if v not in {"todo", "done"}:
                       bad.append(f"{p}: phase {ph} must be todo or done, not {v}")
