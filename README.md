@@ -8,6 +8,37 @@ The generator is a clean-room implementation written from [`SPEC.md`](SPEC.md),
 a prose description of the algorithm. No Mojang code or assets are in this
 repository (see [Clean-room rules](#clean-room-rules)).
 
+## How this repo is built
+
+This project is built by a **software factory**: AI agents in GitHub
+Actions that turn ideas into reviewed pull requests, with one person
+deciding and merging. **[Read how it works and why →](FACTORY.md)**
+
+```mermaid
+flowchart LR
+    A["Idea"] --> B["Reconciler<br/>checks it against the code"]
+    B --> C["Design doc"]
+    C --> D["Planner<br/>small tickets + questions"]
+    D --> E["Implementer<br/>code + tests"]
+    E --> F["CI + reviewer agent"]
+    F --> G{"Maintainer merges"}
+    G -->|phase done| D
+```
+
+- **The human decides, agents do the rest.** The maintainer writes ideas,
+  answers questions (`/decide B`), picks tickets and merges. Agents can't
+  approve or merge.
+- **Clean room by construction.** The decompiled game never leaves the
+  maintainer's laptop, so the agents, running on GitHub, can't see it. They
+  implement only from [`SPEC.md`](SPEC.md), and CI blocks anything that
+  looks like copied code.
+- **Ask, don't guess.** When a spec is unclear, agents open a question with
+  options instead of picking one.
+- **A second agent reviews every PR** with fresh context, and CI checks
+  formatting, lints, tests, wasm size, the flyover and the art.
+- **Docs stay true.** Design docs record what exists, phases are marked
+  done when the code proves it, and a weekly job flags drift.
+
 ## Quick start
 
 ```sh
