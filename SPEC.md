@@ -1053,6 +1053,10 @@ With a 16-block margin the only way output can depend on region origin is
 through chains of interacting features crossing more than one cell, which
 is rare; tests comparing overlapping regions should compare blocks at
 least 16 blocks inside both regions' edges, or use a 32-block margin.
+Any fixed world order is acceptable, including one made of several passes
+over the cells (for example by cell-coordinate parity), and so is a margin
+larger than 16 blocks, chosen so that output is exactly independent of
+region origin and size. (Decided in #3.)
 
 ---
 
