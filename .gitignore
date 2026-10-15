@@ -6,3 +6,4 @@
 /viewer/textures.json
 /art/build/
 .vercel
+__pycache__/

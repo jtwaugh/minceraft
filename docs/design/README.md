@@ -39,8 +39,13 @@ behaviour themselves.
 5. **Build.** Label tickets `factory`, as for SPEC work.
 6. **Keep it true.** When a plan's last ticket closes, the docs updater
    (`claude-docs.yml`) closes the plan and opens a PR marking the phase
-   `done`; merging it plans the next phase. Every Monday it also re-reconciles each `accepted` doc against
-   the code and opens a PR for any that have drifted.
+   `done`; merging it plans the next phase. Every Monday it also
+   re-reconciles each `accepted` doc against the code and opens a PR for
+   any that have drifted.
+
+Automatic planning only follows merges by the maintainer. If a doc's next
+phase didn't get planned (several merges landing while a plan was running
+can drop one), run `gh workflow run claude-plan.yml -f file=<doc>`.
 
 ## Format
 

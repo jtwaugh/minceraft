@@ -127,9 +127,15 @@ def main():
         if set(before) == {"0"}:
             log("New branch push; nothing to compare.")
         else:
-            changed = subprocess.run(
+            diff = subprocess.run(
                 ["git", "diff", "--name-only", before, after],
-                check=True, capture_output=True, text=True).stdout.split()
+                capture_output=True, text=True)
+            if diff.returncode != 0:
+                # e.g. a force-push whose old head isn't in the checkout.
+                log(f"Can't diff {before}..{after}; planning nothing. Run the planner by hand.")
+                print("[]")
+                return
+            changed = diff.stdout.split()
             if "SPEC.md" in changed:
                 targets.append({"file": "SPEC.md", "section": ""})
             for f in changed:
