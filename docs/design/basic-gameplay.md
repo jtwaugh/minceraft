@@ -23,6 +23,9 @@ What exists today that this doc relies on or overlaps (checked against the code)
   entity, item, tool, animal or crop code in this repo. `crates/terrain` is the
   generator; `crates/web/src/lib.rs` exports only generation, height, climate
   and biome functions.
+- **Layout crate.** `crates/layout` (world-layout Phase A: bias terms,
+  channels, regions) is the only game-side crate. It holds no player, input
+  or sim code.
 - **Viewer.** `viewer/` has map tiles, a 3D view and the flyover
   (`viewer/flyover/`). `viewer/flyover/player.js` is the flyover *video*
   player (camera clock and chunk loading), not a game player. No pointer lock,
@@ -34,8 +37,10 @@ What exists today that this doc relies on or overlaps (checked against the code)
   `planter`, raft blocks, slabs or half blocks.
 - **Textures.** `art/PROMPT.md` lists `hoe`, `seeds`, `wheat_0..3`, `rice_0..3`,
   `farmland_dry`, `farmland_wet`, `planter_side`, `heart_full`, `heart_half`.
-  It lists no sword and no animal textures. Check `art/batches_*.json` for
-  what is actually drawn.
+  It lists no sword and no animal textures. `art/batches_1_6.json` draws all
+  of the listed ones (`hoe`, `seeds`, `wheat_0`, `rice_0`, `farmland_dry`,
+  `farmland_wet`, `planter_side`, `heart_full`, `heart_half`); no sword or
+  animal texture exists in `art/batches_*.json`.
 - **Spawn lists.** SPEC 14 gives Beta's creature spawn lists (sheep, pig,
   chicken, cow, wolf). It says nothing about hit points, knockback or flee
   behaviour.
@@ -72,8 +77,8 @@ belt, hands, item entities, the event system and the HUD.
    partial-height collision. `blocks.toml` supports only `none`, `full` and
    `inset`. Open question 2.
 6. **Blocks and art needed from this repo.** `farmland` (dry, wet) and crop
-   stage blocks are not in `data/blocks.toml`, although textures for them are
-   listed in `art/PROMPT.md`. No sword texture is listed. The raft and station
+   stage blocks are not in `data/blocks.toml`, although their textures are
+   now drawn (`art/batches_1_6.json`). No sword texture is listed. The raft and station
    blocks are already requested by `world-layout.md` (its note 8). The tilling
    and growth logic is `[game]`.
 7. **Rule 2 versus the world.** "Players cannot break or place blocks", yet the
