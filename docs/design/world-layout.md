@@ -69,10 +69,12 @@ and any game, sim or streaming code.
    density. Options: express islands and channels as additive density terms
    (fits today's code, but not the doc's wording or its "keeps Beta overhangs"
    claim), or add a per-column base-height hook. The second needs a SPEC 6.3
-   change, which only the maintainer can make. See open question 1.
+   change, which only the maintainer can make. Decided: add the hook
+   (Decisions, item 1).
 2. **Climate bias needs humidity.** `ClimateBias` carries `d_humid`; only
    temperature has a hook. Adding it is a small code change in `climate.rs`,
-   but SPEC 6.3 and 7 mention only temperature biases. Open question 2.
+   but SPEC 6.3 and 7 mention only temperature biases. Decided: add it
+   (Decisions, item 2).
 3. **`Exclusion` versus `ProtectedMask`.** `ProtectedMask` already covers
    "decoration skips these cells". `Exclusion::Circle/Corridor` can be built as
    a `ProtectedMask` implementation. Suggest implementing it that way, not as
@@ -86,7 +88,7 @@ and any game, sim or streaming code.
    margin) decided in #3 and described in SPEC 15, and it satisfies the doc's
    "any order gives the same blocks" criterion. Suggest treating that part of
    Phase D as done and not replacing it; replacing it would change world
-   output for every seed.
+   output for every seed. Decided: keep it (Decisions, item 6).
 6. **Beta facts to check.** The doc says the density formula reads climate.
    SPEC 3 and 7 agree (SPEC 7: one shared climate source). The doc's
    `deep_water` habitat assumes Beta seabeds are shallow; that is a
@@ -739,33 +741,41 @@ A checklist for adapting this spec to the current code:
 
 ---
 
-## Open questions (reconciler)
+## Decisions
 
-1. **Base-height hook.** Islands and channels need to shift base height before
-   the vertical falloff (Phase A, note 1).
-   - A: implement them as additive density terms on the existing hook; no SPEC
-     change, but overhang behaviour differs from what the doc promises.
-   - B: ask for a SPEC 6.3 change adding a per-column base-height hook (a
-     `decision` question for the maintainer); the doc's text stays as is.
-2. **Humidity bias.** Climate biases include `d_humid`; only temperature has a
-   hook.
-   - A: add a humidity hook alongside `TemperatureBias` (needs a SPEC 6.3/7
-     note).
-   - B: drop `d_humid` from v0 and bias temperature only.
-3. **Where the layer lives.**
-   - A: a new `std` crate (for example `crates/layout`) depending on
-     `terrain`, with the seed search binary in it.
-   - B: put the layer in `terrain` behind a `std` feature. This risks the
-     `no_std` invariant and wasm size.
-4. **Validation timing.** Does Phase B validate flat tiles on the undecorated
-   terrain (then Phase G re-checks with decoration), or always on the decorated
-   world?
-   - A: validate decorated output from Phase B (one answer, slower).
-   - B: keep the two-phase split as written.
-5. **Outside the corridor (Phase E).**
-   - A: render nothing.
-   - B: render flat open ocean at sea level via a new generator mode.
-   - C: generate normal terrain and let the camera decide.
-6. **Phase D decoration.** Keep the shipped 16 x 16 cell scheme (note 5) and
-   mark that part done, or replace it with the doc's per-cell hash scheme at
-   the cost of changing every seed's decoration?
+The reconciler's open questions, answered by the maintainer on 2026-10-15.
+Plan and build against these.
+
+1. **Base-height hook: B, add a per-column base-height hook.** Add a
+   `BaseHeightBias` term, `f(x, z) -> f64` in blocks, alongside
+   `DensityBias`. The sum of all terms, divided by 8 (blocks per lattice
+   level), is added to `center` in SPEC 3.3 step 6, evaluated at each
+   lattice column's world block coordinates. No terms means identical
+   output. `RadialBaseHeight` and the seabed part of `Channel` use this
+   hook; `Channel`'s overhang clamp near the waterline uses the existing
+   density hook. This keeps the overhangs the doc asks for. The hook is a
+   project extension point, not Beta behaviour; SPEC 6.3 only describes the
+   density hook and can be extended to list this one in a separate
+   SPEC-only change.
+2. **Humidity bias: A, add a humidity hook.** Add `HumidityBias`, mirroring
+   `TemperatureBias`: summed, added to H and clamped to [0, 1] in
+   `Climate`, before anything reads H (density, biome lookup, decoration).
+   `ClimateBias` keeps `d_humid`.
+3. **Where the layer lives: A, a new `crates/layout`.** A `std` crate that
+   depends on `terrain` and may have runtime dependencies (TOML parsing,
+   serialization, threads). It holds the `Layout` data types, the layout
+   builder, structures, validation, derived maps, navigability, the route
+   builder and the seed search binary. `crates/terrain` gets only the hooks
+   (items 1 and 2, and anything stamping needs) and stays `no_std` with no
+   runtime dependencies. Layout code stays out of the wasm unless the
+   viewer needs it.
+4. **Validation timing: B, keep the split as written.** Phase B validates
+   flat tiles on undecorated terrain; Phase G adds the decorated checks.
+5. **Outside the corridor (Phase E): A, render nothing.** Regions outside
+   the corridor are not generated or drawn. Revisit when Phase E is
+   planned.
+6. **Phase D decoration: keep the shipped scheme.** The 16 x 16 cell scheme
+   from SPEC 15 (decided in #3) stays; the doc's per-candidate hash and
+   8-block margin are not built. The decoration part of Phase D counts as
+   done; the rest of Phase D (region cache, streaming, border handling) is
+   still to do.
