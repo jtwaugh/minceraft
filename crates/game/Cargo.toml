@@ -1,0 +1,11 @@
+[package]
+name = "game"
+version = "0.1.0"
+edition = "2021"
+description = "Game-side crate: input bindings, simulation and client logic (std; not part of the wasm yet)"
+
+[dependencies]
+toml = "0.5"
+
+[lints]
+workspace = true
