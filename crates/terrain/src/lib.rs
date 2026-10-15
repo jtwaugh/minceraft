@@ -128,6 +128,10 @@ pub struct Biases<'a> {
 
 /// Generate a `w x d` region of **terrain only** (Part I plus biome surfaces
 /// and sea ice; no vegetation) whose minimum corner is world `(x0, z0)`.
+///
+/// Chunk boundaries (SPEC 15): there are none to handle here. Terrain is a
+/// function of world coordinates alone, so no margin or cropping is needed
+/// and any two overlapping regions agree.
 pub fn generate_region(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Region {
     generate_region_with_bias(seed, x0, z0, w, d, &[])
 }
@@ -149,6 +153,8 @@ pub fn generate_region_with_bias(
 }
 
 /// Terrain plus vegetation, snow and ice (SPEC Part II), no biases.
+///
+/// Chunk boundaries (SPEC 15): see [`generate_region_with_biases`].
 pub fn generate_decorated(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Region {
     generate_region_with_biases(seed, x0, z0, w, d, &Biases::default(), true)
 }
@@ -159,6 +165,20 @@ pub fn generate_decorated(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Region
 /// With `decorate = true` the terrain is generated for the region plus a
 /// margin, decorated in world-aligned 16x16 cells and cropped, so the result
 /// is identical for any region origin and size (see [`decorate`]).
+///
+/// # Chunk boundaries (SPEC 15)
+///
+/// The original populates a chunk only once its +x/+z neighbours have terrain
+/// and anchors features in a square shifted by +8 on both axes. That scheme
+/// is deliberately not reproduced. Instead:
+///
+/// - terrain runs over the region plus a margin on every side;
+/// - decoration uses fixed 16x16 cells aligned to world multiples of 16
+///   (the cell is the anchor area, so no +8 shift), each with an RNG derived
+///   from `(seed, cell x, cell z)`;
+/// - the result is cropped to the requested region.
+///
+/// Hence overlapping regions agree. Without decoration, no margin is needed.
 pub fn generate_region_with_biases(
     seed: u64,
     x0: i32,
@@ -189,6 +209,8 @@ pub fn generate_region_with_biases(
 
 /// Decorated region plus per-biome decoration statistics for features
 /// anchored inside the region.
+///
+/// Chunk boundaries (SPEC 15): see [`generate_region_with_biases`].
 pub fn generate_decorated_with_stats(
     seed: u64,
     x0: i32,
@@ -228,6 +250,10 @@ pub fn generate_heightmap_with_bias(
 /// Heightmap (same 4-byte format as [`generate_heightmap`]) with biases and
 /// optional decoration; when decorated the top block may be a log, leaves,
 /// a plant or a snow layer.
+///
+/// Chunk boundaries (SPEC 15): with `decorate` this crops the result of
+/// [`generate_region_with_biases`], so the same margin-and-cells scheme
+/// applies; without it the summary is a pure function of world coordinates.
 pub fn generate_heightmap_with_biases(
     seed: u64,
     x0: i32,
@@ -270,6 +296,9 @@ pub struct ClimateMap {
 }
 
 /// Temperature (biased), humidity and biome id for every column of a region.
+///
+/// Chunk boundaries (SPEC 15): climate is sampled per column at fixed world
+/// positions, so there is no margin and no cropping.
 pub fn generate_climate(
     seed: u64,
     x0: i32,
@@ -314,6 +343,9 @@ pub fn generate_climate(
 /// is the tallest such gap in blocks.
 /// Much cheaper per area than [`generate_heightmap`]: one lattice point per
 /// sample instead of `step * step` interpolated columns.
+///
+/// Chunk boundaries (SPEC 15): samples sit on the world-aligned lattice and
+/// there is no decoration, so no margin or cropping is involved.
 pub fn generate_coarse_heightmap(
     seed: u64,
     x0: i32,
