@@ -1,11 +1,12 @@
 //! `Layout` and the `generate_region` wrapper (design: world-layout 4.2).
 
 use crate::{
-    ChannelEval, ClimateBias, DensityTerm, Exclusion, Exclusions, HumidityTerms, TemperatureTerms,
+    ChannelEval, ClimateBias, DensityTerm, Exclusion, Exclusions, HumidityTerms, Structure,
+    TemperatureTerms,
 };
 use terrain::{
-    generate_region_with_biases, BaseHeightBias, Biases, DensityClamp, HumidityBias, ProtectedMask,
-    Region, TemperatureBias,
+    generate_region_with_biases, BaseHeightBias, Biases, Block, DensityClamp, HumidityBias,
+    ProtectedMask, Region, TemperatureBias, HEIGHT,
 };
 
 /// Blocks added around a region when testing term bounds. Generous on
@@ -20,6 +21,25 @@ pub struct Layout {
     pub density: Vec<DensityTerm>,
     pub climate: Vec<ClimateBias>,
     pub exclusions: Vec<Exclusion>,
+    pub structures: Vec<StructurePlacement>,
+}
+
+/// A structure template placed in the world (design: world-layout 4.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StructurePlacement {
+    /// Template name, e.g. `"raft_start"`.
+    pub structure: String,
+    pub origin: [i32; 3],
+    /// Quarter turns, taken mod 4.
+    pub rotation: u8,
+}
+
+/// A generated region plus the raft mask (design: world-layout 4.5).
+pub struct LayoutRegion {
+    pub region: Region,
+    /// Non-air cells of `raft = true` structures inside the region, in world
+    /// coordinates.
+    pub raft_cells: Vec<[i32; 3]>,
 }
 
 /// Axis-aligned box `(min_x, min_z, max_x, max_z)` in world blocks.
@@ -124,6 +144,71 @@ impl Layout {
         self.generate(x0, z0, w, d, decorate, |_| true)
     }
 
+    /// Like [`Layout::generate_region`], also returning the raft mask.
+    pub fn generate_layout_region(
+        &self,
+        x0: i32,
+        z0: i32,
+        w: u32,
+        d: u32,
+        decorate: bool,
+    ) -> LayoutRegion {
+        LayoutRegion {
+            region: self.generate_region(x0, z0, w, d, decorate),
+            raft_cells: self.raft_cells(x0, z0, w, d),
+        }
+    }
+
+    /// Cells `(x, y, z, block)` of every placement that fall inside the
+    /// region, with `keep` choosing which cells of each template count.
+    ///
+    /// # Panics
+    /// If a placement names a template that does not exist.
+    fn placed_cells(
+        &self,
+        (x0, z0, w, d): (i32, i32, u32, u32),
+        keep: impl Fn(&Structure, u8) -> bool,
+    ) -> Vec<(i32, i32, i32, u8)> {
+        let (x1, z1) = (x0 as i64 + w as i64, z0 as i64 + d as i64);
+        let mut out = Vec::new();
+        for p in &self.structures {
+            let s = Structure::named(&p.structure)
+                .unwrap_or_else(|| panic!("unknown structure {:?}", p.structure));
+            for c in s.cells(p.origin, p.rotation) {
+                let (x, y, z, b) = c;
+                if (x0 as i64..x1).contains(&(x as i64))
+                    && (z0 as i64..z1).contains(&(z as i64))
+                    && (0..HEIGHT as i32).contains(&y)
+                    && keep(&s, b)
+                {
+                    out.push(c);
+                }
+            }
+        }
+        out
+    }
+
+    fn raft_cells(&self, x0: i32, z0: i32, w: u32, d: u32) -> Vec<[i32; 3]> {
+        self.placed_cells((x0, z0, w, d), |s, b| s.raft && b != Block::Air as u8)
+            .into_iter()
+            .map(|(x, y, z, _)| [x, y, z])
+            .collect()
+    }
+
+    /// Overwrites the region with every placement's cells inside it.
+    fn stamp(&self, region: &mut Region) {
+        let cells = self.placed_cells(
+            (region.x0, region.z0, region.width, region.depth),
+            |_, _| true,
+        );
+        for (x, y, z, b) in cells {
+            let i = ((z - region.z0) as usize * region.width as usize + (x - region.x0) as usize)
+                * HEIGHT
+                + y as usize;
+            region.blocks[i] = b;
+        }
+    }
+
     fn generate(
         &self,
         x0: i32,
@@ -187,7 +272,9 @@ impl Layout {
             },
             ..Biases::default()
         };
-        generate_region_with_biases(self.seed, x0, z0, w, d, &biases, decorate)
+        let mut region = generate_region_with_biases(self.seed, x0, z0, w, d, &biases, decorate);
+        self.stamp(&mut region);
+        region
     }
 }
 
