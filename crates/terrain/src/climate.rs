@@ -29,6 +29,27 @@ impl<F: Fn(i32, i32) -> f64> TemperatureBias for F {
     }
 }
 
+// ===========================================================================
+// EXTENSION POINT: humidity bias terms
+// ===========================================================================
+//
+// Same contract as temperature: WORLD block column coordinates (x, z); the
+// returned value is added to the column's humidity H and the sum is clamped
+// to [0, 1] inside [`Climate::at`], before density, the biome lookup or
+// decoration read H. Default: no biases.
+
+/// A humidity bias term `f(x, z) -> f64` in world block coordinates.
+pub trait HumidityBias {
+    fn bias(&self, x: i32, z: i32) -> f64;
+}
+
+impl<F: Fn(i32, i32) -> f64> HumidityBias for F {
+    #[inline]
+    fn bias(&self, x: i32, z: i32) -> f64 {
+        self(x, z)
+    }
+}
+
 /// The three climate noise generators for one seed.
 pub struct Climate {
     temp: OctaveSimplex,
@@ -64,10 +85,23 @@ impl Climate {
         (t.clamp(0.0, 1.0), h.clamp(0.0, 1.0))
     }
 
-    /// `(T, H)` with temperature bias terms applied (T clamped to [0, 1]).
+    /// `(T, H)` with temperature and humidity bias terms applied (each
+    /// clamped to [0, 1]).
     #[inline]
-    pub fn at(&self, x: i32, z: i32, tb: &[&dyn TemperatureBias]) -> (f64, f64) {
-        let (mut t, h) = self.raw(x, z);
+    pub fn at(
+        &self,
+        x: i32,
+        z: i32,
+        tb: &[&dyn TemperatureBias],
+        hb: &[&dyn HumidityBias],
+    ) -> (f64, f64) {
+        let (mut t, mut h) = self.raw(x, z);
+        if !hb.is_empty() {
+            for b in hb {
+                h += b.bias(x, z);
+            }
+            h = h.clamp(0.0, 1.0);
+        }
         if !tb.is_empty() {
             for b in tb {
                 t += b.bias(x, z);

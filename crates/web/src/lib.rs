@@ -56,19 +56,19 @@ pub fn coarse_heightmap(seed: u64, x0: i32, z0: i32, step: u32, nx: u32, nz: u32
 /// Biome id per column (`z * w + x`); names/colours via `legend()`.
 #[wasm_bindgen]
 pub fn biome_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<u8> {
-    terrain::generate_climate(seed, x0, z0, w, d, &[]).biome
+    terrain::generate_climate(seed, x0, z0, w, d, &[], &[]).biome
 }
 
 /// Temperature T in [0, 1] per column (`z * w + x`).
 #[wasm_bindgen]
 pub fn temperature_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<f32> {
-    terrain::generate_climate(seed, x0, z0, w, d, &[]).temperature
+    terrain::generate_climate(seed, x0, z0, w, d, &[], &[]).temperature
 }
 
 /// Humidity H in [0, 1] per column (`z * w + x`).
 #[wasm_bindgen]
 pub fn humidity_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<f32> {
-    terrain::generate_climate(seed, x0, z0, w, d, &[]).humidity
+    terrain::generate_climate(seed, x0, z0, w, d, &[], &[]).humidity
 }
 
 /// Legend JSON (generated at build time from `data/*.toml`):

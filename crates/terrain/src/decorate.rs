@@ -332,9 +332,12 @@ pub fn decorate(region: &mut Region, gen: &Generator, biases: &Biases) -> Decora
     let mut biome = Vec::with_capacity(n);
     for z in 0..d {
         for x in 0..w {
-            let (t, h) = gen
-                .climate
-                .at(region.x0 + x, region.z0 + z, biases.temperature);
+            let (t, h) = gen.climate.at(
+                region.x0 + x,
+                region.z0 + z,
+                biases.temperature,
+                biases.humidity,
+            );
             temp.push(t);
             biome.push(biome_for(t, h) as u8);
         }

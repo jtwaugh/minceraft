@@ -228,7 +228,7 @@ fn desert_columns_have_sand_surface() {
     let (x0, z0) = find_desert(seed);
     let (w, d) = (256, 256);
     let r = generate_region(seed, x0, z0, w, d);
-    let cm = generate_climate(seed, x0, z0, w, d, &[]);
+    let cm = generate_climate(seed, x0, z0, w, d, &[], &[]);
     let (mut desert, mut sand) = (0, 0);
     for z in 0..d {
         for x in 0..w {
@@ -314,7 +314,7 @@ fn snow_and_ice_follow_temperature() {
     let (x0, z0, w, d) = (-200, 50, 160, 160);
     // Natural climate.
     let r = generate_decorated(12345, x0, z0, w, d);
-    let cm = generate_climate(12345, x0, z0, w, d, &[]);
+    let cm = generate_climate(12345, x0, z0, w, d, &[], &[]);
     check_snow_ice(&r, &cm);
     // Forced cold: snow on all exposed land and ice on the sea.
     let cold = |_x: i32, _z: i32| -0.8;
@@ -324,7 +324,7 @@ fn snow_and_ice_follow_temperature() {
         ..Biases::default()
     };
     let r = generate_region_with_biases(12345, x0, z0, w, d, &b, true);
-    let cm = generate_climate(12345, x0, z0, w, d, &tb);
+    let cm = generate_climate(12345, x0, z0, w, d, &tb, &[]);
     let (snow, ice) = check_snow_ice(&r, &cm);
     assert!(snow > (w * d / 4) as usize, "too little snow: {snow}");
     let water_cols = (0..d)
@@ -339,7 +339,7 @@ fn temperature_bias_shifts_biomes() {
     let (x0, z0, w, d) = (0, 0, 256, 256);
     let count = |bias: f64, b: Biome| {
         let f = move |_x: i32, _z: i32| bias;
-        let cm = generate_climate(5, x0, z0, w, d, &[&f]);
+        let cm = generate_climate(5, x0, z0, w, d, &[&f], &[]);
         cm.biome.iter().filter(|&&v| v == b as u8).count()
     };
     assert!(
@@ -577,6 +577,80 @@ fn decorated_subregions_agree_with_protected_mask() {
             );
         }
     }
+}
+
+/// A humidity term that is active in only part of the reference region.
+fn humid_patch(x: i32, z: i32) -> f64 {
+    if x > -40 && z > -60 {
+        0.4
+    } else {
+        0.0
+    }
+}
+
+#[test]
+fn decorated_subregions_agree_with_humidity_bias() {
+    let (rx, rz, rw, rd) = REF;
+    for &seed in SEEDS {
+        let b = Biases {
+            humidity: &[&humid_patch],
+            ..Biases::default()
+        };
+        for decorate in [false, true] {
+            let big = generate_region_with_biases(seed, rx, rz, rw, rd, &b, decorate);
+            for &(ox, oz, w, d) in SUBS {
+                let small = generate_region_with_biases(seed, ox, oz, w, d, &b, decorate);
+                assert_cols_agree(
+                    &small,
+                    &big,
+                    &format!("humid seed {seed} decorate {decorate} region {ox},{oz},{w}x{d}"),
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn humidity_bias_raises_h_and_changes_output() {
+    let (x0, z0, w, d) = (0, 0, 128, 128);
+    let base = generate_climate(5, x0, z0, w, d, &[], &[]);
+    let up = |_x: i32, _z: i32| 0.3;
+    let biased = generate_climate(5, x0, z0, w, d, &[], &[&up]);
+    for (a, b) in base.humidity.iter().zip(&biased.humidity) {
+        assert!(*b >= *a && *b <= 1.0);
+        assert!((*b - (*a + 0.3).min(1.0)).abs() < 1e-6);
+    }
+    assert_eq!(base.temperature, biased.temperature);
+    assert_ne!(base.biome, biased.biome);
+    let huge = |_x: i32, _z: i32| 5.0;
+    let m = generate_climate(5, x0, z0, w, d, &[], &[&huge]);
+    assert!(m.humidity.iter().all(|&h| h == 1.0));
+    // Terrain and decoration see the biased H as well.
+    let b = Biases {
+        humidity: &[&up],
+        ..Biases::default()
+    };
+    for decorate in [false, true] {
+        let a = generate_region_with_biases(5, x0, z0, 64, 64, &b, decorate);
+        let n = generate_region_with_biases(5, x0, z0, 64, 64, &Biases::default(), decorate);
+        assert_ne!(a.blocks, n.blocks);
+    }
+}
+
+#[test]
+fn empty_humidity_list_is_identity() {
+    let none: [&dyn HumidityBias; 0] = [];
+    let b = Biases {
+        humidity: &none,
+        ..Biases::default()
+    };
+    let a = generate_region_with_biases(7, -30, 20, 96, 96, &b, true);
+    let n = generate_decorated(7, -30, 20, 96, 96);
+    assert_eq!(a.blocks, n.blocks);
+    let c1 = generate_climate(7, 0, 0, 64, 64, &[], &none);
+    let c2 = generate_climate(7, 0, 0, 64, 64, &[], &[]);
+    assert_eq!(c1.humidity, c2.humidity);
+    assert_eq!(c1.biome, c2.biome);
 }
 
 #[test]
