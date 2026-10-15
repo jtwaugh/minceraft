@@ -269,6 +269,8 @@ mod channel;
 pub use channel::ChannelEval;
 mod region;
 pub use region::{generate_region, Layout};
+mod structure;
+pub use structure::{Structure, StructureError};
 
 #[cfg(test)]
 mod channel_tests;
@@ -278,5 +280,7 @@ mod climate_tests;
 mod exclusion_tests;
 #[cfg(test)]
 mod region_tests;
+#[cfg(test)]
+mod structure_tests;
 #[cfg(test)]
 mod tests;

@@ -6,6 +6,7 @@ description = "World layout bias terms built on the terrain generator (std; not 
 
 [dependencies]
 terrain = { path = "../terrain" }
+toml = "0.5"
 
 [lints]
 workspace = true
