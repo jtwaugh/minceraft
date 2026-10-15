@@ -267,8 +267,11 @@ jobs:
             step attaches every ticket and spec question the Plan body
             mentions, in the order it mentions them. So make sure the body
             lists each one as `#<number>`, build order first, questions
-            last. Before creating anything, check no Plan issue with the
-            same plan-source line exists already; if one does, stop.
+            last. Before creating anything, check no *open* Plan issue
+            with the same plan-source line exists; if one does, stop.
+            Closed plans for the same section are history (for example a
+            plan whose questions have since been answered): the pick step
+            has already decided this section needs a new plan, so go ahead.
 
             If this run created no tickets, the Plan issue says why. If it
             also opened no spec questions (SECTION needs nothing built in
