@@ -47,7 +47,9 @@ on:
         type: string
 
 concurrency:
-  group: claude-plan
+  # One planning run per target at a time. Push runs only dispatch, so each
+  # gets its own group; a shared group would let GitHub cancel queued runs.
+  group: claude-plan-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}', inputs.file, inputs.section) || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -84,14 +86,16 @@ jobs:
           echo "### Planning" >> "$GITHUB_STEP_SUMMARY"
           echo "$targets" >> "$GITHUB_STEP_SUMMARY"
           if [ "$EVENT" = push ]; then
-            # Hand each target to a dispatch run, which can run Claude.
-            echo "$targets" | jq -c '.[]' | while read -r t; do
-              file=$(echo "$t" | jq -r .file)
-              section=$(echo "$t" | jq -r .section)
+            # Hand each target to a dispatch run, which can run Claude. Any
+            # failed dispatch fails this step, so nothing is dropped silently.
+            set -euo pipefail
+            while read -r t; do
+              file=$(jq -r .file <<<"$t")
+              section=$(jq -r .section <<<"$t")
               gh workflow run claude-plan.yml --repo "$REPO" --ref master \
                 -f file="$file" -f section="$section" -f before="$BEFORE" -f after="$AFTER"
               echo "Started a planning run for $file $section" >> "$GITHUB_STEP_SUMMARY"
-            done
+            done < <(jq -c '.[]' <<<"$targets")
             targets='[]'
           fi
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
