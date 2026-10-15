@@ -8,10 +8,15 @@
                            open pull request yet.
 
 A ticket's dependencies are every issue number on its "**Depends on:**"
-line, plus any "Blocked by #n" in its body (the planner writes both). A
-dependency closed as "not planned" counts as closed. Plan issues are never
-tickets, and each ticket is started automatically at most once (marked by a
-`factory-auto-start` comment); after that, relabel it or comment @claude.
+line, plus any "Blocked by #n" in its body (the planner writes both) or in
+a comment from the maintainer or an agent (the implementer writes one when
+it stops on a question it raised mid-run). A dependency closed as "not
+planned" counts as closed. Plan issues are never tickets.
+
+Each ticket is started automatically once per set of blockers: a
+`factory-auto-start` comment marks a start, and it is started again only if
+a new "Blocked by" comment came after that start and those issues are now
+closed. Otherwise relabel it or comment @claude to retry.
 """
 import json
 import os
@@ -27,6 +32,26 @@ def gh(path):
     out = subprocess.run(["gh", "api", path],
                          check=True, capture_output=True, text=True).stdout
     return json.loads(out)
+
+
+TRUSTED = {"jtwaugh", "claude[bot]", "github-actions[bot]"}
+BLOCKED = re.compile(r"[Bb]locked by ([^\n]*)")
+
+
+def comments(n, cache={}):
+    if n not in cache:
+        cache[n] = [c for c in gh(f"repos/{REPO}/issues/{n}/comments?per_page=100")
+                    if c["user"]["login"] in TRUSTED]
+    return cache[n]
+
+
+def comment_blockers(n):
+    """(number, created_at) for each "Blocked by #x" in trusted comments."""
+    out = []
+    for c in comments(n):
+        for m in BLOCKED.finditer(c.get("body") or ""):
+            out += [(int(x), c["created_at"]) for x in re.findall(r"#(\d+)", m.group(1))]
+    return out
 
 
 def deps(body):
@@ -47,7 +72,8 @@ def state(n, cache={}):
 
 
 def open_deps(issue):
-    return sorted(d for d in deps(issue.get("body")) if d != issue["number"] and state(d) != "closed")
+    all_deps = deps(issue.get("body")) | {b for b, _ in comment_blockers(issue["number"])}
+    return sorted(d for d in all_deps if d != issue["number"] and state(d) != "closed")
 
 
 def has_open_pr(n, prs):
@@ -57,8 +83,14 @@ def has_open_pr(n, prs):
 
 
 def auto_started(n):
-    comments = gh(f"repos/{REPO}/issues/{n}/comments?per_page=100")
-    return any("<!-- factory-auto-start -->" in (c.get("body") or "") for c in comments)
+    """True if the ticket was auto-started and no new blocker was declared
+    since: then it shouldn't be started automatically again."""
+    starts = [c["created_at"] for c in comments(n)
+              if "<!-- factory-auto-start -->" in (c.get("body") or "")]
+    if not starts:
+        return False
+    newest_blocker = max((t for _, t in comment_blockers(n)), default="")
+    return newest_blocker < max(starts)
 
 
 def main():
