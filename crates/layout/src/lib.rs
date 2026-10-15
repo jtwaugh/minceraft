@@ -271,6 +271,8 @@ mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
 pub use region::{generate_region, Layout};
+mod structure;
+pub use structure::{Structure, StructureError};
 mod validation;
 pub use validation::{
     validate_island, validate_level, window, CheckResult, Thresholds, ValidationReport,
@@ -287,6 +289,8 @@ mod exclusion_tests;
 mod level_tests;
 #[cfg(test)]
 mod region_tests;
+#[cfg(test)]
+mod structure_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
