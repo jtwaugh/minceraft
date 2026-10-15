@@ -24,10 +24,12 @@ env:
 jobs:
   implement:
     # Public repo: only jtwaugh can start a run, and a labelled issue must also
-    # have been written by jtwaugh, so nobody else's text becomes the task.
+    # have been written by jtwaugh or the planner (claude[bot]), so nobody
+    # else's text becomes the task.
     if: |
       github.event.sender.login == 'jtwaugh' && (
-        (github.event_name == 'issues' && github.event.label.name == 'factory' && github.event.issue.user.login == 'jtwaugh') ||
+        (github.event_name == 'issues' && github.event.label.name == 'factory' &&
+          contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.issue.user.login)) ||
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))

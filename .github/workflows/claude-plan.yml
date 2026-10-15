@@ -1,0 +1,130 @@
+# Planner: turns a SPEC.md section into draft issues. Runs only on GitHub, so
+# it sees the repo (SPEC.md, code, issues) and never work/ or the jar.
+#
+# Run it from the Actions tab ("Claude planner" -> Run workflow), or:
+#   gh workflow run claude-plan.yml -f section="15" -f notes="..."
+#
+# It opens issues labelled "planned". Read them, edit as needed, and add the
+# "factory" label to the ones you want built, in dependency order.
+name: Claude planner
+
+on:
+  workflow_dispatch:
+    inputs:
+      section:
+        description: 'SPEC.md section(s) to plan, e.g. "15", "11.5", "Part II"'
+        required: true
+        type: string
+      notes:
+        description: "Optional guidance: priorities, what to leave out, size of tickets"
+        required: false
+        type: string
+
+concurrency:
+  group: claude-plan
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.actor == 'jtwaugh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        env:
+          SECTION: ${{ inputs.section }}
+          NOTES: ${{ inputs.notes }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            You are the planner for this repository. Break one part of
+            SPEC.md into GitHub issues that an implementer agent will later
+            pick up one at a time. You plan; you don't write code.
+
+            The section to plan is in the environment variable SECTION, and
+            optional guidance from the maintainer is in NOTES. Read them with
+            `printenv SECTION NOTES`.
+
+            ## Read first
+
+            1. CLAUDE.md, especially the clean-room rules. They apply to you:
+               every requirement you write must come from SPEC.md. Never add
+               detail from your own knowledge of Minecraft, even if you're
+               sure of it.
+            2. The SPEC.md section(s) named in SECTION, and any sections they
+               refer to.
+            3. The code that already implements related behaviour, so you
+               plan only what's missing or wrong. Note where code and spec
+               disagree.
+            4. Existing issues, open and closed:
+               `gh issue list --state all --limit 300 --json number,title,labels,state`.
+               Don't duplicate one. If an open issue already covers part of
+               the work, reference it instead.
+
+            ## Ambiguities
+
+            Where the spec is ambiguous, incomplete or contradicts itself,
+            don't guess. Open an issue labelled `spec-question` that quotes
+            the sentence, says what's unclear and what the options are, and
+            leave that part out of the tickets (or make the dependent ticket
+            say "Blocked by #n").
+
+            ## Tickets
+
+            Each ticket is one pull request's worth of work: one SPEC
+            subsection or less, typically under 300 changed lines, testable on
+            its own. Order them so each builds on the ones before. Prefer more
+            small tickets over fewer large ones.
+
+            Create each with
+            `gh issue create --label planned --title "<title>" --body-file <file>`,
+            writing the body to a file first. Use this body format:
+
+            ```
+            **Spec:** SPEC <number> (<heading>)
+            **Depends on:** #<n>, or "none"
+
+            ### What
+            <2-6 sentences: the behaviour to implement or fix, in terms of the
+            spec. Name the files likely to change.>
+
+            ### Done when
+            - [ ] <specific, checkable behaviour, each traceable to the spec>
+            - [ ] Tests cover <what>, including an overlapping-regions
+                  determinism test if the change affects generated blocks
+            - [ ] CLAUDE.md "Before opening a PR" checks pass
+
+            ### World output
+            <"Unchanged", or what should change for a fixed seed and roughly
+            how, e.g. "caves appear below y=64; surface unchanged".>
+
+            ### Out of scope
+            <what a reader might expect here but belongs to another ticket>
+            ```
+
+            Titles start with the spec number, e.g. "SPEC 11.5: big oak
+            branch clusters".
+
+            ## Finish
+
+            Create one more issue, labelled `planned`, titled
+            "Plan: SPEC <section>", listing every issue you created as a
+            checklist in build order (`- [ ] #12 SPEC 11.5: ...`), then the
+            spec-question issues, then a short note of any code/spec
+            disagreements you found.
+
+            Don't add the `factory` label to anything. The maintainer does
+            that after reviewing.
+          claude_args: |
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(git log:*)"
