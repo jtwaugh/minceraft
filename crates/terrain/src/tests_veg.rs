@@ -496,3 +496,134 @@ fn tree_density_matches_spec_formula() {
     assert!(enough(Biome::Forest), "sample has too little forest");
     assert!(stats.trees_per_chunk(Biome::Forest) > 1.5);
 }
+
+/// Sub-regions `(x0, z0, w, d)` for the determinism tests, all inside
+/// `REF`: negative, zero and cell-straddling origins, regions below one
+/// 16x16 cell, and regions ending exactly on a cell boundary.
+const SUBS: &[(i32, i32, u32, u32)] = &[
+    (0, 0, 20, 20),
+    (-1, -1, 20, 20),
+    (5, 5, 1, 1),
+    (0, 0, 1, 1),
+    (-1, -1, 1, 1),
+    (3, -7, 1, 17),
+    (15, 15, 2, 2),
+    (16, 16, 16, 16),
+    (8, 8, 16, 16),
+    (-8, -8, 16, 16),
+    (-16, -16, 16, 16),
+    (-17, -17, 33, 33),
+    (-40, 7, 41, 9),
+    (-60, -70, 100, 90),
+];
+/// The large reference region `(x0, z0, w, d)`.
+const REF: (i32, i32, u32, u32) = (-100, -100, 232, 232);
+const SEEDS: &[u64] = &[1, 12345, 0xDEAD_BEEF];
+
+/// Asserts every column of `small` equals the same world column of `big`.
+fn assert_cols_agree(small: &Region, big: &Region, ctx: &str) {
+    for z in 0..small.depth {
+        for x in 0..small.width {
+            let (wx, wz) = (small.x0 + x as i32, small.z0 + z as i32);
+            let (bx, bz) = ((wx - big.x0) as u32, (wz - big.z0) as u32);
+            assert_eq!(
+                col(small, x, z),
+                col(big, bx, bz),
+                "{ctx}: column ({wx}, {wz}) differs"
+            );
+        }
+    }
+}
+
+#[test]
+fn decorated_subregions_agree_with_reference() {
+    let (rx, rz, rw, rd) = REF;
+    for &seed in SEEDS {
+        let big = generate_decorated(seed, rx, rz, rw, rd);
+        for &(ox, oz, w, d) in SUBS {
+            let small = generate_decorated(seed, ox, oz, w, d);
+            assert_cols_agree(
+                &small,
+                &big,
+                &format!("seed {seed} region {ox},{oz},{w}x{d}"),
+            );
+        }
+    }
+}
+
+#[test]
+fn decorated_subregions_agree_with_protected_mask() {
+    let (rx, rz, rw, rd) = REF;
+    for &seed in SEEDS {
+        let mut mask = ColumnMask::new(-50, -50, 100, 100);
+        for z in -50i32..50 {
+            for x in -50i32..50 {
+                if (x + 2 * z).rem_euclid(5) != 0 {
+                    mask.set(x, z, true);
+                }
+            }
+        }
+        let b = Biases {
+            protected: Some(&mask),
+            ..Biases::default()
+        };
+        let big = generate_region_with_biases(seed, rx, rz, rw, rd, &b, true);
+        for &(ox, oz, w, d) in SUBS {
+            let small = generate_region_with_biases(seed, ox, oz, w, d, &b, true);
+            assert_cols_agree(
+                &small,
+                &big,
+                &format!("masked seed {seed} region {ox},{oz},{w}x{d}"),
+            );
+        }
+    }
+}
+
+#[test]
+fn zero_sized_regions_are_empty() {
+    let mask = ColumnMask::new(0, 0, 8, 8);
+    let b = Biases {
+        protected: Some(&mask),
+        ..Biases::default()
+    };
+    for &(w, d) in &[(0u32, 0u32), (0, 5), (5, 0), (0, 40), (40, 0)] {
+        for &(x0, z0) in &[(0, 0), (-1, -1), (16, 16)] {
+            for decorate in [false, true] {
+                let r = generate_region_with_biases(7, x0, z0, w, d, &b, decorate);
+                assert!(r.blocks.is_empty(), "{w}x{d} at {x0},{z0} not empty");
+                assert_eq!((r.width, r.depth), (w, d));
+            }
+            assert!(generate_decorated(7, x0, z0, w, d).blocks.is_empty());
+            assert!(generate_region(7, x0, z0, w, d).blocks.is_empty());
+        }
+    }
+}
+
+#[test]
+fn undecorated_regions_agree_with_decorated_where_undecorated() {
+    let (rx, rz, rw, rd) = REF;
+    for &seed in SEEDS {
+        let terrain = generate_region(seed, rx, rz, rw, rd);
+        let deco = generate_decorated(seed, rx, rz, rw, rd);
+        for &(ox, oz, w, d) in SUBS {
+            let ctx = format!("seed {seed} region {ox},{oz},{w}x{d}");
+            let t_small = generate_region(seed, ox, oz, w, d);
+            assert_cols_agree(&t_small, &terrain, &ctx);
+            let d_small = generate_decorated(seed, ox, oz, w, d);
+            for z in 0..d {
+                for x in 0..w {
+                    let (bx, bz) = ((ox - rx) as u32 + x, (oz - rz) as u32 + z);
+                    if col(&deco, bx, bz) == col(&terrain, bx, bz) {
+                        assert_eq!(
+                            col(&d_small, x, z),
+                            col(&t_small, x, z),
+                            "{ctx}: ({}, {}) decorated in small only",
+                            ox + x as i32,
+                            oz + z as i32
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
