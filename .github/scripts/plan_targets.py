@@ -4,7 +4,8 @@
 Prints a JSON list of {"file", "section"} targets for the plan job's matrix.
 
 - workflow_dispatch: FILE and SECTION from the inputs. For a design doc with
-  no SECTION, the doc's next phase.
+  no SECTION, the doc's next phase. Merges reach this as dispatch runs too:
+  the Claude action can't run on push, so the push run starts them.
 - push to master: SPEC.md changed -> plan the changed SPEC sections (empty
   section; the planner reads the diff). A design doc changed -> its next
   phase, if one is due.
@@ -154,7 +155,9 @@ def main():
         f = os.environ.get("FILE") or "SPEC.md"
         section = os.environ.get("SECTION", "").strip()
         if f == "SPEC.md":
-            if not section:
+            # An empty section is allowed when a SPEC.md merge started this
+            # run (BEFORE/AFTER set): the planner plans what the diff touched.
+            if not section and not (os.environ.get("BEFORE") and os.environ.get("AFTER")):
                 print("::error::Give a section to plan from SPEC.md.")
                 sys.exit(1)
             targets.append({"file": f, "section": section})
