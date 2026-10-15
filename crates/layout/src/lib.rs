@@ -239,9 +239,14 @@ impl ProtectedMask for Exclusions {
     }
 }
 
+mod region;
+pub use region::{generate_region, Layout};
+
 #[cfg(test)]
 mod climate_tests;
 #[cfg(test)]
 mod exclusion_tests;
+#[cfg(test)]
+mod region_tests;
 #[cfg(test)]
 mod tests;
