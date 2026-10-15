@@ -1,7 +1,7 @@
 //! World layout: bias terms that steer the terrain generator.
 //! See docs/design/world-layout.md (Phase A).
 
-use terrain::{BaseHeightBias, HumidityBias, ProtectedMask, TemperatureBias};
+use terrain::{BaseHeightBias, DensityClamp, HumidityBias, ProtectedMask, TemperatureBias};
 
 /// Hermite smoothstep from `e0` to `e1`; `e0 > e1` gives a falling edge.
 pub fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
@@ -14,8 +14,8 @@ pub fn falloff(d: f64, r_inner: f64, r_outer: f64) -> f64 {
     smoothstep(r_outer, r_inner, d)
 }
 
-/// A term that shapes the terrain. Only base-height terms exist so far.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// A term that shapes the terrain.
+#[derive(Clone, Debug, PartialEq)]
 pub enum DensityTerm {
     /// Raises (or lowers) the base height by up to `delta` blocks around
     /// `center` (world x, z): full effect inside `r_inner`, none beyond
@@ -26,20 +26,46 @@ pub enum DensityTerm {
         r_outer: f64,
         delta: f64,
     },
+    /// A navigable channel along the polyline `points` (world x, z). With
+    /// `d` the distance to the polyline and
+    /// `w = falloff(d, half_width, half_width + falloff)`: the base height
+    /// moves toward `SEA_LEVEL - depth_below_sea` by `w`, and for
+    /// `SEA_LEVEL - depth_below_sea <= y < SEA_LEVEL + clear_above` the
+    /// density is clamped toward -1 by `w` (no overhangs, seabed carved).
+    Channel {
+        points: Vec<(f64, f64)>,
+        half_width: f64,
+        falloff: f64,
+        depth_below_sea: f64,
+        clear_above: i32,
+    },
 }
 
 impl BaseHeightBias for DensityTerm {
-    fn bias(&self, x: i32, z: i32) -> f64 {
-        match *self {
+    fn bias(&self, x: i32, z: i32, base: f64) -> f64 {
+        match self {
             DensityTerm::RadialBaseHeight {
                 center,
                 r_inner,
                 r_outer,
                 delta,
             } => {
+                let (center, delta) = (*center, *delta);
                 let d = (x as f64 - center.0).hypot(z as f64 - center.1);
-                delta * falloff(d, r_inner, r_outer)
+                delta * falloff(d, *r_inner, *r_outer)
             }
+            DensityTerm::Channel { .. } => {
+                ChannelEval::new(self).map_or(0.0, |c| c.bias(x, z, base))
+            }
+        }
+    }
+}
+
+impl DensityClamp for DensityTerm {
+    fn clamp(&self, x: i32, y: i32, z: i32, density: f64) -> f64 {
+        match ChannelEval::new(self) {
+            Some(c) => c.clamp(x, y, z, density),
+            None => density,
         }
     }
 }
@@ -239,9 +265,13 @@ impl ProtectedMask for Exclusions {
     }
 }
 
+mod channel;
+pub use channel::ChannelEval;
 mod region;
 pub use region::{generate_region, Layout};
 
+#[cfg(test)]
+mod channel_tests;
 #[cfg(test)]
 mod climate_tests;
 #[cfg(test)]
