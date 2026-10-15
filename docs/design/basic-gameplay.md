@@ -162,8 +162,10 @@ Select tool | 1 to 5, mouse wheel | press edge
 
 Each phase ends with something playable in the browser test scene.
 
-> **Reconciler:** no browser test scene exists; the only page is the viewer
-> (`viewer/index.html`). All phases are `[game]`. Open question 1.
+> **Reconciler:** no browser test scene exists in this repo; the only page is
+> the viewer (`viewer/index.html`). The browser test scene lives in the game
+> repo, so Phase 1 needs nothing from this repo. All phases are `[game]`.
+> (Decided in #30.)
 
 **1. Input and camera.** Pointer lock, bindings, `TickInput` accumulation with latched edges, free-look camera with FOV and interpolation. Done when looking and moving a debug camera feels smooth at 60 fps with the sim at 20 Hz.
 
@@ -235,10 +237,6 @@ Each phase ends with something playable in the browser test scene.
 
 ## Open questions (reconciler)
 
-1. **Where does the browser test scene live?**
-   - A: in the game repo (matches `scope: game`).
-   - B: a new page in `viewer/`, plain ES modules, no bundler.
-   - C: a headless sim in a separate crate here, viewer unchanged.
 2. **Partial-height collision data.**
    - A: a game-side shape table; `blocks.toml` unchanged.
    - B: add `collision` values (for example `"half"`) in `data/blocks.toml`
