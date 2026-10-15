@@ -268,7 +268,7 @@ How each density bias applies:
 - `RadialBaseHeight`: before the vertical falloff in the density formula, `base_height += delta * falloff(d, r_inner, r_outer)`. Positive `delta` raises land, negative pushes it below sea level.
 - `Channel`: let `d` be the distance from the column to the nearest point on the polyline and `w = falloff(d, half_width, half_width + falloff)`.
   - Lower the base height so the seabed sits about `depth_below_sea` below `SEA_LEVEL`, scaled by `w`. The term is target-relative: the base-height hook receives the column's unbiased base height as well, `f(x, z, base)` in blocks, and the term is `(target - base) * w` with `target = SEA_LEVEL - depth_below_sea`. This changes the hook's signature from Decision 1, which gave `f(x, z)`. (Decided in #19.)
-  - For `SEA_LEVEL - 1 <= y < SEA_LEVEL + clear_above`, clamp density to `min(density, lerp(density, -1.0, w))`. This removes overhangs above the waterline inside the channel.
+  - For `target <= y < SEA_LEVEL + clear_above`, with `target` as above, clamp density to `min(density, lerp(density, -1.0, w))`. This carves the channel down to the seabed and removes overhangs above the waterline inside it, so the seabed and the water path hold on any terrain. The base-height term stays as decided and smooths the carve. (Decided in #42.)
 
 > **Reconciler:** the second `Channel` bullet is a function of final density
 > and `y`, and the existing additive hook does not receive the density value.
