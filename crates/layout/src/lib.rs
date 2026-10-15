@@ -265,6 +265,8 @@ impl ProtectedMask for Exclusions {
     }
 }
 
+mod builder;
+pub use builder::{build_layout, default_v0_level};
 mod channel;
 pub use channel::ChannelEval;
 mod level;
@@ -279,6 +281,8 @@ pub use validation::{
     CHECK_ISLAND_AREA, CHECK_SPAWN_CLEAR,
 };
 
+#[cfg(test)]
+mod builder_tests;
 #[cfg(test)]
 mod channel_tests;
 #[cfg(test)]
