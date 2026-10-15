@@ -1,9 +1,11 @@
 //! `Layout` and the `generate_region` wrapper (design: world-layout 4.2).
 
-use crate::{ClimateBias, DensityTerm, Exclusion, Exclusions, HumidityTerms, TemperatureTerms};
+use crate::{
+    ChannelEval, ClimateBias, DensityTerm, Exclusion, Exclusions, HumidityTerms, TemperatureTerms,
+};
 use terrain::{
-    generate_region_with_biases, BaseHeightBias, Biases, HumidityBias, ProtectedMask, Region,
-    TemperatureBias,
+    generate_region_with_biases, BaseHeightBias, Biases, DensityClamp, HumidityBias, ProtectedMask,
+    Region, TemperatureBias,
 };
 
 /// Blocks added around a region when testing term bounds. Generous on
@@ -38,10 +40,16 @@ fn polyline(points: &[(f64, f64)], reach: f64) -> Option<Bounds> {
 
 impl DensityTerm {
     fn bounds(&self) -> Option<Bounds> {
-        match *self {
+        match self {
             DensityTerm::RadialBaseHeight {
                 center, r_outer, ..
-            } => Some(circle(center, r_outer)),
+            } => Some(circle(*center, *r_outer)),
+            DensityTerm::Channel {
+                points,
+                half_width,
+                falloff,
+                ..
+            } => polyline(points, half_width + falloff),
         }
     }
 }
@@ -129,7 +137,7 @@ impl Layout {
             .density
             .iter()
             .filter(|t| keep(t.bounds()))
-            .copied()
+            .cloned()
             .collect();
         let climate: Vec<ClimateBias> = self
             .climate
@@ -144,8 +152,21 @@ impl Layout {
                 .cloned()
                 .collect(),
         );
-        let base_height: Vec<&dyn BaseHeightBias> =
-            density.iter().map(|t| t as &dyn BaseHeightBias).collect();
+        // Channels are compiled once so each segment keeps its bounding box.
+        let channels: Vec<Option<ChannelEval>> = density.iter().map(ChannelEval::new).collect();
+        let base_height: Vec<&dyn BaseHeightBias> = density
+            .iter()
+            .zip(&channels)
+            .map(|(t, c)| match c {
+                Some(c) => c as &dyn BaseHeightBias,
+                None => t as &dyn BaseHeightBias,
+            })
+            .collect();
+        let clamp: Vec<&dyn DensityClamp> = channels
+            .iter()
+            .flatten()
+            .map(|c| c as &dyn DensityClamp)
+            .collect();
         let temp = TemperatureTerms(&climate);
         let humid = HumidityTerms(&climate);
         let temperature: [&dyn TemperatureBias; 1] = [&temp];
@@ -158,6 +179,7 @@ impl Layout {
             },
             humidity: if climate.is_empty() { &[] } else { &humidity },
             base_height: &base_height,
+            clamp: &clamp,
             protected: if exclusions.0.is_empty() {
                 None
             } else {

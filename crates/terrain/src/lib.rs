@@ -113,24 +113,50 @@ impl<F: Fn(i32, i32, i32) -> f64> DensityBias for F {
 // EXTENSION POINT: per-column base-height terms (SPEC 3.3, 6.3)
 // ===========================================================================
 //
-// Every term receives WORLD block coordinates (x, z) and returns a height
-// offset in blocks. The sum of all terms, divided by 8 (blocks per vertical
+// Every term receives WORLD block coordinates (x, z) and the column's
+// unbiased base height `base` in blocks, and returns a height offset in
+// blocks. The sum of all terms, divided by 8 (blocks per vertical
 // lattice level), is added to `center` in SPEC 3.3 step 6, evaluated at each
 // lattice column's world block coordinates (lattice x * 4, lattice z * 4).
 // Positive values raise the terrain, negative values lower it. Default: none.
 //
-// Any `Fn(i32, i32) -> f64` closure implements `BaseHeightBias`.
+// Any `Fn(i32, i32, f64) -> f64` closure implements `BaseHeightBias`.
 
-/// A base-height bias term `f(x, z) -> f64` in world block coordinates; the
-/// result is in blocks.
+/// A base-height bias term `f(x, z, base) -> f64` in world block
+/// coordinates. `base` is the column's unbiased base height in blocks (the
+/// column `center` of SPEC 3.3 step 6 times 8); the result is in blocks.
 pub trait BaseHeightBias {
-    fn bias(&self, x: i32, z: i32) -> f64;
+    fn bias(&self, x: i32, z: i32, base: f64) -> f64;
 }
 
-impl<F: Fn(i32, i32) -> f64> BaseHeightBias for F {
+impl<F: Fn(i32, i32, f64) -> f64> BaseHeightBias for F {
     #[inline]
-    fn bias(&self, x: i32, z: i32) -> f64 {
-        self(x, z)
+    fn bias(&self, x: i32, z: i32, base: f64) -> f64 {
+        self(x, z, base)
+    }
+}
+
+// ===========================================================================
+// EXTENSION POINT: density clamps (SPEC 6.3)
+// ===========================================================================
+//
+// Every clamp receives WORLD block coordinates and the interpolated density
+// (after the additive `DensityBias` terms) and returns the new density. The
+// clamps run in list order, immediately before the `rho > 0` test. Default:
+// none.
+//
+// Any `Fn(i32, i32, i32, f64) -> f64` closure implements `DensityClamp`.
+
+/// A density clamp `f(x, y, z, density) -> density` in world block
+/// coordinates.
+pub trait DensityClamp {
+    fn clamp(&self, x: i32, y: i32, z: i32, density: f64) -> f64;
+}
+
+impl<F: Fn(i32, i32, i32, f64) -> f64> DensityClamp for F {
+    #[inline]
+    fn clamp(&self, x: i32, y: i32, z: i32, density: f64) -> f64 {
+        self(x, y, z, density)
     }
 }
 
@@ -146,8 +172,11 @@ impl<F: Fn(i32, i32) -> f64> BaseHeightBias for F {
 ///   lookup, sea ice, decoration and snow.
 /// - `humidity`: humidity bias terms, world `(x, z)`; added to H (then
 ///   clamped to [0, 1]) before H is used anywhere.
-/// - `base_height`: per-column base-height terms, world `(x, z)`, in blocks;
-///   their sum / 8 is added to the column `center` (SPEC 3.3 step 6).
+/// - `base_height`: per-column base-height terms, world `(x, z)` plus the
+///   unbiased base height, in blocks; their sum / 8 is added to the column
+///   `center` (SPEC 3.3 step 6).
+/// - `clamp`: density clamps, world `(x, y, z)` plus the density, applied in
+///   order after `density` and before the `rho > 0` test.
 /// - `protected`: cells decoration must never modify (raft mask, spawn
 ///   water). Terrain itself is not affected by the mask.
 #[derive(Clone, Copy, Default)]
@@ -156,6 +185,7 @@ pub struct Biases<'a> {
     pub temperature: &'a [&'a dyn TemperatureBias],
     pub humidity: &'a [&'a dyn HumidityBias],
     pub base_height: &'a [&'a dyn BaseHeightBias],
+    pub clamp: &'a [&'a dyn DensityClamp],
     pub protected: Option<&'a dyn ProtectedMask>,
 }
 
@@ -562,7 +592,12 @@ impl Generator {
         let d = d * 17.0 / 16.0;
         let mut center = 17.0 / 2.0 + d * 4.0;
         if !biases.base_height.is_empty() {
-            let blocks: f64 = biases.base_height.iter().map(|b| b.bias(wx, wz)).sum();
+            let base = center * 8.0;
+            let blocks: f64 = biases
+                .base_height
+                .iter()
+                .map(|b| b.bias(wx, wz, base))
+                .sum();
             center += blocks / 8.0;
         }
         (center, scale)
@@ -704,6 +739,7 @@ impl Generator {
         let tb = biases.temperature;
         let hb = biases.humidity;
         let db = biases.density;
+        let cb = biases.clamp;
         let lat = self.lattice(x0, z0, w, d, biases);
         let mut col = [0u8; HEIGHT];
         let mut lev = [0.0f64; LEVELS];
@@ -793,6 +829,9 @@ impl Generator {
                     // ---- density bias extension point (SPEC 6.3) ----
                     for b in db {
                         rho += b.bias(wx, y as i32, wz);
+                    }
+                    for c in cb {
+                        rho = c.clamp(wx, y as i32, wz, rho);
                     }
                     col[y] = if rho > 0.0 {
                         STONE

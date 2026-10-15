@@ -247,8 +247,8 @@ fn empty_base_height_is_identical() {
 fn base_height_raises_and_lowers() {
     let seed = 12345;
     let base = mean_top(&generate_heightmap(seed, 0, 0, 96, 96));
-    let up = |_: i32, _: i32| 16.0;
-    let down = |_: i32, _: i32| -16.0;
+    let up = |_: i32, _: i32, _: f64| 16.0;
+    let down = |_: i32, _: i32, _: f64| -16.0;
     let ups: [&dyn BaseHeightBias; 1] = [&up];
     let downs: [&dyn BaseHeightBias; 1] = [&down];
     let run = |t: &[&dyn BaseHeightBias]| {
@@ -273,8 +273,8 @@ fn base_height_raises_and_lowers() {
 #[test]
 fn base_height_overlapping_regions_agree() {
     let seed = 777;
-    let a = |x: i32, z: i32| (x as f64 * 0.05).sin() * 10.0 + z as f64 * 0.1;
-    let c = |x: i32, _z: i32| if x > 20 { 6.0 } else { -3.0 };
+    let a = |x: i32, z: i32, _: f64| (x as f64 * 0.05).sin() * 10.0 + z as f64 * 0.1;
+    let c = |x: i32, _z: i32, _: f64| if x > 20 { 6.0 } else { -3.0 };
     let terms: [&dyn BaseHeightBias; 2] = [&a, &c];
     let b = Biases {
         base_height: &terms,

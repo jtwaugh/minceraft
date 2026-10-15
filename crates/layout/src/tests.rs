@@ -27,9 +27,9 @@ fn falloff_shape() {
 
 #[test]
 fn radial_returns_delta_times_falloff() {
-    assert_eq!(ISLAND.bias(0, 0), 40.0);
-    assert_eq!(ISLAND.bias(100, 0), 0.0);
-    assert_eq!(ISLAND.bias(40, 0), 40.0 * falloff(40.0, 24.0, 64.0));
+    assert_eq!(ISLAND.bias(0, 0, 68.0), 40.0);
+    assert_eq!(ISLAND.bias(100, 0, 68.0), 0.0);
+    assert_eq!(ISLAND.bias(40, 0, 68.0), 40.0 * falloff(40.0, 24.0, 64.0));
 }
 
 #[test]
