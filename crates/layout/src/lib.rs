@@ -271,6 +271,11 @@ mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
 pub use region::{generate_region, Layout};
+mod validation;
+pub use validation::{
+    validate_island, validate_level, window, CheckResult, Thresholds, ValidationReport,
+    CHECK_ISLAND_AREA, CHECK_SPAWN_CLEAR,
+};
 
 #[cfg(test)]
 mod channel_tests;
@@ -284,3 +289,5 @@ mod level_tests;
 mod region_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod validation_tests;
