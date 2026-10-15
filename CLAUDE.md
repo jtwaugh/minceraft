@@ -49,8 +49,8 @@ contaminate the codebase in a way that can't be undone.
 
 ## Design docs
 
-`docs/design/README.md` defines the format and lifecycle (idea, proposed,
-accepted, done). When a ticket comes from a design doc:
+`docs/design/README.md` defines the format and lifecycle (idea, accepted,
+done, superseded). When a ticket comes from a design doc:
 
 - The doc says what to build; SPEC.md still says how Beta behaves. Never
   take Beta facts from a design doc.
@@ -64,8 +64,8 @@ accepted, done). When a ticket comes from a design doc:
 ## The loop
 
 1. Ideas arrive as issues labelled `idea`. The reconciler
-   (`claude-idea.yml`) opens a PR adding `docs/design/<name>.md` as
-   `proposed`; merging it makes the doc `accepted`.
+   (`claude-idea.yml`) opens a PR adding `docs/design/<name>.md` marked
+   `accepted`; merging the PR is the acceptance.
 2. The planner (`claude-plan.yml`) turns a SPEC section, or a phase of an
    accepted design doc, into `planned` tickets and `spec-question` issues,
    attached as sub-issues of a "Plan:" issue. It also runs when SPEC.md

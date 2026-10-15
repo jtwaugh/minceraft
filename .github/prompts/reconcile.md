@@ -55,7 +55,9 @@ the doc says, what the code does, and what you suggest. Be brief.
 
 ## Opening the pull request
 
-- New docs get `status: proposed`. Existing docs keep their status unless
+- New docs, and docs that were `idea`, get `status: accepted`: the open PR
+  is the proposal, and merging it is acceptance, so the file must already
+  say `accepted` when it lands. Existing docs keep their status unless
   every phase in this repo is now done, in which case set `done`.
 - File name: `docs/design/<short-kebab-name>.md`.
 - One PR, changing only that file. Title: `Design: <title> (<status>)`.
