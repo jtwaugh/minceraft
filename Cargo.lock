@@ -22,6 +22,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "game-web"
+version = "0.1.0"
+dependencies = [
+ "game",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "layout"
 version = "0.1.0"
 dependencies = [
