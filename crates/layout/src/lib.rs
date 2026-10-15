@@ -270,7 +270,7 @@ pub use channel::ChannelEval;
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
-pub use region::{generate_region, Layout};
+pub use region::{generate_region, Layout, LayoutRegion, StructurePlacement};
 mod structure;
 pub use structure::{Structure, StructureError};
 mod validation;
@@ -287,6 +287,8 @@ mod climate_tests;
 mod exclusion_tests;
 #[cfg(test)]
 mod level_tests;
+#[cfg(test)]
+mod raft_tests;
 #[cfg(test)]
 mod region_tests;
 #[cfg(test)]

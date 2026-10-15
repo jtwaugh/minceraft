@@ -156,6 +156,14 @@ impl Structure {
         Structure::parse(RAFT_START).expect("raft_start.toml is valid")
     }
 
+    /// The built-in template called `name`, if there is one.
+    pub fn named(name: &str) -> Option<Structure> {
+        match name {
+            "raft_start" => Some(Structure::raft_start()),
+            _ => None,
+        }
+    }
+
     /// Every cell `(x, y, z, block)`, air included, placed at `origin` and
     /// turned `rotation` quarter turns (mod 4) about `origin`. A quarter turn
     /// maps an offset `(dx, dz)` from the origin to `(-dz, dx)`, so

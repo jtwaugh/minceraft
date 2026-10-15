@@ -120,6 +120,7 @@ fn busy_layout(seed: u64) -> Layout {
                 radius: 25.0,
             },
         ],
+        ..Layout::default()
     }
 }
 
