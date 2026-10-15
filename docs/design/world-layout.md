@@ -5,7 +5,7 @@ scope: both
 source: "#10"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -18,6 +18,7 @@ phases:
 
 What exists today that this doc relies on or overlaps (checked against the code):
 
+- **Phase A is done** (plan #17): base-height hook (#33), humidity hook (#34), `crates/layout` with `RadialBaseHeight` (#35), `Exclusion` as a `ProtectedMask` (#37), `ClimateBias` (#39), `Layout` and the `generate_region` wrapper (#40), `Channel` (#45, with #31, #27 and #43). The bullets below predate it.
 - **Generator entry points.** `crates/terrain/src/lib.rs` has
   `generate_region(seed, x0, z0, w, d)`, `generate_decorated`,
   `generate_region_with_biases(.., &Biases, decorate)` and
