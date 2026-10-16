@@ -1,0 +1,32 @@
+# The controller reports whether the drawn eye is in a water cell, in walk and
+# fly mode; scene.js switches to the underwater fog and tint on it. The raft
+# scene's water fills y = 49..64 and the player spawns with its eye above it.
+
+case the spawn eye is above the surface
+start walk raft
+frame 50 x2
+expect underwater = false
+
+case flying down through the surface goes underwater, and back up leaves it
+start walk raft
+click
+lock
+press KeyF
+expect mode = fly
+down ShiftLeft
+frame 50 x6       # 10 blocks a second: about 2.5 blocks down after the trailing tick
+up ShiftLeft
+frame 50 x2
+expect eye.y < 64
+expect underwater = true
+down Space
+frame 50 x8
+up Space
+frame 50 x2
+expect eye.y > 64
+expect underwater = false
+
+case outside any loaded region is never underwater
+start fly
+frame 50 x2
+expect underwater = false
