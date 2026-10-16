@@ -1,0 +1,12 @@
+# Fish species for the spawn query (docs/design/world-layout.md Phase C).
+# Read by crates/layout/src/fish.rs.
+#
+# No species ship yet (decided in #93); the species list is a later ticket.
+# Schema, one table per species:
+#
+# [[species]]
+# id        = "name"            # unique
+# weight    = 10                # relative spawn weight, > 0
+# habitats  = ["cold_open"]     # habitat ids (data/habitats.toml); unset = any
+# temp_min / temp_max           # column temperature, inclusive, 0..1; unset = any
+# depth_min / depth_max         # water depth in blocks, inclusive; unset = any
