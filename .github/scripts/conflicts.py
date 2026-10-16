@@ -7,7 +7,8 @@ Only same-repo, non-draft PRs on claude/ branches (the implementer's) are
 listed. A PR is skipped if Claude already gave up on its conflicts for the
 current head commit: a comment containing <!-- conflict-stop --> written
 after that commit. Push a new commit (or merge master yourself) and it's
-eligible again.
+eligible again. With ONLY_PR=<n> (the workflow's `pr` input), only that PR
+is considered, and an earlier stop doesn't skip it.
 
 GitHub works out mergeability in the background after master moves, so a
 PR whose state is still unknown is asked again a few times.
@@ -41,9 +42,12 @@ def mergeable_state(n, tries=6, wait=10):
 
 
 def main():
+    only = os.environ.get("ONLY_PR", "").strip().lstrip("#")
     out = []
     for pr in gh(f"repos/{REPO}/pulls?state=open&per_page=100"):
         n, ref = pr["number"], pr["head"]["ref"]
+        if only and str(n) != only:
+            continue
         if pr["draft"] or pr["head"]["repo"]["full_name"] != REPO or not ref.startswith("claude/"):
             continue
         full = mergeable_state(n)
@@ -55,7 +59,7 @@ def main():
         head_time = gh(f"repos/{REPO}/commits/{sha}")["commit"]["committer"]["date"]
         stopped = any(STOP in (c.get("body") or "") and c["created_at"] > head_time
                       for c in gh(f"repos/{REPO}/issues/{n}/comments?per_page=100"))
-        if stopped:
+        if stopped and not only:
             print(f"#{n}: conflicts, but Claude already stopped on this commit; leaving it", file=sys.stderr)
             continue
         print(f"#{n}: conflicts with master", file=sys.stderr)

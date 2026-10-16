@@ -8,13 +8,18 @@
 # that commit). Fewer conflicts arise in the first place because tickets
 # wait for open PRs on the same files (.github/scripts/tickets.py).
 #
-# Run by hand: gh workflow run resolve-conflicts.yml
+# Run by hand: gh workflow run resolve-conflicts.yml [-f pr=<n>]
 name: Resolve conflicts
 
 on:
   pull_request:
     types: [closed]
   workflow_dispatch:
+    inputs:
+      pr:
+        description: "Only this PR, even if Claude stopped on it before (optional)"
+        required: false
+        type: string
 
 env:
   NOTE: >-
@@ -41,6 +46,7 @@ jobs:
       - id: find
         env:
           GH_TOKEN: ${{ github.token }}
+          ONLY_PR: ${{ inputs.pr }}
         run: |
           prs=$(python3 -B .github/scripts/conflicts.py)
           echo "prs=$prs" >> "$GITHUB_OUTPUT"
@@ -91,7 +97,11 @@ jobs:
             This pull request now conflicts with master because other pull
             requests merged. Bring it up to date; change nothing else.
 
-            1. `git fetch origin master`, then `git merge origin/master`.
+            1. `git fetch origin master`. The Claude action has replaced
+               CLAUDE.md with master's copy (unstaged), which stops a merge:
+               run `git restore CLAUDE.md` first (also `.claude` or
+               `.mcp.json` if `git status` lists them; master's copies come
+               back with the merge). Then `git merge origin/master`.
             2. Resolve each conflict so both sides survive: master's new
                code and this PR's change. Read both sides first
                (`git log --oneline -5 origin/master -- <file>` helps).
@@ -115,7 +125,7 @@ jobs:
                and then names the conflicting files and why you stopped.
           claude_args: |
             --max-turns 60
-            --allowedTools "Edit,Write,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git fetch:*),Bash(git merge:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin claude/*),Bash(cargo fmt:*),Bash(cargo clippy:*),Bash(cargo test:*),Bash(cargo build:*),Bash(./build.sh:*),Bash(node --test:*),Bash(python3:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --allowedTools "Edit,Write,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git fetch:*),Bash(git merge:*),Bash(git restore CLAUDE.md),Bash(git restore .claude:*),Bash(git restore .mcp.json),Bash(git add:*),Bash(git commit:*),Bash(git push origin claude/*),Bash(cargo fmt:*),Bash(cargo clippy:*),Bash(cargo test:*),Bash(cargo build:*),Bash(./build.sh:*),Bash(node --test:*),Bash(python3:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
             --append-system-prompt "Follow CLAUDE.md, above all its clean-room rules: never edit SPEC.md or anything in docs/design/, and add no behaviour that neither side of the merge has. ${{ env.NOTE }}"
 
       # Did the branch move (merge pushed), or did Claude say why it stopped?
