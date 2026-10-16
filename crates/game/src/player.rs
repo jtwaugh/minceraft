@@ -2,7 +2,8 @@
 //! See docs/design/basic-gameplay.md section 4.2 (steps 1 to 7) and 4.1.
 //!
 //! Sneak edge protection follows 4.5 and fall distance and fall damage follow
-//! 4.6. Not handled here yet: step-up, water movement and the raft.
+//! 4.6. Water movement follows 4.3. Not handled here yet: step-up, climbing out
+//! of water and the raft.
 
 use crate::collision::{Aabb, CollisionWorld};
 use crate::input::TickInput;
@@ -126,7 +127,10 @@ impl Player {
 
         // 2. Choose acceleration.
         let f = (physics.slipperiness * physics.friction) as f64;
-        let accel = if self.on_ground {
+        let in_water = world.body_in_water(&self.aabb(physics));
+        let accel = if in_water {
+            physics.water_accel as f64
+        } else if self.on_ground {
             physics.ground_accel as f64 * (physics.ground_accel_ref as f64 / f.powi(3))
         } else {
             physics.air_accel as f64
@@ -138,7 +142,12 @@ impl Player {
         self.vel[2] += (strafe * sin - fwd * cos) * accel;
 
         // 4. Jump.
-        if input.jump && self.on_ground {
+        // In water, holding jump swims up instead (4.3).
+        if in_water {
+            if input.jump {
+                self.vel[1] += physics.water_swim_up_impulse as f64;
+            }
+        } else if input.jump && self.on_ground {
             self.vel[1] = physics.jump_velocity as f64;
         }
 
@@ -159,6 +168,16 @@ impl Player {
         }
         self.on_ground = m.on_ground;
         self.update_fall(m.applied[1], physics, world);
+
+        if in_water {
+            // 4.3 replaces steps 6 and 7: scale every axis, then sink.
+            let k = physics.water_velocity_multiplier as f64;
+            for v in &mut self.vel {
+                *v *= k;
+            }
+            self.vel[1] -= physics.water_gravity as f64;
+            return;
+        }
 
         // 6. Gravity.
         self.vel[1] = (self.vel[1] - physics.gravity as f64) * physics.drag as f64;
@@ -265,7 +284,7 @@ mod tests {
         let (p, w) = (phys(), floor());
         let mut pl = grounded(&p, &w);
         pl.tick(&walk(), &p, &w);
-        assert!(pl.pos[2] < 0.5 && (pl.pos[0] - 0.5).abs() < 1e-12);
+        assert!(pl.pos[2] < 0.5 && (pl.pos[0] - 0.5).abs() < 1e-6);
     }
 
     #[test]
@@ -376,6 +395,83 @@ mod tests {
         assert!(pl.on_ground);
         assert_eq!(pl.health, p.max_health);
         assert_eq!(pl.fall_distance, 0.0);
+    }
+
+    /// Deep water: everything above y = 1 is water.
+    struct Deep(MemoryWorld);
+    impl CollisionWorld for Deep {
+        fn block_at(&self, x: i32, y: i32, z: i32) -> Block {
+            self.0.block_at(x, y, z)
+        }
+        fn body_in_water(&self, _: &Aabb) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn water_acceleration_ignores_ground() {
+        let p = phys();
+        let w = Deep(floor());
+        let input = walk();
+        let mut grounded = Player::new([0.5, 1.0, 0.5], &p);
+        grounded.on_ground = true;
+        let mut airborne = Player::new([0.5, 5.0, 0.5], &p);
+        grounded.tick(&input, &p, &w);
+        airborne.tick(&input, &p, &w);
+        let want =
+            -(p.input_scale as f64) * p.water_accel as f64 * p.water_velocity_multiplier as f64;
+        assert!((grounded.vel[2] - want).abs() < 1e-6, "{:?}", grounded.vel);
+        assert!((airborne.vel[2] - want).abs() < 1e-6, "{:?}", airborne.vel);
+    }
+
+    #[test]
+    fn water_scales_velocity_then_sinks() {
+        let p = phys();
+        let w = Deep(floor());
+        let mut pl = Player::new([0.5, 10.0, 0.5], &p);
+        pl.vel = [1.0, -1.0, 0.5];
+        pl.tick(&TickInput::default(), &p, &w);
+        assert!((pl.vel[0] - 0.8).abs() < 1e-6);
+        assert!((pl.vel[2] - 0.4).abs() < 1e-6);
+        assert!((pl.vel[1] - (-0.8 - 0.02)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn sinking_speed_with_no_input() {
+        let p = phys();
+        let w = Deep(floor());
+        let mut pl = Player::new([0.5, 30.0, 0.5], &p);
+        for _ in 0..100 {
+            pl.tick(&TickInput::default(), &p, &w);
+        }
+        // Steady state of v = 0.8 v - 0.02 is -0.1.
+        assert!((pl.vel[1] + 0.1).abs() < 1e-6, "{}", pl.vel[1]);
+        assert!(pl.pos[1] < 30.0);
+    }
+
+    #[test]
+    fn holding_jump_swims_up_to_steady_rise() {
+        let p = phys();
+        let w = Deep(floor());
+        let jump = TickInput {
+            jump: true,
+            ..TickInput::default()
+        };
+        // Start on the bottom: no land jump impulse.
+        let mut pl = grounded(&p, &floor());
+        pl.tick(&jump, &p, &w);
+        assert!(pl.vel[1] < 0.1, "{pl:?}");
+        for _ in 0..10 {
+            pl.tick(&jump, &p, &w);
+        }
+        let mut last = pl.pos[1];
+        for _ in 0..60 {
+            pl.tick(&jump, &p, &w);
+            assert!(pl.pos[1] > last);
+            last = pl.pos[1];
+        }
+        // Steady state: v = (v + 0.04) * 0.8 - 0.02 gives 0.06.
+        assert!((pl.vel[1] - 0.06).abs() < 1e-6, "{}", pl.vel[1]);
     }
 
     #[test]

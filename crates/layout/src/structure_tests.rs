@@ -54,6 +54,7 @@ fn cells_are_pure() {
     assert_eq!(s.cells(ORIGIN, 1), Structure::raft_start().cells(ORIGIN, 1));
 }
 
+#[cfg(feature = "toml-io")]
 #[test]
 fn asymmetric_template_rotates_offsets() {
     let s = Structure::parse(
@@ -66,10 +67,12 @@ fn asymmetric_template_rotates_offsets() {
     );
 }
 
+#[cfg(feature = "toml-io")]
 fn with(size: &str, palette: &str, layers: &str) -> String {
     format!("size={size}\norigin_offset=[0,0,0]\npalette={palette}\nlayers={layers}\n")
 }
 
+#[cfg(feature = "toml-io")]
 #[test]
 fn bad_templates_are_rejected() {
     let p = "{ A = \"stone\", \".\" = \"air\" }";

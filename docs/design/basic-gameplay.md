@@ -237,7 +237,7 @@ Track fall distance while airborne, reset on landing or entering water. On landi
 
 ### 4.7 Standing on the raft
 
-The raft is a moving rigid body (see the mechanics spec's boat section). For any entity whose `on_ground` support comes from a raft cell:
+The raft is a moving rigid body. Phase 3 adds a minimal raft entity in `crates/game` that owns the raft mask, anchors at the anchorage, and each tick produces a `RaftFrame { displacement: [f64; 3], yaw_delta: f64 (radians), tilt: [f64; 2] (degrees about the x and z axes) }` from a data-driven swell model (amplitude, period and direction in `data/raft.toml`). Raft travel and steering are not part of Phase 3. (Decided in #139.) For any entity whose `on_ground` support comes from a raft cell:
 
 - Before the entity's own movement, translate it by the raft's displacement this tick, and rotate it around the raft's center by the raft's yaw change.
 - The raft's collision boxes are its mask cells, translated by the raft's displacement and rotated in 90-degree steps only, so they stay axis-aligned for the collision resolver of 4.4. A carried entity gets the same quarter turns around the raft's center. (Decided in #140.)

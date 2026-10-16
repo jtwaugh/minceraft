@@ -59,6 +59,7 @@ fn t() -> Thresholds {
     Thresholds::shipped()
 }
 
+#[cfg(feature = "toml-io")]
 #[test]
 fn thresholds_come_from_data_file() {
     assert_eq!(t().min_island_columns, 150);

@@ -2,15 +2,17 @@
 //! and a TOML loader and writer. `[route]` and `[climate]` belong to later
 //! phases and are ignored.
 
+#[cfg(feature = "toml-io")]
 use std::collections::HashSet;
 use std::fmt;
+#[cfg(feature = "toml-io")]
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use terrain::SEA_LEVEL;
 
 /// Per-level metadata for the game.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "toml-io", derive(serde::Serialize, serde::Deserialize))]
 pub struct Level {
     pub id: String,
     pub week: u32,
@@ -62,20 +64,24 @@ impl fmt::Display for LevelFileError {
 
 impl std::error::Error for LevelFileError {}
 
-#[derive(Serialize, Deserialize)]
+#[cfg(feature = "toml-io")]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct RawWorld {
     seed: u64,
     sea_level: i64,
 }
 
 // Unknown top-level tables (`[route]`, `[climate]`) are ignored by serde.
-#[derive(Serialize, Deserialize)]
+#[cfg(feature = "toml-io")]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Raw {
     world: RawWorld,
     #[serde(default, rename = "level")]
     levels: Vec<Level>,
 }
 
+/// Reading and writing level files needs the `toml-io` feature.
+#[cfg(feature = "toml-io")]
 impl LevelFile {
     pub fn from_toml(text: &str) -> Result<Self, LevelFileError> {
         let raw: Raw = toml::from_str(text).map_err(|e| LevelFileError::Parse(e.to_string()))?;

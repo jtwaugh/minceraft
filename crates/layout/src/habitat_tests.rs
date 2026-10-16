@@ -121,6 +121,7 @@ fn free_function_uses_shipped_rules() {
     assert_eq!(classify(&inp()), h.id_of("temperate_open").unwrap());
 }
 
+#[cfg(feature = "toml-io")]
 #[test]
 fn bad_files_are_rejected() {
     let unknown = "[[habitat]]\nid='a'\nbottom=['nope']\n[[habitat]]\nid='z'\n";
@@ -134,6 +135,7 @@ fn bad_files_are_rejected() {
     assert!(Habitats::from_toml(typo).is_err());
 }
 
+#[cfg(feature = "toml-io")]
 #[test]
 fn baked_rules_equal_runtime_parse() {
     let text = include_str!("../../../data/habitats.toml");

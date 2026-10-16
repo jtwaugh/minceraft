@@ -1,31 +1,25 @@
 //! Fish species and the spawn query (docs/design/world-layout.md Phase C).
 //!
-//! Species come from `data/fish.toml`. `species_for` returns the species
+//! Species come from `data/fish.toml`, parsed by `build.rs`. `species_for` returns the species
 //! whose habitat, temperature and depth ranges contain a column, with their
 //! weights. Time of day is not used yet (decided in #93).
 
-use crate::habitat::{HabitatId, Habitats};
-use serde::Deserialize;
+use crate::habitat::HabitatId;
+#[cfg(feature = "toml-io")]
+use crate::habitat::Habitats;
 
-const DEFAULT_FISH: &str = include_str!("../../../data/fish.toml");
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawSpecies {
-    id: String,
-    weight: u32,
-    habitats: Option<Vec<String>>,
-    temp_min: Option<f64>,
-    temp_max: Option<f64>,
-    depth_min: Option<u32>,
-    depth_max: Option<u32>,
+/// A species as emitted by `build.rs`; habitats are rule indices.
+pub(crate) struct StaticSpecies {
+    pub id: &'static str,
+    pub weight: u32,
+    pub habitats: Option<&'static [usize]>,
+    pub temp_min: Option<f64>,
+    pub temp_max: Option<f64>,
+    pub depth_min: Option<u32>,
+    pub depth_max: Option<u32>,
 }
 
-#[derive(Deserialize)]
-struct RawFile {
-    #[serde(default)]
-    species: Vec<RawSpecies>,
-}
+include!(concat!(env!("OUT_DIR"), "/fish.rs"));
 
 /// What the query knows about one water column.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -67,54 +61,41 @@ pub struct Fish {
 
 impl Fish {
     /// Parse a fish file; habitat names are resolved against `habitats`.
+    #[cfg(feature = "toml-io")]
     pub fn from_toml(text: &str, habitats: &Habitats) -> Result<Self, String> {
-        let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
-        let mut species: Vec<Species> = Vec::new();
-        for r in raw.species {
-            if species.iter().any(|p| p.id == r.id) {
-                return Err(format!("duplicate species id '{}'", r.id));
-            }
-            if r.weight == 0 {
-                return Err(format!("species '{}': weight must be > 0", r.id));
-            }
-            if let (Some(a), Some(b)) = (r.temp_min, r.temp_max) {
-                if a > b {
-                    return Err(format!("species '{}': temp_min > temp_max", r.id));
-                }
-            }
-            if let (Some(a), Some(b)) = (r.depth_min, r.depth_max) {
-                if a > b {
-                    return Err(format!("species '{}': depth_min > depth_max", r.id));
-                }
-            }
-            let hab = match r.habitats {
-                None => None,
-                Some(names) => {
-                    let mut ids = Vec::new();
-                    for n in &names {
-                        ids.push(habitats.id_of(n).ok_or_else(|| {
-                            format!("species '{}': unknown habitat '{}'", r.id, n)
-                        })?);
-                    }
-                    Some(ids)
-                }
-            };
-            species.push(Species {
+        let rules = crate::fish_rules::parse_species(text, &|n| habitats.id_of(n).map(|h| h.0))?;
+        let species = rules
+            .into_iter()
+            .map(|r| Species {
                 id: r.id,
                 weight: r.weight,
-                habitats: hab,
+                habitats: r.habitats.map(|h| h.into_iter().map(HabitatId).collect()),
                 temp_min: r.temp_min,
                 temp_max: r.temp_max,
                 depth_min: r.depth_min,
                 depth_max: r.depth_max,
-            });
-        }
+            })
+            .collect();
         Ok(Fish { species })
     }
 
-    /// The shipped `data/fish.toml` against the shipped habitats.
+    /// The shipped `data/fish.toml`, baked in at build time.
     pub fn shipped() -> Self {
-        Self::from_toml(DEFAULT_FISH, &Habitats::shipped()).expect("data/fish.toml is valid")
+        let species = SHIPPED_SPECIES
+            .iter()
+            .map(|r| Species {
+                id: r.id.to_string(),
+                weight: r.weight,
+                habitats: r
+                    .habitats
+                    .map(|h| h.iter().copied().map(HabitatId).collect()),
+                temp_min: r.temp_min,
+                temp_max: r.temp_max,
+                depth_min: r.depth_min,
+                depth_max: r.depth_max,
+            })
+            .collect();
+        Fish { species }
     }
 
     /// Species whose ranges contain `column`, as `(species id, weight)` in
