@@ -8,7 +8,7 @@ use crate::interactions::{
     resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
     TargetFacts,
 };
-use crate::item_entities::{ItemEntityConfig, ItemStore};
+use crate::item_entities::{Deck, ItemEntityConfig, ItemStore};
 use crate::items::{ItemInstance, Items, PlayerState};
 use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
@@ -288,6 +288,12 @@ impl Walker {
                 self.player.tick(input, &self.physics, &world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
+                let deck = Deck {
+                    raft: &f.raft,
+                    tilt: frame.tilt,
+                    push: &f.push,
+                };
+                self.items.tick(&world, Some(deck));
                 let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -295,6 +301,7 @@ impl Walker {
                 self.player.tick(input, &self.physics, &self.world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
+                self.items.tick(&self.world, None);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -374,7 +381,20 @@ impl Walker {
         self.facts = ctx.facts;
         if input.interact {
             self.interact();
+        } else if input.drop {
+            self.drop_carried(input);
         }
+    }
+
+    /// Drop throws the carried item from the eye along the look direction.
+    /// With empty hands it does nothing.
+    fn drop_carried(&mut self, input: &TickInput) {
+        let Some(carried) = self.state.hands.take() else {
+            return;
+        };
+        let speed = self.items.config().throw_speed;
+        let velocity = look_dir(input).map(|c| c * speed);
+        self.items.spawn(carried, self.cur_eye, velocity);
     }
 
     /// Interact picks up the targeted loose item if the hands are empty.
@@ -470,6 +490,13 @@ struct Aim {
     boxed: Option<(Aabb, bool)>,
 }
 
+/// Unit look vector, the same as `Pose::forward` in camera.rs, in f64.
+fn look_dir(input: &TickInput) -> [f64; 3] {
+    let (sy, cy) = (input.yaw as f64).sin_cos();
+    let (sp, cp) = (input.pitch as f64).sin_cos();
+    [sy * cp, sp, -cy * cp]
+}
+
 /// What the ray from `eye` along the look angles of `input` hits, blocks and
 /// entities both, with the names rules match on and the box to outline.
 fn aim(
@@ -479,10 +506,7 @@ fn aim(
     eye: [f64; 3],
     input: &TickInput,
 ) -> Aim {
-    // Same forward vector as `Pose::forward` in camera.rs, in f64.
-    let (sy, cy) = (input.yaw as f64).sin_cos();
-    let (sp, cp) = (input.pitch as f64).sin_cos();
-    let dir = [sy * cp, sp, -cy * cp];
+    let dir = look_dir(input);
     let target = cast_target(world, entities, cfg, eye, dir);
     match target {
         Target::Block { pos, .. } => {
@@ -702,6 +726,69 @@ mod tests {
         w.tick(&down);
         assert_eq!(w.hands(), None);
         assert_eq!(w.items().len(), 1);
+    }
+
+    fn drop_input(yaw: f32, pitch: f32) -> TickInput {
+        TickInput {
+            drop: true,
+            yaw,
+            pitch,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn drop_throws_the_item_along_the_look_direction() {
+        let speed = ItemEntityConfig::default_from_data().throw_speed;
+        for (yaw, pitch) in [(0.0f32, 0.0f32), (1.0, 0.4), (-2.5, -0.7), (3.0, 1.2)] {
+            let mut w = settled();
+            w.state.hands = Some(seeds());
+            w.tick(&drop_input(yaw, pitch));
+            assert_eq!(w.hands(), None);
+            assert_eq!(w.items().len(), 1);
+            let e = w.items().iter().next().unwrap();
+            assert_eq!(e.item, seeds());
+            assert_eq!(e.pos, w.eye(1.0));
+            let (sy, cy) = (f64::from(yaw).sin(), f64::from(yaw).cos());
+            let (sp, cp) = (f64::from(pitch).sin(), f64::from(pitch).cos());
+            let want = [sy * cp, sp, -cy * cp].map(|c| c * speed);
+            for i in 0..3 {
+                assert!((e.velocity[i] - want[i]).abs() < 1e-9, "{yaw} {pitch}");
+            }
+        }
+    }
+
+    #[test]
+    fn drop_with_empty_hands_does_nothing() {
+        let mut w = settled();
+        w.tick(&drop_input(0.0, 0.0));
+        assert_eq!(w.hands(), None);
+        assert!(w.items().is_empty());
+    }
+
+    #[test]
+    fn dropped_item_lands_and_can_be_picked_up_again() {
+        let mut w = settled();
+        w.state.hands = Some(seeds());
+        w.tick(&drop_input(0.0, -0.3));
+        for _ in 0..80 {
+            w.tick(&TickInput::default());
+        }
+        let e = w.items().iter().next().unwrap().clone();
+        assert!(e.velocity.iter().all(|v| *v == 0.0), "came to rest");
+        // Look at the landed item from the eye.
+        let eye = w.eye(1.0);
+        let d = [0, 1, 2].map(|i| e.pos[i] - eye[i]);
+        let flat = (d[0] * d[0] + d[2] * d[2]).sqrt();
+        let aim = TickInput {
+            interact: true,
+            yaw: d[0].atan2(-d[2]) as f32,
+            pitch: d[1].atan2(flat) as f32,
+            ..TickInput::default()
+        };
+        w.tick(&aim);
+        assert_eq!(w.hands(), Some(&seeds()));
+        assert!(w.items().is_empty());
     }
 
     #[test]

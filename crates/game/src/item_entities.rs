@@ -31,6 +31,8 @@ pub struct ItemEntityConfig {
     pub drag: f64,
     /// Extra fraction of horizontal velocity kept each tick while resting.
     pub ground_friction: f64,
+    /// Speed a dropped item leaves the eye at, blocks per second.
+    pub throw_speed: f64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -58,7 +60,7 @@ impl ItemEntityConfig {
         ItemEntityConfig::parse(DEFAULT_ITEMS).expect("data/items.toml is valid")
     }
 
-    /// Parse items text. `box_size` and `gravity` must be finite numbers
+    /// Parse items text. `box_size`, `gravity` and `throw_speed` must be finite numbers
     /// above zero; `drag` and `ground_friction` must lie in `[0, 1]`.
     pub fn parse(text: &str) -> Result<ItemEntityConfig, ItemEntityError> {
         let root: toml::Value = text
@@ -100,6 +102,7 @@ impl ItemEntityConfig {
             gravity: positive("gravity")?,
             drag: fraction("drag")?,
             ground_friction: fraction("ground_friction")?,
+            throw_speed: positive("throw_speed")?,
         })
     }
 }
