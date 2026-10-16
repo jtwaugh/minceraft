@@ -106,7 +106,7 @@ belt, hands, item entities, the event system and the HUD.
 Status: draft
 Scope: player input, camera, movement (land, water, raft deck), the interaction model, and the first two tools: sword and hoe.
 
-Companion to `WORLD_LAYOUT_SPEC.md`. Physics values come from Beta 1.7.3 via `MECHANICS_SPEC.md`. Numbers marked **(verify)** are from memory of Beta's behavior and must be checked against the extracted spec before they are treated as final. Everything tunable lives in data files so feel can be adjusted without code changes.
+Companion to `WORLD_LAYOUT_SPEC.md`. The physics numbers in this document are this game's own values, not claims about Beta, and no Beta parity is intended. They live in a data file and are tunable, and the tests check against those numbers (where a test says "the mechanics spec", it means these values). The **(verify)** marks on them no longer mean "check against Beta"; they only flag numbers likely to be retuned for feel. Everything tunable lives in data files so feel can be adjusted without code changes. (Decided in #90.)
 
 ---
 
@@ -546,6 +546,3 @@ Each phase ends with something playable in the browser test scene.
 3. **Missing sections 2.2 to 11.**
    - A: paste them into this file so the planner can read them.
    - B: keep them in the game repo; this doc stays a summary.
-4. **Player physics facts.**
-   - A: a `research` spec-question; the maintainer adds them to `SPEC.md`.
-   - B: the game defines its own numbers and does not claim Beta parity.
