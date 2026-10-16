@@ -6,6 +6,7 @@ description = "Game-side crate: input bindings, simulation and client logic (std
 
 [dependencies]
 toml = "0.5"
+terrain = { path = "../terrain" }
 
 [lints]
 workspace = true
