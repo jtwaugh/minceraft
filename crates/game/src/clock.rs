@@ -10,6 +10,8 @@ pub const TICK_SECONDS: f64 = 1.0 / TICKS_PER_SECOND as f64;
 /// Most ticks one frame may run. A frame longer than this many ticks (0.5 s)
 /// drops the excess time instead of spiralling: the sim falls behind real time
 /// rather than freezing the renderer. Frames up to 100 ms never reach the cap.
+/// A Rust constant on purpose: it is a safety limit of the loop, not a
+/// gameplay tunable, and changing it would change nothing a player can see.
 pub const MAX_TICKS_PER_FRAME: u32 = 10;
 
 /// What a frame should do: run `ticks` sim ticks, then render at `alpha`.

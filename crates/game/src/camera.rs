@@ -7,7 +7,9 @@
 use crate::input::TickInput;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
-/// Debug fly speed in blocks per tick (10 blocks per second).
+/// Debug fly speed in blocks per tick (10 blocks per second). A Rust constant
+/// on purpose: fly mode is a debug camera that real movement (design section 4)
+/// replaces, so it is not a tunable worth shipping in `data/`.
 pub const FLY_SPEED: f32 = 0.5;
 
 /// Position and look angles at one tick.
@@ -27,6 +29,15 @@ pub fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
         d += TAU;
     }
     a + d * t
+}
+
+/// Clamp a movement axis to -1..1; NaN counts as 0.
+fn clamp_axis(v: f32) -> f32 {
+    if v.is_nan() {
+        0.0
+    } else {
+        v.clamp(-1.0, 1.0)
+    }
 }
 
 impl Pose {
@@ -131,6 +142,18 @@ impl Camera {
         self.prev.lerp(self.cur, alpha.clamp(0.0, 1.0))
     }
 
+    /// Like [`Camera::view`], but with the per-frame look (`yaw`, `pitch`)
+    /// replacing the interpolated look (design 2.2: look is applied every
+    /// frame, the sim reads it at the tick boundary). Position still
+    /// interpolates between ticks.
+    pub fn view_with_look(&self, alpha: f32, yaw: f32, pitch: f32) -> Pose {
+        Pose {
+            yaw,
+            pitch: pitch.clamp(-FRAC_PI_2, FRAC_PI_2),
+            ..self.view(alpha)
+        }
+    }
+
     /// Debug fly step: take look from `input`, move along the look direction
     /// (forward), strafe, and up (jump) / down (sneak). No collision.
     pub fn fly_tick(&mut self, input: &TickInput) {
@@ -140,8 +163,17 @@ impl Camera {
         let f = next.forward();
         let r = next.right();
         let up = f32::from(input.jump) - f32::from(input.sneak);
+        // Clamp each axis to -1..1, then limit the combined magnitude to 1 so
+        // diagonals are no faster than straight lines.
+        let (mf, ms) = (
+            clamp_axis(input.move_forward),
+            clamp_axis(input.move_strafe),
+        );
+        let len = (mf * mf + ms * ms).sqrt();
+        let scale = if len > 1.0 { 1.0 / len } else { 1.0 };
+        let (mf, ms) = (mf * scale, ms * scale);
         for i in 0..3 {
-            next.pos[i] += FLY_SPEED * (f[i] * input.move_forward + r[i] * input.move_strafe);
+            next.pos[i] += FLY_SPEED * (f[i] * mf + r[i] * ms);
         }
         next.pos[1] += FLY_SPEED * up;
         self.push(next);
@@ -232,6 +264,40 @@ mod tests {
             ..TickInput::default()
         });
         assert_eq!(c.current().pos, [FLY_SPEED, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn view_with_look_uses_the_frame_look_and_interpolated_position() {
+        let mut c = Camera::new(Pose::default(), 70.0);
+        c.push(Pose {
+            pos: [2.0, 0.0, 0.0],
+            yaw: 1.0,
+            pitch: 0.5,
+        });
+        let v = c.view_with_look(0.5, 0.9, 9.0);
+        assert_eq!(v.pos, [1.0, 0.0, 0.0]);
+        assert_eq!(v.yaw, 0.9);
+        assert_eq!(v.pitch, FRAC_PI_2);
+    }
+
+    #[test]
+    fn fly_diagonal_is_no_faster_and_inputs_are_clamped() {
+        let dist = |mf: f32, ms: f32| {
+            let mut c = Camera::new(Pose::default(), 70.0);
+            c.fly_tick(&TickInput {
+                move_forward: mf,
+                move_strafe: ms,
+                ..TickInput::default()
+            });
+            let p = c.current().pos;
+            (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt()
+        };
+        assert!(close(dist(1.0, 1.0), FLY_SPEED));
+        assert!(close(dist(1.0, 0.0), FLY_SPEED));
+        assert!(close(dist(5.0, 0.0), FLY_SPEED));
+        assert!(close(dist(-9.0, 9.0), FLY_SPEED));
+        assert!(close(dist(0.5, 0.0), FLY_SPEED * 0.5));
+        assert_eq!(dist(f32::NAN, 0.0), 0.0);
     }
 
     #[test]
