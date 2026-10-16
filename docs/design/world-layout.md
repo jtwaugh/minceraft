@@ -501,6 +501,11 @@ id = "temperate_open"   # fallback
 ```
 
 - Fish spawn query: `species_for(column) -> weighted list` filtering `data/fish.toml` by habitat, temperature, depth, and time of day.
+  Time of day is left out of Phase C: the query filters by habitat,
+  temperature and depth only, and time of day is added when a day/night cycle
+  exists. Phase C ships the `fish.toml` schema and its loader only, with
+  test-only species and no shipped species list. The query lives in
+  `crates/layout`. (Decided in #93.)
 - Viewer mode showing habitats.
 
 Done when:
