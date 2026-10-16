@@ -1,0 +1,69 @@
+# Keeps the factory's GitHub Project board in step with the repo.
+#
+# Sets each card's Status: Inbox, Approved, Blocked, Nits, Ready for Merge,
+# Done. The rules are in .github/scripts/project_sync.py. Every run
+# recomputes the whole board, so a missed event is fixed by the next run,
+# and a schedule catches anything no event covers.
+#
+# Setup (once):
+# - Secret PROJECT_TOKEN: a classic personal access token with the `project`
+#   scope. The project belongs to your account, so the workflow's own token
+#   can't edit it.
+# - Variable PROJECT_NUMBER: the number in the project's URL
+#   (github.com/users/jtwaugh/projects/<number>).
+# - The project's Status field has the six options above, spelled exactly.
+# Until both are set, the job is skipped.
+name: Project sync
+
+on:
+  issues:
+    types: [opened, labeled, unlabeled, closed, reopened]
+  pull_request:
+    types: [opened, synchronize, reopened, closed, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+  workflow_run:
+    workflows: ["CI", "Claude reviewer", "Review gate", "PR size"]
+    types: [completed]
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+# Each run rebuilds the whole board, so only the newest one matters.
+concurrency:
+  group: project-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+jobs:
+  sync:
+    # Only with setup done; never for forks; for comments, only the
+    # reviewer's verdicts and the maintainer's /override.
+    if: |
+      vars.PROJECT_NUMBER != '' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name != 'issue_comment' || contains(fromJSON('["claude[bot]", "jtwaugh"]'), github.event.comment.user.login))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Update the board
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
+        run: |
+          if [ -z "$PROJECT_TOKEN" ]; then
+            echo "::error::Add the PROJECT_TOKEN secret (classic token, project scope)."
+            exit 1
+          fi
+          python3 -B .github/scripts/project_sync.py | tee -a "$GITHUB_STEP_SUMMARY"
