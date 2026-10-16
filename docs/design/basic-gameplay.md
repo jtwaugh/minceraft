@@ -240,6 +240,7 @@ Track fall distance while airborne, reset on landing or entering water. On landi
 The raft is a moving rigid body (see the mechanics spec's boat section). For any entity whose `on_ground` support comes from a raft cell:
 
 - Before the entity's own movement, translate it by the raft's displacement this tick, and rotate it around the raft's center by the raft's yaw change.
+- The raft's collision boxes are its mask cells, translated by the raft's displacement and rotated in 90-degree steps only, so they stay axis-aligned for the collision resolver of 4.4. A carried entity gets the same quarter turns around the raft's center. (Decided in #140.)
 - Deck tilt from swells does not move the player directly. Instead, it adds a small horizontal push down-slope each tick (data, default 0.004 per degree of tilt), so standing still on a rocking raft means drifting slowly unless you sneak. Sneaking cancels the push.
 - Loose item entities on the deck get the same push at double strength, so dropped items slide.
 
