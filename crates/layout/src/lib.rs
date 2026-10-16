@@ -286,6 +286,8 @@ mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
 pub use region::{generate_region, Layout, LayoutRegion, StructurePlacement};
+mod region_coord;
+pub use region_coord::{RegionCoord, REGION_SIZE};
 mod retry;
 pub use retry::{find_level, find_v0_level, LevelFound, RetryError};
 mod structure;
@@ -320,6 +322,8 @@ mod habitat_tests;
 mod level_tests;
 #[cfg(test)]
 mod raft_tests;
+#[cfg(test)]
+mod region_coord_tests;
 #[cfg(test)]
 mod region_tests;
 #[cfg(test)]
