@@ -8,6 +8,7 @@ use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::scene::RaftScene;
+use crate::targeting::{cast_block, Target, TargetingConfig};
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use terrain::{Block, Region, HEIGHT};
@@ -132,6 +133,8 @@ pub struct Walker {
     floating: Option<Floating>,
     prev_eye: [f64; 3],
     cur_eye: [f64; 3],
+    block_reach: f64,
+    target: Target,
 }
 
 impl Walker {
@@ -141,6 +144,8 @@ impl Walker {
         let physics = PlayerPhysics::default_from_data()?;
         let player = Player::new(feet, &physics);
         let eye = eye_above(feet, &physics, false);
+        let targeting = TargetingConfig::default_from_data()
+            .map_err(|e| PhysicsError::Invalid(e.to_string()))?;
         Ok(Walker {
             player,
             physics,
@@ -148,6 +153,8 @@ impl Walker {
             floating: None,
             prev_eye: eye,
             cur_eye: eye,
+            block_reach: targeting.block_reach as f64,
+            target: Target::None,
         })
     }
 
@@ -219,11 +226,23 @@ impl Walker {
                     .advance(&frame, &mut [&mut self.player], &self.physics);
                 let world = RaftWorld::new(&self.world, &f.raft);
                 self.player.tick(input, &self.physics, &world);
+                self.prev_eye = self.cur_eye;
+                self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
+                self.target = eye_target(&world, self.cur_eye, input, self.block_reach);
             }
-            None => self.player.tick(input, &self.physics, &self.world),
+            None => {
+                self.player.tick(input, &self.physics, &self.world);
+                self.prev_eye = self.cur_eye;
+                self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
+                self.target = eye_target(&self.world, self.cur_eye, input, self.block_reach);
+            }
         }
-        self.prev_eye = self.cur_eye;
-        self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
+    }
+
+    /// What the eye ray pointed at after the latest tick (basic-gameplay.md
+    /// section 5). `Target::None` before the first tick.
+    pub fn target(&self) -> Target {
+        self.target
     }
 
     /// The eye between the last two ticks, `alpha` in 0..1.
@@ -247,6 +266,15 @@ impl Walker {
         let up = self.physics.eye_offset(false) as f64;
         self.teleport([eye[0], eye[1] - up, eye[2]]);
     }
+}
+
+/// The block the ray from `eye` along the look angles of `input` hits.
+fn eye_target(world: &impl CollisionWorld, eye: [f64; 3], input: &TickInput, reach: f64) -> Target {
+    // Same forward vector as `Pose::forward` in camera.rs, in f64.
+    let (sy, cy) = (input.yaw as f64).sin_cos();
+    let (sp, cp) = (input.pitch as f64).sin_cos();
+    let dir = [sy * cp, sp, -cy * cp];
+    cast_block(world, eye, dir, reach).map_or(Target::None, |(t, _)| t)
 }
 
 /// The eye position for feet at `feet`.
@@ -299,6 +327,71 @@ mod tests {
             ..TickInput::default()
         });
         assert!((w.eye(1.0)[1] - (feet + 1.62 - 0.08)).abs() < 1e-6);
+    }
+
+    fn look(pitch: f32, sneak: bool) -> TickInput {
+        TickInput {
+            pitch,
+            sneak,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn looking_down_targets_the_block_under_the_feet() {
+        let mut w = settled();
+        assert_eq!(w.target(), Target::None);
+        w.tick(&look(-std::f32::consts::FRAC_PI_2, false));
+        assert_eq!(
+            w.target(),
+            Target::Block {
+                pos: [0, 3, 0],
+                face: crate::targeting::Face::Top
+            }
+        );
+    }
+
+    #[test]
+    fn horizon_over_open_air_targets_nothing() {
+        let mut w = settled();
+        w.tick(&look(0.0, false));
+        assert_eq!(w.target(), Target::None);
+    }
+
+    #[test]
+    fn sneaking_lowers_the_eye_and_the_target_follows() {
+        // Feet at (0.5, 4, 0.5) on a floor whose top is y = 4. Looking down
+        // at slope 0.632 the ray meets the floor 1.62 / 0.632 blocks away
+        // when standing and 1.54 / 0.632 when sneaking: z = -2.06 or -1.94.
+        let pitch = -(0.632f64.atan()) as f32;
+        let mut w = settled();
+        let top = |pos| Target::Block {
+            pos,
+            face: crate::targeting::Face::Top,
+        };
+        w.tick(&look(pitch, false));
+        assert_eq!(w.target(), top([0, 3, -3]));
+        w.tick(&look(pitch, true));
+        assert_eq!(w.target(), top([0, 3, -2]));
+    }
+
+    #[test]
+    fn same_inputs_give_the_same_targets() {
+        let run = || {
+            let mut w = settled();
+            let mut out = Vec::new();
+            for i in 0..30 {
+                w.tick(&TickInput {
+                    yaw: i as f32 * 0.3,
+                    pitch: -1.0 + i as f32 * 0.05,
+                    sneak: i % 3 == 0,
+                    ..TickInput::default()
+                });
+                out.push(w.target());
+            }
+            out
+        };
+        assert_eq!(run(), run());
     }
 
     #[test]
@@ -508,6 +601,23 @@ mod tests {
         assert!(moved > 0.05, "standing still should drift: {moved}");
         let (still, on) = drift(true);
         assert!(still < 1e-6 && on, "sneaking should hold: {still}");
+    }
+
+    #[test]
+    fn on_the_raft_looking_down_targets_the_moved_raft() {
+        let mut w = boarded();
+        w.tick(&look(-std::f32::consts::FRAC_PI_2, false));
+        let Target::Block { pos, face } = w.target() else {
+            panic!("expected a block, got {:?}", w.target());
+        };
+        assert_eq!(face, crate::targeting::Face::Top);
+        let off = w.raft_offset(1.0);
+        let f = w.floating.as_ref().unwrap();
+        let feet = w.player().pos;
+        assert_eq!(pos[0], feet[0].floor() as i32);
+        assert_eq!(pos[2], feet[2].floor() as i32);
+        assert!(f.raft.supports(&w.player().aabb(&w.physics)));
+        assert!(off.iter().all(|v| v.is_finite()));
     }
 
     #[test]

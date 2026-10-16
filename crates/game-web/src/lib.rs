@@ -210,6 +210,28 @@ impl Walk {
         self.0.eye(alpha).to_vec()
     }
 
+    /// What the eye ray hit on the latest tick, as `[kind, x, y, z, face]`:
+    /// kind 0 none, 1 block (position and face 0..5 in the order bottom,
+    /// top, north, south, west, east), 2 entity (`x` is the id).
+    pub fn target(&self) -> Vec<i32> {
+        use game::targeting::{Face, Target};
+        match self.0.target() {
+            Target::None => vec![0, 0, 0, 0, 0],
+            Target::Block { pos, face } => {
+                let f = match face {
+                    Face::Bottom => 0,
+                    Face::Top => 1,
+                    Face::North => 2,
+                    Face::South => 3,
+                    Face::West => 4,
+                    Face::East => 5,
+                };
+                vec![1, pos[0], pos[1], pos[2], f]
+            }
+            Target::Entity { id } => vec![2, id as i32, 0, 0, 0],
+        }
+    }
+
     /// Feet position `[x, y, z]` after the latest tick.
     pub fn feet(&self) -> Vec<f64> {
         self.0.player().pos.to_vec()
