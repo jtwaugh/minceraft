@@ -49,7 +49,7 @@ with its own instructions and its own narrow set of allowed tools.
 | Planner | [`claude-plan.yml`](.github/workflows/claude-plan.yml) | SPEC.md or a design doc changes on `master` | Breaks the next phase or changed sections into small tickets and questions | Write code, or add the `factory` label |
 | Spec editor | [`claude-spec.yml`](.github/workflows/claude-spec.yml) | The maintainer comments `/decide <option>` on a question | Records the answer in the spec or doc it's about | Add facts about the original game; touch any other file |
 | Implementer | [`claude.yml`](.github/workflows/claude.yml) | A ticket is labelled `factory` and its dependencies are closed; any issue closing (it starts tickets that just became unblocked); `@claude` in a comment | Writes the code and tests, runs every check, opens a PR | Edit SPEC.md, design docs or workflows; rebase or force-push |
-| Reviewer | [`claude-review.yml`](.github/workflows/claude-review.yml) | A PR opens or changes | Reviews it against the spec, the rules in CLAUDE.md, and determinism | Approve or merge |
+| Reviewer | [`claude-review.yml`](.github/workflows/claude-review.yml) | A PR opens or changes | Reviews it against the spec, the rules in CLAUDE.md, and determinism; its verdict is a required check ([`review-gate.yml`](.github/workflows/review-gate.yml)) | Approve, merge, or override its own block |
 | Docs updater | [`claude-docs.yml`](.github/workflows/claude-docs.yml) | A phase's last ticket closes; every Monday | Marks finished phases done; re-checks docs against the code | Change anything but design docs |
 
 Plus [`ci.yml`](.github/workflows/ci.yml), which is not an agent: plain
@@ -82,10 +82,12 @@ checks that every PR must pass.
    unblocked starts by itself. The implementer writes the code, runs the
    same checks as CI, and opens a PR that cites the spec sections it
    implements and says whether generated worlds change.
-7. **Review.** CI runs the checks. A separate reviewer agent, which did not
-   write the code, reviews it and posts "ready to merge" or "changes
-   needed".
-8. **Merge.** Only the maintainer can merge.
+7. **Review.** CI runs the checks, including PR size. A separate reviewer
+   agent, which did not write the code, reviews it and posts "Ready",
+   "Ready, with nits" or "Blocked", naming the commit it reviewed.
+8. **Merge.** Only the maintainer can merge, and only when the
+   `review-verdict` check is green: the reviewer said Ready about the
+   latest commit, or the maintainer overrode its block with a reason.
 9. **Next phase.** When a phase's last ticket closes, the docs updater
    closes the plan and opens a PR marking the phase done. Merging that PR
    changes the doc, which starts the planner on the next phase.
@@ -101,7 +103,8 @@ whether a change is good. Everything mechanical is automated. To keep that
 split real:
 
 - agents can't approve or merge pull requests;
-- `master` is protected: every change goes through a PR with passing checks;
+- `master` is protected: every change goes through a PR with passing checks,
+  including the required `review-verdict` and `PR size` checks;
 - [`CODEOWNERS`](.github/CODEOWNERS) requires the maintainer's review for
   the files that steer the agents: SPEC.md, CLAUDE.md, design docs,
   workflows, the art brief;
@@ -158,12 +161,21 @@ seams between chunks in the 3D viewer, and the spec was changed instead.
 
 ### 5. Small tickets, planned just in time
 
-Tickets are one pull request each, typically under 300 changed lines, and
+Tickets are one pull request each, at most 200 reviewable lines, and
 each says what "done" means, whether world output should change, and
 what's out of scope. Phases are planned one at a time, only once the
 previous phase is merged, so each plan is written against code that
 actually exists. Planning a whole design up front would produce tickets
 that are stale before anyone builds them.
+
+The 200-line limit is enforced, not hoped for. Review research finds
+defect detection drops off past a few hundred lines, and in this repo's
+first day the maintainer's time per line fell as PRs grew. The [`PR
+size`](.github/workflows/pr-size.yml) check counts what a reviewer has to
+read: tests, docs and generated files don't count, so the limit never
+argues against tests. A ticket that can't fit becomes a first PR plus a
+follow-up ticket. When a change really can't be split, the maintainer adds
+the `oversize-ok` label; a label from anyone else doesn't count.
 
 ### 6. A reviewer that didn't write the code
 
@@ -177,6 +189,29 @@ that formatters already enforce.
 It has already earned its place: on the PR that added automatic phase
 planning, it caught a Python cache file committed by mistake and two
 real robustness gaps, all fixed before merge.
+
+Its verdict is a gate, not advice. In the first day it said "changes
+needed" on 16 PRs and every one was merged anyway, because the label
+covered both real bugs (a jump cancelled by stepping up a half block, a
+collision push in the wrong direction) and style nits, so it read as
+noise. Now:
+
+- **Three verdicts.** "Ready", "Ready, with nits" (never blocks) and
+  "Blocked". A blocker must be a clean-room or world-output problem, a
+  concrete defect with file, line, trigger and expected behaviour, or an
+  unchecked claim. Everything else is a nit.
+- **Evidence.** The reviewer has the CI toolchain and proves a defect
+  with a test that fails on the PR, pasted into its comment.
+- **A required check.** [`review_gate.py`](.github/scripts/review_gate.py)
+  sets the `review-verdict` status on the PR's head commit: green for
+  Ready, red for Blocked, pending until the reviewer has seen the latest
+  push. A fix pushed after a block is re-reviewed before it can merge.
+- **Overrides on the record.** The maintainer comments
+  `/override <reason>` to merge past a block (or to skip the review of a
+  trivial change). It needs a reason, it counts only if posted after the
+  verdict it overrides, and only the maintainer's account counts. The
+  reasons stay on the PR, so it's easy to check later which overrides
+  were followed by a fix.
 
 ### 7. Generated worlds must not change by accident
 
@@ -201,6 +236,9 @@ changed.
   for three seeds;
 - **Art:** validates every texture, and checks generated texture files
   still match the script that generates them.
+
+and [`pr-size.yml`](.github/workflows/pr-size.yml) fails a PR over 200
+reviewable lines (see decision 5).
 
 Setting this up found a bug: the texture validator searched the current
 folder, so run from the repo root it checked nothing and still said "ok".
@@ -281,6 +319,10 @@ repositories.
 | Answer a question | Comment `/decide B` on it, with reasoning on the next lines |
 | Build tickets | Label them `factory`; each starts once its dependencies are closed |
 | Ask for a fix on a PR | Comment `@claude <what to change>` |
+| Merge past a reviewer block | Comment `/override <reason>` on the PR |
+| Skip the agent review of a trivial PR | Comment `/override <reason>` before it reviews |
+| Allow a PR over 200 lines | Add the `oversize-ok` label |
+| Measure a branch like CI does | `python3 .github/scripts/pr_size.py origin/master HEAD` |
 | Bring a stuck PR up to date | Click "Update branch", or comment `@claude merge master into this branch and resolve the conflicts` |
 | See what's waiting | `gh issue list -l planned` |
 
@@ -297,6 +339,8 @@ docs/design/                    design docs (README.md: format and lifecycle)
 .github/scripts/plan_targets.py which phase or section to plan next
 .github/scripts/attach_subissues.py  attaches tickets to their plan
 .github/scripts/tickets.py      which approved tickets are unblocked
+.github/scripts/review_gate.py  the reviewer's verdict as the review-verdict status
+.github/scripts/pr_size.py      reviewable lines in a change
 .github/workflows/
   ci.yml                        checks on every PR
   claude-idea.yml               reconciler
@@ -304,6 +348,8 @@ docs/design/                    design docs (README.md: format and lifecycle)
   claude-spec.yml               spec editor (/decide)
   claude.yml                    implementer
   claude-review.yml             reviewer
+  review-gate.yml               review-verdict status (verdicts, /override)
+  pr-size.yml                   PR size check
   claude-docs.yml               docs updater
 ```
 
