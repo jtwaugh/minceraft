@@ -2,8 +2,8 @@
 //! See docs/design/basic-gameplay.md section 4.2 (steps 1 to 7) and 4.1.
 //!
 //! Sneak edge protection follows 4.5 and fall distance and fall damage follow
-//! 4.6. Water movement follows 4.3. Not handled here yet: step-up, climbing out
-//! of water and the raft.
+//! 4.6. Water movement and climbing out of water follow 4.3. Not handled here
+//! yet: step-up and the raft.
 
 use crate::collision::{Aabb, CollisionWorld};
 use crate::input::TickInput;
@@ -161,6 +161,8 @@ impl Player {
         let m = move_box(world, &self.aabb(physics), motion);
         let half = physics.width as f64 / 2.0;
         self.pos = [m.aabb.min[0] + half, m.aabb.min[1], m.aabb.min[2] + half];
+        let pushed = input.move_forward != 0.0 || input.move_strafe != 0.0;
+        let blocked_sideways = m.applied[0] != self.vel[0] || m.applied[2] != self.vel[2];
         for i in 0..3 {
             if m.applied[i] != self.vel[i] {
                 self.vel[i] = 0.0;
@@ -176,6 +178,18 @@ impl Player {
                 *v *= k;
             }
             self.vel[1] -= physics.water_gravity as f64;
+            // Exiting water (4.3): pushing into a block face with the space
+            // above the box clear lifts the player out onto the ledge.
+            if pushed && blocked_sideways {
+                let raised =
+                    self.aabb(physics)
+                        .offset([0.0, physics.water_climb_out_clearance as f64, 0.0]);
+                let mut boxes = Vec::new();
+                world.boxes_in(&raised, &mut boxes);
+                if boxes.is_empty() {
+                    self.vel[1] = physics.water_climb_out_velocity as f64;
+                }
+            }
             return;
         }
 
@@ -472,6 +486,63 @@ mod tests {
         }
         // Steady state: v = (v + 0.04) * 0.8 - 0.02 gives 0.06.
         assert!((pl.vel[1] - 0.06).abs() < 1e-6, "{}", pl.vel[1]);
+    }
+
+    /// A pool west of x = 1 (water y = 1..5) beside a ledge whose top is y = 3.
+    /// With `roof`, a block over the pool at y = 5 leaves less than 0.6 of
+    /// clearance above a player floating at y = 2.8.
+    fn pool_and_ledge(roof: bool) -> MemoryWorld {
+        let mut w = floor();
+        for x in -5..1 {
+            for y in 1..5 {
+                for z in -5..5 {
+                    w.set(x, y, z, Block::Water);
+                }
+            }
+        }
+        for x in 1..6 {
+            for y in 1..3 {
+                for z in -5..5 {
+                    w.set(x, y, z, Block::Stone);
+                }
+            }
+        }
+        if roof {
+            w.set(0, 5, 0, Block::Stone);
+        }
+        w
+    }
+
+    /// One tick of the player floating against the ledge, optionally pushing.
+    fn float_against_ledge(roof: bool, push: bool) -> Player {
+        let (p, w) = (phys(), pool_and_ledge(roof));
+        let mut pl = Player::new([0.69, 2.8, 0.5], &p);
+        let input = TickInput {
+            move_forward: if push { 1.0 } else { 0.0 },
+            yaw: std::f32::consts::FRAC_PI_2,
+            ..TickInput::default()
+        };
+        pl.tick(&input, &p, &w);
+        pl
+    }
+
+    #[test]
+    fn pushing_into_ledge_climbs_out() {
+        let pl = float_against_ledge(false, true);
+        assert_eq!(pl.vel[1], phys().water_climb_out_velocity as f64);
+    }
+
+    #[test]
+    fn blocked_clearance_prevents_climb_out() {
+        let pl = float_against_ledge(true, true);
+        assert_ne!(pl.vel[1], phys().water_climb_out_velocity as f64);
+        assert!(pl.vel[1] < 0.0);
+    }
+
+    #[test]
+    fn not_pushing_never_climbs_out() {
+        let pl = float_against_ledge(false, false);
+        assert!(pl.vel[1] < 0.0);
     }
 
     #[test]
