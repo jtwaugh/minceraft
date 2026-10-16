@@ -8,7 +8,7 @@ phases:
   1: done
   2: done
   3: done
-  4: todo
+  4: done
   5: todo
   6: todo
   7: todo
@@ -22,7 +22,8 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Phase 1 done (plan #59).** `crates/game` has the input bindings (`data/input.toml`, #68), `TickInput` with latched edges (#71), the fixed 20 Hz clock and free-look camera (#77); `crates/game-web` and `client/` add pointer lock, input sampling (#72), the debug camera scene and frame-time overlay with p99 reporting (#79). The test scene lives in `client/` (#67). Eye height, bobbing, deck roll and hand rendering are left to later phases.
 - **Phase 2 done (plan #87).** `crates/game` has the collision boxes and world (#119), the player physics data file `data/player.toml` (#117), swept AABB resolution (#121), step-up (#123), the land movement tick (#124), fall distance and damage (#126), sneak edge protection (#127), the headless island walk test `crates/game/tests/island_walk.rs` (#132) and the walking player in the browser test scene (#134). Partial-height shapes live in the game-side table (#116) and the physics numbers are the game's own (#115).
 - **Phase 3 done (plan #137).** `crates/game` has the water tunables and body-in-water detection (#152), the water movement tick and swim up (#154), climbing out (#155), the raft entity with collision and carrying the player (#156, `crates/game/src/raft.rs`, `data/raft.toml`), the swell push on the deck (#163), and the headless tests `crates/game/tests/swim_climb.rs` (#159) and `crates/game/tests/raft_stability.rs` (#164). The browser test scene has swimming and a rocking raft at `client/?scene=raft` (#166). Movement events (4.8) belong to Phase 8.
-- **No gameplay code beyond Phase 3.** There is no entity, item, tool, animal or crop code in this repo. `crates/terrain` is the
+- **Phase 4 done (plan #173).** `crates/game` has the `Target` type, ray-vs-box test and `data/targeting.toml` (#187), block selection boxes and the block raycast (#190, shapes decided in #174), entity targets with the nearest-hit rule (#193), the per-tick eye ray on the walking player (#196), `data/interactions.toml` and its loader (#186), first-match rule resolution with stub actions (#197), and the selection outline and rule overlay in `client/` (#200, `client/overlay.js`). Held tool and hands state are Phase 5.
+- **No gameplay code beyond Phase 4.** There is no entity, item, tool, animal or crop code in this repo. `crates/terrain` is the
   generator; `crates/web/src/lib.rs` exports only generation, height, climate
   and biome functions.
 - **Layout crate.** `crates/layout` (world-layout Phase A: bias terms,
@@ -100,7 +101,7 @@ belt, hands, item entities, the event system and the HUD.
     visible "ready" cue. Measurable versions: p99 frame time under 16.7 ms
     with the sim at 20 Hz for Phase 1; a scripted path crossing the island in
     a headless sim for Phase 2. The Section 14 tests are automatable.
-11. **Phase status.** Phases 1 to 3 are done; the rest are not.
+11. **Phase status.** Phases 1 to 4 are done; the rest are not.
 
 ## Mince Raft: Basic Gameplay Specification
 
