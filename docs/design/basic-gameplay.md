@@ -279,7 +279,7 @@ Rules:
 - If the hands are empty, primary and secondary use the selected tool.
 - If the hands hold an item, tools are stowed. Primary does nothing, secondary uses the carried item if it has a use (for example, seeds on farmland), and interact puts it down. This keeps the Overcooked rule that you can't swing a sword while carrying a fish.
 - Interact on a loose item entity picks it up if the hands are empty. Interact on a station or counter places or takes items (stations are specified later).
-- Drop throws the carried item forward as an item entity with Beta's drop velocity.
+- Drop throws the carried item forward as an item entity. Drop velocity and the item entity's numbers (throw speed, upward kick, gravity, drag, box size) are the game's own, not Beta's: they live in `data/items.toml` and are tuned to feel right, as with player physics. (Decided in #214.)
 - Walking over an item entity does not auto-pick it up. Pickup is always deliberate, so the deck doesn't vacuum up ingredients.
 - v0 starting belt: hand (empty slot), wooden sword, wooden hoe. Fishing rod and bucket slots are reserved.
 
