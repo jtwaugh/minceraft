@@ -1,8 +1,8 @@
 //! Player state and the land-movement tick.
 //! See docs/design/basic-gameplay.md section 4.2 (steps 1 to 7) and 4.1.
 //!
-//! Fall distance and fall damage follow section 4.6. Not handled here yet:
-//! step-up, sneak edge protection, water movement and the raft.
+//! Sneak edge protection follows 4.5 and fall distance and fall damage follow
+//! 4.6. Not handled here yet: step-up, water movement and the raft.
 
 use crate::collision::{Aabb, CollisionWorld};
 use crate::input::TickInput;
@@ -60,6 +60,48 @@ impl Player {
         }
     }
 
+    /// 4.5: shrink the horizontal part of `motion` in `sneak_edge_step` steps,
+    /// x then z, then both together (so a corner can't be rounded diagonally),
+    /// until the moved box still has ground within a step height below it.
+    fn shrink_at_ledge(
+        &self,
+        motion: &mut [f64; 3],
+        physics: &PlayerPhysics,
+        world: &impl CollisionWorld,
+    ) {
+        let bb = self.aabb(physics);
+        let drop = physics.step_height as f64;
+        let step = physics.sneak_edge_step as f64;
+        let mut boxes = Vec::new();
+        let mut supported = |dx: f64, dz: f64| {
+            boxes.clear();
+            let probe = bb.offset([dx, -drop, dz]);
+            world.boxes_in(&probe, &mut boxes);
+            !boxes.is_empty()
+        };
+        // Move `d` one step towards zero, snapping to zero when it crosses.
+        let shrink = |d: f64| {
+            if d.abs() <= step {
+                0.0
+            } else {
+                d - step * d.signum()
+            }
+        };
+        let (mut dx, mut dz) = (motion[0], motion[2]);
+        while dx != 0.0 && !supported(dx, 0.0) {
+            dx = shrink(dx);
+        }
+        while dz != 0.0 && !supported(0.0, dz) {
+            dz = shrink(dz);
+        }
+        while dx != 0.0 && dz != 0.0 && !supported(dx, dz) {
+            dx = shrink(dx);
+            dz = shrink(dz);
+        }
+        motion[0] = dx;
+        motion[2] = dz;
+    }
+
     /// Advance one sim tick, following 4.2 steps 1 to 7 in order.
     pub fn tick(
         &mut self,
@@ -101,7 +143,13 @@ impl Player {
         }
 
         // 5. Move with collision. A blocked axis loses its velocity.
-        let m = move_box(world, &self.aabb(physics), self.vel);
+        // Sneaking on ground first shrinks the move so it cannot leave a ledge
+        // (4.5); a shrunk axis counts as blocked and loses its velocity too.
+        let mut motion = self.vel;
+        if input.sneak && self.on_ground {
+            self.shrink_at_ledge(&mut motion, physics, world);
+        }
+        let m = move_box(world, &self.aabb(physics), motion);
         let half = physics.width as f64 / 2.0;
         self.pos = [m.aabb.min[0] + half, m.aabb.min[1], m.aabb.min[2] + half];
         for i in 0..3 {
@@ -357,5 +405,104 @@ mod tests {
             pl
         };
         assert_eq!(run(), run());
+    }
+
+    /// A 3x3 island (blocks 0..3 on x and z) with its top at y = 1.
+    fn island() -> MemoryWorld {
+        let mut w = MemoryWorld::new();
+        for x in 0..3 {
+            for z in 0..3 {
+                w.set(x, 0, z, Block::Stone);
+            }
+        }
+        w
+    }
+
+    /// Sneak for 200 ticks from the island's centre and return the player.
+    fn sneak_on_island(forward: f32, strafe: f32, yaw: f32, sneak: bool) -> Player {
+        let (p, w) = (phys(), island());
+        let mut pl = Player::new([1.5, 1.0, 1.5], &p);
+        pl.tick(&TickInput::default(), &p, &w);
+        let input = TickInput {
+            move_forward: forward,
+            move_strafe: strafe,
+            yaw,
+            sneak,
+            ..TickInput::default()
+        };
+        for _ in 0..200 {
+            pl.tick(&input, &p, &w);
+            if sneak {
+                assert!(pl.on_ground && pl.pos[1] == 1.0, "left the ledge: {pl:?}");
+            }
+        }
+        pl
+    }
+
+    #[test]
+    fn sneaking_never_leaves_ledge_from_any_direction() {
+        let half = std::f32::consts::FRAC_PI_2;
+        for k in 0..4 {
+            let pl = sneak_on_island(1.0, 0.0, k as f32 * half, true);
+            // It got to the edge, rather than stopping early.
+            let edge = (0..2).any(|i| !(0.05..=2.95).contains(&pl.pos[2 * i]));
+            assert!(edge, "{pl:?}");
+            // Only the body's edge may overhang, never the centre.
+            assert!(pl.pos[0] > -0.3 && pl.pos[0] < 3.3 && pl.pos[2] > -0.3 && pl.pos[2] < 3.3);
+        }
+    }
+
+    #[test]
+    fn sneaking_diagonally_into_a_corner_stays_on() {
+        for k in 0..4 {
+            let yaw = std::f32::consts::FRAC_PI_4 + k as f32 * std::f32::consts::FRAC_PI_2;
+            sneak_on_island(1.0, 0.0, yaw, true);
+            sneak_on_island(1.0, 1.0, yaw, true);
+        }
+    }
+
+    #[test]
+    fn sneaking_slides_along_a_ledge() {
+        // Forward is -z; strafe pushes +x. Walk to the north edge first, then
+        // press into it while strafing: z is held back, x keeps moving.
+        let (p, w) = (phys(), island());
+        let mut pl = Player::new([1.5, 1.0, 1.5], &p);
+        pl.tick(&TickInput::default(), &p, &w);
+        let fwd = TickInput {
+            move_forward: 1.0,
+            sneak: true,
+            ..TickInput::default()
+        };
+        for _ in 0..100 {
+            pl.tick(&fwd, &p, &w);
+        }
+        let (x0, z0) = (pl.pos[0], pl.pos[2]);
+        let diag = TickInput {
+            move_strafe: 1.0,
+            ..fwd
+        };
+        for _ in 0..20 {
+            pl.tick(&diag, &p, &w);
+            assert!(pl.on_ground);
+        }
+        assert!(pl.pos[0] > x0 + 0.2, "{pl:?}");
+        assert!(pl.pos[2] >= z0 - 0.06 && pl.pos[2] < 0.5, "{pl:?}");
+    }
+
+    #[test]
+    fn not_sneaking_or_airborne_is_unaffected() {
+        // Walking off the island falls.
+        let pl = sneak_on_island(1.0, 0.0, 0.0, false);
+        assert!(pl.pos[1] < 1.0 && pl.pos[2] < 0.0, "{pl:?}");
+        // In the air, sneaking does not hold the player back.
+        let (p, w) = (phys(), island());
+        let mut pl = Player::new([1.5, 5.0, 1.5], &p);
+        pl.vel[2] = -3.0;
+        let input = TickInput {
+            sneak: true,
+            ..TickInput::default()
+        };
+        pl.tick(&input, &p, &w);
+        assert!(!pl.on_ground && pl.pos[2] < -1.0, "{pl:?}");
     }
 }

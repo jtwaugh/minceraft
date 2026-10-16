@@ -271,6 +271,8 @@ mod channel;
 pub use channel::ChannelEval;
 mod derived;
 pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
+mod fish;
+pub use fish::{Fish, FishColumn, Species};
 mod habitat;
 pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod habitat_map;
@@ -300,6 +302,8 @@ mod climate_tests;
 mod derived_tests;
 #[cfg(test)]
 mod exclusion_tests;
+#[cfg(test)]
+mod fish_tests;
 #[cfg(test)]
 mod habitat_map_tests;
 #[cfg(test)]
