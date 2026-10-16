@@ -20,3 +20,6 @@ raft_clearance = 4
 # Island columns with a grass top and all 4 neighbours within 1 block of
 # height, counted on undecorated terrain (design Decision 4).
 min_flat_grass_tiles = 6
+
+# Retry loop: seeds tried (start, start + 1, ...) before giving up.
+max_attempts = 64

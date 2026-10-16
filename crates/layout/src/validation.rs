@@ -31,6 +31,13 @@ pub struct Thresholds {
     pub min_raft_water_depth: u32,
     pub raft_clearance: i32,
     pub min_flat_grass_tiles: u32,
+    /// Retry loop cap (`find_level`).
+    #[serde(default = "default_max_attempts")]
+    pub max_attempts: u32,
+}
+
+fn default_max_attempts() -> u32 {
+    64
 }
 
 impl Thresholds {
