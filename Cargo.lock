@@ -123,6 +123,7 @@ dependencies = [
 name = "terrain-web"
 version = "0.1.0"
 dependencies = [
+ "layout",
  "terrain",
  "wasm-bindgen",
 ]
