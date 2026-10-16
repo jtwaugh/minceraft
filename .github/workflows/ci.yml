@@ -22,6 +22,39 @@ env:
   WASM_GZIP_BUDGET: 1000000
 
 jobs:
+  # Which kind of change is this? PRs and pushes that touch only text
+  # (Markdown, .txt, docs/) skip the Rust, Wasm and Art jobs. Skipped jobs
+  # count as passing for branch protection, so those PRs can still merge.
+  # The clean-room job always runs (SPEC.md and design-doc headers are text).
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.after }}
+        run: |
+          code=true
+          if [ "$EVENT" != workflow_dispatch ] && [ -n "$BASE" ] && [ "${BASE//0/}" != "" ]; then
+            if [ "$EVENT" = pull_request ]; then range="$BASE...$HEAD"; else range="$BASE..$HEAD"; fi
+            if changed=$(git diff --name-only "$range"); then
+              echo "Changed files:"; echo "$changed"
+              other=$(echo "$changed" | grep -vE '\.(md|txt)$|^docs/|^LICENSE' || true)
+              if [ -n "$changed" ] && [ -z "$other" ]; then
+                code=false
+                echo "Only text files changed; skipping the Rust, Wasm and Art jobs." >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   clean-room:
     name: Clean-room boundary
     runs-on: ubuntu-latest
@@ -96,6 +129,10 @@ jobs:
 
   rust:
     name: Rust (fmt, clippy, test)
+    needs: changes
+    # Runs unless the change is text-only. If detection itself failed, the
+    # output is empty and the job runs anyway.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -110,6 +147,10 @@ jobs:
 
   wasm:
     name: Wasm build and flyover smoke test
+    needs: changes
+    # Runs unless the change is text-only. If detection itself failed, the
+    # output is empty and the job runs anyway.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -161,6 +202,10 @@ jobs:
 
   art:
     name: Art (validate, generated files, preview)
+    needs: changes
+    # Runs unless the change is text-only. If detection itself failed, the
+    # output is empty and the job runs anyway.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     defaults:
       run:
