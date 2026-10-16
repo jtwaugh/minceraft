@@ -188,6 +188,7 @@ import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLaye
 import { hydrate, VIEW, BIOME, SNOWY } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
+import { FOG_GLSL } from './fog.js';
 const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend, habitat_names } = wasm;
 
 const $ = (id) => document.getElementById(id);
@@ -621,19 +622,21 @@ function program(cut) {
     // packed meshes (mesh.js): position, uv and shade scales, and the mesh's offset
     uniform vec3 unpack;
     uniform vec3 offset;
+    uniform vec3 camPos; // eye, in the same coordinates as the mesh offsets
     out vec3 vuv;
     out float vshade;
     out float vdist;
     out vec3 vtint;
     void main() {
-      gl_Position = mvp * vec4(pos * unpack.x + offset, 1.0);
+      vec3 wp = pos * unpack.x + offset;
+      gl_Position = mvp * vec4(wp, 1.0);
       // animated tiles (water, flowing water) are runs of 4 layers starting
       // at ANIM_FIRST; offset by the current frame
       bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
       vshade = shade * unpack.z;
       vtint = tint;
-      vdist = gl_Position.w;
+      vdist = distance(wp, camPos);
     }`));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
@@ -642,12 +645,13 @@ function program(cut) {
     uniform sampler2DArray tex;
     uniform float alpha; uniform float fogFar; uniform float fogMax; uniform vec3 fogColor;
     out vec4 o;
+    ${FOG_GLSL}
     void main() {
       vec4 t = texture(tex, vuv);
       ${cut ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
       // texels stored with alpha ~0.78 are greyscale and take the climate tint
       vec3 c = (t.a < 0.9 ? t.rgb * vtint : t.rgb) * vshade;
-      float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, fogMax);
+      float f = fogAmount(vdist, fogFar) * fogMax;
       o = vec4(mix(c, fogColor, f), alpha);
     }`));
   gl.linkProgram(prog);
@@ -1001,6 +1005,7 @@ function draw() {
   const view = lookAt([eye[0], eye[1] + target[1], eye[2]], target, [0, 1, 0]);
   const mvp = mul(persp(0.9, cv.width / cv.height, 0.5, 2000), view);
   setU('mvp', new Float32Array(mvp));
+  setU('camPos', [eye[0], eye[1] + target[1], eye[2]]);
   setU('fogMax', 0.6);
   setU('alpha', 1);
   setU('waterFrame', waterFrame);
@@ -1288,7 +1293,7 @@ let flyDrawn = 0;      // chunks drawn in the last flyover frame (after culling)
 let markStarted;
 const started = new Promise((r) => { markStarted = r; }); // the page has a map and a pool
 const FLY_W = 1280, FLY_H = 720;
-const FLY_FOG = VIEW.fogEnd / 1.15; // the shader's fog is solid at 1.15 x fogFar
+const FLY_FOG = VIEW.fogEnd; // fog is solid at this radial distance
 
 // Planning and error messages, centred on the stage ('' hides it).
 function flyStatus(text) { $('flymsg').textContent = text; }
@@ -1478,6 +1483,7 @@ function renderFly(f) {
   const view = lookAt(eye, tgt, [0, 1, 0]);
   const mvp = mul(persp(1.0, FLY_W / FLY_H, 0.3, 1000), view);
   setU('mvp', new Float32Array(mvp));
+  setU('camPos', eye);
   setU('alpha', 1);
   setU('waterFrame', waterFrame);
   setU('fogColor', skyC);
