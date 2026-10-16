@@ -782,3 +782,9 @@ Plan and build against these.
    8-block margin are not built. The decoration part of Phase D counts as
    done; the rest of Phase D (region cache, streaming, border handling) is
    still to do.
+7. **Habitat viewer mode (Phase C): A, a wasm export.** The viewer's
+   habitat mode gets its map from the wasm: add a `crates/layout` wasm
+   export, or move the habitat classifier into a wasm-safe module, so the
+   viewer shows the same habitats as the game. The PR reports the gzipped
+   wasm size. This is the case where the viewer needs layout code in the
+   wasm (Decision 3). (Decided in #92.)
