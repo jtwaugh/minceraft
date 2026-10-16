@@ -217,90 +217,95 @@ impl Walk {
 
     pub fn teleport(&mut self, x: f64, y: f64, z: f64) {
         self.0.teleport([x, y, z]);
+    }
 
-        /// The sim's fixed-step clock (`game::clock`), shared by walking and flying.
-        #[wasm_bindgen]
-        pub struct SimClock {
-            clock: Clock,
-            alpha: f32,
-        }
+    /// Stand the player with its eye at `(x, y, z)`, e.g. leaving fly mode.
+    pub fn teleport_eye(&mut self, x: f64, y: f64, z: f64) {
+        self.0.teleport_eye([x, y, z]);
+    }
+}
 
-        #[wasm_bindgen]
-        impl SimClock {
-            #[wasm_bindgen(constructor)]
-            pub fn new() -> SimClock {
-                SimClock {
-                    clock: Clock::new(),
-                    alpha: 0.0,
-                }
-            }
+/// The sim's fixed-step clock (`game::clock`), shared by walking and flying.
+#[wasm_bindgen]
+pub struct SimClock {
+    clock: Clock,
+    alpha: f32,
+}
 
-            /// Advance by one frame of `dt_seconds`; returns how many sim ticks to
-            /// run before rendering at [`SimClock::alpha`].
-            pub fn advance(&mut self, dt_seconds: f64) -> u32 {
-                let step = self.clock.advance(dt_seconds);
-                self.alpha = step.alpha;
-                step.ticks
-            }
-
-            /// Fraction of the way from the previous tick to the current one.
-            #[wasm_bindgen(getter)]
-            pub fn alpha(&self) -> f32 {
-                self.alpha
-            }
-        }
-
-        impl Default for SimClock {
-            fn default() -> SimClock {
-                SimClock::new()
-            }
-        }
-
-        /// The debug fly camera (`game::camera`), so the client runs the same sim
-        /// code the tests check.
-        #[wasm_bindgen]
-        pub struct FlyCamera(Camera);
-
-        #[wasm_bindgen]
-        impl FlyCamera {
-            #[wasm_bindgen(constructor)]
-            pub fn new(x: f32, y: f32, z: f32) -> FlyCamera {
-                FlyCamera(Camera::new(at(x, y, z), 0.0))
-            }
-
-            pub fn tick(&mut self, input: &Tick) {
-                self.0.fly_tick(&input.0);
-            }
-
-            /// Eye position `[x, y, z]` between the last two ticks, `alpha` in 0..1.
-            pub fn eye(&self, alpha: f32) -> Vec<f32> {
-                self.0.view(alpha).pos.to_vec()
-            }
-
-            /// Move to `(x, y, z)` with no interpolation from the old position.
-            pub fn teleport(&mut self, x: f32, y: f32, z: f32) {
-                self.0 = Camera::new(at(x, y, z), 0.0);
-            }
-        }
-
-        fn at(x: f32, y: f32, z: f32) -> Pose {
-            Pose {
-                pos: [x, y, z],
-                ..Pose::default()
-            }
-        }
-
-        /// Column-major view matrix for an eye at `(x, y, z)` with this frame's look,
-        /// in the sim's convention (`game::camera`), for walking and flying alike.
-        #[wasm_bindgen]
-        pub fn view_matrix(x: f32, y: f32, z: f32, yaw: f32, pitch: f32) -> Vec<f32> {
-            Pose {
-                pos: [x, y, z],
-                yaw,
-                pitch: pitch.clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2),
-            }
-            .view_matrix()
-            .to_vec()
+#[wasm_bindgen]
+impl SimClock {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> SimClock {
+        SimClock {
+            clock: Clock::new(),
+            alpha: 0.0,
         }
     }
+
+    /// Advance by one frame of `dt_seconds`; returns how many sim ticks to
+    /// run before rendering at [`SimClock::alpha`].
+    pub fn advance(&mut self, dt_seconds: f64) -> u32 {
+        let step = self.clock.advance(dt_seconds);
+        self.alpha = step.alpha;
+        step.ticks
+    }
+
+    /// Fraction of the way from the previous tick to the current one.
+    #[wasm_bindgen(getter)]
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
+}
+
+impl Default for SimClock {
+    fn default() -> SimClock {
+        SimClock::new()
+    }
+}
+
+/// The debug fly camera (`game::camera`), so the client runs the same sim
+/// code the tests check.
+#[wasm_bindgen]
+pub struct FlyCamera(Camera);
+
+#[wasm_bindgen]
+impl FlyCamera {
+    #[wasm_bindgen(constructor)]
+    pub fn new(x: f32, y: f32, z: f32) -> FlyCamera {
+        FlyCamera(Camera::new(at(x, y, z), 0.0))
+    }
+
+    pub fn tick(&mut self, input: &Tick) {
+        self.0.fly_tick(&input.0);
+    }
+
+    /// Eye position `[x, y, z]` between the last two ticks, `alpha` in 0..1.
+    pub fn eye(&self, alpha: f32) -> Vec<f32> {
+        self.0.view(alpha).pos.to_vec()
+    }
+
+    /// Move to `(x, y, z)` with no interpolation from the old position.
+    pub fn teleport(&mut self, x: f32, y: f32, z: f32) {
+        self.0 = Camera::new(at(x, y, z), 0.0);
+    }
+}
+
+fn at(x: f32, y: f32, z: f32) -> Pose {
+    Pose {
+        pos: [x, y, z],
+        ..Pose::default()
+    }
+}
+
+/// Column-major view matrix for an eye at `(x, y, z)` with this frame's look,
+/// in the sim's convention (`game::camera`), for walking and flying alike.
+#[wasm_bindgen]
+pub fn view_matrix(x: f32, y: f32, z: f32, yaw: f32, pitch: f32) -> Vec<f32> {
+    Pose {
+        pos: [x, y, z],
+        yaw,
+        pitch: pitch.clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2),
+    }
+    .view_matrix()
+    .to_vec()
 }

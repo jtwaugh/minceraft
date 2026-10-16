@@ -1,9 +1,11 @@
 //! Parsing and validation of `data/fish.toml`, shared by `build.rs` (which
 //! bakes the shipped table into the crate) and `Fish::from_toml` (feature
 //! `toml-io`). `build.rs` includes this file by path, so keep it free of
-//! crate-internal dependencies.
+//! crate-internal dependencies beyond `rule_check`.
 
 use serde::Deserialize;
+
+use crate::rule_check::check_range;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,16 +52,9 @@ pub fn parse_species(
         if r.weight == 0 {
             return Err(format!("species '{}': weight must be > 0", r.id));
         }
-        if let (Some(a), Some(b)) = (r.temp_min, r.temp_max) {
-            if a > b {
-                return Err(format!("species '{}': temp_min > temp_max", r.id));
-            }
-        }
-        if let (Some(a), Some(b)) = (r.depth_min, r.depth_max) {
-            if a > b {
-                return Err(format!("species '{}': depth_min > depth_max", r.id));
-            }
-        }
+        let what = format!("species '{}'", r.id);
+        check_range(&what, "temp", r.temp_min, r.temp_max)?;
+        check_range(&what, "depth", r.depth_min, r.depth_max)?;
         let hab =
             match r.habitats {
                 None => None,

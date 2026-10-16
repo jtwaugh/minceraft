@@ -1,11 +1,12 @@
 //! Parsing and validation of `data/habitats.toml`, shared by `build.rs`
 //! (which bakes the shipped table into the crate) and `Habitats::from_toml`
 //! (feature `toml-io`). `build.rs` includes this file by path, so keep it
-//! free of crate-internal dependencies beyond `habitat_rule`.
+//! free of crate-internal dependencies beyond `habitat_rule` and `rule_check`.
 
 use serde::Deserialize;
 
 use crate::habitat_rule::HabitatRule;
+use crate::rule_check::check_range;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,6 +38,15 @@ pub fn parse_rules(
         if rules.iter().any(|p| p.id == r.id) {
             return Err(format!("duplicate habitat id '{}'", r.id));
         }
+        let what = format!("habitat '{}'", r.id);
+        check_range(&what, "temp", r.temp_min, r.temp_max)?;
+        check_range(&what, "depth", r.depth_min, r.depth_max)?;
+        check_range(
+            &what,
+            "shore_distance",
+            r.shore_distance_min,
+            r.shore_distance_max,
+        )?;
         let bottom = match r.bottom {
             None => None,
             Some(names) => {

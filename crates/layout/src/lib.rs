@@ -285,6 +285,8 @@ pub use habitat_map::{HabitatMap, NO_HABITAT};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
+#[cfg(feature = "toml-io")]
+mod rule_check;
 pub use region::{generate_region, Layout, LayoutRegion, StructurePlacement};
 mod retry;
 pub use retry::{find_level, find_v0_level, LevelFound, RetryError};

@@ -142,6 +142,25 @@ to touch.
   profiles without saying why.
 - **Viewer has no frameworks or bundler.** Plain ES modules in `viewer/`.
 
+## Testing the client
+
+Check input and camera behaviour from memory, not from pixels. Don't use
+screenshots (browser automation or headless captures) to find out whether
+something moves, turns, locks or switches mode; write an input script
+instead.
+
+- `client/controller.js` is the per-frame sim step, with no WebGL. Keep
+  render-loop logic there, not in `scene.js`, so it can be tested.
+- `client/test/scripts/*.input` are event-sequence scripts in the DSL
+  documented at the top of `client/test/dsl.mjs`: DOM events in, frames
+  advanced on the real wasm, `expect` lines on mode, look, eye and
+  movement. `client/test/scripts.test.mjs` runs every case.
+- A client bug report gets a failing script first, then the fix. If the
+  DSL can't express the behaviour, extend the DSL; don't fall back to
+  screenshots.
+- Screenshots are for judging how things look (art, shading, fog), and
+  only when the maintainer asks for that.
+
 ## Art
 
 - `art/PROMPT.md` is the art brief and the list of what should exist. Read

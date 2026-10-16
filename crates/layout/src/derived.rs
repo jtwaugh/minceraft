@@ -106,13 +106,6 @@ impl DerivedMaps {
         }
         out
     }
-
-    /// Index of world column `(x, z)`, or `None` outside the region.
-    pub fn index_of(&self, region: &Region, x: i32, z: i32) -> Option<usize> {
-        let (dx, dz) = (x.checked_sub(region.x0)?, z.checked_sub(region.z0)?);
-        (dx >= 0 && dz >= 0 && (dx as u32) < self.width && (dz as u32) < self.depth)
-            .then(|| dz as usize * self.width as usize + dx as usize)
-    }
 }
 
 /// Exact Euclidean distance transform from land columns (`water_depth == 0`),
