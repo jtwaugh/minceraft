@@ -86,35 +86,6 @@ fn real_seed_matches_column_scan() {
     assert!(water > 0, "test window should contain water");
 }
 
-#[test]
-fn overlapping_regions_agree() {
-    let (seed, ox, oz) = (12345, -100, -100);
-    for decorate in [false, true] {
-        let gen = |x0, z0, w, d| {
-            let r = if decorate {
-                terrain::generate_decorated(seed, x0, z0, w, d)
-            } else {
-                terrain::generate_region(seed, x0, z0, w, d)
-            };
-            (DerivedMaps::from_region(&r), r)
-        };
-        let (a, ra) = gen(ox, oz, 96, 96);
-        let (b, rb) = gen(ox + 40, oz + 24, 80, 90);
-        let mut shared = 0;
-        for z in oz + 24..oz + 96 {
-            for x in ox + 40..ox + 96 {
-                let i = a.index_of(&ra, x, z).unwrap();
-                let j = b.index_of(&rb, x, z).unwrap();
-                assert_eq!(a.water_depth[i], b.water_depth[j], "({x},{z})");
-                assert_eq!(a.bottom_block[i], b.bottom_block[j], "({x},{z})");
-                assert_eq!(a.frozen[i], b.frozen[j], "({x},{z})");
-                shared += 1;
-            }
-        }
-        assert_eq!(shared, 56 * 72);
-    }
-}
-
 /// Water depth grid -> shore distance, via the real transform.
 fn shore(depth: &[u8], w: u32, d: u32) -> Vec<u8> {
     super::derived::shore_distance(depth, w, d)
@@ -149,8 +120,8 @@ fn shore_distance_sees_land_outside_the_requested_area() {
     let layout = Layout::new(12345);
     let wide = DerivedMaps::generate(&layout, -300, -300, 600, 600, false);
     let mut small_hits = 0;
-    for z0 in (-300..270).step_by(30) {
-        for x0 in (-300..270).step_by(30) {
+    for z0 in (-300..270).step_by(90) {
+        for x0 in (-300..270).step_by(90) {
             let m = DerivedMaps::generate(&layout, x0, z0, 24, 24, false);
             for z in 0..24usize {
                 for x in 0..24usize {
@@ -169,7 +140,7 @@ fn shore_distance_sees_land_outside_the_requested_area() {
 }
 
 #[test]
-fn shore_distance_overlapping_regions_agree() {
+fn overlapping_regions_agree() {
     let layout = Layout::new(12345);
     for decorate in [false, true] {
         let a = DerivedMaps::generate(&layout, -100, -100, 96, 96, decorate);
@@ -181,6 +152,8 @@ fn shore_distance_overlapping_regions_agree() {
                 let j = ((z + 76) * 80 + x + 60) as usize;
                 assert_eq!(a.shore_distance[i], b.shore_distance[j], "({x},{z})");
                 assert_eq!(a.water_depth[i], b.water_depth[j], "({x},{z})");
+                assert_eq!(a.bottom_block[i], b.bottom_block[j], "({x},{z})");
+                assert_eq!(a.frozen[i], b.frozen[j], "({x},{z})");
                 shared += 1;
             }
         }

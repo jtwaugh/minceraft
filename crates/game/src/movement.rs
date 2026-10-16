@@ -191,9 +191,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn fuzz_never_leaves_walled_box() {
-        // Hollow stone cube: interior is 1..6 on every axis.
+    /// Hollow 7x7x7 stone box; the inside is 1..6 on every axis.
+    fn walled_box() -> MemoryWorld {
         let mut w = MemoryWorld::new();
         for x in 0..7 {
             for y in 0..7 {
@@ -204,6 +203,13 @@ mod tests {
                 }
             }
         }
+        w
+    }
+
+    #[test]
+    fn fuzz_never_leaves_walled_box() {
+        // Hollow stone cube: interior is 1..6 on every axis.
+        let w = walled_box();
         let mut rng = Rng(0x9E3779B97F4A7C15);
         for _ in 0..300 {
             let mut bb = Aabb::from_size(
@@ -328,16 +334,7 @@ mod tests {
 
     #[test]
     fn fuzz_with_stepping_never_leaves_walled_box() {
-        let mut w = MemoryWorld::new();
-        for x in 0..7 {
-            for y in 0..7 {
-                for z in 0..7 {
-                    if [x, y, z].iter().any(|&c| c == 0 || c == 6) {
-                        w.set(x, y, z, Block::Stone);
-                    }
-                }
-            }
-        }
+        let mut w = walled_box();
         w.set(3, 1, 3, Block::Stone);
         let mut rng = Rng(0xD1B54A32D192ED03);
         for _ in 0..300 {

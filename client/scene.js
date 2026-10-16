@@ -1,6 +1,6 @@
 // Debug scene: generated terrain around a fixed seed, drawn with the viewer's
-// mesher and tileset, flown with the wasm input layer. The sim steps at 20 Hz
-// (fly.js) and rendering interpolates between ticks at display rate; look is
+// mesher and tileset, flown with the wasm input layer and fly camera
+// (crates/game-web). The sim steps at 20 Hz and rendering interpolates between ticks at display rate; look is
 // applied every frame, as docs/design/basic-gameplay.md section 2.2 asks.
 //
 //   ?seed=N      world seed (default 12345)
@@ -13,12 +13,11 @@
 // window.frameStats() returns { frames, p50, p99 } at any time.
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
-import initGame, { InputSampler, Walk, Scene } from './pkg/game_web.js';
+import initGame, { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
-import { TickClock, stepFly, interpolate, lookVectors } from './fly.js';
-import { simLookVectors, stepWalk } from './walk.js';
+import { stepWalk } from './walk.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 
 const CHUNK = 64;
@@ -119,21 +118,6 @@ function perspective(fovY, aspect, near, far) {
   const f = 1 / Math.tan(fovY / 2);
   return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0];
 }
-function viewMatrix(eye, forward, right) {
-  const up = [
-    right[1] * forward[2] - right[2] * forward[1],
-    right[2] * forward[0] - right[0] * forward[2],
-    right[0] * forward[1] - right[1] * forward[0],
-  ];
-  const u = up;
-  const d = (a) => a[0] * eye[0] + a[1] * eye[1] + a[2] * eye[2];
-  return [
-    right[0], u[0], -forward[0], 0,
-    right[1], u[1], -forward[1], 0,
-    right[2], u[2], -forward[2], 0,
-    -d(right), -d(u), d(forward), 1,
-  ];
-}
 function mul(a, b) {
   const o = new Array(16).fill(0);
   for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
@@ -201,9 +185,12 @@ if (scene) {
 }
 
 // ---------------------------------------------------------------- loop
-let prev = [CHUNK / 2, surfaceY + 24, CHUNK / 2], cur = prev;
-if (scene) prev = cur = Array.from(walk.eye(1)).map((v, i) => v + (i === 1 ? 24 : 0));
-const clock = new TickClock();
+const clock = new SimClock();
+const fly = new FlyCamera(CHUNK / 2, surfaceY + 24, CHUNK / 2);
+if (scene) {
+  const [x, y, z] = walk.eye(1);
+  fly.teleport(x, y + 24, z);
+}
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 window.frameStats = () => frames.summary();
@@ -219,21 +206,20 @@ function drawParts(prog, parts) {
 function render(now) {
   if (queue.length) meshNextChunk();
 
-  const { ticks, alpha } = clock.advance(now);
+  const ticks = clock.advance(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  const alpha = clock.alpha;
   const { yaw, pitch } = input.look();
-  let eye, look;
+  let eye; // input.drain() holds no keys while the pointer is unlocked
   if (flying) {
     for (let i = 0; i < ticks; i++) {
-      prev = cur;
-      cur = stepFly(cur, input.tick()); // held keys are cleared whenever the pointer is unlocked
+      const t = input.drain();
+      fly.tick(t);
+      t.free();
     }
-    eye = interpolate(prev, cur, alpha);
-    look = lookVectors(yaw, pitch);
+    eye = Array.from(fly.eye(alpha));
   } else {
-    eye = stepWalk(walk, ticks, alpha, () => input.tick());
-    look = simLookVectors(yaw, pitch);
+    eye = stepWalk(walk, ticks, alpha, () => input.drain());
   }
-  const { forward, right } = look;
 
   const dpr = window.devicePixelRatio || 1;
   const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
@@ -245,7 +231,7 @@ function render(now) {
 
   const mvp = new Float32Array(mul(
     perspective(sampler.fov_degrees * Math.PI / 180, w / h, 0.3, 1000),
-    viewMatrix(eye, forward, right),
+    view_matrix(eye[0], eye[1], eye[2], yaw, pitch),
   ));
   const fogFar = (radius + 0.5) * CHUNK * 1.1;
   const bind = (prog, a) => {
@@ -289,9 +275,10 @@ document.addEventListener('keydown', (e) => {
   if (e.code !== 'KeyF' || e.repeat || !input.locked) return;
   const eyeNow = walk.eye(1), feet = walk.feet();
   if (flying) {
-    walk.teleport(cur[0], cur[1] - (eyeNow[1] - feet[1]), cur[2]);
+    const [x, y, z] = fly.eye(1);
+    walk.teleport(x, y - (eyeNow[1] - feet[1]), z);
   } else {
-    prev = cur = Array.from(eyeNow);
+    fly.teleport(eyeNow[0], eyeNow[1], eyeNow[2]);
   }
   flying = !flying;
 });

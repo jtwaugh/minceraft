@@ -66,6 +66,8 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob, re, sys
+          sys.path.insert(0, ".github/scripts")
+          from plan_targets import header  # the planner's parser, so both read phases alike
           bad = []
           for p in sorted(glob.glob("docs/design/*.md")):
               if p.endswith("README.md"):
@@ -83,7 +85,7 @@ jobs:
                   bad.append(f"{p}: status must be idea, accepted, done or superseded")
               if not sc or sc.group(1) not in {"generator", "game", "both"}:
                   bad.append(f"{p}: scope must be generator, game or both")
-              for ph, v in re.findall(r"^\s+([A-Za-z0-9]+):\s*([a-z]+)", head.split("phases:", 1)[1] if "phases:" in head else "", re.M):
+              for ph, v in header(p)[1]:
                   if v not in {"todo", "done"}:
                       bad.append(f"{p}: phase {ph} must be todo or done, not {v}")
           for b in bad:
@@ -138,6 +140,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
+      - name: Client tests
+        run: node --test client/test/*.test.mjs
 
       - name: Flyover plans a route
         run: |

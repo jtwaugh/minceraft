@@ -31,15 +31,6 @@ pub fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
     a + d * t
 }
 
-/// Clamp a movement axis to -1..1; NaN counts as 0.
-fn clamp_axis(v: f32) -> f32 {
-    if v.is_nan() {
-        0.0
-    } else {
-        v.clamp(-1.0, 1.0)
-    }
-}
-
 impl Pose {
     pub fn lerp(self, other: Pose, t: f32) -> Pose {
         let l = |a: f32, b: f32| a + (b - a) * t;
@@ -163,15 +154,8 @@ impl Camera {
         let f = next.forward();
         let r = next.right();
         let up = f32::from(input.jump) - f32::from(input.sneak);
-        // Clamp each axis to -1..1, then limit the combined magnitude to 1 so
-        // diagonals are no faster than straight lines.
-        let (mf, ms) = (
-            clamp_axis(input.move_forward),
-            clamp_axis(input.move_strafe),
-        );
-        let len = (mf * mf + ms * ms).sqrt();
-        let scale = if len > 1.0 { 1.0 / len } else { 1.0 };
-        let (mf, ms) = (mf * scale, ms * scale);
+        let (mf, ms) = input.movement();
+        let (mf, ms) = (mf as f32, ms as f32);
         for i in 0..3 {
             next.pos[i] += FLY_SPEED * (f[i] * mf + r[i] * ms);
         }

@@ -83,10 +83,6 @@ fn col(r: &Region, x: u32, z: u32) -> &[u8] {
     &r.blocks[i..i + 128]
 }
 
-fn is_log(b: u8) -> bool {
-    b == Block::OakLog as u8 || b == Block::BirchLog as u8 || b == Block::SpruceLog as u8
-}
-
 /// Checks every plant's ground and the sugar cane / cactus rules.
 fn check_plants(r: &Region) -> [usize; Block::COUNT] {
     let mut seen = [0usize; Block::COUNT];
@@ -415,28 +411,11 @@ fn decoration_respects_protected_mask() {
     assert!(diff > 100, "mask test area has no decoration to protect");
 }
 
+/// Block-level overlap is covered by `decorated_subregions_agree_with_reference`;
+/// this checks the decorated heightmap path against the decorated region.
 #[test]
-fn overlapping_decorated_regions_agree() {
+fn decorated_heightmap_matches_decorated_region() {
     let seed = 0xDEAD_BEEF;
-    let (bx, bz, bw, bd) = (-77, -45, 120, 100);
-    let big = generate_decorated(seed, bx, bz, bw, bd);
-    for &(ox, oz, w, d) in &[(-30, 3, 29, 21), (-77, -45, 17, 33), (10, 20, 33, 35)] {
-        let small = generate_decorated(seed, ox, oz, w, d);
-        for z in 0..d {
-            for x in 0..w {
-                let a = col(&small, x, z);
-                let b = col(&big, (ox - bx) as u32 + x, (oz - bz) as u32 + z);
-                assert_eq!(
-                    a,
-                    b,
-                    "column ({}, {}) differs",
-                    ox + x as i32,
-                    oz + z as i32
-                );
-            }
-        }
-    }
-    // Heightmap path agrees with the decorated region.
     let hm = generate_heightmap_with_biases(seed, -30, 3, 29, 21, &Biases::default(), true);
     let small = generate_decorated(seed, -30, 3, 29, 21);
     for z in 0..21u32 {
@@ -449,7 +428,6 @@ fn overlapping_decorated_regions_agree() {
             );
         }
     }
-    let _ = is_log;
 }
 
 /// Tree attempts per chunk, from SPEC 10.3:

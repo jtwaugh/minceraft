@@ -9,6 +9,7 @@
 //! layout_stats` over seeds 1..=200 (see the PR for the distribution).
 
 use crate::{DensityTerm, Exclusion, Layout, Level, Structure, StructurePlacement, WorldConfig};
+use terrain::noise::mix64;
 use terrain::SEA_LEVEL;
 
 /// Island bump: full effect inside `ISLAND_R_INNER`, none beyond
@@ -35,13 +36,10 @@ pub const V0_ISLAND_DIST_MAX: f64 = 32.0;
 /// Default v0 spawn water radius.
 pub const V0_SPAWN_WATER_RADIUS: f64 = 8.0;
 
-/// SplitMix64 finaliser: a stateless hash, so placement is a pure function
-/// of the seed.
-fn mix(mut z: u64) -> u64 {
-    z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
+/// SplitMix64 step: a stateless hash, so placement is a pure function of
+/// the seed.
+fn mix(z: u64) -> u64 {
+    mix64(z.wrapping_add(0x9E37_79B9_7F4A_7C15))
 }
 
 /// Unit float in [0, 1) from the hash of `seed` and a stream number.

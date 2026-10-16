@@ -99,6 +99,7 @@ cargo test                                   # terrain unit tests
 (cd art && python3 -I tools/validate.py)     # must print "ok: N ..." with N > 0
 (cd art && python3 -I tools/build_sheet.py)  # art preview -> art/build/sheet.html
 node viewer/flyover/preview.mjs 12345        # headless flyover plan (needs ./build.sh first)
+node --test client/test/*.test.mjs           # client tests (needs ./build.sh first)
 cargo run -p terrain --profile bench-native --example stats -- 12345   # timing, biome and vegetation stats
 ```
 

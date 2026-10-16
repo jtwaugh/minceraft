@@ -186,3 +186,8 @@ pub fn is_opaque_cube(b: u8) -> bool {
 pub fn is_liquid(b: u8) -> bool {
     BLOCK_INFO.get(b as usize).is_some_and(|i| i.liquid)
 }
+
+#[inline]
+pub fn is_leaves(b: u8) -> bool {
+    b == Block::OakLeaves as u8 || b == Block::BirchLeaves as u8 || b == Block::SpruceLeaves as u8
+}
