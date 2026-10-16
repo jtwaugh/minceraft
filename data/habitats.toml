@@ -1,0 +1,40 @@
+# Water-column habitat rules (docs/design/world-layout.md Phase C).
+# Read by crates/layout/src/habitat.rs.
+#
+# Rules are checked in order and the first match wins. A rule matches when
+# every field it sets matches; unset fields match anything. The last rule
+# must set no fields (the fallback).
+#
+# frozen              = surface is ice
+# temp_min / temp_max = column temperature, inclusive, 0..1
+# depth_min / depth_max = water depth in blocks, inclusive
+# shore_distance_min / shore_distance_max = distance to land in columns, inclusive
+# bottom              = block names (data/blocks.toml); the seabed block must be one
+
+[[habitat]]
+id = "frozen"
+frozen = true
+
+[[habitat]]
+id = "warm_shallows"
+temp_min = 0.6
+depth_max = 6
+bottom = ["sand"]
+
+[[habitat]]
+id = "deep_water"
+depth_min = 14
+shore_distance_min = 24
+
+[[habitat]]
+id = "rocky_shore"
+depth_max = 8
+shore_distance_max = 6
+bottom = ["gravel", "stone"]
+
+[[habitat]]
+id = "cold_open"
+temp_max = 0.4
+
+[[habitat]]
+id = "temperate_open"

@@ -269,6 +269,8 @@ mod builder;
 pub use builder::{build_layout, default_v0_level};
 mod channel;
 pub use channel::ChannelEval;
+mod habitat;
+pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
@@ -292,6 +294,8 @@ mod channel_tests;
 mod climate_tests;
 #[cfg(test)]
 mod exclusion_tests;
+#[cfg(test)]
+mod habitat_tests;
 #[cfg(test)]
 mod level_tests;
 #[cfg(test)]
