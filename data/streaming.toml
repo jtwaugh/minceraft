@@ -1,0 +1,14 @@
+# Region streaming around the player. See docs/design/world-layout.md
+# Phase D (Multi-region world). These are this game's own values.
+
+[radii]
+# Regions within this Chebyshev distance of the player's region are loaded
+# (1 = the player's region and its eight neighbours).
+load = 1
+# Regions farther than this are dropped. At least `load`.
+unload = 2
+
+[generation]
+# Whether streamed regions get trees and plants. Decoration is position
+# independent, so this only changes what is generated, not where borders fall.
+decorate = true
