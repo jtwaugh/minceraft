@@ -8,7 +8,9 @@
 //! turns around the raft's centre before their own movement. Tilt is carried in
 //! the frame and drives the swell push of 4.7 (third and fourth bullets).
 
-use crate::collision::{block_boxes_in, Aabb, CollisionWorld};
+use crate::collision::{
+    block_boxes_in, block_selection_boxes_in, Aabb, CollisionWorld, SelectionBox,
+};
 use crate::physics::PlayerPhysics;
 use crate::player::Player;
 use std::collections::HashSet;
@@ -309,6 +311,17 @@ impl<W: CollisionWorld> CollisionWorld for RaftWorld<'_, W> {
     fn boxes_in(&self, query: &Aabb, out: &mut Vec<Aabb>) {
         block_boxes_in(self, query, out);
         out.extend(self.raft.boxes().filter(|b| b.intersects(query)));
+    }
+
+    fn selection_boxes_in(&self, query: &Aabb, out: &mut Vec<SelectionBox>) {
+        block_selection_boxes_in(self, query, out);
+        out.extend(self.raft.boxes().filter_map(|aabb| {
+            let touches =
+                (0..3).all(|i| aabb.min[i] <= query.max[i] && aabb.max[i] >= query.min[i]);
+            // The cell the box mostly occupies now.
+            let pos = [0, 1, 2].map(|i| ((aabb.min[i] + aabb.max[i]) / 2.0).floor() as i32);
+            touches.then_some(SelectionBox { pos, aabb })
+        }));
     }
 }
 
