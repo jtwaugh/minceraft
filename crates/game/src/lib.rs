@@ -7,6 +7,7 @@ pub mod clock;
 pub mod collision;
 pub mod input;
 pub mod interactions;
+pub mod item_entities;
 pub mod items;
 pub mod movement;
 pub mod physics;

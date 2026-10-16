@@ -2,8 +2,14 @@
 #
 # Names must match the `held` strings in interactions.toml: `tool:<name>` for
 # a tool, `item:<name>` for a carryable item. Names are unique within each
-# list. Item entity numbers (throw speed, gravity, ...) are added here by the
-# item entity ticket.
+# list.
+
+# Loose items in the world. These numbers are this game's own, tuned to feel
+# right (decided in #214). Motion numbers (throw speed, gravity, drag) are
+# added with item motion.
+[item_entity]
+# Edge length of the item's cubic box, in blocks.
+box_size = 0.25
 
 [[tool]]
 name = "sword"
