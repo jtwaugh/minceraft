@@ -10,3 +10,6 @@ terrain = { path = "../terrain" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+layout = { path = "../layout" }
