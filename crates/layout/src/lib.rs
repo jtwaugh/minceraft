@@ -269,6 +269,8 @@ mod builder;
 pub use builder::{build_layout, default_v0_level};
 mod channel;
 pub use channel::ChannelEval;
+mod derived;
+pub use derived::{DerivedMaps, NO_BOTTOM};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
@@ -290,6 +292,8 @@ mod builder_tests;
 mod channel_tests;
 #[cfg(test)]
 mod climate_tests;
+#[cfg(test)]
+mod derived_tests;
 #[cfg(test)]
 mod exclusion_tests;
 #[cfg(test)]
