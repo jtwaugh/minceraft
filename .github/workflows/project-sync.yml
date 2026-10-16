@@ -1,6 +1,6 @@
 # Keeps the factory's GitHub Project board in step with the repo.
 #
-# Sets each card's Status: Inbox, Approved, Submitted, Blocked, Nits, Ready for Merge,
+# Sets each card's Status: Idea, Inbox, Approved, Submitted, Blocked, Nits, Ready for Merge,
 # Done. The rules are in .github/scripts/project_sync.py. Every run
 # recomputes the whole board, so a missed event is fixed by the next run,
 # and a schedule catches anything no event covers.
@@ -12,7 +12,8 @@
 # - Variable PROJECT_NUMBER: the number in the project's URL
 #   (github.com/users/jtwaugh/projects/<number>).
 # - The project's Status field has the options above, spelled exactly
-#   (Submitted is optional; without it those cards stay in Approved).
+#   (Idea and Submitted are optional; without them those cards go to
+#   Inbox and Approved).
 # Until both are set, the job is skipped.
 name: Project sync
 
@@ -37,7 +38,7 @@ concurrency:
 
 permissions:
   contents: read
-  issues: read
+  issues: write # labels a card dragged to Idea
   pull-requests: read
   checks: read
   statuses: read
