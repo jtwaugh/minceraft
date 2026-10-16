@@ -30,12 +30,7 @@ impl Structure {
     /// Parses a template, resolving palette names to block ids.
     #[cfg(feature = "toml-io")]
     pub fn parse(src: &str) -> Result<Structure, StructureError> {
-        let p = crate::structure_rules::parse_structure(src, &|name| {
-            terrain::BLOCK_INFO
-                .iter()
-                .position(|b| b.name == name)
-                .map(|i| i as u8)
-        })?;
+        let p = crate::structure_rules::parse_structure(src, &terrain::block_id)?;
         Ok(Structure {
             size: p.size,
             origin_offset: p.origin_offset,
