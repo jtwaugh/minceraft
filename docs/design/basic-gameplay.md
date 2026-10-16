@@ -76,7 +76,7 @@ belt, hands, item entities, the event system and the HUD.
    targets, not Beta facts, until they are.
 5. **Collision data.** Step-up on half blocks and slab-height edges needs
    partial-height collision. `blocks.toml` supports only `none`, `full` and
-   `inset`. Open question 2.
+   `inset`. Decided in #88: see section 4.4.
 6. **Blocks and art needed from this repo.** `farmland` (dry, wet) and crop
    stage blocks are not in `data/blocks.toml`, although their textures are
    now drawn (`art/batches_1_6.json`). No sword texture is listed. The raft and station
@@ -225,6 +225,7 @@ Values from the mechanics spec override these. No drowning in v0; add an air met
 - If horizontal movement was blocked and the player is on ground, retry with the box raised by step height. Keep the stepped result only if it moved farther horizontally.
 - `on_ground` is true when vertical movement was clipped while moving downward.
 - Plants (tall grass, flowers, crops) have no collision.
+- Partial-height collision shapes (slabs, half blocks) live in a game-side shape table in `crates/game`. `data/blocks.toml` and `crates/terrain` are unchanged, and test slabs are defined in the game's own test world. (Decided in #88.)
 
 ### 4.5 Sneak edge protection
 
@@ -539,10 +540,6 @@ Each phase ends with something playable in the browser test scene.
 
 ## Open questions (reconciler)
 
-2. **Partial-height collision data.**
-   - A: a game-side shape table; `blocks.toml` unchanged.
-   - B: add `collision` values (for example `"half"`) in `data/blocks.toml`
-     and `build.rs`, so the game reads shapes from the generator's data.
 3. **Missing sections 2.2 to 11.**
    - A: paste them into this file so the planner can read them.
    - B: keep them in the game repo; this doc stays a summary.
