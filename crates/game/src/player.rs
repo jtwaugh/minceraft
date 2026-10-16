@@ -112,12 +112,7 @@ impl Player {
     ) {
         // 1. Read input and scale it. Over-long raw input (diagonals) is
         // normalised first so no direction is faster than straight ahead.
-        let (mut fwd, mut strafe) = (input.move_forward as f64, input.move_strafe as f64);
-        let len = fwd.hypot(strafe);
-        if len > 1.0 {
-            fwd /= len;
-            strafe /= len;
-        }
+        let (mut fwd, mut strafe) = input.movement();
         let mut scale = physics.input_scale as f64;
         if input.sneak {
             scale *= physics.sneak_scale as f64;

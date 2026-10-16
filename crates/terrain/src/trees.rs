@@ -6,20 +6,16 @@
 //! state and commits them at the end; a tree touching a protected cell is
 //! skipped entirely (`World::commit`).
 
-use crate::data::{is_opaque_cube, tree_params, Block, TreeKind};
+use crate::data::{is_leaves, is_opaque_cube, tree_params, TreeKind};
 use crate::decorate::World;
 use crate::noise::{floor, Rng};
 use crate::{AIR, DIRT, GRASS, HEIGHT};
 
 const H: i32 = HEIGHT as i32;
 
-#[inline]
-fn is_leaves(b: u8) -> bool {
-    b == Block::OakLeaves as u8 || b == Block::BirchLeaves as u8 || b == Block::SpruceLeaves as u8
-}
-
 #[cfg(test)]
 fn is_log(b: u8) -> bool {
+    use crate::data::Block;
     b == Block::OakLog as u8 || b == Block::BirchLog as u8 || b == Block::SpruceLog as u8
 }
 

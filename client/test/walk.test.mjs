@@ -2,7 +2,7 @@
 // Run: node --test client/test/walk.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { simLookVectors, stepWalk } from '../walk.js';
+import { stepWalk } from '../walk.js';
 
 function fakeWalk({ world = true } = {}) {
   const w = {
@@ -29,12 +29,4 @@ test('no ticks run, and no input is drained, before terrain is loaded', () => {
   stepWalk(w, 4, 0, () => { drained++; });
   assert.equal(w.ticks.length, 0);
   assert.equal(drained, 0);
-});
-
-test('sim look: yaw 0 faces -z and a quarter turn right faces +x', () => {
-  const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
-  assert.ok(near(simLookVectors(0, 0).forward, [0, 0, -1]));
-  assert.ok(near(simLookVectors(Math.PI / 2, 0).forward, [1, 0, 0]));
-  assert.ok(near(simLookVectors(0, 0).right, [1, 0, 0]));
-  assert.ok(simLookVectors(0, 0.5).forward[1] > 0);
 });

@@ -5,7 +5,8 @@
 //
 //   const input = attachInput({ sampler: new InputSampler(), canvas, document, window });
 //   input.look()   every frame: { yaw, pitch } for the camera
-//   input.tick()   at each sim tick boundary: the TickInput for the sim
+//   input.tick()   at each sim tick boundary: the TickInput, as a plain object
+//   input.drain()  the same, as the wasm Tick the sim bindings take (caller frees it)
 //   input.detach() remove every listener
 
 const MOUSE_KEYS = ['MouseLeft', null, 'MouseRight']; // MouseEvent.button 0, 1, 2
@@ -74,6 +75,9 @@ export function attachInput({ sampler, canvas, document, window }) {
     },
     look() {
       return { yaw: sampler.yaw, pitch: sampler.pitch };
+    },
+    drain() {
+      return sampler.drain();
     },
     tick() {
       const t = sampler.drain();

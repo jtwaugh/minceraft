@@ -30,6 +30,24 @@ pub struct TickInput {
     pub tool_slot: Option<u8>,
 }
 
+impl TickInput {
+    /// Movement as `(forward, strafe)`: each axis clamped to -1..1 (non-finite
+    /// counts as 0), then the pair scaled down to length 1 if longer, so
+    /// diagonals are no faster than straight lines.
+    pub fn movement(&self) -> (f64, f64) {
+        let (f, s) = (
+            axis(self.move_forward) as f64,
+            axis(self.move_strafe) as f64,
+        );
+        let len = f.hypot(s);
+        if len > 1.0 {
+            (f / len, s / len)
+        } else {
+            (f, s)
+        }
+    }
+}
+
 /// A press edge that survives until the sim has consumed it.
 ///
 /// Presses are counted, and each drain consumes one, so a physical click is

@@ -95,8 +95,8 @@ viewer/
   pkg/                build output (gitignored)
   textures.json       full tileset exported by build.sh (gitignored)
 client/
-  index.html, scene.js  debug camera page: viewer terrain, fly camera, frame-time overlay
-  fly.js, frametimes.js 20 Hz fly sim with interpolation; rolling p50/p99 frame times
+  index.html, scene.js  debug camera page: viewer terrain, wasm fly camera, frame-time overlay
+  frametimes.js         rolling p50/p99 frame times
   input.js, tiles.js    pointer-lock input feed; tile array for the viewer's mesher
 ```
 

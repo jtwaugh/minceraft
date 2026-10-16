@@ -1,7 +1,7 @@
 //! Small-plant patch generators (SPEC 12). Each returns how many blocks it
 //! placed. Positions with no room, bad ground or bad light are skipped.
 
-use crate::data::{blocks_movement, is_liquid, is_opaque_cube, Block};
+use crate::data::{blocks_movement, is_leaves, is_liquid, is_opaque_cube, Block};
 use crate::decorate::World;
 use crate::noise::Rng;
 use crate::{AIR, DIRT, GRASS, SAND};
@@ -12,11 +12,6 @@ const PUMPKIN: u8 = Block::Pumpkin as u8;
 const DEAD_BUSH: u8 = Block::DeadBush as u8;
 const BROWN: u8 = Block::BrownMushroom as u8;
 const RED: u8 = Block::RedMushroom as u8;
-
-#[inline]
-fn is_leaves(b: u8) -> bool {
-    b == Block::OakLeaves as u8 || b == Block::BirchLeaves as u8 || b == Block::SpruceLeaves as u8
-}
 
 /// Triangular offset in `[-(s-1), s-1]` ("spread", SPEC Part II notation).
 #[inline]
