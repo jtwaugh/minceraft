@@ -35,8 +35,9 @@ const gl = canvas.getContext('webgl2', { antialias: true });
 if (!gl) throw new Error('WebGL2 is not available');
 
 // ---------------------------------------------------------------- shaders
-// The viewer's shader, minus water animation. `cut` discards transparent
-// texels (leaves, plants); `solid` does not.
+// The viewer's shader, minus water animation, reading the split colour/tint
+// textures from tiles.js. `cut` (leaves, plants) outputs coverage as alpha for
+// alpha-to-coverage and discards below `cutoff`; `solid` does neither.
 function program(cut) {
   const sh = (type, src) => {
     const s = gl.createShader(type);
@@ -66,15 +67,16 @@ function program(cut) {
     precision mediump float;
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
-    uniform sampler2DArray tex;
-    uniform float alpha; uniform float fogFar; uniform vec3 fogColor;
+    uniform sampler2DArray tex; uniform sampler2DArray tintTex;
+    uniform float alpha; uniform float fogFar; uniform vec3 fogColor; uniform float cutoff;
     out vec4 o;
     void main() {
       vec4 t = texture(tex, vuv);
-      ${cut ? 'if (t.a < 0.5) discard;' : ''}
-      vec3 c = (t.a < 0.9 ? t.rgb * vtint : t.rgb) * vshade;
+      ${cut ? 'if (t.a < cutoff) discard;' : ''}
+      float g = texture(tintTex, vuv).r;
+      vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade;
       float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, 1.0);
-      o = vec4(mix(c, fogColor, f), alpha);
+      o = vec4(mix(c, fogColor, f), ${cut ? 't.a * alpha' : 'alpha'});
     }`));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
@@ -140,6 +142,14 @@ const faceLayer = await loadTiles(gl, B, names, '../viewer/textures.json');
 const ctx = legendContext(legendJson, faceLayer);
 
 const solidProg = program(false), cutProg = program(true);
+// With MSAA, cutout edges use alpha-to-coverage so distant leaves fade to
+// partial coverage instead of popping in and out at a hard alpha threshold.
+const msaa = gl.getParameter(gl.SAMPLES) > 0;
+const cut = (draw) => {
+  if (msaa) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  draw();
+  if (msaa) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+};
 let skyColor = [0.61, 0.76, 0.9];
 const meshes = { opaque: [], cutout: [], water: [], ice: [] };
 
@@ -231,12 +241,12 @@ function render(now) {
     gl.uniform1f(prog.u('alpha'), a);
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
-  bind(cutProg, 1); drawParts(cutProg, meshes.cutout);
+  bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
     const moved = (parts) => parts.map((p) => ({ ...p, offset: [p.offset[0] + dx, p.offset[1] + dy, p.offset[2] + dz] }));
     bind(solidProg, 1); drawParts(solidProg, moved(raftMeshes.opaque));
-    bind(cutProg, 1); drawParts(cutProg, moved(raftMeshes.cutout));
+    bind(cutProg, 1); cut(() => drawParts(cutProg, moved(raftMeshes.cutout)));
   }
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
@@ -259,5 +269,9 @@ function render(now) {
 }
 
 gl.activeTexture(gl.TEXTURE0);
-for (const p of [solidProg, cutProg]) { gl.useProgram(p); gl.uniform1i(p.u('tex'), 0); }
+for (const p of [solidProg, cutProg]) {
+  gl.useProgram(p);
+  gl.uniform1i(p.u('tex'), 0); gl.uniform1i(p.u('tintTex'), 1);
+  gl.uniform1f(p.u('cutoff'), msaa ? 1 / 255 : 0.5);
+}
 requestAnimationFrame(render);
