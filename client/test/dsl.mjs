@@ -7,7 +7,8 @@
 // One statement per line; `#` starts a comment. A file holds one or more cases.
 //
 //   case <name>                 a fresh world: fake canvas/document/window, new sim
-//   start fly|walk [raft]       mode, and the raft test scene (default: walk, no terrain)
+//   start fly|walk [raft]       mode, and the raft test scene (default: walk, no terrain);
+//                               the raft scene has three loose seeds on its islet
 //   click                       click the canvas (requests pointer lock)
 //   lock | unlock | blur        pointer lock gained / lost; window loses focus
 //   down <code> | up <code>     KeyboardEvent.code, e.g. KeyW, Space, ShiftLeft
@@ -24,12 +25,15 @@
 // Paths: mode (fly|walk), locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
-// (the matched rule's action, or none), box (outlined: true|false), underwater.
+// (the matched rule's action, or none), box (outlined: true|false), underwater,
+// belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
+// item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
+import { spawnTestItems } from '../overlay.js';
 
 let ready = false;
 function init() {
@@ -62,6 +66,7 @@ function world({ mode = 'walk', raft = false }) {
   const sampler = new InputSampler();
   const input = attachInput({ sampler, canvas, document, window });
   const walk = raft ? Walk.in_scene(new Scene()) : new Walk(32, 70.5, 32);
+  if (raft) spawnTestItems(walk);
   const fly = new FlyCamera(32, 94, 32);
   const controller = createController({
     input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly',
@@ -91,6 +96,11 @@ function read(w, path) {
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
   if (['ticks', 'alpha', 'yaw', 'pitch', 'underwater'].includes(path)) return s[path];
+  if (path === 'belt.selected') return s.belt.selected;
+  if (/^belt\.slot\.[1-9]$/.test(path)) return s.belt.slots[+path.slice(-1) - 1] ?? 'none';
+  if (path === 'hands') return s.belt.hands ?? 'none';
+  if (path === 'held') return s.belt.held;
+  if (path === 'items') return w.walk.loose_items();
   const aim = s.aim;
   if (path === 'target.kind') return aim.kind;
   if (path === 'target.id') return aim.id ?? -1;

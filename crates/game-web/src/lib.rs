@@ -7,6 +7,7 @@ use game::camera::{Camera, Pose};
 use game::clock::Clock;
 use game::input::TickInput;
 use game::interactions::{Button, HeldThing};
+use game::items::ItemInstance;
 use game::sampler::Sampler;
 use game::scene::{raft_scene, RaftScene, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
@@ -233,8 +234,53 @@ impl Walk {
         }
     }
 
-    /// Pick the held thing until the belt exists: `empty`, or `tool:<name>`
-    /// (for example `tool:hoe`); `item:<name>` holds an item.
+    /// The tool in belt slot `slot` (0-based), or empty for an empty slot.
+    pub fn belt_slot(&self, slot: u32) -> String {
+        usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.0.player_state().tool_belt.get(i))
+            .and_then(Option::as_ref)
+            .map_or_else(String::new, |t| t.tool.clone())
+    }
+
+    /// Number of belt slots.
+    pub fn belt_len(&self) -> u32 {
+        game::items::BELT_SLOTS as u32
+    }
+
+    /// The selected belt slot (0-based).
+    pub fn selected_slot(&self) -> u32 {
+        u32::from(self.0.player_state().selected)
+    }
+
+    /// The carried item's name, or empty when the hands are empty.
+    pub fn hands(&self) -> String {
+        self.0.hands().map_or_else(String::new, |i| i.item.clone())
+    }
+
+    /// What interaction rules see, as `set_held` takes it: `empty`,
+    /// `tool:<name>` or `item:<name>`.
+    pub fn held(&self) -> String {
+        match self.0.held() {
+            HeldThing::Tool(n) => format!("tool:{n}"),
+            HeldThing::Item(n) => format!("item:{n}"),
+            _ => "empty".into(),
+        }
+    }
+
+    /// Put a loose item called `name` at `(x, y, z)`; returns its entity id.
+    pub fn spawn_item(&mut self, name: &str, x: f64, y: f64, z: f64) -> i32 {
+        self.0
+            .spawn_item(ItemInstance { item: name.into() }, [x, y, z]) as i32
+    }
+
+    /// How many loose items lie in the world.
+    pub fn loose_items(&self) -> u32 {
+        self.0.items().len() as u32
+    }
+
+    /// Override the held thing, whatever the belt and hands say (tests):
+    /// `empty`, `tool:<name>` or `item:<name>`.
     pub fn set_held(&mut self, held: &str) {
         self.0.set_held(match held.split_once(':') {
             Some(("tool", n)) => HeldThing::Tool(n.into()),

@@ -8,16 +8,15 @@
 //     box      [minx, miny, minz, maxx, maxy, maxz] to outline, or null
 //     primary, secondary, last   { index, action } of the matched rule, or null
 //   formatAim(aim) -> overlay lines
-//   heldFromQuery(tool) -> the `held` string for Walk.set_held
+//   readBelt(walk) -> { slots, selected, hands, held }
+//     slots    tool name per belt slot, or null for an empty slot
+//     hands    the carried item's name, or null
+//     held     what interaction rules see: empty | tool:<name> | item:<name>
+//   formatBelt(belt) -> overlay lines (a minimum readout; the real HUD is Phase 8)
+//   spawnTestItems(walk) puts a few loose items on the raft scene's islet
 
 export const FACES = ['bottom', 'top', 'north', 'south', 'west', 'east'];
 const KINDS = ['none', 'block', 'entity'];
-
-/** `?tool=hoe|sword|empty` (or `item:<name>`) as a held string; anything else is empty-handed. */
-export function heldFromQuery(tool) {
-  if (!tool || tool === 'empty') return 'empty';
-  return tool.includes(':') ? tool : `tool:${tool}`;
-}
 
 function rule(walk, index) {
   return index < 0 ? null : { index, action: walk.rule_action(index) };
@@ -49,4 +48,25 @@ export function formatAim(aim) {
     `rule primary ${showRule(aim.primary)} | secondary ${showRule(aim.secondary)}`,
     `last press ${showRule(aim.last)}`,
   ].join('\n');
+}
+
+export function readBelt(walk) {
+  const slots = [];
+  for (let i = 0; i < walk.belt_len(); i++) slots.push(walk.belt_slot(i) || null);
+  return { slots, selected: walk.selected_slot(), hands: walk.hands() || null, held: walk.held() };
+}
+
+export function formatBelt(belt) {
+  const cells = belt.slots.map((t, i) => `${i === belt.selected ? '>' : ' '}${i + 1}:${t ?? '-'}`);
+  return `belt ${cells.join(' ')}\nhands ${belt.hands ?? 'empty'} | held ${belt.held}`;
+}
+
+// The islet is the 3x3 patch one block east of the spawn (crates/game/src/scene.rs);
+// its middle row is clear of the plants and the stub animal.
+const TEST_ITEMS = ['seeds', 'seeds', 'seeds'];
+
+export function spawnTestItems(walk) {
+  const [fx, , fz] = walk.feet();
+  const x0 = Math.floor(fx) + 1, z = Math.floor(fz);
+  TEST_ITEMS.forEach((name, i) => walk.spawn_item(name, x0 + 0.5 + i, 64.2, z));
 }

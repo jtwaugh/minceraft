@@ -9,8 +9,6 @@
 //                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
 //   ?plants=D    plant draw distance in blocks (default 48)
-//   ?tool=T     what the walking player holds until the belt exists: empty (default), hoe, sword,
-//                or item:<name>; the overlay shows which interaction rule a press would match
 //   ?log=N       console.log the frame-time summary every N frames, for headless runs
 //
 // window.frameStats() returns { frames, p50, p99 } at any time.
@@ -21,7 +19,7 @@ import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadI
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
-import { formatAim, heldFromQuery } from './overlay.js';
+import { formatAim, formatBelt, spawnTestItems } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { NEAR, farPlane, look } from './view.js';
@@ -34,7 +32,6 @@ const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
 const flying = qs.get('mode') === 'fly';
 const raftScene = qs.get('scene') === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
-const held = heldFromQuery(qs.get('tool'));
 const logEvery = +(qs.get('log') ?? 0);
 
 const canvas = document.getElementById('gl');
@@ -221,7 +218,7 @@ const sampler = new InputSampler();
 const surfaceY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[1] + 1;
 const scene = raftScene ? new Scene() : null;
 const walk = scene ? Walk.in_scene(scene) : new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
-walk.set_held(held);
+if (scene) spawnTestItems(walk);
 const input = attachInput({ sampler, canvas, document, window });
 
 const names = [];
@@ -363,7 +360,7 @@ function render(now) {
     overlay.textContent = `${frames.format()}\n${p99 > FRAME_BUDGET_MS ? 'over' : 'within'} the 16.7 ms p99 budget\n` +
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
-held ${held}
+${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;
     hint.hidden = input.locked;
   }

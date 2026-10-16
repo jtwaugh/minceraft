@@ -1,0 +1,131 @@
+# Tool belt and hands (docs/design/basic-gameplay.md section 6). The belt is
+# empty hand, sword, hoe, and two reserved slots; slots are keys 1-5 and the wheel.
+# Raft scene: three seeds lie on the islet east of the spawn (yaw 1.57 is +x).
+
+case the belt starts on the empty hand
+start walk raft
+expect belt.selected = 0
+expect belt.slot.1 = none
+expect belt.slot.2 = sword
+expect belt.slot.3 = hoe
+expect held = empty
+expect hands = none
+
+case number keys select a slot and the held tool follows
+start walk raft
+click
+lock
+press Digit2
+frame 50 x2
+expect belt.selected = 1
+expect held = tool:sword
+press Digit3
+frame 50 x2
+expect belt.selected = 2
+expect held = tool:hoe
+press Digit4
+frame 50 x2
+expect belt.selected = 3
+expect held = empty
+
+case the wheel steps through slots
+start walk raft
+click
+lock
+wheel 100
+frame 50 x2
+expect belt.selected = 1
+wheel 100
+frame 50 x2
+expect belt.selected = 2
+wheel -100
+frame 50 x2
+expect belt.selected = 1
+
+case keys do nothing while the pointer is unlocked
+start walk raft
+press Digit3
+frame 50 x2
+expect belt.selected = 0
+
+case E picks up a seed packet in reach and Q drops it again
+start walk raft
+click
+lock
+mouse 632 120
+frame 50 x2
+expect target.kind = entity
+expect items = 3
+expect hands = none
+press KeyE
+frame 50 x2
+expect hands = seeds
+expect held = item:seeds
+expect items = 2
+expect target.kind != entity
+press KeyQ
+frame 50 x2
+expect hands = none
+expect held = empty
+expect items = 3
+
+case E with nothing in reach picks nothing up
+start walk raft
+click
+lock
+frame 50 x2
+press KeyE
+frame 50 x2
+expect hands = none
+expect items = 3
+
+case carrying stows the tool: selecting still works but the held thing stays the item
+start walk raft
+click
+lock
+mouse 632 120
+frame 50 x2
+press KeyE
+frame 50 x2
+expect hands = seeds
+press Digit3
+frame 50 x2
+expect belt.selected = 2
+expect held = item:seeds
+press KeyQ
+frame 50 x2
+expect held = tool:hoe
+
+case primary hits the animal with empty hands
+start walk raft
+click
+lock
+mouse 763 -64
+frame 50 x2
+expect target.kind = entity
+expect target.id = 1
+button down left
+frame 50 x2
+button up left
+frame 50
+expect rule.last = attack
+
+case primary does nothing while carrying
+start walk raft
+click
+lock
+mouse 632 120
+frame 50 x2
+press KeyE
+frame 50 x2
+expect hands = seeds
+mouse 131 -184
+frame 50 x2
+expect target.kind = entity
+expect target.id = 1
+button down left
+frame 50 x2
+button up left
+frame 50
+expect rule.last = none
+expect hands = seeds
