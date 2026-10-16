@@ -212,6 +212,9 @@ noise. Now:
   verdict it overrides, and only the maintainer's account counts. The
   reasons stay on the PR, so it's easy to check later which overrides
   were followed by a fix.
+- **One gap.** The reviewer can't run on a PR that edits its own workflow
+  file (`claude-code-action` refuses), so such PRs wait at pending until
+  the maintainer reviews them and comments `/override <reason>`.
 
 ### 7. Generated worlds must not change by accident
 

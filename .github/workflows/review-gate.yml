@@ -52,6 +52,12 @@ jobs:
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          # The PR that adds this gate runs before the script is on the
+          # default branch; leave the status unset rather than fail.
+          if [ ! -f .github/scripts/review_gate.py ]; then
+            echo "::notice::review_gate.py isn't on the default branch yet; not setting review-verdict."
+            exit 0
+          fi
           if [ "$EVENT" = workflow_run ]; then
             python3 -B .github/scripts/review_gate.py --sha "$SHA"
           else
