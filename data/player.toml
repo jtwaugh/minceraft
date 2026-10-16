@@ -1,5 +1,5 @@
 # Player body and land-movement tunables. See docs/design/basic-gameplay.md
-# sections 4.1, 4.2, 4.5 and 4.6.
+# sections 4.1, 4.2, 4.3, 4.5 and 4.6.
 #
 # These are this game's own values (decided in #90). They make no claim of
 # Beta parity and are not taken from SPEC.md; retune them for feel. Every key
@@ -45,3 +45,17 @@ edge_step = 0.05
 [falling]
 # Fall distance that does no damage; damage is ceil(fall_distance - threshold).
 damage_threshold = 3.0
+
+[water]
+# Section 4.3. Horizontal acceleration while in water, and the per-tick
+# velocity multiplier applied to all three axes.
+accel = 0.02
+velocity_multiplier = 0.8
+# Gravity in water, subtracted from vy each tick.
+gravity = 0.02
+# Added to vy each tick while jump is held in water.
+swim_up_impulse = 0.04
+# Vertical velocity set when climbing out onto a ledge, and the clearance
+# above the feet that the ledge must have.
+climb_out_velocity = 0.3
+climb_out_clearance = 0.6
