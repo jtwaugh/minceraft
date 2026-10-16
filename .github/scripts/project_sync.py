@@ -8,9 +8,11 @@ Statuses, in the order a ticket moves through them:
 
   Inbox            open ticket, question or idea nobody has approved: no
                    `factory` label and no pull request
-  Approved         labelled `factory`, but no pull request with a result yet:
-                   waiting on dependencies, being built, or its PR's CI and
-                   review are still running
+  Approved         labelled `factory`, no pull request yet: waiting on
+                   dependencies or files, or being built
+  Submitted        its PR is open and CI or the reviewer hasn't finished with
+                   the head commit yet (falls back to Approved if the board
+                   has no Submitted column)
   Blocked          its PR can't merge as is: the reviewer said Blocked (and
                    the maintainer didn't /override), a check failed, or it
                    conflicts with master
@@ -41,9 +43,12 @@ import review_gate  # noqa: E402  (verdict parsing and the merge-gate decision)
 
 REPO = os.environ["GITHUB_REPOSITORY"]
 STATUSES = ["Inbox", "Approved", "Blocked", "Nits", "Ready for Merge", "Done"]
-# Check runs from agent jobs, not checks on the code.
+OPTIONAL = {"Submitted": "Approved"}  # status: what to use if the board lacks it
+# Check runs from agent and housekeeping jobs (including this sync, which is
+# cancelled whenever a newer run starts), not checks on the code.
 AGENT_JOBS = {"implement", "find-ready", "start-ready", "edit-spec", "reconcile",
-              "finish-plan", "phase-done", "drift", "pick", "plan"}
+              "finish-plan", "phase-done", "drift", "pick", "plan", "sync",
+              "find", "resolve"}
 NITS = re.compile(r"Verdict:\s*\**\s*ready,? with nits", re.I)
 
 
@@ -93,7 +98,9 @@ def checks_state(sha):
             continue
         if r["status"] != "completed":
             state = "running"
-        elif r["conclusion"] in ("failure", "timed_out", "cancelled", "action_required", "startup_failure"):
+        # "cancelled" is left out: a run is cancelled when a newer push
+        # supersedes it, and the newer run's checks are the ones that count.
+        elif r["conclusion"] in ("failure", "timed_out", "action_required", "startup_failure"):
             return "failed"
     return state
 
@@ -114,7 +121,7 @@ def pr_status(pr):
     if gate == "failure":
         return "Blocked", "reviewer: blocked"
     if gate == "pending" or checks == "running":
-        return "Approved", "checks or review still running"
+        return "Submitted", "checks or review still running"
     verdict = review_gate.latest_verdict(comments)
     if verdict and verdict[1] and pr["head"]["sha"].startswith(verdict[1]) \
             and NITS.search(verdict[2].get("body") or ""):
@@ -218,6 +225,10 @@ def load_project(login, number):
     if not field or "options" not in field:
         raise SystemExit("The project has no single-select Status field.")
     options = {o["name"]: o["id"] for o in field["options"]}
+    for name, fallback in OPTIONAL.items():
+        if name not in options:
+            print(f"No '{name}' column on the board; using '{fallback}' instead.")
+            options[name] = options.get(fallback)
     missing = [s for s in STATUSES if s not in options]
     if missing:
         raise SystemExit("Add these options to the project's Status field (exact names): "
