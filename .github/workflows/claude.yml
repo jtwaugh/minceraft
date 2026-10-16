@@ -188,7 +188,7 @@ jobs:
       # A run that ends without a PR and without explaining itself would
       # otherwise leave the ticket silently idle. Say so on the ticket.
       - name: Report a run that opened no PR
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -198,7 +198,7 @@ jobs:
         run: |
           prs=$(gh api "repos/$REPO/pulls?state=open&per_page=100" \
             --jq "[.[] | select((.head.ref | startswith(\"claude/issue-$N-\")) or ((.body // \"\") | test(\"(?i)(close[sd]?|fix(e[sd])?|resolve[sd]?) #$N\\\\b\")))] | length")
-          said=$(gh api "repos/$REPO/issues/$N/comments?per_page=100" \
+          said=$(gh api "repos/$REPO/issues/$N/comments?per_page=100&since=$STARTED" \
             --jq "[.[] | select(.user.login == \"claude[bot]\" and .created_at > \"$STARTED\")] | length")
           if [ "$prs" -eq 0 ] && [ "$said" -eq 0 ]; then
             gh issue comment "$N" --repo "$REPO" --body "The automatic run finished without opening a PR or saying why ([run log]($RUN), outcome: ${{ job.status }}). Comment \`@claude\` here to retry."
