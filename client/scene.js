@@ -22,6 +22,7 @@ import { loadTiles } from './tiles.js';
 import { formatAim, heldFromQuery } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
+import { NEAR, farPlane, look } from './view.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 
 const CHUNK = 64;
@@ -42,7 +43,10 @@ if (!gl) throw new Error('WebGL2 is not available');
 // ---------------------------------------------------------------- shaders
 // The viewer's shader, minus water animation, reading the split colour/tint
 // textures from tiles.js. `cut` (leaves, plants) outputs coverage as alpha for
-// alpha-to-coverage and discards below `cutoff`; `solid` does neither.
+// alpha-to-coverage and discards below `cutoff`; `solid` does neither. Fog
+// runs from `fogStart` to `fogEnd` (eye distance) and `tint` multiplies the
+// lit colour, both set per frame by view.js `look`, so the same shader draws
+// above and under water.
 function program(cut) {
   const sh = (type, src) => {
     const s = gl.createShader(type);
@@ -73,14 +77,14 @@ function program(cut) {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogFar; uniform vec3 fogColor; uniform float cutoff;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform vec3 fogColor; uniform vec3 tint; uniform float cutoff;
     out vec4 o;
     void main() {
       vec4 t = texture(tex, vuv);
       ${cut ? 'if (t.a < cutoff) discard;' : ''}
       float g = texture(tintTex, vuv).r;
-      vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade;
-      float f = clamp((vdist - fogFar * 0.55) / (fogFar * 0.6), 0.0, 1.0);
+      vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint;
+      float f = clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
       o = vec4(mix(c, fogColor, f), ${cut ? 't.a * alpha' : 'alpha'});
     }`));
   gl.linkProgram(p);
@@ -292,29 +296,32 @@ function drawParts(prog, parts) {
 function render(now) {
   if (queue.length) meshNextChunk();
 
-  const { alpha, eye, yaw, pitch, flying, aim } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  const { alpha, eye, yaw, pitch, flying, aim, underwater } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
 
   const dpr = window.devicePixelRatio || 1;
   const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   gl.viewport(0, 0, w, h);
-  gl.clearColor(...skyColor, 1);
+  const fogFar = (radius + 0.5) * CHUNK * 1.1;
+  const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
+  gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
 
   const mvp = new Float32Array(mul(
-    perspective(sampler.fov_degrees * Math.PI / 180, w / h, 0.3, 1000),
+    perspective(sampler.fov_degrees * Math.PI / 180, w / h, NEAR, farPlane(fogFar)),
     view_matrix(eye[0], eye[1], eye[2], yaw, pitch),
   ));
-  const fogFar = (radius + 0.5) * CHUNK * 1.1;
   const bind = (prog, a) => {
     gl.useProgram(prog);
     const s = prog === cutProg ? cutSampler : solidSampler;
     gl.bindSampler(0, s); gl.bindSampler(1, s);
     gl.uniformMatrix4fv(prog.u('mvp'), false, mvp);
     gl.uniform3fv(prog.u('unpack'), [POS_SCALE, UV_SCALE, SHADE_SCALE]);
-    gl.uniform3fv(prog.u('fogColor'), skyColor);
-    gl.uniform1f(prog.u('fogFar'), fogFar);
+    gl.uniform3fv(prog.u('fogColor'), view.fogColor);
+    gl.uniform1f(prog.u('fogStart'), view.fogStart);
+    gl.uniform1f(prog.u('fogEnd'), view.fogEnd);
+    gl.uniform3fv(prog.u('tint'), view.tint);
     gl.uniform1f(prog.u('alpha'), a);
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
@@ -327,7 +334,11 @@ function render(now) {
   }
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
+  // Water faces point out of the water, so from below the surface they are
+  // back faces: draw both sides while the eye is under water.
+  if (underwater) gl.disable(gl.CULL_FACE);
   bind(solidProg, 0.45); drawParts(solidProg, meshes.water);
+  gl.enable(gl.CULL_FACE);
   bind(solidProg, 0.72); drawParts(solidProg, meshes.ice);
   gl.depthMask(true);
   gl.bindVertexArray(null);
@@ -339,7 +350,10 @@ function render(now) {
     overlayAt = now;
     const p99 = frames.percentile(99);
     overlay.textContent = `${frames.format()}\n${p99 > FRAME_BUDGET_MS ? 'over' : 'within'} the 16.7 ms p99 budget\n` +
-      `${flying ? 'fly' : 'walk'} (F to switch)\npos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `\nheld ${held}\n${formatAim(aim)}`}`;
+      `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
+pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
+held ${held}
+${formatAim(aim)}`}`;
     hint.hidden = input.locked;
   }
   if (logEvery && frames.n % logEvery === 0 && frames.n) console.log(`[frames] ${frames.format()}`);

@@ -24,7 +24,7 @@
 // Paths: mode (fly|walk), locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
-// (the matched rule's action, or none), box (outlined: true|false).
+// (the matched rule's action, or none), box (outlined: true|false), underwater.
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
@@ -90,7 +90,7 @@ function read(w, path) {
   if (path === 'locked') return w.input.locked;
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
-  if (['ticks', 'alpha', 'yaw', 'pitch'].includes(path)) return s[path];
+  if (['ticks', 'alpha', 'yaw', 'pitch', 'underwater'].includes(path)) return s[path];
   const aim = s.aim;
   if (path === 'target.kind') return aim.kind;
   if (path === 'target.id') return aim.id ?? -1;

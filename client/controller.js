@@ -5,9 +5,12 @@
 // F swaps walking and flying while the pointer is locked, keeping the position.
 //
 //   const c = createController({ input, walk, fly, clock, document, flying });
-//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying, aim }
+//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying, aim, underwater }
 //                          (aim as in overlay.js; the walking player's, stale while flying)
 //   c.detach()          remove the F listener
+//
+// `underwater` is whether the drawn eye is in a water cell, in either mode;
+// scene.js switches the fog and tint on it.
 //
 // client/test/scripts/*.input drive this through the DSL in client/test/dsl.mjs.
 
@@ -15,7 +18,7 @@ import { stepWalk } from './walk.js';
 import { readAim } from './overlay.js';
 
 export function createController({ input, walk, fly, clock, document, flying = false }) {
-  const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null };
+  const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null, underwater: false };
 
   const onKey = (e) => {
     if (e.code !== 'KeyF' || e.repeat || !input.locked) return;
@@ -47,7 +50,8 @@ export function createController({ input, walk, fly, clock, document, flying = f
       } else {
         eye = stepWalk(walk, ticks, alpha, () => input.drain());
       }
-      Object.assign(state, { ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha) });
+      const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
+      Object.assign(state, { ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha), underwater });
       return state;
     },
     detach() {

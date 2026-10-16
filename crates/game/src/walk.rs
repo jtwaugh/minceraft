@@ -360,6 +360,18 @@ impl Walker {
         between_ticks(self.prev_eye, self.cur_eye, alpha)
     }
 
+    /// Whether the block cell containing `pos` is a liquid. The client asks
+    /// this of the drawn eye to switch to the underwater view. Water blocks
+    /// fill their whole cell, so the cell alone decides; the raft is never
+    /// liquid, so only the loaded regions are consulted.
+    pub fn liquid_at(&self, pos: [f64; 3]) -> bool {
+        let c = |v: f64| v.floor() as i32;
+        self.world
+            .block_at(c(pos[0]), c(pos[1]), c(pos[2]))
+            .info()
+            .liquid
+    }
+
     /// Put the player at `feet` with no velocity, e.g. when leaving fly mode.
     pub fn teleport(&mut self, feet: [f64; 3]) {
         self.player = Player::new(feet, &self.physics);
@@ -767,6 +779,22 @@ mod tests {
 
     fn scene_walker() -> Walker {
         Walker::in_raft_scene(crate::scene::raft_scene()).unwrap()
+    }
+
+    #[test]
+    fn liquid_at_is_the_water_cell_and_not_the_air_or_floor() {
+        // The scene's water fills y = 49..64 (cells 49 to 63), stone below.
+        let w = scene_walker();
+        let [x, _, z] = w.player().pos;
+        assert!(w.liquid_at([x, 63.99, z]));
+        assert!(w.liquid_at([x, 49.0, z]));
+        assert!(!w.liquid_at([x, 64.0, z]));
+        assert!(!w.liquid_at([x, 48.5, z]));
+        // Outside every loaded region is air.
+        assert!(!w.liquid_at([1000.0, 60.0, 1000.0]));
+        // The spawn's eye is above the surface; the feet are in the water.
+        assert!(!w.liquid_at(w.eye(1.0)));
+        assert!(w.liquid_at(w.player().pos));
     }
 
     /// Swim at the raft (towards -z) holding jump until standing on it.

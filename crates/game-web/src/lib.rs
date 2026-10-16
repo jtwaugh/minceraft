@@ -283,6 +283,12 @@ impl Walk {
             .collect()
     }
 
+    /// Whether the block cell containing `(x, y, z)` is a liquid, e.g. the
+    /// drawn eye being under water.
+    pub fn liquid_at(&self, x: f64, y: f64, z: f64) -> bool {
+        self.0.liquid_at([x, y, z])
+    }
+
     /// Feet position `[x, y, z]` after the latest tick.
     pub fn feet(&self) -> Vec<f64> {
         self.0.player().pos.to_vec()
