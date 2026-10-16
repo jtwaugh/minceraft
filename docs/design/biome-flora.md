@@ -1,6 +1,6 @@
 ---
 title: Biome colour blending, biome flora and foliage variation
-status: idea
+status: accepted
 scope: both
 source: ""
 superseded_by: ""
@@ -14,6 +14,67 @@ phases:
 ---
 
 # Biome colour blending, biome flora and foliage variation
+
+## Current state
+
+Nothing in phases A to F is built yet. What exists and is relied on:
+
+- `viewer/mesh.js` has `columnTints` (per-column grass and leaf tints from
+  `ramp3(biome.grass | leaf, humidity)`, no blending), `tintFor`, `CROSS`
+  and the 16-byte vertex (`VERTEX_BYTES`, `POS_SCALE`, `UV_SCALE`). One tint
+  per column; F2 is accurate.
+- `client/tiles.js` hard-codes `NAMES` and `TINTED`, uploads with
+  `gl.generateMipmap` and `REPEAT` wrap on both axes, one sampler state for
+  all passes. F1 is accurate.
+- `client/scene.js` uses `cutoff = msaa ? 1/255 : 0.5` with
+  `SAMPLE_ALPHA_TO_COVERAGE`, and sets `skyColor` from the spawn chunk
+  centre only (lines near 169 and 184). F1 and F2 are accurate.
+- `viewer/index.html` also holds its own copy of the block id table
+  (line ~219), alongside `viewer/mesh.js`'s `B`; C.2's single tile list
+  should cover it too.
+- `crates/terrain/src/decorate.rs` picks the biome per feature at its own
+  column (deviation B3 in SPEC) and runs snow last, per column.
+- `data/blocks.toml` has `tall_grass`, `fern`, `dandelion` (collision
+  `none`, opacity 0); `data/biomes.toml` has `grass_ramp`, `leaf_ramp`,
+  `sky_ramp` per biome. No `[blend]`, `water_ramp`, `dry_ramp` or
+  `flora.toml` yet.
+- Art for the existing plants is in `art/batches_13_14.json`. None of the
+  new tiles listed in C.2, D.5 or E exist.
+
+## Reconciliation notes
+
+- **Header.** Was `idea`; now `accepted` (merging this PR accepts it).
+  `scope: both` fits: A to C are client and viewer, D to F touch
+  `crates/terrain` and the mesher.
+- **Overlap with `viewer-rendering.md`.** Its Phase B (foliage mips,
+  alpha-to-coverage, per-block UV variation) duplicates A.2, A.4 and C.1.
+  `viewer-rendering.md` is still `idea`; see open question 1
+  and resolve it before planning Phase A or C so both aren't built.
+- **`no_std` invariant.** D's `data/flora.toml` is read by
+  `crates/terrain/build.rs`, which is allowed. The noise and hash must use
+  `crates/terrain/src/noise.rs` primitives; no new runtime dependency.
+- **Determinism.** D.2 claims the flora pass never changes a Beta-placed
+  block and never consumes the cell RNG. It also must write only to air, and
+  the existing snow pass reads the surface, so the pass has to sit before
+  snow as the doc says. It needs the Determinism test the doc already lists.
+- **Wasm size.** D and E add blocks, data and mesher shapes; report gzipped
+  wasm size per CLAUDE.md. A to C are JS only and don't change it.
+- **World output.** A to C: none. D to E: air becomes plant blocks, so
+  `stats` before and after is required in each PR; the "flora disabled
+  equals today" test is the right guard.
+- **Vertex byte 14.** A.5 and C.5 reserve byte 14 and viewer-rendering C
+  reserves byte 13; the 16-byte vertex is full-ish. Whoever lands first
+  should record the layout in `viewer/mesh.js`.
+- **SPEC facts.** F4's table of tall grass, fern and dandelion biomes
+  matches SPEC 9.1. Survival rules for new plants are this project's own
+  and SPEC 12 doesn't cover them.
+- **Game.** D.4 refers to "Basic gameplay 5" (targeting); that doc's
+  Targeting section is 5, consistent.
+- **`[manual check]` items** already tagged. Measurable versions: for A,
+  compare the opaque pixel share of a plant quad at 20/40/80 blocks in a
+  headless render against level 0 coverage; for B, the colour-step test
+  already given is sufficient.
+- No item is `[external]`.
 
 The world reads as Beta in a way that's charming up close and flat from a
 few chunks away: grass changes colour in a hard line at every biome border,
@@ -104,6 +165,13 @@ tint flicker but not coverage.
 
 No world output change. Lands in the client and, through shared code, the
 viewer.
+
+Items 2 and 4 (the JS mip builder and the shader alpha sharpening), and
+Phase C.1 (terrain top rotations and mirrors), are built by
+`docs/design/viewer-rendering.md` Phase B.1, B.2 and B.3, which keeps them.
+This doc depends on those and adds only the client side: using the shared
+mip module in `client/tiles.js` and the sharpening in the client's cutout
+program, plus the other items here. (Decided in #205.)
 
 1. **Clamp, don't wrap.** Sample the cutout pass with `CLAMP_TO_EDGE`.
    Today no face uses UVs outside 0..1, but viewer-rendering Phase E plans
@@ -317,13 +385,6 @@ shapes leave room for it.
 
 ## Open questions
 
-1. **Overlap with `viewer-rendering.md`.** Its Phase B.1 to B.3 (foliage
-   mips, alpha to coverage, per-block UV variation) are this doc's A.2,
-   A.4 and C.1.
-   A. This doc takes them over; viewer-rendering drops its Phase B.
-   B. Viewer-rendering keeps them; this doc depends on them and only adds
-   the client side.
-   C. Merge the two docs.
 2. **Blend radius default.**
    A. 3 (7x7), the cheap default.
    B. 5 (11x11), softer borders.

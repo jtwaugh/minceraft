@@ -38,7 +38,8 @@ pub use climate::{
     biome_at, biome_for, biome_lookup, climate_at, Climate, HumidityBias, TemperatureBias,
 };
 pub use data::{
-    Biome, BiomeInfo, Block, BlockInfo, Collision, TreeKind, BIOME_INFO, BLOCK_INFO, LEGEND_JSON,
+    block_id, Biome, BiomeInfo, Block, BlockInfo, Collision, TreeKind, BIOME_INFO, BLOCK_INFO,
+    LEGEND_JSON,
 };
 pub use decorate::{decorate, ColumnMask, DecorationStats, ProtectedMask};
 use noise::{hash_f64, Axis, OctavePerlin, Rng};
