@@ -2,5 +2,7 @@
 //! See docs/design/basic-gameplay.md.
 
 pub mod bindings;
+pub mod camera;
+pub mod clock;
 pub mod input;
 pub mod sampler;
