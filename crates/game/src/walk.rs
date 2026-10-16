@@ -12,7 +12,9 @@ use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::scene::RaftScene;
+use crate::stream::{StreamConfig, Streamer};
 use crate::targeting::{cast_target, ray_vs_box, Target, TargetableEntity, TargetingConfig};
+use layout::Layout;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use terrain::{Block, Region, HEIGHT};
@@ -135,6 +137,7 @@ pub struct Walker {
     physics: PlayerPhysics,
     world: RegionSet,
     floating: Option<Floating>,
+    streamer: Option<Streamer>,
     prev_eye: [f64; 3],
     cur_eye: [f64; 3],
     targeting: TargetingConfig,
@@ -161,6 +164,7 @@ impl Walker {
             physics,
             world: RegionSet::default(),
             floating: None,
+            streamer: None,
             prev_eye: eye,
             cur_eye: eye,
             targeting,
@@ -186,6 +190,32 @@ impl Walker {
     /// Origins `(x0, z0)` of the loaded regions, in no particular order.
     pub fn loaded_regions(&self) -> Vec<(i32, i32)> {
         self.world.loaded().collect()
+    }
+
+    /// A walker with its feet at `feet` over a streamed world: the player's
+    /// region and its neighbours are loaded now, and regions load and unload
+    /// as the player crosses borders (radii from `data/streaming.toml`).
+    pub fn with_layout(layout: Layout, feet: [f64; 3]) -> Result<Walker, String> {
+        let mut w = Walker::new(feet).map_err(|e| e.to_string())?;
+        let mut streamer = Streamer::new(layout, StreamConfig::default_from_data()?);
+        streamer.update(feet, &mut w.world);
+        w.streamer = Some(streamer);
+        Ok(w)
+    }
+
+    /// Number of regions currently loaded for collision.
+    pub fn loaded_region_count(&self) -> usize {
+        self.world.len()
+    }
+
+    /// The region the stream is centred on, if this walker streams.
+    pub fn streamed_centre(&self) -> Option<layout::RegionCoord> {
+        self.streamer.as_ref().and_then(|s| s.centre())
+    }
+
+    /// The region cache behind the stream, if this walker streams.
+    pub fn streamer_cache(&self) -> Option<&layout::RegionCache> {
+        self.streamer.as_ref().map(|s| s.cache())
     }
 
     /// A walker in the raft test scene: the sea, the raft moving under the
@@ -262,6 +292,9 @@ impl Walker {
                 self.take_aim(aim, input);
             }
         }
+        if let Some(s) = &mut self.streamer {
+            s.update(self.player.pos, &mut self.world);
+        }
     }
 
     /// Stub targets for the test scene; `Target::Entity { id }` refers to these.
@@ -334,6 +367,9 @@ impl Walker {
     /// Put the player at `feet` with no velocity, e.g. when leaving fly mode.
     pub fn teleport(&mut self, feet: [f64; 3]) {
         self.player = Player::new(feet, &self.physics);
+        if let Some(s) = &mut self.streamer {
+            s.update(feet, &mut self.world);
+        }
         let eye = eye_above(feet, &self.physics, false);
         self.prev_eye = eye;
         self.cur_eye = eye;
