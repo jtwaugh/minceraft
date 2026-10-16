@@ -1,0 +1,10 @@
+[world]
+seed = 12345
+sea_level = 64
+
+[[level]]
+id = "v0"
+week = 1
+anchorage = [0, 0]
+island_center = [22, 12]
+spawn_water_radius = 8.0

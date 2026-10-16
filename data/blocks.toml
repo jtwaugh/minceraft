@@ -240,3 +240,39 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#f4f7fb"
+
+[[block]]
+id = 25
+name = "raft_planks"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#a87a40"
+
+[[block]]
+id = 26
+name = "butcher_block"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#c49a5c"
+
+[[block]]
+id = 27
+name = "griddle"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#5a5a5a"
+
+[[block]]
+id = 28
+name = "crate"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#8b5a2b"

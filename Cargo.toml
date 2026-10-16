@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/terrain", "crates/web", "crates/layout"]
+members = ["crates/terrain", "crates/web", "crates/layout", "crates/game", "crates/game-web"]
 
 [profile.release]
 opt-level = "z"
@@ -16,6 +16,16 @@ opt-level = 3
 # The hot noise loops benefit a lot from speed optimisation; the size cost
 # is a few KB of wasm.
 [profile.release.package.terrain]
+opt-level = 3
+
+# Tests and dev builds generate a lot of terrain, which is ~20x slower
+# unoptimised. Optimise just the generator (and the layout crate on top of
+# it); everything else keeps fast debug builds. Debug assertions and
+# overflow checks stay on.
+[profile.dev.package.terrain]
+opt-level = 3
+
+[profile.dev.package.layout]
 opt-level = 3
 
 # Clippy runs in CI with -D warnings. These lints are allowed on purpose:

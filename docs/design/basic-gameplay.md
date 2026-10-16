@@ -170,10 +170,10 @@ Rules:
 
 | Parameter | Default | Notes |
 |---|---|---|
-| Field of view | 70 degrees | Beta default |
+| Field of view | 70 degrees | This project's default, not a claim about Beta. (Decided in #61.) |
 | Eye height | 1.62 blocks | 1.62 minus about 0.08 while sneaking **(verify)** |
 | View bobbing | on | Driven by distance walked, disabled in water and in air |
-| Mouse sensitivity | data | Use Beta's sensitivity curve from the mechanics spec |
+| Mouse sensitivity | data | Linear sensitivity set in data; no Beta parity claimed. (Decided in #61.) |
 | Deck roll | data | Camera rolls with raft tilt, scaled down (default 50 percent) to reduce motion sickness |
 
 A first-person hand renders the current tool or carried item, with Beta's swing animation on primary and a smaller use animation on secondary.
@@ -486,6 +486,10 @@ The sim emits these for the game layer (orders, scoring, sound, particles, tutor
 
 Each phase ends with something playable in the browser test scene.
 
+> **Maintainer:** the browser test scene is a separate web client folder
+> (for example `client/`) with its own page, sharing `viewer/`'s meshing and
+> textures. (Decided in #60.)
+
 **1. Input and camera.** Pointer lock, bindings, `TickInput` accumulation with latched edges, free-look camera with FOV and interpolation. Done when looking and moving a debug camera feels smooth at 60 fps with the sim at 20 Hz.
 
 **2. Land movement and collision.** Sections 4.1, 4.2, 4.4, 4.5, 4.6. Done when the movement tests pass and the player can walk around the island, step up half blocks, jump onto one-block ledges, and sneak to the edge without falling.
@@ -533,13 +537,6 @@ Each phase ends with something playable in the browser test scene.
 > affect this repo are below.
 
 ## Open questions (reconciler)
-
-1. **Where the browser test scene lives in this repo.** (Reopened: #30
-   chose a separate game repo, and the game now lives here instead.)
-   - A: a new page in `viewer/` (plain ES modules, no bundler, like the
-     viewer), with the sim compiled to wasm alongside the generator.
-   - B: a separate web client folder (for example `client/`) with its own
-     page, sharing `viewer/`'s meshing and textures.
 
 2. **Partial-height collision data.**
    - A: a game-side shape table; `blocks.toml` unchanged.

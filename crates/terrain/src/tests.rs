@@ -298,3 +298,52 @@ fn base_height_overlapping_regions_agree() {
         }
     }
 }
+
+#[test]
+fn raft_blocks_have_distinct_ids_and_old_ids_unchanged() {
+    // Ids 0..=24 are the original palette; they must never move.
+    let old = [
+        (Block::Air, 0),
+        (Block::Stone, 1),
+        (Block::Dirt, 2),
+        (Block::Grass, 3),
+        (Block::Sand, 4),
+        (Block::Gravel, 5),
+        (Block::Water, 6),
+        (Block::Ice, 7),
+        (Block::OakLog, 8),
+        (Block::BirchLog, 9),
+        (Block::SpruceLog, 10),
+        (Block::OakLeaves, 11),
+        (Block::BirchLeaves, 12),
+        (Block::SpruceLeaves, 13),
+        (Block::TallGrass, 14),
+        (Block::Fern, 15),
+        (Block::DeadBush, 16),
+        (Block::Dandelion, 17),
+        (Block::Rose, 18),
+        (Block::SugarCane, 19),
+        (Block::Cactus, 20),
+        (Block::BrownMushroom, 21),
+        (Block::RedMushroom, 22),
+        (Block::Pumpkin, 23),
+        (Block::SnowLayer, 24),
+    ];
+    for (b, id) in old {
+        assert_eq!(b as u8, id);
+    }
+    let new = [
+        (Block::RaftPlanks, 25),
+        (Block::ButcherBlock, 26),
+        (Block::Griddle, 27),
+        (Block::Crate, 28),
+    ];
+    for (i, (b, id)) in new.iter().enumerate() {
+        assert_eq!(*b as u8, *id);
+        for (c, _) in &new[i + 1..] {
+            assert_ne!(*b as u8, *c as u8);
+        }
+        let info = &BLOCK_INFO[*id as usize];
+        assert!(info.opaque_cube && info.opacity == 255);
+    }
+}

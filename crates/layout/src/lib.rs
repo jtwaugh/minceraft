@@ -265,11 +265,27 @@ impl ProtectedMask for Exclusions {
     }
 }
 
+mod builder;
+pub use builder::{build_layout, default_v0_level};
 mod channel;
 pub use channel::ChannelEval;
+mod level;
+pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
-pub use region::{generate_region, Layout};
+pub use region::{generate_region, Layout, LayoutRegion, StructurePlacement};
+mod retry;
+pub use retry::{find_level, find_v0_level, LevelFound, RetryError};
+mod structure;
+pub use structure::{Structure, StructureError};
+mod validation;
+pub use validation::{
+    raft_footprint, validate_flat_grass, validate_island, validate_level, validate_raft, window,
+    CheckResult, Thresholds, ValidationReport, CHECK_FLAT_GRASS, CHECK_ISLAND_AREA,
+    CHECK_RAFT_CLEAR, CHECK_RAFT_WATER, CHECK_SPAWN_CLEAR,
+};
 
+#[cfg(test)]
+mod builder_tests;
 #[cfg(test)]
 mod channel_tests;
 #[cfg(test)]
@@ -277,6 +293,16 @@ mod climate_tests;
 #[cfg(test)]
 mod exclusion_tests;
 #[cfg(test)]
+mod level_tests;
+#[cfg(test)]
+mod raft_tests;
+#[cfg(test)]
 mod region_tests;
 #[cfg(test)]
+mod retry_tests;
+#[cfg(test)]
+mod structure_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod validation_tests;

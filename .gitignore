@@ -2,6 +2,7 @@
 /target/
 /crates/web/pkg/
 /viewer/pkg/
+/client/pkg/
 *.jar
 /viewer/textures.json
 /art/build/
