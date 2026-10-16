@@ -1,0 +1,63 @@
+# Interaction rules: what held item + button + target does what.
+# The first matching rule wins, so specific rules go above general ones.
+# See docs/design/basic-gameplay.md section 7.
+
+[[rule]]
+held = "tool:sword"
+button = "primary"
+target = "entity:animal"
+action = "attack"
+
+[[rule]]
+held = "tool:hoe"
+button = "secondary"
+target = "block:grass"
+require_air_above = true
+action = "till"
+
+[[rule]]
+held = "tool:hoe"
+button = "secondary"
+target = "block:dirt"
+require_air_above = true
+action = "till"
+
+[[rule]]
+held = "tool:hoe"
+button = "secondary"
+target = "block:planter_dirt"
+action = "till"
+
+[[rule]]
+held = "item:seeds"
+button = "secondary"
+target = "block:farmland"
+target_face = "top"
+require_air_above = true
+action = "plant"
+
+[[rule]]
+held = "empty"
+button = "secondary"
+target = "block:crop"
+require_state = "mature"
+action = "harvest"
+
+[[rule]]
+held = "any_tool"
+button = "secondary"
+target = "block:crop"
+require_state = "mature"
+action = "harvest"
+
+[[rule]]
+held = "empty"
+button = "secondary"
+target = "block:tall_grass"
+action = "forage"
+
+[[rule]]
+held = "any"
+button = "primary"
+target = "entity:animal"
+action = "attack" # fallback: punch
