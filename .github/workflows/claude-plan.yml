@@ -223,6 +223,16 @@ jobs:
             into several tickets. Order them so each builds on the ones
             before. Prefer more small tickets over fewer large ones.
 
+            The **Files:** line decides scheduling: a ticket doesn't start
+            while an open pull request edits one of its files, so tickets in
+            the same phase that edit the same file run one after another.
+            List real paths (check they exist, or say which new file it
+            creates); leave out lib.rs, mod.rs and Cargo.toml, which every
+            feature touches. Where you can, split work so that tickets
+            meant to run in parallel touch different files, and if one file
+            keeps collecting unrelated changes (check `git log --stat`),
+            plan a small ticket that splits it first.
+
             Create each with
             `gh issue create --label planned --title "<title>" --body-file <file>`,
             writing the body to a file first. Use this body format:
@@ -231,6 +241,8 @@ jobs:
             **Spec:** SPEC <number> (<heading>), or for a design doc
                       <FILE> <phase> (<heading>), plus any SPEC sections it relies on
             **Depends on:** #<n>, or "none"
+            **Files:** <each file you expect it to change, as a backticked
+                       path from the repo root, e.g. `crates/game/src/walk.rs`>
 
             ### What
             <2-6 sentences: the behaviour to implement or fix, in terms of the
