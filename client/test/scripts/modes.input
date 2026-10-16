@@ -1,0 +1,43 @@
+# F swaps walking and the debug fly camera while the pointer is locked.
+
+case starts in walk mode by default
+expect mode = walk
+
+case F toggles fly and back
+click
+lock
+press KeyF
+expect mode = fly
+press KeyF
+expect mode = walk
+
+case F does nothing while unlocked, or on auto-repeat
+press KeyF
+expect mode = walk
+click
+lock
+down KeyF
+repeat KeyF
+repeat KeyF
+up KeyF
+expect mode = fly
+
+case switching to fly keeps the eye where it was
+start walk raft
+click
+lock
+frame 50 x4
+mark
+press KeyF
+frame 1
+expect moved < 0.5
+
+case walking in the raft scene moves the player
+start walk raft
+click
+lock
+frame 50 x10
+mark
+down KeyW
+frame 50 x10
+expect moved > 0.3

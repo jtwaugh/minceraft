@@ -1,0 +1,102 @@
+# Debug fly camera: look follows the mouse every frame, held keys move it at
+# 20 Hz, and nothing reaches the sim while the pointer is unlocked.
+# yaw 0 faces -z and turning right increases yaw (crates/game/src/camera.rs).
+
+case nothing moves before the pointer is locked
+start fly
+mark
+mouse 200 0
+down KeyW
+frame 50 x4
+expect locked = false
+expect yaw = 0
+expect moved = 0
+
+case clicking requests the lock
+start fly
+click
+expect lock_requests = 1
+lock
+expect locked = true
+
+case mouse look is applied on the next frame, without waiting for a tick
+start fly
+click
+lock
+mouse 100 -50
+frame 1
+expect ticks = 0
+expect yaw > 0
+expect pitch > 0
+
+case W flies forward along -z at yaw 0
+start fly
+click
+lock
+mark
+down KeyW
+frame 50 x4
+expect moved.z < -1
+expect moved.x ~ 0
+expect moved.y ~ 0
+
+case W follows the look: after turning right it flies toward +x
+start fly
+click
+lock
+mouse 400 0
+frame 16
+mark
+down KeyW
+frame 50 x4
+expect moved.x > 1
+
+case Space rises, Shift sinks
+start fly
+click
+lock
+mark
+down Space
+frame 50 x2
+expect moved.y > 0
+up Space
+mark
+down ShiftLeft
+frame 50 x4   # the drawn eye trails the sim by up to a tick
+expect moved.y < 0
+
+case releasing the key stops the camera
+start fly
+click
+lock
+down KeyW
+frame 50 x2
+up KeyW
+frame 50
+mark
+frame 50 x4
+expect moved = 0
+
+case losing the lock releases held keys
+start fly
+click
+lock
+down KeyW
+frame 50
+unlock
+frame 50
+mark
+frame 50 x4
+expect moved = 0
+
+case window blur releases held keys
+start fly
+click
+lock
+down KeyD
+frame 50
+blur
+frame 50
+mark
+frame 50 x4
+expect moved = 0

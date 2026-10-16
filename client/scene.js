@@ -17,14 +17,14 @@ import initGame, { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix }
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
-import { stepWalk } from './walk.js';
+import { createController } from './controller.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
 const seed = BigInt(qs.get('seed') ?? 12345);
 const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
-let flying = qs.get('mode') === 'fly';
+const flying = qs.get('mode') === 'fly';
 const raftScene = qs.get('scene') === 'raft';
 const logEvery = +(qs.get('log') ?? 0);
 
@@ -191,6 +191,7 @@ if (scene) {
   const [x, y, z] = walk.eye(1);
   fly.teleport(x, y + 24, z);
 }
+const controller = createController({ input, walk, fly, clock, document, flying });
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 window.frameStats = () => frames.summary();
@@ -206,20 +207,7 @@ function drawParts(prog, parts) {
 function render(now) {
   if (queue.length) meshNextChunk();
 
-  const ticks = clock.advance(lastFrame === null ? 0 : (now - lastFrame) / 1000);
-  const alpha = clock.alpha;
-  const { yaw, pitch } = input.look();
-  let eye; // input.drain() holds no keys while the pointer is unlocked
-  if (flying) {
-    for (let i = 0; i < ticks; i++) {
-      const t = input.drain();
-      fly.tick(t);
-      t.free();
-    }
-    eye = Array.from(fly.eye(alpha));
-  } else {
-    eye = stepWalk(walk, ticks, alpha, () => input.drain());
-  }
+  const { alpha, eye, yaw, pitch, flying } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
 
   const dpr = window.devicePixelRatio || 1;
   const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
@@ -269,19 +257,6 @@ function render(now) {
   if (logEvery && frames.n % logEvery === 0 && frames.n) console.log(`[frames] ${frames.format()}`);
   requestAnimationFrame(render);
 }
-
-// F swaps between walking and the debug fly camera, keeping the position.
-document.addEventListener('keydown', (e) => {
-  if (e.code !== 'KeyF' || e.repeat || !input.locked) return;
-  const eyeNow = walk.eye(1), feet = walk.feet();
-  if (flying) {
-    const [x, y, z] = fly.eye(1);
-    walk.teleport(x, y - (eyeNow[1] - feet[1]), z);
-  } else {
-    fly.teleport(eyeNow[0], eyeNow[1], eyeNow[2]);
-  }
-  flying = !flying;
-});
 
 gl.activeTexture(gl.TEXTURE0);
 for (const p of [solidProg, cutProg]) { gl.useProgram(p); gl.uniform1i(p.u('tex'), 0); }

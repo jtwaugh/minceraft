@@ -140,7 +140,7 @@ impl Walker {
     pub fn new(feet: [f64; 3]) -> Result<Walker, PhysicsError> {
         let physics = PlayerPhysics::default_from_data()?;
         let player = Player::new(feet, &physics);
-        let eye = [feet[0], feet[1] + physics.eye_offset(false) as f64, feet[2]];
+        let eye = eye_above(feet, &physics, false);
         Ok(Walker {
             player,
             physics,
@@ -223,12 +223,7 @@ impl Walker {
             None => self.player.tick(input, &self.physics, &self.world),
         }
         self.prev_eye = self.cur_eye;
-        let up = self.physics.eye_offset(input.sneak) as f64;
-        self.cur_eye = [
-            self.player.pos[0],
-            self.player.pos[1] + up,
-            self.player.pos[2],
-        ];
+        self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
     }
 
     /// The eye between the last two ticks, `alpha` in 0..1.
@@ -241,14 +236,22 @@ impl Walker {
     /// Put the player at `feet` with no velocity, e.g. when leaving fly mode.
     pub fn teleport(&mut self, feet: [f64; 3]) {
         self.player = Player::new(feet, &self.physics);
-        let eye = [
-            feet[0],
-            feet[1] + self.physics.eye_offset(false) as f64,
-            feet[2],
-        ];
+        let eye = eye_above(feet, &self.physics, false);
         self.prev_eye = eye;
         self.cur_eye = eye;
     }
+
+    /// Put the player, standing, with its eye at `eye`, e.g. when leaving
+    /// fly mode at the fly camera's position.
+    pub fn teleport_eye(&mut self, eye: [f64; 3]) {
+        let up = self.physics.eye_offset(false) as f64;
+        self.teleport([eye[0], eye[1] - up, eye[2]]);
+    }
+}
+
+/// The eye position for feet at `feet`.
+fn eye_above(feet: [f64; 3], physics: &PlayerPhysics, sneak: bool) -> [f64; 3] {
+    [feet[0], feet[1] + physics.eye_offset(sneak) as f64, feet[2]]
 }
 
 #[cfg(test)]

@@ -241,10 +241,10 @@ impl Bindings {
 
 fn number(t: &toml::value::Table, key: &str) -> Result<f32, BindingsError> {
     match t.get(key) {
-        Some(toml::Value::Float(f)) => Ok(*f as f32),
+        Some(toml::Value::Float(f)) if f.is_finite() => Ok(*f as f32),
         Some(toml::Value::Integer(i)) => Ok(*i as f32),
         _ => Err(BindingsError::Invalid(format!(
-            "look.{key} must be a number"
+            "look.{key} must be a finite number"
         ))),
     }
 }

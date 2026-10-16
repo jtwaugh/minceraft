@@ -287,6 +287,8 @@ pub use habitat_map::{HabitatMap, NO_HABITAT};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
+#[cfg(feature = "toml-io")]
+mod rule_check;
 pub use region::{generate_region, Layout, LayoutRegion, StructurePlacement};
 mod region_coord;
 pub use region_coord::{RegionCoord, REGION_SIZE};
