@@ -8,6 +8,8 @@ use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::scene::RaftScene;
+use crate::stream::{StreamConfig, Streamer};
+use layout::Layout;
 use terrain::{Block, Region, HEIGHT};
 
 /// Collision over several generated regions; the first region that contains a
@@ -21,6 +23,11 @@ pub struct RegionSet {
 impl RegionSet {
     pub fn push(&mut self, region: Region) {
         self.regions.push(region);
+    }
+
+    /// Drops the region whose minimum corner is `(x0, z0)`.
+    pub fn remove_at(&mut self, x0: i32, z0: i32) {
+        self.regions.retain(|r| (r.x0, r.z0) != (x0, z0));
     }
 
     pub fn len(&self) -> usize {
@@ -62,6 +69,7 @@ pub struct Walker {
     physics: PlayerPhysics,
     world: RegionSet,
     floating: Option<Floating>,
+    streamer: Option<Streamer>,
     prev_eye: [f64; 3],
     cur_eye: [f64; 3],
 }
@@ -78,6 +86,7 @@ impl Walker {
             physics,
             world: RegionSet::default(),
             floating: None,
+            streamer: None,
             prev_eye: eye,
             cur_eye: eye,
         })
@@ -85,6 +94,32 @@ impl Walker {
 
     pub fn add_region(&mut self, region: Region) {
         self.world.push(region);
+    }
+
+    /// A walker with its feet at `feet` over a streamed world: the player's
+    /// region and its neighbours are loaded now, and regions load and unload
+    /// as the player crosses borders (radii from `data/streaming.toml`).
+    pub fn with_layout(layout: Layout, feet: [f64; 3]) -> Result<Walker, String> {
+        let mut w = Walker::new(feet).map_err(|e| e.to_string())?;
+        let mut streamer = Streamer::new(layout, StreamConfig::default_from_data()?);
+        streamer.update(feet, &mut w.world);
+        w.streamer = Some(streamer);
+        Ok(w)
+    }
+
+    /// Number of regions currently loaded for collision.
+    pub fn loaded_regions(&self) -> usize {
+        self.world.len()
+    }
+
+    /// The region the stream is centred on, if this walker streams.
+    pub fn streamed_centre(&self) -> Option<layout::RegionCoord> {
+        self.streamer.as_ref().and_then(|s| s.centre())
+    }
+
+    /// The region cache behind the stream, if this walker streams.
+    pub fn streamer_cache(&self) -> Option<&layout::RegionCache> {
+        self.streamer.as_ref().map(|s| s.cache())
     }
 
     /// A walker in the raft test scene: the sea, the raft moving under the
@@ -144,6 +179,9 @@ impl Walker {
             }
             None => self.player.tick(input, &self.physics, &self.world),
         }
+        if let Some(s) = &mut self.streamer {
+            s.update(self.player.pos, &mut self.world);
+        }
         self.prev_eye = self.cur_eye;
         let up = self.physics.eye_offset(input.sneak) as f64;
         self.cur_eye = [
@@ -163,6 +201,9 @@ impl Walker {
     /// Put the player at `feet` with no velocity, e.g. when leaving fly mode.
     pub fn teleport(&mut self, feet: [f64; 3]) {
         self.player = Player::new(feet, &self.physics);
+        if let Some(s) = &mut self.streamer {
+            s.update(feet, &mut self.world);
+        }
         let eye = [
             feet[0],
             feet[1] + self.physics.eye_offset(false) as f64,
