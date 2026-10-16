@@ -95,7 +95,9 @@ node viewer/flyover/preview.mjs 2026 0 0 route.ppm   # plan only, no browser
    recorder is paused too.
 10. **Frames:**
     - **Rendering:** frames render into the hidden WebGL canvas at
-      1280×720. Fog reaches full sky colour at `VIEW.fogEnd` (196 blocks).
+      1280×720. Fog is by straight-line distance from the eye (`camPos`, the curve is
+      in `viewer/fog.js`): a smoothstep from half of `VIEW.fogEnd` that
+      reaches full sky colour at exactly `VIEW.fogEnd` (196 blocks).
       The sky follows the biome under the camera.
     - **Captions:** each frame is copied into the `#flyout` 2D canvas, which
       adds the captions and fades.
