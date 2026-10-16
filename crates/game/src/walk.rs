@@ -8,7 +8,8 @@ use crate::interactions::{
     resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
     TargetFacts,
 };
-use crate::items::{Items, PlayerState};
+use crate::item_entities::{ItemEntityConfig, ItemStore};
+use crate::items::{ItemInstance, Items, PlayerState};
 use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
@@ -123,6 +124,9 @@ impl CollisionWorld for RegionSet {
     }
 }
 
+/// Item entity ids start here, above the ids of the stub entities.
+const FIRST_ITEM_ID: crate::targeting::EntityId = 1 << 20;
+
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
     raft: Raft,
@@ -146,6 +150,7 @@ pub struct Walker {
     entities: Vec<TargetableEntity>,
     rules: Interactions,
     dispatcher: Dispatcher,
+    items: ItemStore,
     state: PlayerState,
     /// Test override of the derived held thing.
     held_override: Option<HeldThing>,
@@ -175,6 +180,7 @@ impl Walker {
             entities: Vec::new(),
             rules: Interactions::default_rules(),
             dispatcher: Dispatcher::default(),
+            items: ItemStore::new(ItemEntityConfig::default_from_data(), FIRST_ITEM_ID),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             held_override: None,
@@ -258,6 +264,7 @@ impl Walker {
 
     /// One 20 Hz step.
     pub fn tick(&mut self, input: &TickInput) {
+        let entities = self.all_entities();
         if let Some(slot) = input.tool_slot {
             self.state.select(slot);
         }
@@ -281,20 +288,14 @@ impl Walker {
                 self.player.tick(input, &self.physics, &world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                let aim = aim(&world, &self.entities, &self.targeting, self.cur_eye, input);
+                let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
             None => {
                 self.player.tick(input, &self.physics, &self.world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                let aim = aim(
-                    &self.world,
-                    &self.entities,
-                    &self.targeting,
-                    self.cur_eye,
-                    input,
-                );
+                let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
         }
@@ -335,6 +336,27 @@ impl Walker {
             .unwrap_or_else(|| self.state.held_thing())
     }
 
+    /// Put a loose item in the world, returning its entity id.
+    pub fn spawn_item(&mut self, item: ItemInstance, pos: [f64; 3]) -> crate::targeting::EntityId {
+        self.items.spawn(item, pos, [0.0; 3])
+    }
+
+    pub fn items(&self) -> &ItemStore {
+        &self.items
+    }
+
+    /// The carried item, if any.
+    pub fn hands(&self) -> Option<&ItemInstance> {
+        self.state.hands.as_ref()
+    }
+
+    /// Stub entities plus the loose items, as the eye ray sees them.
+    fn all_entities(&self) -> Vec<TargetableEntity> {
+        let mut all = self.entities.clone();
+        all.extend(self.items.targetables());
+        all
+    }
+
     /// Record this tick's aim and run the presses in `input` against it.
     fn take_aim(&mut self, aim: Aim, input: &TickInput) {
         self.target = aim.target;
@@ -345,8 +367,31 @@ impl Walker {
             target: aim.target,
             facts: aim.facts,
         };
-        self.dispatcher.dispatch(&self.rules, input, &ctx);
+        // Tools are stowed while carrying: primary does nothing.
+        let mut pressed = *input;
+        pressed.primary &= self.state.hands.is_none();
+        self.dispatcher.dispatch(&self.rules, &pressed, &ctx);
         self.facts = ctx.facts;
+        if input.interact {
+            self.interact();
+        }
+    }
+
+    /// Interact picks up the targeted loose item if the hands are empty.
+    /// Stations and counters arrive later.
+    fn interact(&mut self) {
+        if self.state.hands.is_some() {
+            return;
+        }
+        let Target::Entity { id } = self.target else {
+            return;
+        };
+        if let Some(e) = self.items.remove(id) {
+            self.state.hands = Some(e.item);
+            self.target = Target::None;
+            self.target_box = None;
+            self.facts = TargetFacts::default();
+        }
     }
 
     /// The box to outline for the current target (the block's selection box
@@ -360,6 +405,9 @@ impl Walker {
     /// The rule a press of `button` would match against the current target
     /// and held thing, for the debug overlay.
     pub fn preview(&self, button: Button) -> Option<Resolved> {
+        if button == Button::Primary && self.state.hands.is_some() {
+            return None;
+        }
         let ctx = ResolveCtx {
             held: self.held(),
             button,
@@ -590,6 +638,136 @@ mod tests {
         assert!(w.preview(Button::Secondary).is_none());
         w.set_held(HeldThing::Empty);
         assert_eq!(w.preview(Button::Primary).unwrap().rule_index, 8);
+    }
+
+    fn seeds() -> ItemInstance {
+        ItemInstance {
+            item: "seeds".into(),
+        }
+    }
+
+    fn interact() -> TickInput {
+        TickInput {
+            interact: true,
+            ..look(0.0, false)
+        }
+    }
+
+    /// A walker looking at seeds 1.5 blocks ahead (north) at eye height.
+    fn facing_seeds() -> (Walker, crate::targeting::EntityId) {
+        let mut w = settled();
+        let id = w.spawn_item(seeds(), [0.5, 5.62, -1.0]);
+        w.tick(&look(0.0, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        (w, id)
+    }
+
+    #[test]
+    fn interact_picks_up_a_targeted_item_with_empty_hands() {
+        let (mut w, id) = facing_seeds();
+        w.tick(&interact());
+        assert_eq!(w.hands(), Some(&seeds()));
+        assert!(w.items().get(id).is_none());
+        assert_eq!(w.target(), Target::None);
+    }
+
+    #[test]
+    fn interact_with_full_hands_does_nothing() {
+        let (mut w, id) = facing_seeds();
+        let other = ItemInstance {
+            item: "other".into(),
+        };
+        w.state.hands = Some(other.clone());
+        w.tick(&interact());
+        assert_eq!(w.hands(), Some(&other));
+        assert!(w.items().get(id).is_some());
+    }
+
+    #[test]
+    fn interact_out_of_reach_or_on_nothing_picks_nothing_up() {
+        let mut w = settled();
+        let far = w.spawn_item(seeds(), [0.5, 5.62, -6.0]);
+        w.tick(&interact());
+        assert_eq!(w.hands(), None);
+        assert!(w.items().get(far).is_some());
+        // Looking at the sky with an item behind: nothing targeted.
+        let mut up = interact();
+        up.pitch = 1.2;
+        w.tick(&up);
+        assert_eq!(w.hands(), None);
+        assert_eq!(w.items().len(), 1);
+        // Targeting a block (not an item) picks nothing up either.
+        let mut down = interact();
+        down.pitch = -1.5;
+        w.tick(&down);
+        assert_eq!(w.hands(), None);
+        assert_eq!(w.items().len(), 1);
+    }
+
+    #[test]
+    fn walking_into_an_item_does_not_pick_it_up() {
+        let mut w = settled();
+        let id = w.spawn_item(seeds(), [0.5, 4.2, -1.0]);
+        let walk = TickInput {
+            move_forward: 1.0,
+            ..look(0.0, false)
+        };
+        for _ in 0..30 {
+            w.tick(&walk);
+        }
+        assert!(w.player().pos[2] < -1.5, "walked past the item");
+        assert_eq!(w.hands(), None);
+        assert!(w.items().get(id).is_some());
+    }
+
+    #[test]
+    fn carrying_stows_the_tool() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.player_state_mut().select(1);
+        w.tick(&look(0.0, false));
+        assert_eq!(
+            w.preview(Button::Primary).map(|r| r.action),
+            Some(ActionKind::Attack)
+        );
+        w.state.hands = Some(seeds());
+        // Even with a sword selected and an animal in front: no attack.
+        w.tick(&TickInput {
+            primary: true,
+            ..look(0.0, false)
+        });
+        assert!(w.preview(Button::Primary).is_none());
+        assert_eq!(w.last_rule(), None);
+    }
+
+    #[test]
+    fn carrying_resolves_secondary_with_the_item() {
+        let mut w = settled();
+        w.player_state_mut().select(2);
+        w.state.hands = Some(seeds());
+        // Looking straight down at stone: seeds have no rule on stone, and
+        // the hoe's till rule must not apply.
+        let mut down = look(0.0, false);
+        down.pitch = -1.5;
+        w.tick(&down);
+        assert!(w.preview(Button::Secondary).is_none());
+        // Seeds on farmland resolve to plant.
+        let ctx = ResolveCtx {
+            held: w.held(),
+            button: Button::Secondary,
+            target: Target::Block {
+                pos: [0, 3, 0],
+                face: crate::targeting::Face::Top,
+            },
+            facts: TargetFacts {
+                block: Some("farmland".into()),
+                air_above: true,
+                ..TargetFacts::default()
+            },
+        };
+        let r = resolve(&w.rules.rules, &ctx).unwrap();
+        assert_eq!(r.action, ActionKind::Plant);
+        assert_eq!(w.held(), HeldThing::Item("seeds".into()));
     }
 
     fn slot(n: u8) -> TickInput {
