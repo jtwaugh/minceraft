@@ -4,7 +4,7 @@
 //! Names must match the `held` strings in `data/interactions.toml`;
 //! `Items::check_interactions` verifies that.
 
-use crate::interactions::{Held, Interactions};
+use crate::interactions::{Held, HeldThing, Interactions};
 use std::fmt;
 
 const DEFAULT_ITEMS: &str = include_str!("../../../data/items.toml");
@@ -198,6 +198,25 @@ impl PlayerState {
             hands: None,
         })
     }
+
+    /// Select belt slot `slot` (0-based). Slots beyond the belt are ignored.
+    pub fn select(&mut self, slot: u8) {
+        if usize::from(slot) < BELT_SLOTS {
+            self.selected = slot;
+        }
+    }
+
+    /// What interaction rules see: the carried item if the hands are
+    /// non-empty (tools are stowed), else the selected tool, else `Empty`.
+    pub fn held_thing(&self) -> HeldThing {
+        if let Some(item) = &self.hands {
+            return HeldThing::Item(item.item.clone());
+        }
+        match self.tool_belt.get(usize::from(self.selected)) {
+            Some(Some(t)) => HeldThing::Tool(t.tool.clone()),
+            _ => HeldThing::Empty,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -279,5 +298,43 @@ mod tests {
             PlayerState::new(&items),
             Err(ItemsError::UnknownName { .. })
         ));
+    }
+
+    fn state() -> PlayerState {
+        PlayerState::new(&Items::default_items()).unwrap()
+    }
+
+    #[test]
+    fn select_changes_slot_and_ignores_out_of_range() {
+        let mut p = state();
+        p.select(2);
+        assert_eq!(p.selected, 2);
+        p.select(BELT_SLOTS as u8);
+        p.select(200);
+        assert_eq!(p.selected, 2);
+    }
+
+    #[test]
+    fn held_thing_follows_selection() {
+        let mut p = state();
+        assert_eq!(p.held_thing(), HeldThing::Empty);
+        p.select(1);
+        assert_eq!(p.held_thing(), HeldThing::Tool("sword".into()));
+        p.select(2);
+        assert_eq!(p.held_thing(), HeldThing::Tool("hoe".into()));
+        p.select(3);
+        assert_eq!(p.held_thing(), HeldThing::Empty);
+    }
+
+    #[test]
+    fn carried_item_overrides_selection() {
+        let mut p = state();
+        p.hands = Some(ItemInstance {
+            item: "seeds".into(),
+        });
+        for slot in 0..BELT_SLOTS as u8 {
+            p.select(slot);
+            assert_eq!(p.held_thing(), HeldThing::Item("seeds".into()));
+        }
     }
 }
