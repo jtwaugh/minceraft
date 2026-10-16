@@ -38,10 +38,13 @@ Nothing in phases A to F is built yet. What exists and is relied on:
   `none`, opacity 0); `data/biomes.toml` has `grass_ramp`, `leaf_ramp`,
   `sky_ramp` per biome. No `[blend]`, `water_ramp`, `dry_ramp` or
   `flora.toml` yet.
+- Phase A progress: A.1 and A.3 are built (PR #208, `client/samplers.js`: per-pass samplers, cutout clamp and LOD cap); A.5 is built (PR #210: plant top flag in vertex byte 14 and distance fade). Phase A is not done: A.2 and A.4 remain (see Reconciliation notes).
 - Art for the existing plants is in `art/batches_13_14.json`. None of the
   new tiles listed in C.2, D.5 or E exist.
 
 ## Reconciliation notes
+
+- **Phase A still incomplete (plan #203).** Tickets #206 and #207 closed via PRs #208 and #210, covering A.1, A.3 and A.5. A.2 (shared JS mip builder with coverage-preserving alpha) and A.4 (shader alpha sharpening, cutoff 0.5) are not built: `client/tiles.js` and `viewer/index.html` still call `gl.generateMipmap`, and `client/scene.js` still uses `cutoff = msaa ? 1/255 : 0.5` with no `fwidth` sharpening. Per #205 they belong to `viewer-rendering.md` Phase B.1/B.2, which is still `todo`. The Phase A acceptance tests on mip coverage also wait on that work. Suggest planning viewer-rendering Phase B, then this doc's client-side wiring, before marking Phase A done.
 
 - **Header.** Was `idea`; now `accepted` (merging this PR accepts it).
   `scope: both` fits: A to C are client and viewer, D to F touch
