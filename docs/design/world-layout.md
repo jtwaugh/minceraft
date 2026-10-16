@@ -467,7 +467,7 @@ Done when:
 Depends on: A, and the climate module from the biome work.
 
 Adds:
-- Derived maps: water depth, bottom block, shore distance (a distance transform from land columns, capped at 64), frozen surface flag.
+- Derived maps: water depth, bottom block, shore distance (a distance transform from land columns, capped at 64; the distance is Euclidean between column centres, rounded to the nearest integer), frozen surface flag. (Decided in #91.)
 - Habitat classification, driven by `data/habitats.toml`. Rules are checked in order and the first match wins:
 
 ```toml
