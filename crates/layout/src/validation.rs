@@ -19,7 +19,7 @@ use std::fmt;
 use serde::Deserialize;
 use terrain::{column_summary, Block, Region, HEIGHT, SEA_LEVEL};
 
-use crate::{Layout, Level};
+use crate::{Layout, Level, Structure};
 
 const DEFAULT_THRESHOLDS: &str = include_str!("../../../data/validation.toml");
 
@@ -28,6 +28,9 @@ const DEFAULT_THRESHOLDS: &str = include_str!("../../../data/validation.toml");
 pub struct Thresholds {
     pub min_island_columns: u32,
     pub window_margin: i32,
+    pub min_raft_water_depth: u32,
+    pub raft_clearance: i32,
+    pub min_flat_grass_tiles: u32,
 }
 
 impl Thresholds {
@@ -82,6 +85,9 @@ impl ValidationReport {
 
 pub const CHECK_ISLAND_AREA: &str = "island_area";
 pub const CHECK_SPAWN_CLEAR: &str = "island_clear_of_spawn_zone";
+pub const CHECK_RAFT_WATER: &str = "raft_water_depth";
+pub const CHECK_RAFT_CLEAR: &str = "raft_footprint_clear";
+pub const CHECK_FLAT_GRASS: &str = "flat_grass_tiles";
 
 /// World-coordinate window `(x0, z0, w, d)` a level's checks need.
 pub fn window(level: &Level, t: &Thresholds) -> (i32, i32, u32, u32) {
@@ -167,9 +173,143 @@ pub fn validate_island(region: &Region, level: &Level, t: &Thresholds) -> Valida
     }
 }
 
+/// Block at world `(x, y, z)`, or `None` outside the region.
+fn block_at(region: &Region, x: i32, y: i32, z: i32) -> Option<u8> {
+    let (lx, lz) = (x as i64 - region.x0 as i64, z as i64 - region.z0 as i64);
+    if lx < 0 || lz < 0 || lx >= region.width as i64 || lz >= region.depth as i64 {
+        return None;
+    }
+    if !(0..HEIGHT as i32).contains(&y) {
+        return None;
+    }
+    Some(region.blocks[region.index(lx as u32, 0, lz as u32) + y as usize])
+}
+
+/// Distinct world columns `(x, z)` under the non-air cells of every
+/// `raft = true` placement in `layout`: the raft footprint.
+pub fn raft_footprint(layout: &Layout) -> Vec<(i32, i32)> {
+    let mut cols = Vec::new();
+    for p in &layout.structures {
+        let Some(s) = Structure::named(&p.structure) else {
+            continue;
+        };
+        if s.raft {
+            cols.extend(
+                s.solid_cells(p.origin, p.rotation)
+                    .iter()
+                    .map(|c| (c.0, c.2)),
+            );
+        }
+    }
+    cols.sort_unstable();
+    cols.dedup();
+    cols
+}
+
+/// Run the raft checks on terrain **before** the raft is stamped. For each
+/// footprint column: water depth is the run of water blocks down from
+/// `SEA_LEVEL - 1`, and the column is clear when no solid (non-air,
+/// non-water) block lies in `SEA_LEVEL..=SEA_LEVEL + raft_clearance`. The
+/// water measure is the shallowest column, the clearance measure the number
+/// of blocked columns. A column outside the region fails both, as does an
+/// empty footprint.
+pub fn validate_raft(
+    region: &Region,
+    footprint: &[(i32, i32)],
+    t: &Thresholds,
+) -> ValidationReport {
+    let water = Block::Water as u8;
+    let air = Block::Air as u8;
+    let mut min_depth = u32::MAX;
+    let mut blocked = 0u32;
+    for &(x, z) in footprint {
+        let mut depth = 0;
+        while block_at(region, x, SEA_LEVEL - 1 - depth, z) == Some(water) {
+            depth += 1;
+        }
+        min_depth = min_depth.min(depth as u32);
+        let clear = (SEA_LEVEL..=SEA_LEVEL + t.raft_clearance)
+            .all(|y| matches!(block_at(region, x, y, z), Some(b) if b == air || b == water));
+        if !clear {
+            blocked += 1;
+        }
+    }
+    if footprint.is_empty() {
+        min_depth = 0;
+    }
+    ValidationReport {
+        checks: vec![
+            CheckResult {
+                name: CHECK_RAFT_WATER,
+                measured: min_depth as f64,
+                required: format!(">= {} under every footprint column", t.min_raft_water_depth),
+                passed: !footprint.is_empty() && min_depth >= t.min_raft_water_depth,
+            },
+            CheckResult {
+                name: CHECK_RAFT_CLEAR,
+                measured: blocked as f64,
+                required: format!(
+                    "== 0 footprint columns with solid blocks in SEA_LEVEL..=SEA_LEVEL+{}",
+                    t.raft_clearance
+                ),
+                passed: !footprint.is_empty() && blocked == 0,
+            },
+        ],
+    }
+}
+
+/// Top solid block `(block, y)` of a column, ignoring water and ice.
+fn ground(region: &Region, x: i32, z: i32) -> Option<(u8, i32)> {
+    (0..HEIGHT as i32).rev().find_map(|y| {
+        let b = block_at(region, x, y, z)?;
+        (b != Block::Air as u8 && b != Block::Water as u8 && b != Block::Ice as u8)
+            .then_some((b, y))
+    })
+}
+
+/// Count flat grass tiles on the island of an **undecorated** region
+/// (Decision 4): island columns whose top block is grass and whose 4
+/// neighbours' ground heights are each within 1 block. A neighbour outside
+/// the region makes the tile not flat.
+pub fn validate_flat_grass(region: &Region, level: &Level, t: &Thresholds) -> ValidationReport {
+    let flat = island_columns(region, level.island_center)
+        .into_iter()
+        .filter(|&(x, z)| {
+            let Some((b, y)) = ground(region, x, z) else {
+                return false;
+            };
+            b == Block::Grass as u8
+                && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().all(|&(dx, dz)| {
+                    ground(region, x + dx, z + dz).is_some_and(|(_, ny)| (ny - y).abs() <= 1)
+                })
+        })
+        .count();
+    ValidationReport {
+        checks: vec![CheckResult {
+            name: CHECK_FLAT_GRASS,
+            measured: flat as f64,
+            required: format!(">= {}", t.min_flat_grass_tiles),
+            passed: flat >= t.min_flat_grass_tiles as usize,
+        }],
+    }
+}
+
 /// Generate the undecorated window for `level` under `layout` and validate.
+/// The layout's structures are left out, so the raft checks see the terrain
+/// before the raft is stamped.
 pub fn validate_level(layout: &Layout, level: &Level, t: &Thresholds) -> ValidationReport {
     let (x0, z0, w, d) = window(level, t);
-    let region = layout.generate_region(x0, z0, w, d, false);
-    validate_island(&region, level, t)
+    let bare = Layout {
+        structures: Vec::new(),
+        ..layout.clone()
+    };
+    let region = bare.generate_region(x0, z0, w, d, false);
+    let mut report = validate_island(&region, level, t);
+    report
+        .checks
+        .extend(validate_raft(&region, &raft_footprint(layout), t).checks);
+    report
+        .checks
+        .extend(validate_flat_grass(&region, level, t).checks);
+    report
 }
