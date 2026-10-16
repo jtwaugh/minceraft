@@ -9,6 +9,7 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use layout::{Habitats, Layout};
 use terrain::Biases;
 use wasm_bindgen::prelude::*;
 
@@ -79,4 +80,25 @@ pub fn humidity_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<f32> {
 #[wasm_bindgen]
 pub fn legend() -> String {
     String::from(terrain::LEGEND_JSON)
+}
+
+/// Habitat index per column (`z * w + x`) for the plain seed (no layout
+/// bias terms, so it lines up with the other viewer modes). The index is a
+/// rule's position in `data/habitats.toml` (see `habitat_names()`); land
+/// columns hold 255.
+#[wasm_bindgen]
+pub fn habitat_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<u8> {
+    Layout::new(seed).habitat_map(x0, z0, w, d).habitat
+}
+
+/// Habitat ids in rule order, as a JSON array of strings; index `i` is
+/// the value `habitat_map` uses for that habitat.
+#[wasm_bindgen]
+pub fn habitat_names() -> String {
+    let names: Vec<String> = Habitats::shipped()
+        .rules
+        .iter()
+        .map(|r| alloc::format!("\"{}\"", r.id))
+        .collect();
+    alloc::format!("[{}]", names.join(","))
 }

@@ -146,6 +146,7 @@
         <button data-mode="biome" aria-pressed="false">biome</button>
         <button data-mode="temperature" aria-pressed="false">temperature</button>
         <button data-mode="humidity" aria-pressed="false">humidity</button>
+        <button data-mode="habitat" aria-pressed="false">habitat</button>
       </div>
     </div>
     <div class="stage" id="mapstage">
@@ -187,7 +188,7 @@ import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLaye
 import { hydrate, VIEW } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
-const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend } = wasm;
+const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend, habitat_names } = wasm;
 
 const $ = (id) => document.getElementById(id);
 
@@ -263,6 +264,15 @@ function scale(stops, v) {
   const f = Math.max(0, Math.min(1, v)) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(f));
   return lerp3(stops[i], stops[i + 1], f - i);
 }
+// Habitat colours (this project's own), by id from data/habitats.toml;
+// habitats not listed here get grey.
+const HABITAT_COLORS = {
+  frozen: [200, 230, 245], warm_shallows: [64, 224, 200], deep_water: [14, 30, 110],
+  rocky_shore: [150, 120, 90], cold_open: [70, 120, 200], temperate_open: [40, 160, 110],
+};
+const NO_HABITAT = 255;
+let HABITATS = []; // habitat_names(): index -> id
+const habitatColor = (h) => HABITAT_COLORS[HABITATS[h]] || [128, 128, 128];
 const css = (c) => `rgb(${c.map((v) => Math.round(v)).join(',')})`;
 
 // ---------------------------------------------------------------- map
@@ -317,10 +327,14 @@ function drawMap() {
       if (!state.filled[c]) { col = draftColor(x, z); d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255; continue; }
       if (mode === 'terrain') col = terrainColor(i, x, z);
       else {
-        if (mode === 'biome') col = BIOMES[state.biome[c]].map;
+        if (mode === 'habitat') {
+          const h = state.hab[c];
+          // land stays in the terrain colours; water shows its habitat
+          col = h === NO_HABITAT || !state.habFilled[c] ? terrainColor(i, x, z) : habitatColor(h);
+        } else if (mode === 'biome') col = BIOMES[state.biome[c]].map;
         else col = scale(SCALES[mode], (mode === 'temperature' ? state.temp : state.hum)[c]);
         // darken the sea a little so coastlines stay readable
-        if (hm[i] === B.water || hm[i] === B.ice) col = col.map((v) => v * 0.72);
+        if (mode !== 'habitat' && (hm[i] === B.water || hm[i] === B.ice)) col = col.map((v) => v * 0.72);
       }
       d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
     }
@@ -344,6 +358,15 @@ const LEGEND_TOP = 8;
 function drawLegend() {
   const el = $('legend');
   const mode = state.mode;
+  if (mode === 'habitat') {
+    const n = new Uint32Array(256);
+    for (let c = 0; c < state.hab.length; c++) if (state.habFilled[c]) n[state.hab[c]]++;
+    el.innerHTML = HABITATS.map((name, h) => ({ name, h }))
+      .filter(({ h }) => n[h] > 0)
+      .map(({ name, h }) => `<span style="--c:${css(habitatColor(h))}">${name.replace(/_/g, ' ')}</span>`).join('') +
+      (state.habFilled.includes(1) ? '' : '<span>loading habitats…</span>');
+    return;
+  }
   if (mode === 'terrain' || mode === 'biome') {
     const n = legendCounts(mode);
     const items = (mode === 'terrain'
@@ -367,6 +390,7 @@ function drawLegend() {
 
 function setMode(mode) {
   state.mode = mode;
+  if (mode === 'habitat' && state.habFilled && !state.habFilled.includes(1)) loadHabitats();
   for (const b of document.querySelectorAll('button[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
   if (state.hm) drawMap();
 }
@@ -399,6 +423,7 @@ $('map').addEventListener('mousemove', (ev) => {
   let t = `x ${state.x0 + x} z ${state.z0 + z} · ${nm(hm[i])} y ${hm[i + 1]}`;
   if (hm[i] === B.water || hm[i] === B.ice) t += `, ${hm[i + 1] - hm[i + 2]} deep over ${nm(hm[i + 3])}`;
   t += ` · ${BIOMES[state.biome[c]].name}`;
+  if (state.mode === 'habitat' && state.habFilled[c] && state.hab[c] !== NO_HABITAT) t += ` · ${HABITATS[state.hab[c]].replace(/_/g, ' ')}`;
   if (state.mode === 'temperature') t += ` · T ${state.temp[c].toFixed(2)}`;
   if (state.mode === 'humidity') t += ` · H ${state.hum[c].toFixed(2)}`;
   $('hover').textContent = t;
@@ -440,6 +465,8 @@ async function regenerate() {
   state.temp = new Float32Array(MAP * MAP);
   state.hum = new Float32Array(MAP * MAP);
   state.filled = new Uint8Array(MAP * MAP);
+  state.hab = new Uint8Array(MAP * MAP).fill(NO_HABITAT);
+  state.habFilled = new Uint8Array(MAP * MAP);
   state.draft = null;
   if (!state.sel) state.sel = { x: (MAP - AREA) / 2, z: (MAP - AREA) / 2 };
   placeSel();
@@ -479,10 +506,47 @@ async function regenerate() {
   }).map((p, n) => p.then((t) => { if (id === genId) placeTile(t, tiles[n].tx * TILE - x0, tiles[n].tz * TILE - z0); }));
   try { await Promise.all(work); } catch { return false; }
   if (id !== genId) return false;
+  if (state.mode === 'habitat') loadHabitats();
   const ms = performance.now() - t0;
   $('busy').textContent = '';
   dev('map', `${ms.toFixed(0)} ms (${tiles.length} tiles, ${cached} cached)`);
   return true;
+}
+
+// Habitat tiles (same grid as the map tiles) are fetched only while habitat
+// mode is showing, then cached like the others.
+const habCache = new Map(); // `${seed}:${tx}:${tz}` -> habitat bytes
+let habJobs = [];
+function loadHabitats() {
+  const id = genId;
+  habJobs.forEach((j) => j.cancel());
+  habJobs = [];
+  const { seed, x0, z0 } = state;
+  for (let tz = Math.floor(z0 / TILE); tz <= Math.floor((z0 + MAP - 1) / TILE); tz++) {
+    for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + MAP - 1) / TILE); tx++) {
+      const key = `${seed}:${tx}:${tz}`;
+      const place = (t) => { if (id === genId) placeHabitats(t, tx * TILE - x0, tz * TILE - z0); };
+      const hit = habCache.get(key);
+      if (hit) { place(hit); continue; }
+      const job = pool.run('habitat', { seed, x: tx * TILE, z: tz * TILE, size: TILE }, 1);
+      habJobs.push(job);
+      job.promise.then((t) => {
+        habCache.set(key, t);
+        while (habCache.size > TILE_CACHE) habCache.delete(habCache.keys().next().value);
+        place(t);
+      }, () => {});
+    }
+  }
+}
+
+function placeHabitats(t, ox, oz) {
+  const xa = Math.max(0, ox), xb = Math.min(MAP, ox + TILE), za = Math.max(0, oz), zb = Math.min(MAP, oz + TILE);
+  for (let z = za; z < zb; z++) {
+    const src = (z - oz) * TILE + (xa - ox), dst = z * MAP + xa, w = xb - xa;
+    state.hab.set(t.subarray(src, src + w), dst);
+    state.habFilled.fill(1, dst, dst + w);
+  }
+  drawMap();
 }
 
 // Copy the part of a tile (map-relative corner ox, oz) that falls on the map.
@@ -1536,11 +1600,12 @@ await init({ module_or_path: wasmModule });
 LEGEND = JSON.parse(legend());
 COLORS = []; NAMES = [];
 for (const b of LEGEND.blocks) { COLORS[b.id] = b.color; NAMES[b.id] = b.name; }
+HABITATS = JSON.parse(habitat_names());
 BIOMES = [];
 for (const b of LEGEND.biomes) BIOMES[b.id] = b;
 CTX = legendContext(legend(), faceLayers(tileFor));
 pool = new WorkerPool({ faceLayer: CTX.faceLayer, module: wasmModule });
-setMode(['terrain', 'biome', 'temperature', 'humidity'].includes(qs.get('mode')) ? qs.get('mode') : 'terrain');
+setMode(['terrain', 'biome', 'temperature', 'humidity', 'habitat'].includes(qs.get('mode')) ? qs.get('mode') : 'terrain');
 initGL();
 state.textured = await loadTextures();
 if (!state.textured) {

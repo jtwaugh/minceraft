@@ -5,6 +5,7 @@
 //   init   { faceLayer, module }         once, first: the page's face-to-layer table (mesh.js)
 //                                        and its compiled wasm module (shared, not recompiled)
 //   tile   { seed, x, z, size }          decorated map tile: heightmap, biome, temperature, humidity
+//   habitat { seed, x, z, size }         habitat_map for a map tile (only fetched in habitat mode)
 //   coarse { seed, x0, z0, step, nx, nz } coarse_heightmap survey (the map's quick first draft)
 //   plan   { seed, cx, cz, bounds }      flyover plan data (flyover/plan.js planData)
 //   chunk  { seed, cx, cz, fast }        decorated 64x64 chunk (plus a one-block ring), meshed
@@ -24,6 +25,10 @@ const tasks = {
       hum: wasm.humidity_map(seed, x, z, size, size),
     };
     return [r, Object.values(r).map((a) => a.buffer)];
+  },
+  habitat({ seed, x, z, size }) {
+    const hab = wasm.habitat_map(seed, x, z, size, size);
+    return [hab, [hab.buffer]];
   },
   coarse({ seed, x0, z0, step, nx, nz }) {
     const raw = wasm.coarse_heightmap(seed, x0, z0, step, nx, nz);
