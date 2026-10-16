@@ -123,6 +123,64 @@ pub fn cast_block(
     best
 }
 
+/// The minimum an entity must offer to be targeted. Phase 6 supplies real
+/// entities through this record.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TargetableEntity {
+    pub id: EntityId,
+    /// What the entity is, such as `animal`.
+    pub kind: String,
+    /// The entity's bounding box in world coordinates, before expansion.
+    pub aabb: Aabb,
+}
+
+/// Cast the eye ray at entities and blocks and return the nearest hit.
+///
+/// Entity boxes grow by `cfg.entity_box_expansion` on every side and count
+/// within `cfg.entity_reach`; blocks count within `cfg.block_reach`. When an
+/// entity and a block are equally far, the entity wins; between entities the
+/// lower id wins. Returns `Target::None` for a zero direction or no hit.
+pub fn cast_target(
+    world: &impl CollisionWorld,
+    entities: &[TargetableEntity],
+    cfg: &TargetingConfig,
+    origin: [f64; 3],
+    dir: [f64; 3],
+) -> Target {
+    let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt();
+    if !len.is_finite() || len == 0.0 {
+        return Target::None;
+    }
+    let d = [dir[0] / len, dir[1] / len, dir[2] / len];
+    let grow = f64::from(cfg.entity_box_expansion);
+    let mut best: Option<(Target, f64)> = None;
+    for e in entities {
+        let b = Aabb::new(
+            [0, 1, 2].map(|i| e.aabb.min[i] - grow),
+            [0, 1, 2].map(|i| e.aabb.max[i] + grow),
+        );
+        let Some(hit) = ray_vs_box(origin, d, &b) else {
+            continue;
+        };
+        let better = match best {
+            None => true,
+            Some((Target::Entity { id }, bd)) => {
+                hit.distance < bd || (hit.distance == bd && e.id < id)
+            }
+            Some((_, bd)) => hit.distance < bd,
+        };
+        if hit.distance <= f64::from(cfg.entity_reach) && better {
+            best = Some((Target::Entity { id: e.id }, hit.distance));
+        }
+    }
+    if let Some((t, bd)) = cast_block(world, origin, d, f64::from(cfg.block_reach)) {
+        if best.is_none_or(|(_, ed)| bd < ed) {
+            return t;
+        }
+    }
+    best.map_or(Target::None, |(t, _)| t)
+}
+
 /// Reach and box tunables from `data/targeting.toml`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TargetingConfig {
@@ -324,6 +382,101 @@ mod tests {
         assert_eq!(cast(&world, o, east), None);
         let o = [-2.5, 0.5, 3.5];
         assert_eq!(cast(&world, o, east), block([0, 0, 3], Face::West));
+    }
+
+    fn ent(id: EntityId, min: [f64; 3], max: [f64; 3]) -> TargetableEntity {
+        TargetableEntity {
+            id,
+            kind: "animal".to_string(),
+            aabb: Aabb::new(min, max),
+        }
+    }
+
+    fn target(w: &MemoryWorld, es: &[TargetableEntity], o: [f64; 3], d: [f64; 3]) -> Target {
+        let cfg = TargetingConfig::default_from_data().unwrap();
+        cast_target(w, es, &cfg, o, d)
+    }
+
+    #[test]
+    fn nearest_of_entity_and_block_wins() {
+        use terrain::Block;
+        let o = [0.5, 0.5, 0.5];
+        let east = [1.0, 0.0, 0.0];
+        let mut w = MemoryWorld::new();
+        w.set(4, 0, 0, Block::Stone);
+        let front = ent(7, [2.0, 0.2, 0.2], [2.6, 0.8, 0.8]);
+        assert_eq!(target(&w, &[front], o, east), Target::Entity { id: 7 });
+        let behind = ent(7, [4.0, 0.2, 0.2], [4.6, 0.8, 0.8]);
+        assert_eq!(
+            target(&w, &[behind], o, east),
+            block([4, 0, 0], Face::West).unwrap()
+        );
+    }
+
+    #[test]
+    fn entity_reach_is_shorter_than_block_reach() {
+        use terrain::Block;
+        let o = [0.5, 0.5, 0.5];
+        let east = [1.0, 0.0, 0.0];
+        let mut w = MemoryWorld::new();
+        w.set(5, 0, 0, Block::Stone);
+        // Expanded box starts at x = 3.9, 3.4 away: out of entity reach.
+        let far = ent(1, [4.0, 0.2, 0.2], [4.5, 0.8, 0.8]);
+        assert_eq!(
+            target(&w, std::slice::from_ref(&far), o, east),
+            block([5, 0, 0], Face::West).unwrap()
+        );
+        // Expanded box starts at x = 3.4, 2.9 away: in reach, and nearer the block.
+        let near = ent(1, [3.5, 0.2, 0.2], [4.0, 0.8, 0.8]);
+        assert_eq!(target(&w, &[near], o, east), Target::Entity { id: 1 });
+        // Alone, the far entity is ignored.
+        assert_eq!(
+            target(&MemoryWorld::new(), std::slice::from_ref(&far), o, east),
+            Target::None
+        );
+    }
+
+    #[test]
+    fn expansion_widens_the_box() {
+        let w = MemoryWorld::new();
+        let e = [ent(3, [2.0, 0.0, 0.0], [3.0, 1.0, 1.0])];
+        // Passes 0.05 above the raw box (top at y = 1).
+        let o = [0.0, 1.05, 0.5];
+        assert_eq!(target(&w, &e, o, [1.0, 0.0, 0.0]), Target::Entity { id: 3 });
+        // 0.15 above is still a miss.
+        let o = [0.0, 1.15, 0.5];
+        assert_eq!(target(&w, &e, o, [1.0, 0.0, 0.0]), Target::None);
+    }
+
+    #[test]
+    fn ties_and_empty_are_deterministic() {
+        use terrain::Block;
+        let o = [0.5, 0.5, 0.5];
+        let east = [1.0, 0.0, 0.0];
+        let w = MemoryWorld::new();
+        assert_eq!(target(&w, &[], o, east), Target::None);
+        assert_eq!(target(&w, &[], o, [0.0; 3]), Target::None);
+        // Equal-distance entities: lowest id, whatever the order.
+        let a = ent(5, [2.0, 0.0, 0.0], [3.0, 1.0, 1.0]);
+        let b = ent(2, [2.0, 0.0, 0.0], [3.0, 1.0, 1.0]);
+        assert_eq!(
+            target(&w, &[a.clone(), b.clone()], o, east),
+            Target::Entity { id: 2 }
+        );
+        assert_eq!(target(&w, &[b, a], o, east), Target::Entity { id: 2 });
+        // Entity face at x = 2.9 meets a block face at x = 2.9? Use exact tie: box
+        // expanded to x = 3.0 (min 3.1 - 0.1 is inexact), so use a block at 3.
+        let mut w = MemoryWorld::new();
+        w.set(3, 0, 0, Block::Stone);
+        let tie = ent(9, [3.5, 0.0, 0.0], [4.0, 1.0, 1.0]);
+        let cfg = TargetingConfig {
+            entity_box_expansion: 0.5,
+            ..TargetingConfig::default_from_data().unwrap()
+        };
+        assert_eq!(
+            cast_target(&w, &[tie], &cfg, o, east),
+            Target::Entity { id: 9 }
+        );
     }
 
     #[test]

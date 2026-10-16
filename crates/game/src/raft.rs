@@ -161,6 +161,15 @@ fn rotate(p: [f64; 3], c: [f64; 2], turns: i32) -> [f64; 3] {
     [c[0] + dx, p[1], c[1] + dz]
 }
 
+/// Merge per-region raft masks into one sorted list without duplicates, so
+/// the result does not depend on the order the regions are given in.
+pub fn merge_masks<'a>(masks: impl IntoIterator<Item = &'a [[i32; 3]]>) -> Vec<[i32; 3]> {
+    let mut cells: Vec<[i32; 3]> = masks.into_iter().flatten().copied().collect();
+    cells.sort();
+    cells.dedup();
+    cells
+}
+
 #[derive(Clone, Debug)]
 pub struct Raft {
     /// Mask cells at the rest pose.
@@ -190,6 +199,13 @@ impl Raft {
             yaw: 0.0,
             turns: 0,
         }
+    }
+
+    /// Build the raft from the per-region raft masks (world-layout 4.5): the
+    /// union of every region's cells, so a raft whose mask straddles a region
+    /// border is the same raft as one built from a region covering both.
+    pub fn from_region_masks<'a>(masks: impl IntoIterator<Item = &'a [[i32; 3]]>) -> Raft {
+        Raft::new(&merge_masks(masks))
     }
 
     /// The raft's current centre in the xz plane.

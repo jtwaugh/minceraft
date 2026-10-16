@@ -1,10 +1,15 @@
 //! Interaction rules loaded from `data/interactions.toml`.
 //! See docs/design/basic-gameplay.md section 7.
 //!
-//! This module only parses the table. Block names and entity kinds are kept
+//! This module parses the table and resolves a press against it (first match
+//! wins), calling stub actions until Phases 6 and 7.
+//!
+//! The table is parsed here. Block names and entity kinds are kept
 //! as written and not checked against the block table, because some of them
 //! (`farmland`, `crop`, `planter_dirt`, animals) arrive in later phases.
 
+use crate::input::TickInput;
+use crate::targeting::{self, Face};
 use std::fmt;
 
 const DEFAULT_INTERACTIONS: &str = include_str!("../../../data/interactions.toml");
@@ -287,9 +292,302 @@ impl Interactions {
     }
 }
 
+/// What the player holds, as far as rules care.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HeldThing {
+    Empty,
+    Tool(String),
+    Item(String),
+}
+
+/// What is known about the targeted thing. Names are as written in the
+/// rules (`grass`, `crop`, `animal`); the face comes from the target itself.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TargetFacts {
+    pub block: Option<String>,
+    pub entity: Option<String>,
+    pub air_above: bool,
+    pub crop_state: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolveCtx {
+    pub held: HeldThing,
+    pub button: Button,
+    pub target: targeting::Target,
+    pub facts: TargetFacts,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Resolved {
+    pub rule_index: usize,
+    pub action: ActionKind,
+}
+
+fn face_name(face: Face) -> &'static str {
+    match face {
+        Face::Bottom => "bottom",
+        Face::Top => "top",
+        Face::North => "north",
+        Face::South => "south",
+        Face::West => "west",
+        Face::East => "east",
+    }
+}
+
+fn held_matches(rule: &Held, held: &HeldThing) -> bool {
+    match (rule, held) {
+        (Held::Any, _) => true,
+        (Held::Empty, HeldThing::Empty) => true,
+        (Held::AnyTool, HeldThing::Tool(_)) => true,
+        (Held::Tool(a), HeldThing::Tool(b)) => a == b,
+        (Held::Item(a), HeldThing::Item(b)) => a == b,
+        _ => false,
+    }
+}
+
+fn rule_matches(rule: &Rule, ctx: &ResolveCtx) -> bool {
+    if rule.button != ctx.button || !held_matches(&rule.held, &ctx.held) {
+        return false;
+    }
+    let face = match (&rule.target, &ctx.target) {
+        (Target::None, targeting::Target::None) => None,
+        (Target::Block(name), targeting::Target::Block { face, .. })
+            if ctx.facts.block.as_deref() == Some(name) =>
+        {
+            Some(*face)
+        }
+        (Target::Entity(kind), targeting::Target::Entity { .. })
+            if ctx.facts.entity.as_deref() == Some(kind) =>
+        {
+            None
+        }
+        _ => return false,
+    };
+    if let Some(want) = &rule.target_face {
+        if face.map(face_name) != Some(want.as_str()) {
+            return false;
+        }
+    }
+    if rule.require_air_above && !ctx.facts.air_above {
+        return false;
+    }
+    if let Some(want) = &rule.require_state {
+        if ctx.facts.crop_state.as_ref() != Some(want) {
+            return false;
+        }
+    }
+    true
+}
+
+/// The first rule, in file order, that matches `ctx`.
+pub fn resolve(rules: &[Rule], ctx: &ResolveCtx) -> Option<Resolved> {
+    rules
+        .iter()
+        .position(|r| rule_matches(r, ctx))
+        .map(|rule_index| Resolved {
+            rule_index,
+            action: rules[rule_index].action,
+        })
+}
+
+// Stub actions: real behaviour comes in Phases 6 and 7. Each reports that it ran.
+pub fn attack() -> ActionKind {
+    ActionKind::Attack
+}
+pub fn till() -> ActionKind {
+    ActionKind::Till
+}
+pub fn plant() -> ActionKind {
+    ActionKind::Plant
+}
+pub fn harvest() -> ActionKind {
+    ActionKind::Harvest
+}
+pub fn forage() -> ActionKind {
+    ActionKind::Forage
+}
+
+fn run_action(action: ActionKind) -> ActionKind {
+    match action {
+        ActionKind::Attack => attack(),
+        ActionKind::Till => till(),
+        ActionKind::Plant => plant(),
+        ActionKind::Harvest => harvest(),
+        ActionKind::Forage => forage(),
+    }
+}
+
+/// Per-tick dispatch state.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Dispatcher {
+    /// Rule matched by the most recent press edge; `None` if that press
+    /// matched nothing. Unchanged on ticks with no press. For the overlay.
+    pub last_rule: Option<usize>,
+}
+
+impl Dispatcher {
+    /// Resolves each press edge in `input` (primary, then secondary) against
+    /// `ctx` (its `button` is overridden) and runs the matched stub. Returns
+    /// the actions that ran: at most one per edge, none without a press.
+    pub fn dispatch(
+        &mut self,
+        rules: &Interactions,
+        input: &TickInput,
+        ctx: &ResolveCtx,
+    ) -> Vec<ActionKind> {
+        let mut ran = Vec::new();
+        for (pressed, button) in [
+            (input.primary, Button::Primary),
+            (input.secondary, Button::Secondary),
+        ] {
+            if !pressed {
+                continue;
+            }
+            let ctx = ResolveCtx {
+                button,
+                ..ctx.clone()
+            };
+            let resolved = resolve(&rules.rules, &ctx);
+            self.last_rule = resolved.map(|r| r.rule_index);
+            if let Some(r) = resolved {
+                ran.push(run_action(r.action));
+            }
+        }
+        ran
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ctx(held: HeldThing, button: Button, block: &str, face: Face) -> ResolveCtx {
+        ResolveCtx {
+            held,
+            button,
+            target: targeting::Target::Block {
+                pos: [0, 0, 0],
+                face,
+            },
+            facts: TargetFacts {
+                block: Some(block.into()),
+                air_above: true,
+                ..TargetFacts::default()
+            },
+        }
+    }
+
+    fn animal(held: HeldThing) -> ResolveCtx {
+        ResolveCtx {
+            held,
+            button: Button::Primary,
+            target: targeting::Target::Entity { id: 1 },
+            facts: TargetFacts {
+                entity: Some("animal".into()),
+                ..TargetFacts::default()
+            },
+        }
+    }
+
+    fn resolved(c: &ResolveCtx) -> Option<Resolved> {
+        resolve(&Interactions::default_rules().rules, c)
+    }
+
+    fn action(c: &ResolveCtx) -> Option<ActionKind> {
+        resolved(c).map(|r| r.action)
+    }
+
+    fn tool(n: &str) -> HeldThing {
+        HeldThing::Tool(n.into())
+    }
+
+    #[test]
+    fn specific_rules_beat_general_ones() {
+        let c = ctx(tool("hoe"), Button::Secondary, "grass", Face::Top);
+        let r = resolved(&c).unwrap();
+        assert_eq!((r.rule_index, r.action), (1, ActionKind::Till));
+        // The sword rule comes before the punch fallback.
+        assert_eq!(resolved(&animal(tool("sword"))).unwrap().rule_index, 0);
+    }
+
+    #[test]
+    fn punch_fallback_matches_with_no_tool() {
+        let r = resolved(&animal(HeldThing::Empty)).unwrap();
+        assert_eq!((r.rule_index, r.action), (8, ActionKind::Attack));
+    }
+
+    #[test]
+    fn air_above_blocks_till() {
+        let mut c = ctx(tool("hoe"), Button::Secondary, "grass", Face::Top);
+        c.facts.air_above = false;
+        assert_eq!(action(&c), None);
+        c.facts.block = Some("planter_dirt".into());
+        assert_eq!(action(&c), Some(ActionKind::Till));
+    }
+
+    #[test]
+    fn top_face_required_to_plant() {
+        let seeds = HeldThing::Item("seeds".into());
+        let mut c = ctx(seeds, Button::Secondary, "farmland", Face::Top);
+        assert_eq!(action(&c), Some(ActionKind::Plant));
+        c.target = targeting::Target::Block {
+            pos: [0, 0, 0],
+            face: Face::North,
+        };
+        assert_eq!(action(&c), None);
+    }
+
+    #[test]
+    fn harvest_needs_mature_crop() {
+        let mut c = ctx(HeldThing::Empty, Button::Secondary, "crop", Face::Top);
+        assert_eq!(action(&c), None);
+        c.facts.crop_state = Some("growing".into());
+        assert_eq!(action(&c), None);
+        c.facts.crop_state = Some("mature".into());
+        assert_eq!(action(&c), Some(ActionKind::Harvest));
+        c.held = tool("sword");
+        assert_eq!(action(&c), Some(ActionKind::Harvest));
+        c.held = HeldThing::Item("seeds".into());
+        assert_eq!(action(&c), None);
+    }
+
+    #[test]
+    fn button_and_target_must_match() {
+        let c = ctx(HeldThing::Empty, Button::Primary, "tall_grass", Face::Top);
+        assert_eq!(action(&c), None);
+        let c = ResolveCtx {
+            target: targeting::Target::None,
+            ..c
+        };
+        assert_eq!(action(&c), None);
+    }
+
+    #[test]
+    fn dispatch_runs_once_per_press_edge() {
+        let rules = Interactions::default_rules();
+        let mut d = Dispatcher::default();
+        let c = animal(tool("sword"));
+        let idle = TickInput::default();
+        assert!(d.dispatch(&rules, &idle, &c).is_empty());
+        assert_eq!(d.last_rule, None);
+        let press = TickInput {
+            primary: true,
+            ..TickInput::default()
+        };
+        assert_eq!(d.dispatch(&rules, &press, &c), vec![ActionKind::Attack]);
+        assert_eq!(d.last_rule, Some(0));
+        // No new press: nothing runs, the overlay keeps the last match.
+        assert!(d.dispatch(&rules, &idle, &c).is_empty());
+        assert_eq!(d.last_rule, Some(0));
+        // A press that matches nothing clears it.
+        let none = ResolveCtx {
+            target: targeting::Target::None,
+            ..c
+        };
+        assert!(d.dispatch(&rules, &press, &none).is_empty());
+        assert_eq!(d.last_rule, None);
+    }
 
     const BASE: &str =
         "held = \"empty\"\nbutton = \"secondary\"\ntarget = \"none\"\naction = \"forage\"\n";

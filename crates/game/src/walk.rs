@@ -9,25 +9,92 @@ use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::scene::RaftScene;
 use crate::stream::{StreamConfig, Streamer};
+use crate::targeting::{cast_block, Target, TargetingConfig};
 use layout::Layout;
+use std::collections::HashMap;
+use std::ops::RangeInclusive;
 use terrain::{Block, Region, HEIGHT};
 
-/// Collision over several generated regions; the first region that contains a
-/// column answers, and air is returned outside all of them. Regions generated
-/// from one seed agree where they overlap.
+/// Side of the square column cells the lookup index is split into.
+const CELL: i64 = 16;
+
+fn cell_of(v: i64) -> i64 {
+    v.div_euclid(CELL)
+}
+
+/// Collision over several generated regions, keyed by region origin. A column
+/// is found through a grid of cells, each listing the regions that touch it,
+/// so a lookup does not scan all regions. Where regions overlap, the one
+/// inserted first answers (regions generated from one seed agree anyway), and
+/// air is returned outside all of them. Inserting at an origin already loaded
+/// replaces that region.
 #[derive(Default)]
 pub struct RegionSet {
-    regions: Vec<Region>,
+    regions: HashMap<(i32, i32), (u64, Region)>,
+    cells: HashMap<(i64, i64), Vec<(i32, i32)>>,
+    next_seq: u64,
 }
 
 impl RegionSet {
-    pub fn push(&mut self, region: Region) {
-        self.regions.push(region);
+    fn cell_range(r: &Region) -> (RangeInclusive<i64>, RangeInclusive<i64>) {
+        let lo = |o: i32| cell_of(o as i64);
+        let hi = |o: i32, n: u32| cell_of(o as i64 + (n as i64).max(1) - 1);
+        (lo(r.x0)..=hi(r.x0, r.width), lo(r.z0)..=hi(r.z0, r.depth))
     }
 
-    /// Drops the region whose minimum corner is `(x0, z0)`.
-    pub fn remove_at(&mut self, x0: i32, z0: i32) {
-        self.regions.retain(|r| (r.x0, r.z0) != (x0, z0));
+    /// Load `region`, replacing any region with the same origin.
+    pub fn insert(&mut self, region: Region) {
+        self.remove(region.x0, region.z0);
+        let key = (region.x0, region.z0);
+        let (xs, zs) = Self::cell_range(&region);
+        for cx in xs {
+            for cz in zs.clone() {
+                self.cells.entry((cx, cz)).or_default().push(key);
+            }
+        }
+        self.regions.insert(key, (self.next_seq, region));
+        self.next_seq += 1;
+    }
+
+    /// Same as `insert`.
+    pub fn push(&mut self, region: Region) {
+        self.insert(region);
+    }
+
+    /// Unload the region whose origin is `(x0, z0)`; its columns read as air.
+    pub fn remove(&mut self, x0: i32, z0: i32) -> Option<Region> {
+        let (_, region) = self.regions.remove(&(x0, z0))?;
+        let (xs, zs) = Self::cell_range(&region);
+        for cx in xs {
+            for cz in zs.clone() {
+                if let Some(list) = self.cells.get_mut(&(cx, cz)) {
+                    list.retain(|k| *k != (x0, z0));
+                    if list.is_empty() {
+                        self.cells.remove(&(cx, cz));
+                    }
+                }
+            }
+        }
+        Some(region)
+    }
+
+    /// Origins `(x0, z0)` of the loaded regions, in no particular order.
+    pub fn loaded(&self) -> impl Iterator<Item = (i32, i32)> + '_ {
+        self.regions.keys().copied()
+    }
+
+    /// The loaded region that holds world column `(x, z)`.
+    pub fn region_at(&self, x: i32, z: i32) -> Option<&Region> {
+        let (x, z) = (x as i64, z as i64);
+        let list = self.cells.get(&(cell_of(x), cell_of(z)))?;
+        list.iter()
+            .filter_map(|k| self.regions.get(k))
+            .filter(|(_, r)| {
+                let (lx, lz) = (x - r.x0 as i64, z - r.z0 as i64);
+                lx >= 0 && lz >= 0 && lx < r.width as i64 && lz < r.depth as i64
+            })
+            .min_by_key(|(seq, _)| *seq)
+            .map(|(_, r)| r)
     }
 
     pub fn len(&self) -> usize {
@@ -44,13 +111,10 @@ impl CollisionWorld for RegionSet {
         if y < 0 || y >= HEIGHT as i32 {
             return Block::Air;
         }
-        for r in &self.regions {
-            let (lx, lz) = (x as i64 - r.x0 as i64, z as i64 - r.z0 as i64);
-            if lx >= 0 && lz >= 0 && lx < r.width as i64 && lz < r.depth as i64 {
-                return RegionWorld::new(r).block_at(x, y, z);
-            }
+        match self.region_at(x, z) {
+            Some(r) => RegionWorld::new(r).block_at(x, y, z),
+            None => Block::Air,
         }
-        Block::Air
     }
 }
 
@@ -72,6 +136,8 @@ pub struct Walker {
     streamer: Option<Streamer>,
     prev_eye: [f64; 3],
     cur_eye: [f64; 3],
+    block_reach: f64,
+    target: Target,
 }
 
 impl Walker {
@@ -80,7 +146,9 @@ impl Walker {
     pub fn new(feet: [f64; 3]) -> Result<Walker, PhysicsError> {
         let physics = PlayerPhysics::default_from_data()?;
         let player = Player::new(feet, &physics);
-        let eye = [feet[0], feet[1] + physics.eye_offset(false) as f64, feet[2]];
+        let eye = eye_above(feet, &physics, false);
+        let targeting = TargetingConfig::default_from_data()
+            .map_err(|e| PhysicsError::Invalid(e.to_string()))?;
         Ok(Walker {
             player,
             physics,
@@ -89,11 +157,23 @@ impl Walker {
             streamer: None,
             prev_eye: eye,
             cur_eye: eye,
+            block_reach: targeting.block_reach as f64,
+            target: Target::None,
         })
     }
 
     pub fn add_region(&mut self, region: Region) {
-        self.world.push(region);
+        self.world.insert(region);
+    }
+
+    /// Unload the region whose origin is `(x0, z0)`.
+    pub fn remove_region(&mut self, x0: i32, z0: i32) -> Option<Region> {
+        self.world.remove(x0, z0)
+    }
+
+    /// Origins `(x0, z0)` of the loaded regions, in no particular order.
+    pub fn loaded_regions(&self) -> Vec<(i32, i32)> {
+        self.world.loaded().collect()
     }
 
     /// A walker with its feet at `feet` over a streamed world: the player's
@@ -108,7 +188,7 @@ impl Walker {
     }
 
     /// Number of regions currently loaded for collision.
-    pub fn loaded_regions(&self) -> usize {
+    pub fn loaded_region_count(&self) -> usize {
         self.world.len()
     }
 
@@ -176,19 +256,26 @@ impl Walker {
                     .advance(&frame, &mut [&mut self.player], &self.physics);
                 let world = RaftWorld::new(&self.world, &f.raft);
                 self.player.tick(input, &self.physics, &world);
+                self.prev_eye = self.cur_eye;
+                self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
+                self.target = eye_target(&world, self.cur_eye, input, self.block_reach);
             }
-            None => self.player.tick(input, &self.physics, &self.world),
+            None => {
+                self.player.tick(input, &self.physics, &self.world);
+                self.prev_eye = self.cur_eye;
+                self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
+                self.target = eye_target(&self.world, self.cur_eye, input, self.block_reach);
+            }
         }
         if let Some(s) = &mut self.streamer {
             s.update(self.player.pos, &mut self.world);
         }
-        self.prev_eye = self.cur_eye;
-        let up = self.physics.eye_offset(input.sneak) as f64;
-        self.cur_eye = [
-            self.player.pos[0],
-            self.player.pos[1] + up,
-            self.player.pos[2],
-        ];
+    }
+
+    /// What the eye ray pointed at after the latest tick (basic-gameplay.md
+    /// section 5). `Target::None` before the first tick.
+    pub fn target(&self) -> Target {
+        self.target
     }
 
     /// The eye between the last two ticks, `alpha` in 0..1.
@@ -204,14 +291,31 @@ impl Walker {
         if let Some(s) = &mut self.streamer {
             s.update(feet, &mut self.world);
         }
-        let eye = [
-            feet[0],
-            feet[1] + self.physics.eye_offset(false) as f64,
-            feet[2],
-        ];
+        let eye = eye_above(feet, &self.physics, false);
         self.prev_eye = eye;
         self.cur_eye = eye;
     }
+
+    /// Put the player, standing, with its eye at `eye`, e.g. when leaving
+    /// fly mode at the fly camera's position.
+    pub fn teleport_eye(&mut self, eye: [f64; 3]) {
+        let up = self.physics.eye_offset(false) as f64;
+        self.teleport([eye[0], eye[1] - up, eye[2]]);
+    }
+}
+
+/// The block the ray from `eye` along the look angles of `input` hits.
+fn eye_target(world: &impl CollisionWorld, eye: [f64; 3], input: &TickInput, reach: f64) -> Target {
+    // Same forward vector as `Pose::forward` in camera.rs, in f64.
+    let (sy, cy) = (input.yaw as f64).sin_cos();
+    let (sp, cp) = (input.pitch as f64).sin_cos();
+    let dir = [sy * cp, sp, -cy * cp];
+    cast_block(world, eye, dir, reach).map_or(Target::None, |(t, _)| t)
+}
+
+/// The eye position for feet at `feet`.
+fn eye_above(feet: [f64; 3], physics: &PlayerPhysics, sneak: bool) -> [f64; 3] {
+    [feet[0], feet[1] + physics.eye_offset(sneak) as f64, feet[2]]
 }
 
 #[cfg(test)]
@@ -261,6 +365,71 @@ mod tests {
         assert!((w.eye(1.0)[1] - (feet + 1.62 - 0.08)).abs() < 1e-6);
     }
 
+    fn look(pitch: f32, sneak: bool) -> TickInput {
+        TickInput {
+            pitch,
+            sneak,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn looking_down_targets_the_block_under_the_feet() {
+        let mut w = settled();
+        assert_eq!(w.target(), Target::None);
+        w.tick(&look(-std::f32::consts::FRAC_PI_2, false));
+        assert_eq!(
+            w.target(),
+            Target::Block {
+                pos: [0, 3, 0],
+                face: crate::targeting::Face::Top
+            }
+        );
+    }
+
+    #[test]
+    fn horizon_over_open_air_targets_nothing() {
+        let mut w = settled();
+        w.tick(&look(0.0, false));
+        assert_eq!(w.target(), Target::None);
+    }
+
+    #[test]
+    fn sneaking_lowers_the_eye_and_the_target_follows() {
+        // Feet at (0.5, 4, 0.5) on a floor whose top is y = 4. Looking down
+        // at slope 0.632 the ray meets the floor 1.62 / 0.632 blocks away
+        // when standing and 1.54 / 0.632 when sneaking: z = -2.06 or -1.94.
+        let pitch = -(0.632f64.atan()) as f32;
+        let mut w = settled();
+        let top = |pos| Target::Block {
+            pos,
+            face: crate::targeting::Face::Top,
+        };
+        w.tick(&look(pitch, false));
+        assert_eq!(w.target(), top([0, 3, -3]));
+        w.tick(&look(pitch, true));
+        assert_eq!(w.target(), top([0, 3, -2]));
+    }
+
+    #[test]
+    fn same_inputs_give_the_same_targets() {
+        let run = || {
+            let mut w = settled();
+            let mut out = Vec::new();
+            for i in 0..30 {
+                w.tick(&TickInput {
+                    yaw: i as f32 * 0.3,
+                    pitch: -1.0 + i as f32 * 0.05,
+                    sneak: i % 3 == 0,
+                    ..TickInput::default()
+                });
+                out.push(w.target());
+            }
+            out
+        };
+        assert_eq!(run(), run());
+    }
+
     #[test]
     fn eye_interpolates_between_ticks() {
         let mut w = settled();
@@ -286,6 +455,112 @@ mod tests {
         assert_eq!(set.block_at(1, 2, 1), Block::Air);
         assert_eq!(set.block_at(9, 0, 0), Block::Air);
         assert_eq!(set.block_at(1, -1, 1), Block::Air);
+    }
+
+    /// Two adjacent halves of a hilly strip, and one region covering both.
+    fn halves() -> (Region, Region, Region) {
+        let n = 8u32;
+        let fill = |r: &mut Region| {
+            for z in 0..r.depth {
+                for x in 0..r.width {
+                    let wx = r.x0 + x as i32;
+                    let top = 3 + (wx.rem_euclid(3)) as u32;
+                    for y in 0..=top {
+                        let i = r.index(x, y, z);
+                        r.blocks[i] = Block::Stone as u8;
+                    }
+                }
+            }
+        };
+        let mk = |x0: i32, w: u32| {
+            let mut r = Region {
+                blocks: vec![0u8; w as usize * n as usize * HEIGHT],
+                width: w,
+                depth: n,
+                height: HEIGHT as u32,
+                x0,
+                z0: -4,
+            };
+            fill(&mut r);
+            r
+        };
+        (mk(-8, 8), mk(0, 8), mk(-8, 16))
+    }
+
+    #[test]
+    fn adjacent_regions_match_one_covering_region() {
+        let (a, b, both) = halves();
+        let mut set = RegionSet::default();
+        set.insert(a);
+        set.insert(b);
+        let one = RegionWorld::new(&both);
+        for x in -10..10 {
+            for y in -1..10 {
+                for z in -6..6 {
+                    assert_eq!(set.block_at(x, y, z), one.block_at(x, y, z), "{x} {y} {z}");
+                }
+            }
+        }
+        let q = crate::collision::Aabb {
+            min: [-0.3, 3.5, -0.3],
+            max: [0.3, 5.5, 0.3],
+        };
+        let (mut s, mut o) = (Vec::new(), Vec::new());
+        set.boxes_in(&q, &mut s);
+        one.boxes_in(&q, &mut o);
+        assert_eq!(s, o);
+        assert_eq!(set.body_in_water(&q), one.body_in_water(&q));
+    }
+
+    #[test]
+    fn removing_a_region_makes_it_air_and_leaves_neighbours() {
+        let (a, b, _) = halves();
+        let mut set = RegionSet::default();
+        set.insert(a);
+        set.insert(b);
+        assert_eq!(set.block_at(-1, 1, 0), Block::Stone);
+        assert!(set.remove(-8, -4).is_some());
+        assert!(set.remove(-8, -4).is_none());
+        assert_eq!(set.block_at(-1, 1, 0), Block::Air);
+        assert_eq!(set.block_at(-8, 1, 0), Block::Air);
+        assert_eq!(set.block_at(0, 1, 0), Block::Stone);
+        assert_eq!(set.len(), 1);
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        let (a, b, _) = halves();
+        w.add_region(a);
+        w.add_region(b);
+        let mut origins = w.loaded_regions();
+        origins.sort();
+        assert_eq!(origins, vec![(-8, -4), (0, -4)]);
+        w.remove_region(0, -4);
+        assert_eq!(w.loaded_regions(), vec![(-8, -4)]);
+    }
+
+    #[test]
+    fn walking_across_a_border_matches_one_region() {
+        let walk = |regions: Vec<Region>| {
+            let mut w = Walker::new([-6.5, 8.0, 0.5]).unwrap();
+            for r in regions {
+                w.add_region(r);
+            }
+            let east = TickInput {
+                move_forward: 1.0,
+                yaw: std::f32::consts::FRAC_PI_2,
+                jump: true,
+                ..TickInput::default()
+            };
+            let mut path = Vec::new();
+            for _ in 0..60 {
+                w.tick(&east);
+                path.push(w.player().pos);
+            }
+            path
+        };
+        let (a, b, both) = halves();
+        let split = walk(vec![a, b]);
+        let whole = walk(vec![both]);
+        assert_eq!(split, whole);
+        assert!(split.last().unwrap()[0] > 0.0, "should cross x = 0");
     }
 
     #[test]
@@ -362,6 +637,23 @@ mod tests {
         assert!(moved > 0.05, "standing still should drift: {moved}");
         let (still, on) = drift(true);
         assert!(still < 1e-6 && on, "sneaking should hold: {still}");
+    }
+
+    #[test]
+    fn on_the_raft_looking_down_targets_the_moved_raft() {
+        let mut w = boarded();
+        w.tick(&look(-std::f32::consts::FRAC_PI_2, false));
+        let Target::Block { pos, face } = w.target() else {
+            panic!("expected a block, got {:?}", w.target());
+        };
+        assert_eq!(face, crate::targeting::Face::Top);
+        let off = w.raft_offset(1.0);
+        let f = w.floating.as_ref().unwrap();
+        let feet = w.player().pos;
+        assert_eq!(pos[0], feet[0].floor() as i32);
+        assert_eq!(pos[2], feet[2].floor() as i32);
+        assert!(f.raft.supports(&w.player().aabb(&w.physics)));
+        assert!(off.iter().all(|v| v.is_finite()));
     }
 
     #[test]

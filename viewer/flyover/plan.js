@@ -9,10 +9,11 @@ export const SURVEY_N = 256;      // samples per side: 2048 x 2048 blocks, ~0.5 
 export const REFINE_STEP = 4;     // path-corridor survey for camera clearance (every lattice column)
 
 // Biome ids (data/biomes.toml).
-const BIOME = { rainforest: 0, swamp: 1, seasonal: 2, forest: 3, savanna: 4, shrubland: 5,
+export const BIOME = { rainforest: 0, swamp: 1, seasonal: 2, forest: 3, savanna: 4, shrubland: 5,
   taiga: 6, desert: 7, plains: 8, ice_desert: 9, tundra: 10 };
 const WOODED = new Set([BIOME.rainforest, BIOME.seasonal, BIOME.forest, BIOME.taiga]);
-const SNOWY = new Set([BIOME.taiga, BIOME.ice_desert, BIOME.tundra]);
+// Snow-topped: below cool_t, the snow-layer temperature (data/biomes.toml).
+export const SNOWY = new Set([BIOME.taiga, BIOME.ice_desert, BIOME.tundra]);
 
 // ---------------------------------------------------------------- survey grids
 

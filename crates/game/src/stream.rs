@@ -89,7 +89,7 @@ impl Streamer {
             .update(centre, self.config.load, self.config.unload);
         for c in &change.unloaded {
             let (x0, z0) = c.origin();
-            world.remove_at(x0, z0);
+            world.remove(x0, z0);
         }
         for c in &change.loaded {
             if let Some(r) = self.cache.get(*c) {
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn construction_loads_the_neighbours_and_the_player_lands_on_terrain() {
         let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
-        assert_eq!(w.loaded_regions(), 9);
+        assert_eq!(w.loaded_region_count(), 9);
         for _ in 0..200 {
             w.tick(&TickInput::default());
         }
@@ -165,7 +165,7 @@ mod tests {
         let input = east();
         for _ in 0..2500 {
             w.tick(&input);
-            assert!(w.loaded_regions() <= bound);
+            assert!(w.loaded_region_count() <= bound);
             seen.insert(w.streamed_centre());
             if w.player().pos[0] > 64.5 + 300.0 {
                 break;
@@ -180,7 +180,7 @@ mod tests {
         assert!(seen.len() >= 3);
         let cache = w.streamer_cache().unwrap();
         assert!(cache.generations() > 9, "new regions loaded ahead");
-        assert_eq!(cache.len(), w.loaded_regions());
+        assert_eq!(cache.len(), w.loaded_region_count());
         assert!(!cache.contains(RegionCoord::new(centre.rx - 3, centre.rz)));
     }
 

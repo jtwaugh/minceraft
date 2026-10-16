@@ -20,6 +20,8 @@ mod fish_rules;
 mod habitat_rule;
 #[path = "src/habitat_rules.rs"]
 mod habitat_rules;
+#[path = "src/rule_check.rs"]
+mod rule_check;
 #[path = "src/structure_error.rs"]
 mod structure_error;
 #[path = "src/structure_rules.rs"]
