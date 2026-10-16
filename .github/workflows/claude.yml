@@ -157,6 +157,7 @@ jobs:
           echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/toolchain
       - uses: anthropics/claude-code-action@v1
+        id: claude
         env:
           ISSUE: ${{ matrix.issue }}
         with:
@@ -185,6 +186,29 @@ jobs:
             --allowedTools "${{ env.ALLOWED_TOOLS }},Bash(git checkout -b claude/*),Bash(git switch -c claude/*),Bash(git add:*),Bash(git commit:*),Bash(git push -u origin claude/*),Bash(git push origin claude/*),Bash(date:*)"
             --append-system-prompt "${{ env.RULES }}"
 
+      # The action hides Claude's transcript in the log (this repo is public).
+      # Print only what's needed to diagnose a run: the commands that were
+      # refused by --allowedTools and Claude's last message.
+      - name: Summarise the run
+        id: summary
+        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
+        env:
+          OUT: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          [ -f "$OUT" ] || exit 0
+          denied=$(jq -r '[.[] | select(.type == "result")] | last | .permission_denials // [] | .[] |
+            "`\(.tool_name)`: `\((.tool_input.command // .tool_input.file_path // (.tool_input | tostring))[0:200] | gsub("`"; "´"))`"' "$OUT" | sort | uniq -c | sed 's/^ *\([0-9]*\) /- \1× /' || true)
+          last=$(jq -r '[.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // ""' "$OUT" | head -c 1500 || true)
+          {
+            echo "### Refused commands"
+            echo "${denied:-none}"
+            echo
+            echo "### Claude's last message"
+            echo '```'
+            echo "${last:-(none)}"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY" > summary.md
+
       # A run that ends without a PR and without explaining itself would
       # otherwise leave the ticket silently idle. Say so on the ticket.
       - name: Report a run that opened no PR
@@ -201,5 +225,8 @@ jobs:
           said=$(gh api "repos/$REPO/issues/$N/comments?per_page=100&since=$STARTED" \
             --jq "[.[] | select(.user.login == \"claude[bot]\" and .created_at > \"$STARTED\")] | length")
           if [ "$prs" -eq 0 ] && [ "$said" -eq 0 ]; then
-            gh issue comment "$N" --repo "$REPO" --body "The automatic run finished without opening a PR or saying why ([run log]($RUN), outcome: ${{ job.status }}). Comment \`@claude\` here to retry."
+            { echo "The automatic run finished without opening a PR or saying why ([run log]($RUN), outcome: ${{ job.status }}). Comment \`@claude\` here to retry."
+              [ -f summary.md ] && { echo; cat summary.md; }
+            } > body.md
+            gh issue comment "$N" --repo "$REPO" --body-file body.md
           fi
