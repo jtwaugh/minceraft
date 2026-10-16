@@ -62,6 +62,7 @@ jobs:
           PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
           PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
         run: |
+          set -o pipefail  # so a failure isn't hidden by tee
           if [ -z "$PROJECT_TOKEN" ]; then
             echo "::error::Add the PROJECT_TOKEN secret (classic token, project scope)."
             exit 1
