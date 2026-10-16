@@ -122,6 +122,13 @@ or `preview.mjs` shows; `viewer/pkg/` is stale until you do.
 6. **Say whether world output changes.** If any block, height, biome or
    decoration can differ for a fixed seed and coordinate, say so, say why,
    and include before/after `stats` output.
+7. **Stay within 200 reviewable lines.**
+   `python3 .github/scripts/pr_size.py origin/master HEAD` exits 0. Tests,
+   docs and generated files don't count, so never trim tests to fit. If the
+   ticket can't fit, build a coherent first part that passes every check,
+   open a follow-up issue labelled `planned` for the rest (the planner's
+   ticket format, with `**Depends on:** #<this ticket>`), and link it in the
+   PR. CI fails larger PRs unless the maintainer labels them `oversize-ok`.
 
 Keep PRs to one issue. Don't reformat or refactor code you weren't asked
 to touch.

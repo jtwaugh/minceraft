@@ -1,0 +1,73 @@
+# Review gate: turns the reviewer's verdict into the required
+# `review-verdict` commit status, so "Blocked" stops a merge until the code
+# is fixed and re-reviewed, or the maintainer comments `/override <reason>`.
+# The logic is in .github/scripts/review_gate.py.
+name: Review gate
+
+on:
+  # A push resets the status to pending until the reviewer has seen it.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  # The reviewer finished (or was cancelled by a newer push).
+  workflow_run:
+    workflows: ["Claude reviewer"]
+    types: [completed]
+  # The maintainer commented /override.
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write # the +1 reaction on an /override
+  statuses: write
+
+concurrency:
+  group: review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: |
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        github.event.comment.user.login == 'jtwaugh' &&
+        startsWith(github.event.comment.body, '/override'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Always the default branch's script, never a PR's copy of it.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+
+      - name: Set the review-verdict status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # The PR that adds this gate runs before the script is on the
+          # default branch; leave the status unset rather than fail.
+          if [ ! -f .github/scripts/review_gate.py ]; then
+            echo "::notice::review_gate.py isn't on the default branch yet; not setting review-verdict."
+            exit 0
+          fi
+          if [ "$EVENT" = workflow_run ]; then
+            python3 -B .github/scripts/review_gate.py --sha "$SHA"
+          else
+            python3 -B .github/scripts/review_gate.py --pr "$PR"
+          fi
+
+      - name: Acknowledge the override
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content=+1 > /dev/null

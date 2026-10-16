@@ -216,9 +216,12 @@ jobs:
             ## Tickets
 
             Each ticket is one pull request's worth of work: one spec
-            subsection or less, typically under 300 changed lines, testable on
-            its own. Order them so each builds on the ones before. Prefer more
-            small tickets over fewer large ones.
+            subsection or less, testable on its own, and at most 200
+            reviewable lines. Tests, docs and generated files don't count
+            toward that; CI measures it with .github/scripts/pr_size.py and
+            fails PRs over the limit. If a subsection needs more, split it
+            into several tickets. Order them so each builds on the ones
+            before. Prefer more small tickets over fewer large ones.
 
             Create each with
             `gh issue create --label planned --title "<title>" --body-file <file>`,
