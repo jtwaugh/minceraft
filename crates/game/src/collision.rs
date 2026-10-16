@@ -80,15 +80,22 @@ pub trait CollisionWorld {
 
     /// Append every block box that strictly overlaps `query` to `out`.
     fn boxes_in(&self, query: &Aabb, out: &mut Vec<Aabb>) {
-        let lo = |i: usize| query.min[i].floor() as i32;
-        let hi = |i: usize| query.max[i].floor() as i32;
-        for x in lo(0)..=hi(0) {
-            for y in lo(1)..=hi(1) {
-                for z in lo(2)..=hi(2) {
-                    if let Some(b) = block_box(self.block_at(x, y, z), x, y, z) {
-                        if b.intersects(query) {
-                            out.push(b);
-                        }
+        block_boxes_in(self, query, out);
+    }
+}
+
+/// The block boxes of `world` that strictly overlap `query`, found through
+/// `block_at`. This is the default `CollisionWorld::boxes_in`, exposed so
+/// overlays can add their own boxes to it.
+pub fn block_boxes_in<W: CollisionWorld + ?Sized>(world: &W, query: &Aabb, out: &mut Vec<Aabb>) {
+    let lo = |i: usize| query.min[i].floor() as i32;
+    let hi = |i: usize| query.max[i].floor() as i32;
+    for x in lo(0)..=hi(0) {
+        for y in lo(1)..=hi(1) {
+            for z in lo(2)..=hi(2) {
+                if let Some(b) = block_box(world.block_at(x, y, z), x, y, z) {
+                    if b.intersects(query) {
+                        out.push(b);
                     }
                 }
             }
