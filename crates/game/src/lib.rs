@@ -10,3 +10,4 @@ pub mod movement;
 pub mod physics;
 pub mod player;
 pub mod sampler;
+pub mod walk;

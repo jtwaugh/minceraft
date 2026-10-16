@@ -1,13 +1,29 @@
 //! Habitat rules and classifier (docs/design/world-layout.md Phase C).
 //!
-//! Rules come from `data/habitats.toml`, checked in order; the first rule
-//! whose set fields all match wins. Bounds are inclusive. The file must end
-//! with a rule that sets nothing, so every column gets a habitat.
+//! Rules come from `data/habitats.toml`, parsed and validated by `build.rs`,
+//! and are checked in order; the first rule whose set fields all match wins.
+//! Bounds are inclusive. The file must end with a rule that sets nothing, so
+//! every column gets a habitat.
 
-use serde::Deserialize;
 use terrain::BLOCK_INFO;
 
-const DEFAULT_HABITATS: &str = include_str!("../../../data/habitats.toml");
+use crate::habitat_rules::parse_rules;
+pub use crate::habitat_rules::HabitatRule;
+
+/// A rule as emitted by `build.rs`.
+pub(crate) struct StaticRule {
+    pub id: &'static str,
+    pub frozen: Option<bool>,
+    pub temp_min: Option<f64>,
+    pub temp_max: Option<f64>,
+    pub depth_min: Option<u32>,
+    pub depth_max: Option<u32>,
+    pub shore_distance_min: Option<u32>,
+    pub shore_distance_max: Option<u32>,
+    pub bottom: Option<&'static [u8]>,
+}
+
+include!(concat!(env!("OUT_DIR"), "/habitats.rs"));
 
 /// Index of a rule in the file (so the order in `data/habitats.toml`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -24,51 +40,7 @@ pub struct HabitatInputs {
     pub frozen: bool,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawRule {
-    id: String,
-    frozen: Option<bool>,
-    temp_min: Option<f64>,
-    temp_max: Option<f64>,
-    depth_min: Option<u32>,
-    depth_max: Option<u32>,
-    shore_distance_min: Option<u32>,
-    shore_distance_max: Option<u32>,
-    bottom: Option<Vec<String>>,
-}
-
-#[derive(Deserialize)]
-struct RawFile {
-    habitat: Vec<RawRule>,
-}
-
-/// One rule with block names resolved to ids.
-#[derive(Clone, Debug, PartialEq)]
-pub struct HabitatRule {
-    pub id: String,
-    pub frozen: Option<bool>,
-    pub temp_min: Option<f64>,
-    pub temp_max: Option<f64>,
-    pub depth_min: Option<u32>,
-    pub depth_max: Option<u32>,
-    pub shore_distance_min: Option<u32>,
-    pub shore_distance_max: Option<u32>,
-    pub bottom: Option<Vec<u8>>,
-}
-
 impl HabitatRule {
-    fn matches_everything(&self) -> bool {
-        self.frozen.is_none()
-            && self.temp_min.is_none()
-            && self.temp_max.is_none()
-            && self.depth_min.is_none()
-            && self.depth_max.is_none()
-            && self.shore_distance_min.is_none()
-            && self.shore_distance_max.is_none()
-            && self.bottom.is_none()
-    }
-
     pub fn matches(&self, i: &HabitatInputs) -> bool {
         self.frozen.is_none_or(|f| f == i.frozen)
             && self.temp_min.is_none_or(|m| i.temperature >= m)
@@ -92,29 +64,21 @@ pub struct Habitats {
 }
 
 impl Habitats {
+    /// Parse and validate a rule file. For tests and tools: the shipped
+    /// rules are baked in at build time and never go through this.
     pub fn from_toml(text: &str) -> Result<Self, String> {
-        let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
-        let mut rules: Vec<HabitatRule> = Vec::new();
-        for r in raw.habitat {
-            if rules.iter().any(|p| p.id == r.id) {
-                return Err(format!("duplicate habitat id '{}'", r.id));
-            }
-            let bottom = match r.bottom {
-                None => None,
-                Some(names) => {
-                    let mut ids = Vec::new();
-                    for n in &names {
-                        let id = BLOCK_INFO
-                            .iter()
-                            .position(|b| b.name == n)
-                            .ok_or_else(|| format!("habitat '{}': unknown block '{}'", r.id, n))?;
-                        ids.push(id as u8);
-                    }
-                    Some(ids)
-                }
-            };
-            rules.push(HabitatRule {
-                id: r.id,
+        let rules = parse_rules(text, &|n| {
+            BLOCK_INFO.iter().position(|b| b.name == n).map(|i| i as u8)
+        })?;
+        Ok(Habitats { rules })
+    }
+
+    /// The shipped `data/habitats.toml`.
+    pub fn shipped() -> Self {
+        let rules = SHIPPED_RULES
+            .iter()
+            .map(|r| HabitatRule {
+                id: r.id.to_string(),
                 frozen: r.frozen,
                 temp_min: r.temp_min,
                 temp_max: r.temp_max,
@@ -122,18 +86,10 @@ impl Habitats {
                 depth_max: r.depth_max,
                 shore_distance_min: r.shore_distance_min,
                 shore_distance_max: r.shore_distance_max,
-                bottom,
-            });
-        }
-        if !rules.last().is_some_and(HabitatRule::matches_everything) {
-            return Err("last habitat rule must set no conditions (catch-all)".into());
-        }
-        Ok(Habitats { rules })
-    }
-
-    /// The shipped `data/habitats.toml`.
-    pub fn shipped() -> Self {
-        Self::from_toml(DEFAULT_HABITATS).expect("data/habitats.toml is valid")
+                bottom: r.bottom.map(<[u8]>::to_vec),
+            })
+            .collect();
+        Habitats { rules }
     }
 
     /// First matching rule. Pure in `inputs`.

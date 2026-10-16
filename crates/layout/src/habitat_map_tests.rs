@@ -123,3 +123,43 @@ fn overlapping_regions_agree() {
         }
     }
 }
+
+#[test]
+fn habitats_appear_across_seeds_and_warm_shallows_are_warm() {
+    let habitats = Habitats::shipped();
+    let temp_min = habitats.rules[habitats.id_of("warm_shallows").unwrap().0]
+        .temp_min
+        .expect("warm_shallows sets temp_min");
+    let mut seen = vec![false; habitats.rules.len()];
+    for seed in 1..=60 {
+        let l = level_layout(seed);
+        let m = l.habitat_map_with(&habitats, -48, -48, 96, 96);
+        for (i, &h) in m.habitat.iter().enumerate() {
+            if h == NO_HABITAT {
+                continue;
+            }
+            seen[h as usize] = true;
+            if habitats.name(HabitatId(h as usize)) == "warm_shallows" {
+                assert!(
+                    f64::from(m.temperature[i]) >= temp_min,
+                    "seed {seed}: warm_shallows at {} is {}",
+                    i,
+                    m.temperature[i]
+                );
+            }
+        }
+    }
+    // deep_water is left out until #94 is decided.
+    for name in [
+        "frozen",
+        "warm_shallows",
+        "rocky_shore",
+        "cold_open",
+        "temperate_open",
+    ] {
+        assert!(
+            seen[habitats.id_of(name).unwrap().0],
+            "{name} never appears"
+        );
+    }
+}

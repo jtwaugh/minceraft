@@ -9,5 +9,9 @@ terrain = { path = "../terrain" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.5"
 
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.5"
+
 [lints]
 workspace = true
