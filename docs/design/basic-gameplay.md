@@ -170,10 +170,10 @@ Rules:
 
 | Parameter | Default | Notes |
 |---|---|---|
-| Field of view | 70 degrees | Beta default |
+| Field of view | 70 degrees | This project's default, not a claim about Beta. (Decided in #61.) |
 | Eye height | 1.62 blocks | 1.62 minus about 0.08 while sneaking **(verify)** |
 | View bobbing | on | Driven by distance walked, disabled in water and in air |
-| Mouse sensitivity | data | Use Beta's sensitivity curve from the mechanics spec |
+| Mouse sensitivity | data | Linear sensitivity set in data; no Beta parity claimed. (Decided in #61.) |
 | Deck roll | data | Camera rolls with raft tilt, scaled down (default 50 percent) to reduce motion sickness |
 
 A first-person hand renders the current tool or carried item, with Beta's swing animation on primary and a smaller use animation on secondary.
