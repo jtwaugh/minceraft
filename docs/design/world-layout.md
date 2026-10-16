@@ -526,6 +526,8 @@ Note: Beta seabeds are not especially deep. If `deep_water` is rare, add a `Radi
 
 If `deep_water` does not appear over a sample of seeds, lower its thresholds in `data/habitats.toml` until it makes up at least 1% of water columns over that sample; do not add a layout bias for it, and do not exempt it from the criterion above. (Decided in #94.)
 
+The `cold_open` rule must be able to match water that is not frozen. If it does not appear over a sample of seeds, change its rule in `data/habitats.toml` (for example by raising `temp_max`) until it does, accepting that it shares the cold band with `frozen`; do not drop it and do not exempt it from the criterion above. (Decided in #128.)
+
 ### Phase D: Multi-region world
 
 Depends on: B.
