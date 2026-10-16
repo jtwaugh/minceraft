@@ -1,7 +1,8 @@
 //! Player state and the land-movement tick.
 //! See docs/design/basic-gameplay.md section 4.2 (steps 1 to 7) and 4.1.
 //!
-//! Not handled here yet: step-up, fall damage, water and the raft.
+//! Sneak edge protection follows 4.5 and fall distance and fall damage follow
+//! 4.6. Not handled here yet: step-up, water movement and the raft.
 
 use crate::collision::{Aabb, CollisionWorld};
 use crate::input::TickInput;
@@ -15,6 +16,8 @@ pub struct Player {
     pub vel: [f64; 3],
     pub on_ground: bool,
     pub health: u32,
+    /// Blocks fallen since last on the ground or in water.
+    pub fall_distance: f64,
 }
 
 impl Player {
@@ -24,6 +27,7 @@ impl Player {
             vel: [0.0; 3],
             on_ground: false,
             health: physics.max_health,
+            fall_distance: 0.0,
         }
     }
 
@@ -34,6 +38,26 @@ impl Player {
             [self.pos[0] - w / 2.0, self.pos[1], self.pos[2] - w / 2.0],
             [w, h, w],
         )
+    }
+
+    /// Section 4.6: accumulate fall distance while airborne; on landing apply
+    /// `ceil(fall_distance - threshold)` damage if positive. Water resets the
+    /// distance without damage.
+    fn update_fall(&mut self, dy: f64, physics: &PlayerPhysics, world: &impl CollisionWorld) {
+        if world.body_in_water(&self.aabb(physics)) {
+            self.fall_distance = 0.0;
+            return;
+        }
+        if dy < 0.0 {
+            self.fall_distance -= dy;
+        }
+        if self.on_ground {
+            let damage = (self.fall_distance - physics.fall_damage_threshold as f64).ceil();
+            if damage > 0.0 {
+                self.health = self.health.saturating_sub(damage as u32);
+            }
+            self.fall_distance = 0.0;
+        }
     }
 
     /// 4.5: shrink the horizontal part of `motion` in `sneak_edge_step` steps,
@@ -134,6 +158,7 @@ impl Player {
             }
         }
         self.on_ground = m.on_ground;
+        self.update_fall(m.applied[1], physics, world);
 
         // 6. Gravity.
         self.vel[1] = (self.vel[1] - physics.gravity as f64) * physics.drag as f64;
@@ -279,6 +304,78 @@ mod tests {
         let mut pl = grounded(&p, &w);
         pl.tick(&jump, &p, &w);
         assert!(pl.pos[1] > 1.3 && !pl.on_ground);
+    }
+
+    /// Drop the player from `h` blocks above the floor and settle.
+    fn drop_from(h: f64, w: &impl CollisionWorld) -> Player {
+        let p = phys();
+        let mut pl = Player::new([0.5, 1.0 + h, 0.5], &p);
+        for _ in 0..200 {
+            pl.tick(&TickInput::default(), &p, w);
+        }
+        assert!(pl.on_ground);
+        pl
+    }
+
+    #[test]
+    fn short_falls_do_no_damage() {
+        let w = floor();
+        for h in [0.0, 1.0, 3.0] {
+            let pl = drop_from(h, &w);
+            assert_eq!(pl.health, phys().max_health, "h={h}");
+        }
+    }
+
+    #[test]
+    fn long_falls_deal_ceil_of_excess() {
+        let w = floor();
+        let max = phys().max_health;
+        assert_eq!(drop_from(3.5, &w).health, max - 1);
+        assert_eq!(drop_from(4.0, &w).health, max - 1);
+        assert_eq!(drop_from(6.2, &w).health, max - 4);
+        assert_eq!(drop_from(100.0, &w).health, 0);
+    }
+
+    #[test]
+    fn fall_distance_resets_after_landing() {
+        let (p, w) = (phys(), floor());
+        let mut pl = drop_from(8.0, &w);
+        assert_eq!(pl.fall_distance, 0.0);
+        let health = pl.health;
+        for _ in 0..20 {
+            pl.tick(&TickInput::default(), &p, &w);
+        }
+        assert_eq!(pl.health, health);
+        // A second small drop only counts its own distance.
+        let pl2 = drop_from(2.0, &w);
+        assert_eq!(pl2.health, p.max_health);
+    }
+
+    /// A floor with water everywhere above y = 1 up to `top`.
+    struct Wet(MemoryWorld);
+    impl CollisionWorld for Wet {
+        fn block_at(&self, x: i32, y: i32, z: i32) -> Block {
+            self.0.block_at(x, y, z)
+        }
+        fn body_in_water(&self, bb: &Aabb) -> bool {
+            bb.min[1] < 4.0
+        }
+    }
+
+    #[test]
+    fn water_resets_distance_and_prevents_damage() {
+        let p = phys();
+        let w = Wet(floor());
+        let mut pl = Player::new([0.5, 20.0, 0.5], &p);
+        let mut max_fd: f64 = 0.0;
+        for _ in 0..200 {
+            pl.tick(&TickInput::default(), &p, &w);
+            max_fd = max_fd.max(pl.fall_distance);
+        }
+        assert!(max_fd > 10.0, "fell through air first");
+        assert!(pl.on_ground);
+        assert_eq!(pl.health, p.max_health);
+        assert_eq!(pl.fall_distance, 0.0);
     }
 
     #[test]

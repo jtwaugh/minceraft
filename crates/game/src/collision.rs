@@ -59,6 +59,12 @@ pub trait CollisionWorld {
     /// The block at integer coordinates; air where nothing is known.
     fn block_at(&self, x: i32, y: i32, z: i32) -> Block;
 
+    /// Whether a body occupying `bb` is in water. The land-only world has
+    /// none; water movement (Phase 3) overrides this.
+    fn body_in_water(&self, _bb: &Aabb) -> bool {
+        false
+    }
+
     /// Append every block box that strictly overlaps `query` to `out`.
     fn boxes_in(&self, query: &Aabb, out: &mut Vec<Aabb>) {
         let lo = |i: usize| query.min[i].floor() as i32;
