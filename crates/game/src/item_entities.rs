@@ -1,11 +1,13 @@
 //! Loose items in the world: the item entity type and the store that holds
 //! them. See docs/design/basic-gameplay.md section 6.
 //!
-//! Motion and collision (gravity, drag, landing) and pickup are separate
-//! tickets; this module only owns the records and exposes them to targeting.
+//! [`ItemStore::tick`] moves them (gravity, drag, landing, the deck push).
+//! Pickup and throwing are separate tickets.
 
-use crate::collision::Aabb;
+use crate::collision::{Aabb, CollisionWorld};
 use crate::items::ItemInstance;
+use crate::movement::move_box;
+use crate::raft::{Raft, SwellPush};
 use crate::targeting::{EntityId, TargetableEntity};
 use std::fmt;
 
@@ -15,11 +17,20 @@ const DEFAULT_ITEMS: &str = include_str!("../../../data/items.toml");
 /// `entity:item` matches them and `entity:animal` does not.
 pub const ITEM_KIND: &str = "item";
 
+/// Ticks per second; item velocities are blocks per second.
+pub const TICKS_PER_SECOND: f64 = 20.0;
+
 /// Item entity numbers from the `[item_entity]` table of `data/items.toml`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ItemEntityConfig {
     /// Edge length of the item's cubic box, in blocks.
     pub box_size: f64,
+    /// Downward acceleration, blocks per second squared.
+    pub gravity: f64,
+    /// Fraction of velocity kept each tick, on every axis.
+    pub drag: f64,
+    /// Extra fraction of horizontal velocity kept each tick while resting.
+    pub ground_friction: f64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -47,30 +58,79 @@ impl ItemEntityConfig {
         ItemEntityConfig::parse(DEFAULT_ITEMS).expect("data/items.toml is valid")
     }
 
-    /// Parse items text; `item_entity.box_size` must be a finite number above zero.
+    /// Parse items text. `box_size` and `gravity` must be finite numbers
+    /// above zero; `drag` and `ground_friction` must lie in `[0, 1]`.
     pub fn parse(text: &str) -> Result<ItemEntityConfig, ItemEntityError> {
         let root: toml::Value = text
             .parse()
             .map_err(|e: toml::de::Error| ItemEntityError::Parse(e.to_string()))?;
-        let value = root
-            .get("item_entity")
-            .and_then(|t| t.get("box_size"))
-            .ok_or_else(|| ItemEntityError::Missing("item_entity.box_size".into()))?;
-        let n = match value {
-            toml::Value::Float(f) => *f,
-            toml::Value::Integer(i) => *i as f64,
-            _ => {
-                return Err(ItemEntityError::Invalid(
-                    "item_entity.box_size must be a number".into(),
-                ))
+        let get = |key: &str| -> Result<f64, ItemEntityError> {
+            let value = root
+                .get("item_entity")
+                .and_then(|t| t.get(key))
+                .ok_or_else(|| ItemEntityError::Missing(format!("item_entity.{key}")))?;
+            match value {
+                toml::Value::Float(f) => Ok(*f),
+                toml::Value::Integer(i) => Ok(*i as f64),
+                _ => Err(ItemEntityError::Invalid(format!(
+                    "item_entity.{key} must be a number"
+                ))),
             }
         };
-        if !n.is_finite() || n <= 0.0 {
-            return Err(ItemEntityError::Invalid(
-                "item_entity.box_size must be above zero".into(),
-            ));
+        let positive = |key: &str| -> Result<f64, ItemEntityError> {
+            let n = get(key)?;
+            if !n.is_finite() || n <= 0.0 {
+                return Err(ItemEntityError::Invalid(format!(
+                    "item_entity.{key} must be above zero"
+                )));
+            }
+            Ok(n)
+        };
+        let fraction = |key: &str| -> Result<f64, ItemEntityError> {
+            let n = get(key)?;
+            if !(0.0..=1.0).contains(&n) {
+                return Err(ItemEntityError::Invalid(format!(
+                    "item_entity.{key} must be between 0 and 1"
+                )));
+            }
+            Ok(n)
+        };
+        Ok(ItemEntityConfig {
+            box_size: positive("box_size")?,
+            gravity: positive("gravity")?,
+            drag: fraction("drag")?,
+            ground_friction: fraction("ground_friction")?,
+        })
+    }
+}
+
+/// Horizontal speed below which a resting item stops, blocks per second.
+const REST_SPEED: f64 = 1e-3;
+
+/// Step used to lift an item out of a block, blocks.
+const LIFT_STEP: f64 = 1.0 / 16.0;
+
+/// The raft deck and the swell acting on items that rest on it.
+#[derive(Clone, Copy)]
+pub struct Deck<'a> {
+    pub raft: &'a Raft,
+    /// Deck tilt this tick, degrees about the x and z axes.
+    pub tilt: [f64; 2],
+    pub push: &'a SwellPush,
+}
+
+/// Raise an item whose box overlaps a block until it is clear, so it never
+/// rests inside a full block. Gives up after 64 blocks of lift.
+fn lift_out_of_blocks(world: &impl CollisionWorld, bb: &mut Aabb, pos: &mut [f64; 3]) {
+    let mut boxes = Vec::new();
+    for _ in 0..(64.0 / LIFT_STEP) as usize {
+        boxes.clear();
+        world.boxes_in(bb, &mut boxes);
+        if boxes.is_empty() {
+            return;
         }
-        Ok(ItemEntityConfig { box_size: n })
+        *bb = bb.offset([0.0, LIFT_STEP, 0.0]);
+        pos[1] += LIFT_STEP;
     }
 }
 
@@ -169,6 +229,47 @@ impl ItemStore {
         self.items.iter_mut()
     }
 
+    /// Advance every item one tick, in id order, against `world` (which
+    /// should include the raft's boxes where there is one).
+    ///
+    /// Per item: the swell push if `deck` holds it up, gravity, a swept move
+    /// that stops flush against blocks, then drag, and ground friction while
+    /// resting. An item that starts inside a block is lifted out first.
+    pub fn tick(&mut self, world: &impl CollisionWorld, deck: Option<Deck<'_>>) {
+        let cfg = self.cfg;
+        let dt = 1.0 / TICKS_PER_SECOND;
+        for e in &mut self.items {
+            let mut bb = e.aabb(&cfg);
+            lift_out_of_blocks(world, &mut bb, &mut e.pos);
+            if let Some(d) = &deck {
+                if d.raft.supports(&bb) {
+                    // The push is blocks per tick; velocities are per second.
+                    let [px, pz] = d.push.item_push(d.tilt);
+                    e.velocity[0] += px * TICKS_PER_SECOND;
+                    e.velocity[2] += pz * TICKS_PER_SECOND;
+                }
+            }
+            e.velocity[1] -= cfg.gravity * dt;
+            let v = e.velocity.map(|c| c * dt);
+            let m = move_box(world, &bb, v);
+            for i in 0..3 {
+                e.pos[i] += m.applied[i];
+                if m.applied[i] != v[i] {
+                    e.velocity[i] = 0.0;
+                }
+                e.velocity[i] *= cfg.drag;
+            }
+            if m.on_ground {
+                for i in [0, 2] {
+                    e.velocity[i] *= cfg.ground_friction;
+                    if e.velocity[i].abs() < REST_SPEED {
+                        e.velocity[i] = 0.0;
+                    }
+                }
+            }
+        }
+    }
+
     /// The items as targets, of kind `item`, for `cast_target`.
     pub fn targetables(&self) -> Vec<TargetableEntity> {
         self.items
@@ -187,6 +288,7 @@ mod tests {
     use super::*;
     use crate::collision::MemoryWorld;
     use crate::interactions::{Button, HeldThing, Interactions, ResolveCtx, TargetFacts};
+    use crate::raft::RaftWorld;
     use crate::targeting::{cast_target, Target, TargetingConfig};
     use terrain::Block;
 
@@ -209,6 +311,178 @@ mod tests {
     fn shipped_config_loads() {
         let c = ItemEntityConfig::default_from_data();
         assert!(c.box_size > 0.0 && c.box_size < 1.0);
+        assert!(c.gravity > 0.0);
+        assert!((0.0..=1.0).contains(&c.drag) && (0.0..=1.0).contains(&c.ground_friction));
+    }
+
+    fn floor() -> MemoryWorld {
+        let mut w = MemoryWorld::new();
+        for x in -8..8 {
+            for z in -8..8 {
+                w.set(x, 0, z, Block::Stone);
+            }
+        }
+        w
+    }
+
+    fn run(s: &mut ItemStore, w: &impl CollisionWorld, n: usize) {
+        for _ in 0..n {
+            s.tick(w, None);
+        }
+    }
+
+    #[test]
+    fn dropped_item_falls_and_rests_on_the_ground() {
+        let w = floor();
+        let mut s = store();
+        let id = s.spawn(seeds(), [0.5, 4.0, 0.5], [0.0; 3]);
+        s.tick(&w, None);
+        assert!(s.get(id).unwrap().pos[1] < 4.0, "falls");
+        run(&mut s, &w, 100);
+        let e = s.get(id).unwrap();
+        let half = s.config().box_size / 2.0;
+        assert!(
+            (e.pos[1] - (1.0 + half)).abs() < 1e-6,
+            "rests on top: {}",
+            e.pos[1]
+        );
+        assert_eq!(e.velocity, [0.0; 3]);
+        let before = e.pos;
+        run(&mut s, &w, 20);
+        assert_eq!(s.get(id).unwrap().pos, before, "stays put");
+    }
+
+    #[test]
+    fn thrown_item_lands_and_slides_to_a_stop() {
+        let w = floor();
+        let mut s = store();
+        let id = s.spawn(seeds(), [0.5, 2.0, 0.5], [4.0, 3.0, 0.0]);
+        run(&mut s, &w, 200);
+        let e = s.get(id).unwrap();
+        assert!(e.pos[0] > 1.0 && e.pos[0] < 7.0, "x = {}", e.pos[0]);
+        assert_eq!(e.velocity, [0.0; 3]);
+    }
+
+    #[test]
+    fn items_stop_at_walls() {
+        let mut w = floor();
+        for y in 1..3 {
+            w.set(3, y, 0, Block::Stone);
+        }
+        let mut s = store();
+        let id = s.spawn(seeds(), [0.5, 1.2, 0.5], [20.0, 0.0, 0.0]);
+        run(&mut s, &w, 60);
+        let e = s.get(id).unwrap();
+        let half = s.config().box_size / 2.0;
+        assert!(e.pos[0] <= 3.0 - half + 1e-9, "x = {}", e.pos[0]);
+    }
+
+    #[test]
+    fn an_item_spawned_in_a_block_is_lifted_out() {
+        let mut w = floor();
+        for y in 1..3 {
+            w.set(0, y, 0, Block::Stone);
+        }
+        let mut s = store();
+        let id = s.spawn(seeds(), [0.5, 1.5, 0.5], [0.0; 3]);
+        run(&mut s, &w, 100);
+        let e = s.get(id).unwrap();
+        let half = s.config().box_size / 2.0;
+        assert!((e.pos[1] - (3.0 + half)).abs() < 1e-6, "y = {}", e.pos[1]);
+        let mut boxes = Vec::new();
+        w.boxes_in(&e.aabb(s.config()), &mut boxes);
+        assert!(boxes.is_empty());
+    }
+
+    #[test]
+    fn the_same_ticks_give_the_same_result() {
+        let w = floor();
+        let go = || {
+            let mut s = store();
+            s.spawn(seeds(), [0.5, 3.0, 0.5], [2.0, 5.0, -1.0]);
+            s.spawn(seeds(), [2.5, 1.0, 1.5], [-3.0, 0.0, 2.0]);
+            run(&mut s, &w, 80);
+            s.iter().map(|e| (e.pos, e.velocity)).collect::<Vec<_>>()
+        };
+        assert_eq!(go(), go());
+    }
+
+    fn deck() -> (MemoryWorld, Raft) {
+        let mut w = MemoryWorld::new();
+        let mut cells = Vec::new();
+        for x in 0..4 {
+            for z in 0..4 {
+                w.set(x, 64, z, Block::Stone);
+                cells.push([x, 64, z]);
+            }
+        }
+        (w, Raft::new(&cells))
+    }
+
+    #[test]
+    fn deck_push_is_scaled_by_item_multiplier() {
+        let (base, raft) = deck();
+        let world = RaftWorld::new(&base, &raft);
+        let push = SwellPush::default_from_data().unwrap();
+        let mut s = store();
+        let id = s.spawn(seeds(), [2.0, 65.0 + 0.125, 2.0], [0.0; 3]);
+        run(&mut s, &world, 1);
+        // Settled on the deck, no push yet.
+        let tilt = [0.0, 3.0];
+        s.tick(
+            &world,
+            Some(Deck {
+                raft: &raft,
+                tilt,
+                push: &push,
+            }),
+        );
+        let v = s.get(id).unwrap().velocity;
+        let per_tick = push.per_degree * 3.0 * push.item_multiplier;
+        let want = per_tick * TICKS_PER_SECOND * s.config().drag * s.config().ground_friction;
+        assert!((v[0] - want).abs() < 1e-9, "{} vs {want}", v[0]);
+        assert_eq!(v[2], 0.0);
+        // A player-strength push would be a smaller, different number.
+        assert!(push.item_multiplier > 1.0 && (v[0] - want / push.item_multiplier).abs() > 1e-6);
+        // The item slides along the deck.
+        for _ in 0..10 {
+            s.tick(
+                &world,
+                Some(Deck {
+                    raft: &raft,
+                    tilt,
+                    push: &push,
+                }),
+            );
+        }
+        assert!(s.get(id).unwrap().pos[0] > 2.0);
+        assert_eq!(s.get(id).unwrap().pos[1], 65.125);
+    }
+
+    #[test]
+    fn items_off_the_deck_get_no_push() {
+        let (mut base, raft) = deck();
+        for x in 10..14 {
+            for z in 0..4 {
+                base.set(x, 64, z, Block::Stone);
+            }
+        }
+        let world = RaftWorld::new(&base, &raft);
+        let push = SwellPush::default_from_data().unwrap();
+        let mut s = store();
+        let id = s.spawn(seeds(), [11.0, 65.125, 2.0], [0.0; 3]);
+        for _ in 0..10 {
+            s.tick(
+                &world,
+                Some(Deck {
+                    raft: &raft,
+                    tilt: [0.0, 3.0],
+                    push: &push,
+                }),
+            );
+        }
+        assert_eq!(s.get(id).unwrap().velocity, [0.0; 3]);
+        assert_eq!(s.get(id).unwrap().pos[0], 11.0);
     }
 
     #[test]
