@@ -63,6 +63,7 @@ arch -arm64 brew install wasm-pack binaryen
 | `./build.sh` | export textures, build the wasm, run `wasm-opt -Oz`, print its size |
 | `./build.sh --test` | run `cargo test` first |
 | `./build.sh --serve` | serve `viewer/` on port 8000 afterwards |
+| `./build.sh --serve-client` | serve the repo root on port 8000; the debug camera is at `/client/` (click to lock the pointer; `?log=60` logs frame times to the console, `window.frameStats()` returns them) |
 
 ## Repository layout
 
@@ -93,6 +94,10 @@ viewer/
   flyover/            flyover video: planner and player (see its README)
   pkg/                build output (gitignored)
   textures.json       full tileset exported by build.sh (gitignored)
+client/
+  index.html, scene.js  debug camera page: viewer terrain, fly camera, frame-time overlay
+  fly.js, frametimes.js 20 Hz fly sim with interpolation; rolling p50/p99 frame times
+  input.js, tiles.js    pointer-lock input feed; tile array for the viewer's mesher
 ```
 
 ## The terrain crate
