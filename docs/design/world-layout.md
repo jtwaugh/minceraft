@@ -6,7 +6,7 @@ source: "#10"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
   E: todo
@@ -19,6 +19,7 @@ phases:
 What exists today that this doc relies on or overlaps (checked against the code):
 
 - **Phase A is done** (plan #17): base-height hook (#33), humidity hook (#34), `crates/layout` with `RadialBaseHeight` (#35), `Exclusion` as a `ProtectedMask` (#37), `ClimateBias` (#39), `Layout` and the `generate_region` wrapper (#40), `Channel` (#45, with #31, #27 and #43). The bullets below predate it.
+- **Phase B is done** (plan #47): raft blocks (#57), `Level` and the level file loader (#56), structure templates and `raft_start` (#69), stamping and the raft mask (#73), `build_layout` (#74), validation config and island checks (#70), raft footprint and flat grass checks (#78), retry loop and the v0 level file (#80). The game-side criteria (loading the level, spawning on the deck, the sim building its raft entity) wait for the game crates; the layout crate returns the level and raft mask.
 - **Generator entry points.** `crates/terrain/src/lib.rs` has
   `generate_region(seed, x0, z0, w, d)`, `generate_decorated`,
   `generate_region_with_biases(.., &Biases, decorate)` and
