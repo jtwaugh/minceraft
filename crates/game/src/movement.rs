@@ -2,7 +2,7 @@
 //!
 //! Boxes overlapping the swept box are collected once, then the move is
 //! resolved y first, then x, then z, clipping against every box per axis so
-//! the mover ends flush against what blocks it. Step-up is not handled here.
+//! the mover ends flush against what blocks it. [`move_with_step`] adds step-up.
 
 use crate::collision::{Aabb, CollisionWorld};
 
@@ -66,6 +66,38 @@ pub fn move_box(world: &impl CollisionWorld, bb: &Aabb, velocity: [f64; 3]) -> M
         aabb: cur,
         applied,
         on_ground: velocity[1] < 0.0 && applied[1] > velocity[1],
+    }
+}
+
+/// [`move_box`] with step-up (4.4): when the horizontal move was blocked and
+/// the mover is on ground, retry with the box raised by `step_height` and
+/// keep that result only if it moved farther horizontally. `on_ground` is the
+/// mover's state before the move.
+pub fn move_with_step(
+    world: &impl CollisionWorld,
+    bb: &Aabb,
+    velocity: [f64; 3],
+    step_height: f64,
+    on_ground: bool,
+) -> Move {
+    let plain = move_box(world, bb, velocity);
+    let blocked = plain.applied[0] != velocity[0] || plain.applied[2] != velocity[2];
+    if !blocked || !(on_ground || plain.on_ground) {
+        return plain;
+    }
+    // Raise (stopping at any ceiling), move horizontally, then settle back down.
+    let up = move_box(world, bb, [0.0, step_height, 0.0]);
+    let across = move_box(world, &up.aabb, [velocity[0], 0.0, velocity[2]]);
+    let down = move_box(world, &across.aabb, [0.0, -up.applied[1], 0.0]);
+    let dist = |a: &[f64; 3]| a[0] * a[0] + a[2] * a[2];
+    let stepped = [across.applied[0], 0.0, across.applied[2]];
+    if dist(&stepped) <= dist(&plain.applied) {
+        return plain;
+    }
+    Move {
+        aabb: down.aabb,
+        applied: [stepped[0], down.aabb.min[1] - bb.min[1], stepped[2]],
+        on_ground: down.on_ground,
     }
 }
 
@@ -189,6 +221,144 @@ mod tests {
                     rng.range(-12.0, 12.0),
                 ];
                 bb = move_box(&w, &bb, v).aabb;
+                for i in 0..3 {
+                    assert!(bb.min[i] >= 1.0 - 1e-6 && bb.max[i] <= 6.0 + 1e-6, "{bb:?}");
+                }
+            }
+        }
+    }
+
+    /// Test world with game-side half-height slabs (decided in #88).
+    struct SlabWorld {
+        inner: MemoryWorld,
+        slabs: Vec<(i32, i32, i32)>,
+    }
+
+    impl CollisionWorld for SlabWorld {
+        fn block_at(&self, x: i32, y: i32, z: i32) -> Block {
+            self.inner.block_at(x, y, z)
+        }
+        fn boxes_in(&self, query: &Aabb, out: &mut Vec<Aabb>) {
+            self.inner.boxes_in(query, out);
+            for &(x, y, z) in &self.slabs {
+                let (x, y, z) = (x as f64, y as f64, z as f64);
+                let b = Aabb::new([x, y, z], [x + 1.0, y + 0.5, z + 1.0]);
+                if b.intersects(query) {
+                    out.push(b);
+                }
+            }
+        }
+    }
+
+    fn slab_world() -> SlabWorld {
+        SlabWorld {
+            inner: floor(),
+            slabs: vec![(1, 1, 0)],
+        }
+    }
+
+    #[test]
+    fn step_up_succeeds_on_slab_edge() {
+        let w = slab_world();
+        let bb = player(0.5, 1.0, 0.5);
+        let m = move_with_step(&w, &bb, [0.4, 0.0, 0.0], 0.5, true);
+        assert!((m.applied[0] - 0.4).abs() < 1e-12);
+        assert!((m.aabb.min[1] - 1.5).abs() < 1e-12);
+        assert!(m.on_ground);
+        // Without stepping the slab blocks.
+        assert!(move_box(&w, &bb, [0.4, 0.0, 0.0]).applied[0] < 0.4);
+    }
+
+    #[test]
+    fn step_up_fails_on_full_block() {
+        let mut w = slab_world();
+        w.inner.set(1, 1, 0, Block::Stone);
+        w.slabs.clear();
+        let bb = player(0.5, 1.0, 0.5);
+        let plain = move_box(&w, &bb, [0.4, 0.0, 0.0]);
+        let m = move_with_step(&w, &bb, [0.4, 0.0, 0.0], 0.5, true);
+        assert_eq!(m, plain);
+        assert_eq!(m.aabb.min[1], 1.0);
+    }
+
+    #[test]
+    fn step_requires_ground() {
+        let w = slab_world();
+        let bb = player(0.5, 1.2, 0.5);
+        let m = move_with_step(&w, &bb, [0.4, 0.0, 0.0], 0.5, false);
+        assert_eq!(m, move_box(&w, &bb, [0.4, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn stepped_result_discarded_when_not_farther() {
+        // A ceiling just above the slab stops the raised box from moving
+        // farther than the plain move, so the plain result is kept.
+        let mut w = slab_world();
+        w.inner.set(1, 3, 0, Block::Stone);
+        let bb = player(0.5, 1.0, 0.5);
+        let m = move_with_step(&w, &bb, [0.4, 0.0, 0.0], 0.5, true);
+        assert_eq!(m, move_box(&w, &bb, [0.4, 0.0, 0.0]));
+        assert_eq!(m.aabb.min[1], 1.0);
+    }
+
+    #[test]
+    fn jump_onto_one_block_ledge() {
+        let mut w = floor();
+        w.set(1, 1, 0, Block::Stone);
+        let mut bb = player(0.5, 1.0, 0.5);
+        let (g, drag) = (0.08, 0.98);
+        let mut vy = 0.42;
+        let mut ground = true;
+        for _ in 0..40 {
+            let m = move_with_step(&w, &bb, [0.1, vy, 0.0], 0.5, ground);
+            bb = m.aabb;
+            ground = m.on_ground;
+            if ground && bb.min[1] > 1.5 {
+                break;
+            }
+            vy = if ground { -g } else { (vy - g) * drag };
+        }
+        assert!(ground);
+        assert!((bb.min[1] - 2.0).abs() < 1e-9, "{bb:?}");
+        assert!(bb.max[0] > 1.0);
+        // From flat ground the same step height cannot climb the block.
+        let m = move_with_step(&w, &player(0.5, 1.0, 0.5), [0.4, 0.0, 0.0], 0.5, true);
+        assert_eq!(m.aabb.min[1], 1.0);
+    }
+
+    #[test]
+    fn fuzz_with_stepping_never_leaves_walled_box() {
+        let mut w = MemoryWorld::new();
+        for x in 0..7 {
+            for y in 0..7 {
+                for z in 0..7 {
+                    if [x, y, z].iter().any(|&c| c == 0 || c == 6) {
+                        w.set(x, y, z, Block::Stone);
+                    }
+                }
+            }
+        }
+        w.set(3, 1, 3, Block::Stone);
+        let mut rng = Rng(0xD1B54A32D192ED03);
+        for _ in 0..300 {
+            let mut bb = Aabb::from_size(
+                [
+                    rng.range(1.0, 5.4),
+                    rng.range(1.0, 4.2),
+                    rng.range(1.0, 5.4),
+                ],
+                [0.6, 1.8, 0.6],
+            );
+            let mut ground = false;
+            for _ in 0..20 {
+                let v = [
+                    rng.range(-12.0, 12.0),
+                    rng.range(-12.0, 12.0),
+                    rng.range(-12.0, 12.0),
+                ];
+                let m = move_with_step(&w, &bb, v, 0.5, ground || rng.next() < 0.5);
+                bb = m.aabb;
+                ground = m.on_ground;
                 for i in 0..3 {
                     assert!(bb.min[i] >= 1.0 - 1e-6 && bb.max[i] <= 6.0 + 1e-6, "{bb:?}");
                 }
