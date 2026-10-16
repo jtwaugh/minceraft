@@ -7,7 +7,11 @@
 //   byte  8     texture layer     uint8
 //   byte  9     shade             uint8, shade * 128 (SHADE_SCALE)
 //   bytes 10-12 tint rgb          uint8, normalized
-//   bytes 13-15 padding
+//   byte  13    reserved (ambient occlusion, per viewer-rendering)
+//   byte  14    plant top weight  uint8: 255 on the top vertices of cross
+//               plants, 0 at their base and on every other face (the client
+//               fades and sways with it; the viewer ignores it)
+//   byte  15    padding
 //
 // Positions are local to the meshed area: x and z from 0 to size, y the
 // world y. The renderer adds a per-mesh offset.
@@ -135,7 +139,7 @@ const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 class Quads {
   constructor() { this.buf = new ArrayBuffer(VERTEX_BYTES * 4 * 1024); this.n = 0; this.view(); }
   view() { this.i16 = new Int16Array(this.buf); this.u8 = new Uint8Array(this.buf); }
-  quad(x, y, z, p, uv, layer, k, tint) {
+  quad(x, y, z, p, uv, layer, k, tint, top = null) {
     if ((this.n + 4) * VERTEX_BYTES > this.buf.byteLength) {
       const nb = new ArrayBuffer(this.buf.byteLength * 2);
       new Uint8Array(nb).set(this.u8); this.buf = nb; this.view();
@@ -149,6 +153,7 @@ class Quads {
       this.u8[o + 6] = Math.round(uv[j][0] * 16); this.u8[o + 7] = Math.round(uv[j][1] * 16);
       this.u8[o + 8] = layer; this.u8[o + 9] = sh;
       this.u8[o + 10] = r; this.u8[o + 11] = g; this.u8[o + 12] = b;
+      this.u8[o + 14] = top ? top[j] : 0;
     }
     this.n += 4;
   }
@@ -197,6 +202,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false } =
   const SNOW_HI = [1, SNOW_H, 1];
   const X1 = [[0.15, 1, 0.15], [0.85, 1, 0.85], [0.85, 0, 0.85], [0.15, 0, 0.15]];
   const X2 = [[0.85, 1, 0.15], [0.15, 1, 0.85], [0.15, 0, 0.85], [0.85, 0, 0.15]];
+  const XTOP = [255, 255, 0, 0]; // vertex order of X1/X2: top, top, base, base
   const XUV = [[0, 0], [1, 0], [1, 1], [0, 1]];
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     const c = z * size + x, base = col(x, z);
@@ -208,8 +214,8 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false } =
         // two crossed quads, wound both ways so they show from either side
         const layer = layerOf(ctx, b, 0), k = 0.9 * (0.75 + y / 256);
         for (const q of [X1, X2]) {
-          out[3].quad(x, y, z, q, XUV, layer, k, tint);
-          out[3].quad(x, y, z, [q[1], q[0], q[3], q[2]], [XUV[1], XUV[0], XUV[3], XUV[2]], layer, k, tint);
+          out[3].quad(x, y, z, q, XUV, layer, k, tint, XTOP);
+          out[3].quad(x, y, z, [q[1], q[0], q[3], q[2]], [XUV[1], XUV[0], XUV[3], XUV[2]], layer, k, tint, [XTOP[1], XTOP[0], XTOP[3], XTOP[2]]);
         }
         continue;
       }
