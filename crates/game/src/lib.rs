@@ -12,4 +12,5 @@ pub mod player;
 pub mod raft;
 pub mod sampler;
 pub mod scene;
+pub mod targeting;
 pub mod walk;

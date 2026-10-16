@@ -1,0 +1,13 @@
+# Targeting tunables. See docs/design/basic-gameplay.md section 5.
+#
+# This game's own values; no claim of Beta parity.
+
+[reach]
+# Furthest block the eye ray can select, in blocks.
+block = 4.5
+# Furthest entity the eye ray can select, in blocks.
+entity = 3.0
+
+[entity]
+# Each side of an entity's box grows by this before the ray test, in blocks.
+box_expansion = 0.1
