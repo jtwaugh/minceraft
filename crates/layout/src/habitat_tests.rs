@@ -133,3 +133,9 @@ fn bad_files_are_rejected() {
     let typo = "[[habitat]]\nid='a'\ndepth_mx=3\n[[habitat]]\nid='z'\n";
     assert!(Habitats::from_toml(typo).is_err());
 }
+
+#[test]
+fn baked_rules_equal_runtime_parse() {
+    let text = include_str!("../../../data/habitats.toml");
+    assert_eq!(Habitats::shipped(), Habitats::from_toml(text).unwrap());
+}

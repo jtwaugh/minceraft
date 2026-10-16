@@ -274,6 +274,7 @@ pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
 mod fish;
 pub use fish::{Fish, FishColumn, Species};
 mod habitat;
+mod habitat_rules;
 pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod habitat_map;
 pub use habitat_map::{HabitatMap, NO_HABITAT};
