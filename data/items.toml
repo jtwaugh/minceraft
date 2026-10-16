@@ -5,11 +5,17 @@
 # list.
 
 # Loose items in the world. These numbers are this game's own, tuned to feel
-# right (decided in #214). Motion numbers (throw speed, gravity, drag) are
-# added with item motion.
+# right (decided in #214). Throw speed is added with throwing.
 [item_entity]
 # Edge length of the item's cubic box, in blocks.
 box_size = 0.25
+# Downward acceleration, blocks per second squared.
+gravity = 30.0
+# Fraction of velocity kept each tick, on every axis.
+drag = 0.98
+# Extra fraction of horizontal velocity kept each tick while resting, so a
+# landed item slides to a stop.
+ground_friction = 0.6
 
 [[tool]]
 name = "sword"
