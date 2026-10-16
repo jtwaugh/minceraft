@@ -121,11 +121,16 @@ pub struct Deck<'a> {
 
 /// Raise an item whose box overlaps a block until it is clear, so it never
 /// rests inside a full block. Gives up after 64 blocks of lift.
-fn lift_out_of_blocks(world: &impl CollisionWorld, bb: &mut Aabb, pos: &mut [f64; 3]) {
-    let mut boxes = Vec::new();
+/// `boxes` is scratch space, reused across calls.
+fn lift_out_of_blocks(
+    world: &impl CollisionWorld,
+    bb: &mut Aabb,
+    pos: &mut [f64; 3],
+    boxes: &mut Vec<Aabb>,
+) {
     for _ in 0..(64.0 / LIFT_STEP) as usize {
         boxes.clear();
-        world.boxes_in(bb, &mut boxes);
+        world.boxes_in(bb, boxes);
         if boxes.is_empty() {
             return;
         }
@@ -238,9 +243,10 @@ impl ItemStore {
     pub fn tick(&mut self, world: &impl CollisionWorld, deck: Option<Deck<'_>>) {
         let cfg = self.cfg;
         let dt = 1.0 / TICKS_PER_SECOND;
+        let mut scratch = Vec::new();
         for e in &mut self.items {
             let mut bb = e.aabb(&cfg);
-            lift_out_of_blocks(world, &mut bb, &mut e.pos);
+            lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
             if let Some(d) = &deck {
                 if d.raft.supports(&bb) {
                     // The push is blocks per tick; velocities are per second.
