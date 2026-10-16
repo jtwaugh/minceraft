@@ -257,7 +257,7 @@ Each tick, cast a ray from the eye along the look direction:
 
 - Block reach: 4.5 blocks **(verify)**. Entity reach: 3 blocks **(verify)**.
 - Test entity bounding boxes (expanded by 0.1) and block selection boxes. The nearest hit wins.
-- Plants have selection boxes even without collision boxes, so they can be targeted.
+- Plants have selection boxes even without collision boxes, so they can be targeted. Every non-air block, liquids included, has the unit-cube selection box (the full cell), except where the block's collision box is smaller than the cell, in which case that box is used. Only air is never targeted, so a ray stops on a water surface and can target water. (Decided in #174.)
 - Result: `Target::Block { pos, face }`, `Target::Entity { id }`, or `Target::None`.
 - Render a selection outline on the targeted block and a subtle highlight on the targeted entity.
 
