@@ -91,16 +91,6 @@ function upload(gl, internal, format, data) {
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, internal, S, S, NAMES.length, 0, format, gl.UNSIGNED_BYTE, data);
   gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  // Crisp texels up close (NEAREST mag), filtered texels at a distance:
-  // trilinear plus anisotropic min filtering stops grazing-angle ground from
-  // aliasing into moire and hides the seams between mip levels.
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
-  if (aniso) {
-    const max = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
-    gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, max));
-  }
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  // Filtering and wrap come from the per-pass samplers (samplers.js), bound
+  // by the scene; the texture only needs complete mips here.
 }

@@ -191,3 +191,11 @@ pub fn is_liquid(b: u8) -> bool {
 pub fn is_leaves(b: u8) -> bool {
     b == Block::OakLeaves as u8 || b == Block::BirchLeaves as u8 || b == Block::SpruceLeaves as u8
 }
+
+/// The id of the block named `name` in `data/blocks.toml`.
+pub fn block_id(name: &str) -> Option<u8> {
+    BLOCK_INFO
+        .iter()
+        .position(|b| b.name == name)
+        .map(|i| i as u8)
+}

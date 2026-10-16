@@ -240,11 +240,6 @@ impl Walk {
     pub fn teleport(&mut self, x: f64, y: f64, z: f64) {
         self.0.teleport([x, y, z]);
     }
-
-    /// Stand the player with its eye at `(x, y, z)`, e.g. leaving fly mode.
-    pub fn teleport_eye(&mut self, x: f64, y: f64, z: f64) {
-        self.0.teleport_eye([x, y, z]);
-    }
 }
 
 /// The sim's fixed-step clock (`game::clock`), shared by walking and flying.

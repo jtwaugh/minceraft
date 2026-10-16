@@ -27,7 +27,9 @@ mod structure_error;
 #[path = "src/structure_rules.rs"]
 mod structure_rules;
 
-/// Mirrors `Thresholds` in `src/validation.rs`.
+/// Mirrors `Thresholds` in `src/validation.rs`. The shipped file must set
+/// every field; only `Thresholds::from_toml` falls back to a default
+/// `max_attempts`.
 #[derive(Deserialize)]
 struct Thresholds {
     min_island_columns: u32,
@@ -35,12 +37,7 @@ struct Thresholds {
     min_raft_water_depth: u32,
     raft_clearance: i32,
     min_flat_grass_tiles: u32,
-    #[serde(default = "default_max_attempts")]
     max_attempts: u32,
-}
-
-fn default_max_attempts() -> u32 {
-    64
 }
 
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {

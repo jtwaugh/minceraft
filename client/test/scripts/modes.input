@@ -41,3 +41,16 @@ mark
 down KeyW
 frame 50 x10
 expect moved > 0.3
+
+case fly and back while sneaking keeps the eye where it was
+start walk raft
+click
+lock
+down ShiftLeft
+frame 50 x20
+frame 1
+mark
+press KeyF
+press KeyF
+frame 1
+expect moved < 0.02

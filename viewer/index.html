@@ -448,8 +448,32 @@ $('map').addEventListener('click', (ev) => {
 // that overlap it, in workers, the one under the 3D area first. Tiles sit on
 // a fixed world grid and are cached, so moving the map reuses what it can.
 // Resolves true when the map is complete (false if a newer call replaced it).
-const tileCache = new Map(); // `${seed}:${tx}:${tz}` -> { hm, biome, temp, hum }, most recent last
+// A small LRU: a hit moves the entry to the back, and a set past `max`
+// drops the least recently used. Keys are `${seed}:${tx}:${tz}`.
+function lruCache(max) {
+  const m = new Map();
+  return {
+    get(k) {
+      const v = m.get(k);
+      if (v !== undefined) { m.delete(k); m.set(k, v); }
+      return v;
+    },
+    set(k, v) {
+      m.set(k, v);
+      while (m.size > max) m.delete(m.keys().next().value);
+    },
+  };
+}
 const TILE_CACHE = 16;
+const tileCache = lruCache(TILE_CACHE); // -> { hm, biome, temp, hum }
+
+/** Every TILE-sized tile overlapping the map at (x0, z0), row by row. */
+function mapTiles(x0, z0) {
+  const out = [];
+  for (let tz = Math.floor(z0 / TILE); tz <= Math.floor((z0 + MAP - 1) / TILE); tz++)
+    for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + MAP - 1) / TILE); tx++) out.push({ tx, tz });
+  return out;
+}
 let mapJobs = [], genId = 0;
 async function regenerate() {
   const id = ++genId;
@@ -485,21 +509,18 @@ async function regenerate() {
 
   // tiles overlapping the map, the one under the 3D area first
   const sx = x0 + state.sel.x + AREA / 2, sz = z0 + state.sel.z + AREA / 2;
-  const tiles = [];
-  for (let tz = Math.floor(z0 / TILE); tz <= Math.floor((z0 + MAP - 1) / TILE); tz++)
-    for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + MAP - 1) / TILE); tx++)
-      tiles.push({ tx, tz, d: Math.hypot((tx + 0.5) * TILE - sx, (tz + 0.5) * TILE - sz) });
+  const tiles = mapTiles(x0, z0).map(({ tx, tz }) =>
+    ({ tx, tz, d: Math.hypot((tx + 0.5) * TILE - sx, (tz + 0.5) * TILE - sz) }));
   tiles.sort((a, b) => a.d - b.d);
   let cached = 0;
   const work = tiles.map(({ tx, tz }, n) => {
     const key = `${seed}:${tx}:${tz}`;
     const hit = tileCache.get(key);
-    if (hit) { cached++; tileCache.delete(key); tileCache.set(key, hit); return Promise.resolve(hit); }
+    if (hit) { cached++; return Promise.resolve(hit); }
     const job = pool.run('tile', { seed, x: tx * TILE, z: tz * TILE, size: TILE }, n / 100);
     mapJobs.push(job);
     return job.promise.then((t) => {
       tileCache.set(key, t);
-      while (tileCache.size > TILE_CACHE) tileCache.delete(tileCache.keys().next().value);
       return t;
     });
   }).map((p, n) => p.then((t) => { if (id === genId) placeTile(t, tiles[n].tx * TILE - x0, tiles[n].tz * TILE - z0); }));
@@ -514,27 +535,24 @@ async function regenerate() {
 
 // Habitat tiles (same grid as the map tiles) are fetched only while habitat
 // mode is showing, then cached like the others.
-const habCache = new Map(); // `${seed}:${tx}:${tz}` -> habitat bytes
+const habCache = lruCache(TILE_CACHE); // -> habitat bytes
 let habJobs = [];
 function loadHabitats() {
   const id = genId;
   habJobs.forEach((j) => j.cancel());
   habJobs = [];
   const { seed, x0, z0 } = state;
-  for (let tz = Math.floor(z0 / TILE); tz <= Math.floor((z0 + MAP - 1) / TILE); tz++) {
-    for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + MAP - 1) / TILE); tx++) {
-      const key = `${seed}:${tx}:${tz}`;
-      const place = (t) => { if (id === genId) placeHabitats(t, tx * TILE - x0, tz * TILE - z0); };
-      const hit = habCache.get(key);
-      if (hit) { place(hit); continue; }
-      const job = pool.run('habitat', { seed, x: tx * TILE, z: tz * TILE, size: TILE }, 1);
-      habJobs.push(job);
-      job.promise.then((t) => {
-        habCache.set(key, t);
-        while (habCache.size > TILE_CACHE) habCache.delete(habCache.keys().next().value);
-        place(t);
-      }, () => {});
-    }
+  for (const { tx, tz } of mapTiles(x0, z0)) {
+    const key = `${seed}:${tx}:${tz}`;
+    const place = (t) => { if (id === genId) placeHabitats(t, tx * TILE - x0, tz * TILE - z0); };
+    const hit = habCache.get(key);
+    if (hit) { place(hit); continue; }
+    const job = pool.run('habitat', { seed, x: tx * TILE, z: tz * TILE, size: TILE }, 1);
+    habJobs.push(job);
+    job.promise.then((t) => {
+      habCache.set(key, t);
+      place(t);
+    }, () => {});
   }
 }
 

@@ -19,6 +19,7 @@ import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadI
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
+import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 
@@ -244,6 +245,8 @@ function render(now) {
   const fogFar = (radius + 0.5) * CHUNK * 1.1;
   const bind = (prog, a) => {
     gl.useProgram(prog);
+    const s = prog === cutProg ? cutSampler : solidSampler;
+    gl.bindSampler(0, s); gl.bindSampler(1, s);
     gl.uniformMatrix4fv(prog.u('mvp'), false, mvp);
     gl.uniform3fv(prog.u('unpack'), [POS_SCALE, UV_SCALE, SHADE_SCALE]);
     gl.uniform3fv(prog.u('fogColor'), skyColor);
@@ -280,6 +283,9 @@ function render(now) {
 }
 
 gl.activeTexture(gl.TEXTURE0);
+// Opaque and water repeat; cutout clamps and stops at the 4x4 mip (samplers.js).
+const solidSampler = createSampler(gl, 'opaque');
+const cutSampler = createSampler(gl, 'cutout');
 for (const p of [solidProg, cutProg]) {
   gl.useProgram(p);
   gl.uniform1i(p.u('tex'), 0); gl.uniform1i(p.u('tintTex'), 1);

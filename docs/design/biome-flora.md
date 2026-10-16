@@ -166,6 +166,13 @@ tint flicker but not coverage.
 No world output change. Lands in the client and, through shared code, the
 viewer.
 
+Items 2 and 4 (the JS mip builder and the shader alpha sharpening), and
+Phase C.1 (terrain top rotations and mirrors), are built by
+`docs/design/viewer-rendering.md` Phase B.1, B.2 and B.3, which keeps them.
+This doc depends on those and adds only the client side: using the shared
+mip module in `client/tiles.js` and the sharpening in the client's cutout
+program, plus the other items here. (Decided in #205.)
+
 1. **Clamp, don't wrap.** Sample the cutout pass with `CLAMP_TO_EDGE`.
    Today no face uses UVs outside 0..1, but viewer-rendering Phase E plans
    greedy-merged water quads that rely on `REPEAT`, so use a WebGL2 sampler
@@ -378,13 +385,6 @@ shapes leave room for it.
 
 ## Open questions
 
-1. **Overlap with `viewer-rendering.md`.** Its Phase B.1 to B.3 (foliage
-   mips, alpha to coverage, per-block UV variation) are this doc's A.2,
-   A.4 and C.1.
-   A. This doc takes them over; viewer-rendering drops its Phase B.
-   B. Viewer-rendering keeps them; this doc depends on them and only adds
-   the client side.
-   C. Merge the two docs.
 2. **Blend radius default.**
    A. 3 (7x7), the cheap default.
    B. 5 (11x11), softer borders.
