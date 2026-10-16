@@ -8,7 +8,8 @@
 //   ?scene=raft  the Phase 3 test scene: a flat sea, a raft rocking on the scripted swell,
 //                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
-//   ?tool=T      what the walking player holds until the belt exists: empty (default), hoe, sword,
+//   ?plants=D    plant draw distance in blocks (default 48)
+//   ?tool=T     what the walking player holds until the belt exists: empty (default), hoe, sword,
 //                or item:<name>; the overlay shows which interaction rule a press would match
 //   ?log=N       console.log the frame-time summary every N frames, for headless runs
 //
@@ -19,6 +20,7 @@ import initGame, { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix }
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
+import { PLANT_FADE_RANGE } from './plantfade.js';
 import { formatAim, heldFromQuery } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
@@ -30,6 +32,7 @@ const seed = BigInt(qs.get('seed') ?? 12345);
 const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
 const flying = qs.get('mode') === 'fly';
 const raftScene = qs.get('scene') === 'raft';
+const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
 const held = heldFromQuery(qs.get('tool'));
 const logEvery = +(qs.get('log') ?? 0);
 
@@ -57,12 +60,18 @@ function program(cut) {
     layout(location=2) in float layer;
     layout(location=3) in float shade;
     layout(location=4) in vec3 tint;
+    layout(location=5) in float top;
     uniform mat4 mvp;
     uniform vec3 unpack;
     uniform vec3 offset;
+    uniform vec3 eye; uniform vec2 plantFade; // start, range (blocks)
     out vec3 vuv; out float vshade; out float vdist; out vec3 vtint;
     void main() {
-      gl_Position = mvp * vec4(pos * unpack.x + offset, 1.0);
+      vec3 w = pos * unpack.x + offset;
+      ${cut ? `// mirrors plantScale in plantfade.js: top vertices sink one block to the base
+      float s = 1.0 - clamp((distance(w, eye) - plantFade.x) / plantFade.y, 0.0, 1.0);
+      w.y -= top * (1.0 - s);` : ''}
+      gl_Position = mvp * vec4(w, 1.0);
       vuv = vec3(uv * unpack.y, layer);
       vshade = shade * unpack.z;
       vtint = tint;
@@ -185,6 +194,7 @@ function upload({ verts, faces }, offset) {
   };
   attr(0, 3, gl.SHORT, false, 0); attr(1, 2, gl.UNSIGNED_BYTE, false, 6); attr(2, 1, gl.UNSIGNED_BYTE, false, 8);
   attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10);
+  attr(5, 1, gl.UNSIGNED_BYTE, true, 14);
   gl.bindVertexArray(null);
   return { vao, n: faces * 6, offset };
 }
@@ -316,6 +326,7 @@ function render(now) {
     gl.uniform3fv(prog.u('fogColor'), skyColor);
     gl.uniform1f(prog.u('fogFar'), fogFar);
     gl.uniform1f(prog.u('alpha'), a);
+    if (prog === cutProg) { gl.uniform3fv(prog.u('eye'), eye); gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); }
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
