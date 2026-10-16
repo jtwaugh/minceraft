@@ -5,15 +5,17 @@
 // F swaps walking and flying while the pointer is locked, keeping the position.
 //
 //   const c = createController({ input, walk, fly, clock, document, flying });
-//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying }
+//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying, aim }
+//                          (aim as in overlay.js; the walking player's, stale while flying)
 //   c.detach()          remove the F listener
 //
 // client/test/scripts/*.input drive this through the DSL in client/test/dsl.mjs.
 
 import { stepWalk } from './walk.js';
+import { readAim } from './overlay.js';
 
 export function createController({ input, walk, fly, clock, document, flying = false }) {
-  const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0 };
+  const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null };
 
   const onKey = (e) => {
     if (e.code !== 'KeyF' || e.repeat || !input.locked) return;
@@ -45,7 +47,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       } else {
         eye = stepWalk(walk, ticks, alpha, () => input.drain());
       }
-      Object.assign(state, { ticks, alpha, eye, yaw, pitch });
+      Object.assign(state, { ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha) });
       return state;
     },
     detach() {

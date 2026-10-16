@@ -6,6 +6,7 @@ use game::bindings::Bindings;
 use game::camera::{Camera, Pose};
 use game::clock::Clock;
 use game::input::TickInput;
+use game::interactions::{Button, HeldThing};
 use game::sampler::Sampler;
 use game::scene::{raft_scene, RaftScene, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
@@ -230,6 +231,56 @@ impl Walk {
             }
             Target::Entity { id } => vec![2, id as i32, 0, 0, 0],
         }
+    }
+
+    /// Pick the held thing until the belt exists: `empty`, or `tool:<name>`
+    /// (for example `tool:hoe`); `item:<name>` holds an item.
+    pub fn set_held(&mut self, held: &str) {
+        self.0.set_held(match held.split_once(':') {
+            Some(("tool", n)) => HeldThing::Tool(n.into()),
+            Some(("item", n)) => HeldThing::Item(n.into()),
+            _ => HeldThing::Empty,
+        });
+    }
+
+    /// Index of the rule a press of the primary (or secondary) button would
+    /// match against the current target and held thing, or -1.
+    pub fn preview_rule(&self, secondary: bool) -> i32 {
+        let button = if secondary {
+            Button::Secondary
+        } else {
+            Button::Primary
+        };
+        self.0.preview(button).map_or(-1, |r| r.rule_index as i32)
+    }
+
+    /// Rule index of the latest press that matched a rule, or -1.
+    pub fn last_rule(&self) -> i32 {
+        self.0.last_rule().map_or(-1, |i| i as i32)
+    }
+
+    /// The `action` of rule `index` (`attack`, `till`, ...), or empty.
+    pub fn rule_action(&self, index: i32) -> String {
+        usize::try_from(index)
+            .ok()
+            .and_then(|i| self.0.rule_action(i))
+            .map_or_else(String::new, |a| format!("{a:?}").to_lowercase())
+    }
+
+    /// The box to outline for the current target, `[minx, miny, minz, maxx,
+    /// maxy, maxz]` in world coordinates, or empty with no target. For a
+    /// block on the raft, the box is moved to where the raft is drawn at
+    /// `alpha` between ticks, so it sticks to the interpolated mesh.
+    pub fn target_box(&self, alpha: f64) -> Vec<f64> {
+        let Some((b, on_raft)) = self.0.target_box() else {
+            return Vec::new();
+        };
+        let (now, drawn) = (self.0.raft_offset(1.0), self.0.raft_offset(alpha));
+        let shift = |i: usize| if on_raft { drawn[i] - now[i] } else { 0.0 };
+        (0..3)
+            .map(|i| b.min[i] + shift(i))
+            .chain((0..3).map(|i| b.max[i] + shift(i)))
+            .collect()
     }
 
     /// Feet position `[x, y, z]` after the latest tick.
