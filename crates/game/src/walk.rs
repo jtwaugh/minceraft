@@ -6,6 +6,8 @@ use crate::collision::{CollisionWorld, RegionWorld};
 use crate::input::TickInput;
 use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
+use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
+use crate::scene::RaftScene;
 use terrain::{Block, Region, HEIGHT};
 
 /// Collision over several generated regions; the first region that contains a
@@ -45,11 +47,21 @@ impl CollisionWorld for RegionSet {
     }
 }
 
+/// A raft under the scripted swell, and the swell's clock.
+struct Floating {
+    raft: Raft,
+    swell: Swell,
+    push: SwellPush,
+    tick: u64,
+    prev_offset: [f64; 3],
+}
+
 /// The player plus the eye positions of the last two ticks.
 pub struct Walker {
     player: Player,
     physics: PlayerPhysics,
     world: RegionSet,
+    floating: Option<Floating>,
     prev_eye: [f64; 3],
     cur_eye: [f64; 3],
 }
@@ -65,6 +77,7 @@ impl Walker {
             player,
             physics,
             world: RegionSet::default(),
+            floating: None,
             prev_eye: eye,
             cur_eye: eye,
         })
@@ -72,6 +85,32 @@ impl Walker {
 
     pub fn add_region(&mut self, region: Region) {
         self.world.push(region);
+    }
+
+    /// A walker in the raft test scene: the sea, the raft moving under the
+    /// scripted swell, and the player in the water in front of it.
+    pub fn in_raft_scene(scene: RaftScene) -> Result<Walker, String> {
+        let mut w = Walker::new(scene.spawn).map_err(|e| e.to_string())?;
+        w.floating = Some(Floating {
+            raft: Raft::new(&scene.cells),
+            swell: Swell::default_from_data()?,
+            push: SwellPush::default_from_data()?,
+            tick: 0,
+            prev_offset: [0.0; 3],
+        });
+        w.add_region(scene.sea);
+        Ok(w)
+    }
+
+    /// How far the raft is from its rest pose, `alpha` of the way between
+    /// the last two ticks. Zero when there is no raft.
+    pub fn raft_offset(&self, alpha: f64) -> [f64; 3] {
+        let Some(f) = &self.floating else {
+            return [0.0; 3];
+        };
+        let a = alpha.clamp(0.0, 1.0);
+        let (p, c) = (f.prev_offset, f.raft.offset());
+        [0, 1, 2].map(|i| p[i] + (c[i] - p[i]) * a)
     }
 
     pub fn has_world(&self) -> bool {
@@ -84,7 +123,27 @@ impl Walker {
 
     /// One 20 Hz step.
     pub fn tick(&mut self, input: &TickInput) {
-        self.player.tick(input, &self.physics, &self.world);
+        match &mut self.floating {
+            Some(f) => {
+                // Swell push, then the raft moves (carrying the player), then
+                // the player's own movement against the moved raft.
+                let frame = f.swell.frame(f.tick);
+                f.tick += 1;
+                f.prev_offset = f.raft.offset();
+                f.raft.push_rider(
+                    &mut self.player,
+                    frame.tilt,
+                    input.sneak,
+                    &f.push,
+                    &self.physics,
+                );
+                f.raft
+                    .advance(&frame, &mut [&mut self.player], &self.physics);
+                let world = RaftWorld::new(&self.world, &f.raft);
+                self.player.tick(input, &self.physics, &world);
+            }
+            None => self.player.tick(input, &self.physics, &self.world),
+        }
         self.prev_eye = self.cur_eye;
         let up = self.physics.eye_offset(input.sneak) as f64;
         self.cur_eye = [
@@ -202,5 +261,77 @@ mod tests {
         }
         assert!(w.player().on_ground && w.player().pos[1] == 4.0);
         assert!(w.player().pos[2] > -8.0 - 0.31);
+    }
+
+    fn scene_walker() -> Walker {
+        Walker::in_raft_scene(crate::scene::raft_scene()).unwrap()
+    }
+
+    /// Swim at the raft (towards -z) holding jump until standing on it.
+    fn boarded() -> Walker {
+        let mut w = scene_walker();
+        let swim = TickInput {
+            move_forward: 1.0,
+            jump: true,
+            ..TickInput::default()
+        };
+        for _ in 0..300 {
+            w.tick(&swim);
+            if w.player().on_ground {
+                break;
+            }
+        }
+        assert!(w.player().on_ground, "{:?}", w.player());
+        w
+    }
+
+    #[test]
+    fn scene_player_swims_and_climbs_onto_the_raft() {
+        let w = boarded();
+        assert!(w.player().pos[1] >= 64.0, "{:?}", w.player());
+        let f = w.floating.as_ref().unwrap();
+        assert!(f.raft.supports(&w.player().aabb(&w.physics)));
+    }
+
+    #[test]
+    fn scene_player_stays_on_the_raft_and_sneaking_stops_the_drift() {
+        let drift = |sneak: bool| {
+            let mut w = boarded();
+            let idle = TickInput {
+                sneak,
+                ..TickInput::default()
+            };
+            let rel = |w: &Walker| {
+                let c = w.floating.as_ref().unwrap().raft.centre();
+                [w.player().pos[0] - c[0], w.player().pos[2] - c[1]]
+            };
+            for _ in 0..20 {
+                w.tick(&idle);
+            }
+            let start = rel(&w);
+            let mut far = 0.0f64;
+            for _ in 0..60 {
+                w.tick(&idle);
+                let r = rel(&w);
+                far = far.max((r[0] - start[0]).hypot(r[1] - start[1]));
+            }
+            (far, w.player().on_ground)
+        };
+        let (moved, _) = drift(false);
+        assert!(moved > 0.05, "standing still should drift: {moved}");
+        let (still, on) = drift(true);
+        assert!(still < 1e-6 && on, "sneaking should hold: {still}");
+    }
+
+    #[test]
+    fn raft_offset_interpolates_between_ticks() {
+        let mut w = scene_walker();
+        assert_eq!(w.raft_offset(1.0), [0.0; 3]);
+        w.tick(&TickInput::default());
+        let end = w.raft_offset(1.0);
+        assert!(end[0] != 0.0 || end[2] != 0.0);
+        assert_eq!(w.raft_offset(0.0), [0.0; 3]);
+        let mid = w.raft_offset(0.5);
+        assert!((mid[0] - end[0] / 2.0).abs() < 1e-12);
     }
 }

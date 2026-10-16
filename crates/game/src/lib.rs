@@ -11,4 +11,5 @@ pub mod physics;
 pub mod player;
 pub mod raft;
 pub mod sampler;
+pub mod scene;
 pub mod walk;
