@@ -4,8 +4,11 @@
   tickets.py blocked <n>   Print a JSON list of issue numbers that ticket #n
                            still waits on (open dependencies). [] if ready.
   tickets.py ready         Print a JSON list of open `factory` tickets whose
-                           dependencies have all closed and that have no
-                           open pull request yet.
+                           dependencies have all closed, that have no open
+                           pull request yet, and whose files no open pull
+                           request (or other ticket in the list) is editing.
+  tickets.py check <n>     Print true if ticket #n would be in `ready` now,
+                           else false (start-ready re-checks before starting).
 
 A ticket's dependencies are every issue number on its "**Depends on:**"
 line, plus any "Blocked by #n" in its body (the planner writes both) or in
@@ -17,6 +20,14 @@ Each ticket is started automatically once per set of blockers: a
 `factory-auto-start` comment marks a start, and it is started again only if
 a new "Blocked by" comment came after that start and those issues are now
 closed. Otherwise relabel it or comment @claude to retry.
+
+To keep branches from conflicting, a ticket also waits while an open pull
+request edits a file the ticket expects to change: the backticked file names
+in its body (the planner's **Files:** line, or "Likely files: `walk.rs`").
+Files every feature touches (lib.rs, mod.rs, Cargo.toml, Cargo.lock) don't
+count; conflicts there are trivial and resolved after each merge
+(resolve-conflicts.yml). When that pull request merges, find-ready runs and
+the ticket starts.
 """
 import json
 import os
@@ -76,6 +87,53 @@ def open_deps(issue):
     return sorted(d for d in all_deps if d != issue["number"] and state(d) != "closed")
 
 
+FILE = re.compile(r"`([\w./-]+\.(?:rs|js|mjs|toml|py|html|css|json|sh|yml|input))`")
+SHARED = re.compile(r"(^|/)(lib\.rs|mod\.rs|main\.rs|Cargo\.toml|Cargo\.lock)$")
+
+
+def predicted_files(body):
+    """File names or paths a ticket says it will change."""
+    return {f.lstrip("./") for f in FILE.findall(body or "") if not SHARED.search(f)}
+
+
+def touches(pred, path):
+    if "/" in pred:
+        return path == pred or path.endswith("/" + pred)
+    return path.rsplit("/", 1)[-1] == pred
+
+
+def overlap(preds, paths):
+    return sorted({p for p in paths for q in preds if touches(q, p)})
+
+
+def pr_files(pr, cache={}):
+    n = pr["number"]
+    if n not in cache:
+        cache[n] = [f["filename"] for f in gh(f"repos/{REPO}/pulls/{n}/files?per_page=100")]
+    return cache[n]
+
+
+def is_pr_for(n, pr):
+    pat = re.compile(rf"\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #{n}\b", re.I)
+    return pr["head"]["ref"].startswith(f"claude/issue-{n}-") or bool(pat.search(pr.get("body") or ""))
+
+
+def busy_prs(ticket, prs):
+    """Open PRs (not this ticket's) editing a file this ticket expects to change."""
+    preds = predicted_files(ticket.get("body"))
+    if not preds:
+        return []
+    out = []
+    for pr in prs:
+        if is_pr_for(ticket["number"], pr):
+            continue
+        files = overlap(preds, pr_files(pr))
+        if files:
+            print(f"#{ticket['number']}: PR #{pr['number']} edits {', '.join(files)}", file=sys.stderr)
+            out.append(pr["number"])
+    return out
+
+
 def has_open_pr(n, prs):
     pat = re.compile(rf"\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #{n}\b", re.I)
     return any(pr["head"]["ref"].startswith(f"claude/issue-{n}-") or pat.search(pr.get("body") or "")
@@ -93,29 +151,52 @@ def auto_started(n):
     return newest_blocker < max(starts)
 
 
+def open_prs():
+    return gh(f"repos/{REPO}/pulls?state=open&per_page=100")
+
+
+def ready_tickets(prs):
+    tickets = [i for i in gh(f"repos/{REPO}/issues?state=open&labels=factory&per_page=100")
+               if "pull_request" not in i and not i["title"].startswith("Plan:")]
+    ready, claimed = [], {}
+    for t in sorted(tickets, key=lambda t: t["number"]):
+        n = t["number"]
+        waiting = open_deps(t)
+        if waiting:
+            print(f"#{n}: waiting on {waiting}", file=sys.stderr)
+            continue
+        if has_open_pr(n, prs):
+            print(f"#{n}: already has an open PR", file=sys.stderr)
+            continue
+        if auto_started(n):
+            print(f"#{n}: already started automatically once; relabel or @claude to retry",
+                  file=sys.stderr)
+            continue
+        busy = busy_prs(t, prs)
+        if busy:
+            print(f"#{n}: waiting for PR(s) {busy} to merge (same files)", file=sys.stderr)
+            continue
+        preds = predicted_files(t.get("body"))
+        clash = [m for m, other in claimed.items() if overlap(other, preds) or overlap(preds, other)]
+        if clash:
+            print(f"#{n}: shares files with #{clash[0]}, which starts first", file=sys.stderr)
+            continue
+        print(f"#{n}: ready", file=sys.stderr)
+        ready.append(n)
+        claimed[n] = preds
+    return ready
+
+
 def main():
     mode = sys.argv[1]
     if mode == "blocked":
         issue = gh(f"repos/{REPO}/issues/{sys.argv[2]}")
-        print(json.dumps(open_deps(issue)))
+        print(json.dumps(open_deps(issue) + busy_prs(issue, open_prs())))
     elif mode == "ready":
-        tickets = [i for i in gh(f"repos/{REPO}/issues?state=open&labels=factory&per_page=100")
-                   if "pull_request" not in i and not i["title"].startswith("Plan:")]
-        prs = gh(f"repos/{REPO}/pulls?state=open&per_page=100")
-        ready = []
-        for t in tickets:
-            waiting = open_deps(t)
-            if waiting:
-                print(f"#{t['number']}: waiting on {waiting}", file=sys.stderr)
-            elif has_open_pr(t["number"], prs):
-                print(f"#{t['number']}: already has an open PR", file=sys.stderr)
-            elif auto_started(t["number"]):
-                print(f"#{t['number']}: already started automatically once; relabel or @claude to retry",
-                      file=sys.stderr)
-            else:
-                print(f"#{t['number']}: ready", file=sys.stderr)
-                ready.append(t["number"])
-        print(json.dumps(sorted(ready)))
+        print(json.dumps(ready_tickets(open_prs())))
+    elif mode == "check":
+        n = int(sys.argv[2])
+        print("true" if n in ready_tickets(open_prs()) else "false")
     else:
         sys.exit(f"unknown mode {mode}")
 

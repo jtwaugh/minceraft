@@ -1,0 +1,60 @@
+# PR size: fails a pull request with more than 200 reviewable lines.
+# Tests, prose and generated files don't count (.github/scripts/pr_size.py).
+# The maintainer can let one through by adding the `oversize-ok` label; a
+# label added by anyone else, an agent included, doesn't count.
+name: PR size
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  size:
+    name: PR size
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Count reviewable lines
+        id: size
+        continue-on-error: true
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The script is read from the base branch, so a PR can't loosen it.
+          git show "$BASE:.github/scripts/pr_size.py" > "$RUNNER_TEMP/pr_size.py" 2>/dev/null \
+            || cp .github/scripts/pr_size.py "$RUNNER_TEMP/pr_size.py"
+          python3 -B "$RUNNER_TEMP/pr_size.py" "$BASE" "$HEAD"
+
+      - name: Pass only if the maintainer allowed an oversize PR
+        if: steps.size.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'oversize-ok') }}
+        run: |
+          if [ "$HAS_LABEL" != true ]; then
+            echo "::error::Over 200 reviewable lines. Split the PR, or the maintainer can add the oversize-ok label."
+            exit 1
+          fi
+          who=$(gh api "repos/${{ github.repository }}/issues/$PR/events?per_page=100" \
+            --jq '[.[] | select(.event == "labeled" and .label.name == "oversize-ok")] | last | .actor.login // ""')
+          if [ "$who" != jtwaugh ]; then
+            echo "::error::The oversize-ok label was added by '$who'; only jtwaugh can allow an oversize PR."
+            exit 1
+          fi
+          echo "Over the limit, allowed by jtwaugh's oversize-ok label." >> "$GITHUB_STEP_SUMMARY"

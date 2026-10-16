@@ -9,7 +9,7 @@ use crate::interactions::{
     TargetFacts,
 };
 use crate::item_entities::{ItemEntityConfig, ItemStore};
-use crate::items::ItemInstance;
+use crate::items::{ItemInstance, Items, PlayerState};
 use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
@@ -150,10 +150,10 @@ pub struct Walker {
     entities: Vec<TargetableEntity>,
     rules: Interactions,
     dispatcher: Dispatcher,
-    held: HeldThing,
-    /// The carried item (section 6). While set, tools are stowed.
-    hands: Option<ItemInstance>,
     items: ItemStore,
+    state: PlayerState,
+    /// Test override of the derived held thing.
+    held_override: Option<HeldThing>,
     facts: TargetFacts,
     target_box: Option<(Aabb, bool)>,
 }
@@ -180,9 +180,10 @@ impl Walker {
             entities: Vec::new(),
             rules: Interactions::default_rules(),
             dispatcher: Dispatcher::default(),
-            held: HeldThing::Empty,
-            hands: None,
             items: ItemStore::new(ItemEntityConfig::default_from_data(), FIRST_ITEM_ID),
+            state: PlayerState::new(&Items::default_items())
+                .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+            held_override: None,
             facts: TargetFacts::default(),
             target_box: None,
         })
@@ -264,6 +265,9 @@ impl Walker {
     /// One 20 Hz step.
     pub fn tick(&mut self, input: &TickInput) {
         let entities = self.all_entities();
+        if let Some(slot) = input.tool_slot {
+            self.state.select(slot);
+        }
         match &mut self.floating {
             Some(f) => {
                 // Swell push, then the raft moves (carrying the player), then
@@ -305,10 +309,31 @@ impl Walker {
         self.entities = entities;
     }
 
-    /// The tool in hand, until the belt is wired in. Carried items take
-    /// precedence over it (see `held_thing`).
+    /// Force the held thing, whatever the belt and hands say (tests and the
+    /// debug overlay). `clear_held_override` goes back to the derived one.
     pub fn set_held(&mut self, held: HeldThing) {
-        self.held = held;
+        self.held_override = Some(held);
+    }
+
+    pub fn clear_held_override(&mut self) {
+        self.held_override = None;
+    }
+
+    /// The belt, selection and hands.
+    pub fn player_state(&self) -> &PlayerState {
+        &self.state
+    }
+
+    pub fn player_state_mut(&mut self) -> &mut PlayerState {
+        &mut self.state
+    }
+
+    /// What interaction rules see: the override if set, else derived from
+    /// the player state (design section 6).
+    pub fn held(&self) -> HeldThing {
+        self.held_override
+            .clone()
+            .unwrap_or_else(|| self.state.held_thing())
     }
 
     /// Put a loose item in the world, returning its entity id.
@@ -322,7 +347,7 @@ impl Walker {
 
     /// The carried item, if any.
     pub fn hands(&self) -> Option<&ItemInstance> {
-        self.hands.as_ref()
+        self.state.hands.as_ref()
     }
 
     /// Stub entities plus the loose items, as the eye ray sees them.
@@ -332,27 +357,19 @@ impl Walker {
         all
     }
 
-    /// What rules see as held: the carried item, else the tool.
-    fn held_thing(&self) -> HeldThing {
-        match &self.hands {
-            Some(i) => HeldThing::Item(i.item.clone()),
-            None => self.held.clone(),
-        }
-    }
-
     /// Record this tick's aim and run the presses in `input` against it.
     fn take_aim(&mut self, aim: Aim, input: &TickInput) {
         self.target = aim.target;
         self.target_box = aim.boxed;
         let ctx = ResolveCtx {
-            held: self.held_thing(),
+            held: self.held(),
             button: Button::Primary,
             target: aim.target,
             facts: aim.facts,
         };
         // Tools are stowed while carrying: primary does nothing.
         let mut pressed = *input;
-        pressed.primary &= self.hands.is_none();
+        pressed.primary &= self.state.hands.is_none();
         self.dispatcher.dispatch(&self.rules, &pressed, &ctx);
         self.facts = ctx.facts;
         if input.interact {
@@ -363,14 +380,14 @@ impl Walker {
     /// Interact picks up the targeted loose item if the hands are empty.
     /// Stations and counters arrive later.
     fn interact(&mut self) {
-        if self.hands.is_some() {
+        if self.state.hands.is_some() {
             return;
         }
         let Target::Entity { id } = self.target else {
             return;
         };
         if let Some(e) = self.items.remove(id) {
-            self.hands = Some(e.item);
+            self.state.hands = Some(e.item);
             self.target = Target::None;
             self.target_box = None;
             self.facts = TargetFacts::default();
@@ -388,11 +405,11 @@ impl Walker {
     /// The rule a press of `button` would match against the current target
     /// and held thing, for the debug overlay.
     pub fn preview(&self, button: Button) -> Option<Resolved> {
-        if button == Button::Primary && self.hands.is_some() {
+        if button == Button::Primary && self.state.hands.is_some() {
             return None;
         }
         let ctx = ResolveCtx {
-            held: self.held_thing(),
+            held: self.held(),
             button,
             target: self.target,
             facts: self.facts.clone(),
@@ -660,7 +677,7 @@ mod tests {
         let other = ItemInstance {
             item: "other".into(),
         };
-        w.hands = Some(other.clone());
+        w.state.hands = Some(other.clone());
         w.tick(&interact());
         assert_eq!(w.hands(), Some(&other));
         assert!(w.items().get(id).is_some());
@@ -707,13 +724,13 @@ mod tests {
     fn carrying_stows_the_tool() {
         let mut w = settled();
         w.set_entities(vec![stub_animal()]);
-        w.set_held(HeldThing::Tool("sword".into()));
+        w.player_state_mut().select(1);
         w.tick(&look(0.0, false));
         assert_eq!(
             w.preview(Button::Primary).map(|r| r.action),
             Some(ActionKind::Attack)
         );
-        w.hands = Some(seeds());
+        w.state.hands = Some(seeds());
         // Even with a sword selected and an animal in front: no attack.
         w.tick(&TickInput {
             primary: true,
@@ -726,8 +743,8 @@ mod tests {
     #[test]
     fn carrying_resolves_secondary_with_the_item() {
         let mut w = settled();
-        w.set_held(HeldThing::Tool("hoe".into()));
-        w.hands = Some(seeds());
+        w.player_state_mut().select(2);
+        w.state.hands = Some(seeds());
         // Looking straight down at stone: seeds have no rule on stone, and
         // the hoe's till rule must not apply.
         let mut down = look(0.0, false);
@@ -736,7 +753,7 @@ mod tests {
         assert!(w.preview(Button::Secondary).is_none());
         // Seeds on farmland resolve to plant.
         let ctx = ResolveCtx {
-            held: w.held_thing(),
+            held: w.held(),
             button: Button::Secondary,
             target: Target::Block {
                 pos: [0, 3, 0],
@@ -750,7 +767,57 @@ mod tests {
         };
         let r = resolve(&w.rules.rules, &ctx).unwrap();
         assert_eq!(r.action, ActionKind::Plant);
-        assert_eq!(w.held_thing(), HeldThing::Item("seeds".into()));
+        assert_eq!(w.held(), HeldThing::Item("seeds".into()));
+    }
+
+    fn slot(n: u8) -> TickInput {
+        TickInput {
+            tool_slot: Some(n),
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn slot_selection_derives_the_held_thing() {
+        let mut w = settled();
+        assert_eq!(w.held(), HeldThing::Empty);
+        w.tick(&slot(1));
+        assert_eq!(w.player_state().selected, 1);
+        assert_eq!(w.held(), HeldThing::Tool("sword".into()));
+        w.tick(&slot(2));
+        assert_eq!(w.held(), HeldThing::Tool("hoe".into()));
+        w.tick(&TickInput::default());
+        assert_eq!(w.player_state().selected, 2);
+        w.tick(&slot(9));
+        assert_eq!(w.player_state().selected, 2);
+        w.tick(&slot(0));
+        assert_eq!(w.held(), HeldThing::Empty);
+    }
+
+    #[test]
+    fn selection_applies_to_the_same_ticks_press() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.tick(&TickInput {
+            primary: true,
+            tool_slot: Some(1),
+            ..look(0.0, false)
+        });
+        assert_eq!(w.last_rule(), Some(0));
+    }
+
+    #[test]
+    fn carried_item_wins_and_override_can_be_cleared() {
+        let mut w = settled();
+        w.tick(&slot(1));
+        w.player_state_mut().hands = Some(crate::items::ItemInstance {
+            item: "seeds".into(),
+        });
+        assert_eq!(w.held(), HeldThing::Item("seeds".into()));
+        w.set_held(HeldThing::Empty);
+        assert_eq!(w.held(), HeldThing::Empty);
+        w.clear_held_override();
+        assert_eq!(w.held(), HeldThing::Item("seeds".into()));
     }
 
     #[test]

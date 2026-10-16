@@ -21,6 +21,9 @@ on:
     types: [created]
   pull_request_review:
     types: [submitted]
+  # A merge can free tickets that were waiting for that PR's files.
+  pull_request:
+    types: [closed]
 
 env:
   ALLOWED_TOOLS: >-
@@ -113,8 +116,10 @@ jobs:
   # An issue closed: which approved tickets are now unblocked?
   find-ready:
     if: |
-      github.event_name == 'issues' && github.event.action == 'closed' &&
-      contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login)
+      (github.event_name == 'issues' && github.event.action == 'closed' &&
+        contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login)) ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged &&
+        github.event.pull_request.merged_by.login == 'jtwaugh')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -160,20 +165,31 @@ jobs:
           fetch-depth: 0
       # Marks the ticket as auto-started, so tickets.py never starts it
       # automatically again (no retry loops). Relabel it, or comment
-      # @claude, to try again.
+      # @claude, to try again. Re-checks first: a merge closes its ticket
+      # too, so two find-ready runs can pick the same ticket, and another
+      # ticket may have opened a PR on the same files since.
       - name: Mark as started
         id: mark
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$(python3 -B .github/scripts/tickets.py check "${{ matrix.issue }}")" != true ]; then
+            echo "#${{ matrix.issue }} is no longer ready to start; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "go=true" >> "$GITHUB_OUTPUT"
           gh issue comment "${{ matrix.issue }}" --repo "${{ github.repository }}" \
             --body "<!-- factory-auto-start --> Dependencies closed; starting automatically ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))."
           echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/toolchain
+      - if: steps.mark.outputs.go == 'true'
+        uses: ./.github/actions/toolchain
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
+        if: steps.mark.outputs.go == 'true'
         uses: ./.github/actions/claude-deps
-      - uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
+      - if: steps.mark.outputs.go == 'true'
+        uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         id: claude
         env:
           ISSUE: ${{ matrix.issue }}
@@ -209,12 +225,12 @@ jobs:
       # result itself; a miss fails the job (and says so where given).
       - name: Check the run left its result
         id: check
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.mark.outputs.go == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -B .github/scripts/expect.py ticket "${{ matrix.issue }}" "${{ steps.mark.outputs.at }}"
       - name: Report the run
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.mark.outputs.go == 'true' }}
         uses: ./.github/actions/claude-report
         with:
           execution-file: ${{ steps.claude.outputs.execution_file }}

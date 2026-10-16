@@ -14,7 +14,12 @@ itself, so a run that made nothing fails visibly instead.
     expect.py plan FILE STARTED     a "Plan:" issue for FILE created since
                                     STARTED
     expect.py review PR STARTED     a comment from Claude on PR #PR with a
-                                    "Verdict:" line, written since STARTED
+                                    "Verdict:" and a "Reviewed commit:" line,
+                                    written since STARTED
+    expect.py conflict PR@SHA STARTED
+                                    PR #PR's branch moved past SHA (the merge
+                                    was pushed), or Claude commented since
+                                    STARTED saying why it stopped
 
 STARTED is an ISO 8601 UTC time (2026-10-16T03:17:05Z). Writes ok=true or
 ok=false, and expected=<what was looked for>, to $GITHUB_OUTPUT (or stdout),
@@ -64,14 +69,24 @@ def plan(path, started):
 
 def review(pr, started):
     comments = gh(f"repos/{REPO}/issues/{pr}/comments?per_page=100&since={started}")
-    return any(c["user"]["login"] == BOT and "Verdict:" in (c.get("body") or "") for c in comments)
+    return any(c["user"]["login"] == BOT and "Verdict:" in (c.get("body") or "")
+               and "Reviewed commit:" in (c.get("body") or "") for c in comments)
+
+
+def conflict(arg, started):
+    pr, sha = arg.split("@", 1)
+    if gh(f"repos/{REPO}/pulls/{pr}")["head"]["sha"] != sha:
+        return True
+    comments = gh(f"repos/{REPO}/issues/{pr}/comments?per_page=100&since={started}")
+    return any(c["user"]["login"] == BOT and c["created_at"] >= started for c in comments)
 
 
 CHECKS = {
     "ticket": (ticket, "a pull request for #{0}, or a comment saying why it stopped"),
     "phase-done": (phase_done, "a pull request marking plan #{0}'s phase done"),
     "plan": (plan, "a Plan issue for {0}"),
-    "review": (review, "a review comment with a verdict on #{0}"),
+    "review": (review, "a review comment with a verdict and the reviewed commit on #{0}"),
+    "conflict": (conflict, "master merged into #{0} (or a comment saying why not)"),
 }
 
 
@@ -79,7 +94,7 @@ def main():
     kind, arg, started = sys.argv[1:4]
     fn, what = CHECKS[kind]
     ok = fn(arg, started)
-    expected = what.format(arg)
+    expected = what.format(arg.split("@", 1)[0])
     lines = [f"ok={'true' if ok else 'false'}", f"expected={expected}"]
     print(("Found " if ok else "Missing: ") + expected, file=sys.stderr)
     out = os.environ.get("GITHUB_OUTPUT")
