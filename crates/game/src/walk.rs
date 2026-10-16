@@ -378,7 +378,8 @@ impl Walker {
     }
 
     /// Interact picks up the targeted loose item if the hands are empty.
-    /// Stations and counters arrive later.
+    /// With full hands it does nothing: put-down arrives with stations
+    /// and counters (decided in #215); only Drop releases the item.
     fn interact(&mut self) {
         if self.state.hands.is_some() {
             return;
@@ -681,6 +682,29 @@ mod tests {
         w.tick(&interact());
         assert_eq!(w.hands(), Some(&other));
         assert!(w.items().get(id).is_some());
+    }
+
+    /// Decided in #215: with stations absent, interact while carrying is a
+    /// no-op whatever is aimed at; the item is neither put down nor lost.
+    #[test]
+    fn interact_while_carrying_never_puts_down_or_loses_the_item() {
+        let mut w = settled();
+        let far = w.spawn_item(seeds(), [0.5, 5.62, -6.0]);
+        w.state.hands = Some(seeds());
+        let mut aims = vec![interact()];
+        let mut up = interact();
+        up.pitch = 1.2;
+        aims.push(up);
+        let mut down = interact();
+        down.pitch = -1.5;
+        aims.push(down);
+        for input in &aims {
+            w.tick(input);
+            assert_eq!(w.hands(), Some(&seeds()));
+            assert_eq!(w.items().len(), 1);
+            assert!(w.items().get(far).is_some());
+        }
+        assert_ne!(w.target(), Target::None, "last aim targets a block");
     }
 
     #[test]
