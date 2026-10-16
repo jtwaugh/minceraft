@@ -1,0 +1,202 @@
+//! Player body and land-movement tunables loaded from `data/player.toml`.
+//! See docs/design/basic-gameplay.md sections 4.1, 4.2, 4.5 and 4.6.
+
+use std::fmt;
+
+const DEFAULT_PLAYER: &str = include_str!("../../../data/player.toml");
+
+/// Every tunable from sections 4.1 to 4.6.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerPhysics {
+    /// Bounding box width, blocks.
+    pub width: f32,
+    /// Bounding box height, blocks.
+    pub height: f32,
+    pub step_height: f32,
+    pub max_health: u32,
+    /// Multiplier on forward and strafe input.
+    pub input_scale: f32,
+    /// Extra multiplier on input while sneaking.
+    pub sneak_scale: f32,
+    /// Slipperiness of a normal block.
+    pub slipperiness: f32,
+    /// Horizontal friction per tick in air; on ground it is multiplied by
+    /// the block's slipperiness.
+    pub friction: f32,
+    pub ground_accel: f32,
+    pub ground_accel_ref: f32,
+    pub air_accel: f32,
+    pub jump_velocity: f32,
+    pub gravity: f32,
+    pub drag: f32,
+    /// Step size when shrinking motion at a ledge while sneaking.
+    pub sneak_edge_step: f32,
+    /// Fall distance that does no damage.
+    pub fall_damage_threshold: f32,
+}
+
+#[derive(Debug)]
+pub enum PhysicsError {
+    Parse(String),
+    Missing(String),
+    Invalid(String),
+}
+
+impl fmt::Display for PhysicsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PhysicsError::Parse(e) => write!(f, "player.toml: {e}"),
+            PhysicsError::Missing(k) => write!(f, "player.toml: missing `{k}`"),
+            PhysicsError::Invalid(e) => write!(f, "player.toml: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for PhysicsError {}
+
+impl PlayerPhysics {
+    /// The shipped defaults from `data/player.toml`.
+    pub fn default_from_data() -> Result<PlayerPhysics, PhysicsError> {
+        PlayerPhysics::parse(DEFAULT_PLAYER)
+    }
+
+    /// Parse player physics text; every value is required and must be a
+    /// finite, non-negative number.
+    pub fn parse(text: &str) -> Result<PlayerPhysics, PhysicsError> {
+        let root: toml::Value = text
+            .parse()
+            .map_err(|e: toml::de::Error| PhysicsError::Parse(e.to_string()))?;
+        let get = |table: &str, key: &str| -> Result<f32, PhysicsError> {
+            let path = format!("{table}.{key}");
+            let value = root
+                .get(table)
+                .and_then(|t| t.get(key))
+                .ok_or_else(|| PhysicsError::Missing(path.clone()))?;
+            let n = match value {
+                toml::Value::Float(f) => *f as f32,
+                toml::Value::Integer(i) => *i as f32,
+                _ => return Err(PhysicsError::Invalid(format!("{path} must be a number"))),
+            };
+            if !n.is_finite() || n < 0.0 {
+                return Err(PhysicsError::Invalid(format!(
+                    "{path} must be a non-negative number"
+                )));
+            }
+            Ok(n)
+        };
+        let max_health = get("body", "max_health")?;
+        if max_health.fract() != 0.0 {
+            return Err(PhysicsError::Invalid(
+                "body.max_health must be a whole number".into(),
+            ));
+        }
+        Ok(PlayerPhysics {
+            width: get("body", "width")?,
+            height: get("body", "height")?,
+            step_height: get("body", "step_height")?,
+            max_health: max_health as u32,
+            input_scale: get("movement", "input_scale")?,
+            sneak_scale: get("movement", "sneak_scale")?,
+            slipperiness: get("movement", "slipperiness")?,
+            friction: get("movement", "friction")?,
+            ground_accel: get("movement", "ground_accel")?,
+            ground_accel_ref: get("movement", "ground_accel_ref")?,
+            air_accel: get("movement", "air_accel")?,
+            jump_velocity: get("movement", "jump_velocity")?,
+            gravity: get("movement", "gravity")?,
+            drag: get("movement", "drag")?,
+            sneak_edge_step: get("sneak", "edge_step")?,
+            fall_damage_threshold: get("falling", "damage_threshold")?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_match_design_doc() {
+        let p = PlayerPhysics::default_from_data().unwrap();
+        assert_eq!(p.width, 0.6);
+        assert_eq!(p.height, 1.8);
+        assert_eq!(p.step_height, 0.5);
+        assert_eq!(p.max_health, 20);
+        assert_eq!(p.input_scale, 0.98);
+        assert_eq!(p.sneak_scale, 0.3);
+        assert_eq!(p.slipperiness, 0.6);
+        assert_eq!(p.friction, 0.91);
+        assert_eq!(p.ground_accel, 0.1);
+        assert_eq!(p.ground_accel_ref, 0.16277136);
+        assert_eq!(p.air_accel, 0.02);
+        assert_eq!(p.jump_velocity, 0.42);
+        assert_eq!(p.gravity, 0.08);
+        assert_eq!(p.drag, 0.98);
+        assert_eq!(p.sneak_edge_step, 0.05);
+        assert_eq!(p.fall_damage_threshold, 3.0);
+    }
+
+    #[test]
+    fn ground_accel_on_normal_block_is_unchanged() {
+        let p = PlayerPhysics::default_from_data().unwrap();
+        let f = p.slipperiness * p.friction;
+        let accel = p.ground_accel * (p.ground_accel_ref / f.powi(3));
+        assert!((accel - 0.1).abs() < 1e-4);
+        assert!((f - 0.546).abs() < 1e-6);
+    }
+
+    fn without(line_prefix: &str) -> String {
+        DEFAULT_PLAYER
+            .lines()
+            .filter(|l| !l.starts_with(line_prefix))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn missing_value_is_an_error() {
+        let text = without("jump_velocity");
+        assert!(matches!(
+            PlayerPhysics::parse(&text),
+            Err(PhysicsError::Missing(k)) if k == "movement.jump_velocity"
+        ));
+    }
+
+    #[test]
+    fn missing_table_is_an_error() {
+        let text = without("[falling]");
+        assert!(PlayerPhysics::parse(&text).is_err());
+    }
+
+    #[test]
+    fn negative_value_is_an_error() {
+        let text = DEFAULT_PLAYER.replace("gravity = 0.08", "gravity = -0.08");
+        assert!(matches!(
+            PlayerPhysics::parse(&text),
+            Err(PhysicsError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn non_number_is_an_error() {
+        let text = DEFAULT_PLAYER.replace("drag = 0.98", "drag = \"x\"");
+        assert!(matches!(
+            PlayerPhysics::parse(&text),
+            Err(PhysicsError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn fractional_health_is_an_error() {
+        let text = DEFAULT_PLAYER.replace("max_health = 20", "max_health = 20.5");
+        assert!(PlayerPhysics::parse(&text).is_err());
+    }
+
+    #[test]
+    fn garbage_is_a_parse_error() {
+        assert!(matches!(
+            PlayerPhysics::parse("[body"),
+            Err(PhysicsError::Parse(_))
+        ));
+    }
+}
