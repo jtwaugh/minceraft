@@ -2,14 +2,18 @@
 //! over loaded terrain regions, plus the eye pose between ticks.
 //! See docs/design/basic-gameplay.md sections 1 (rule 1) and 3.
 
-use crate::collision::{CollisionWorld, RegionWorld};
+use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::input::TickInput;
+use crate::interactions::{
+    resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
+    TargetFacts,
+};
 use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::scene::RaftScene;
 use crate::stream::{StreamConfig, Streamer};
-use crate::targeting::{cast_block, Target, TargetingConfig};
+use crate::targeting::{cast_target, ray_vs_box, Target, TargetableEntity, TargetingConfig};
 use layout::Layout;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
@@ -136,8 +140,14 @@ pub struct Walker {
     streamer: Option<Streamer>,
     prev_eye: [f64; 3],
     cur_eye: [f64; 3],
-    block_reach: f64,
+    targeting: TargetingConfig,
     target: Target,
+    entities: Vec<TargetableEntity>,
+    rules: Interactions,
+    dispatcher: Dispatcher,
+    held: HeldThing,
+    facts: TargetFacts,
+    target_box: Option<(Aabb, bool)>,
 }
 
 impl Walker {
@@ -157,8 +167,14 @@ impl Walker {
             streamer: None,
             prev_eye: eye,
             cur_eye: eye,
-            block_reach: targeting.block_reach as f64,
+            targeting,
             target: Target::None,
+            entities: Vec::new(),
+            rules: Interactions::default_rules(),
+            dispatcher: Dispatcher::default(),
+            held: HeldThing::Empty,
+            facts: TargetFacts::default(),
+            target_box: None,
         })
     }
 
@@ -214,6 +230,7 @@ impl Walker {
             prev_offset: [0.0; 3],
         });
         w.add_region(scene.sea);
+        w.entities = scene.entities;
         Ok(w)
     }
 
@@ -256,18 +273,80 @@ impl Walker {
                 self.player.tick(input, &self.physics, &world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                self.target = eye_target(&world, self.cur_eye, input, self.block_reach);
+                let aim = aim(&world, &self.entities, &self.targeting, self.cur_eye, input);
+                self.take_aim(aim, input);
             }
             None => {
                 self.player.tick(input, &self.physics, &self.world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                self.target = eye_target(&self.world, self.cur_eye, input, self.block_reach);
+                let aim = aim(
+                    &self.world,
+                    &self.entities,
+                    &self.targeting,
+                    self.cur_eye,
+                    input,
+                );
+                self.take_aim(aim, input);
             }
         }
         if let Some(s) = &mut self.streamer {
             s.update(self.player.pos, &mut self.world);
         }
+    }
+
+    /// Stub targets for the test scene; `Target::Entity { id }` refers to these.
+    pub fn set_entities(&mut self, entities: Vec<TargetableEntity>) {
+        self.entities = entities;
+    }
+
+    /// What the player holds, until the belt exists (Phase 5).
+    pub fn set_held(&mut self, held: HeldThing) {
+        self.held = held;
+    }
+
+    /// Record this tick's aim and run the presses in `input` against it.
+    fn take_aim(&mut self, aim: Aim, input: &TickInput) {
+        self.target = aim.target;
+        self.target_box = aim.boxed;
+        let ctx = ResolveCtx {
+            held: self.held.clone(),
+            button: Button::Primary,
+            target: aim.target,
+            facts: aim.facts,
+        };
+        self.dispatcher.dispatch(&self.rules, input, &ctx);
+        self.facts = ctx.facts;
+    }
+
+    /// The box to outline for the current target (the block's selection box
+    /// or the entity's box) in world coordinates as of the latest tick, and
+    /// whether it belongs to the raft, so the caller can move it with the
+    /// raft's interpolated offset instead of the latest tick's.
+    pub fn target_box(&self) -> Option<(Aabb, bool)> {
+        self.target_box
+    }
+
+    /// The rule a press of `button` would match against the current target
+    /// and held thing, for the debug overlay.
+    pub fn preview(&self, button: Button) -> Option<Resolved> {
+        let ctx = ResolveCtx {
+            held: self.held.clone(),
+            button,
+            target: self.target,
+            facts: self.facts.clone(),
+        };
+        resolve(&self.rules.rules, &ctx)
+    }
+
+    /// The `action` of rule `index`, as written in `data/interactions.toml`.
+    pub fn rule_action(&self, index: usize) -> Option<ActionKind> {
+        self.rules.rules.get(index).map(|r| r.action)
+    }
+
+    /// Rule index of the most recent press that matched, if any.
+    pub fn last_rule(&self) -> Option<usize> {
+        self.dispatcher.last_rule
     }
 
     /// What the eye ray pointed at after the latest tick (basic-gameplay.md
@@ -293,13 +372,78 @@ impl Walker {
     }
 }
 
-/// The block the ray from `eye` along the look angles of `input` hits.
-fn eye_target(world: &impl CollisionWorld, eye: [f64; 3], input: &TickInput, reach: f64) -> Target {
+/// One tick's result of aiming the eye ray.
+struct Aim {
+    target: Target,
+    facts: TargetFacts,
+    /// The box to outline and whether the raft owns it.
+    boxed: Option<(Aabb, bool)>,
+}
+
+/// What the ray from `eye` along the look angles of `input` hits, blocks and
+/// entities both, with the names rules match on and the box to outline.
+fn aim(
+    world: &impl CollisionWorld,
+    entities: &[TargetableEntity],
+    cfg: &TargetingConfig,
+    eye: [f64; 3],
+    input: &TickInput,
+) -> Aim {
     // Same forward vector as `Pose::forward` in camera.rs, in f64.
     let (sy, cy) = (input.yaw as f64).sin_cos();
     let (sp, cp) = (input.pitch as f64).sin_cos();
     let dir = [sy * cp, sp, -cy * cp];
-    cast_block(world, eye, dir, reach).map_or(Target::None, |(t, _)| t)
+    let target = cast_target(world, entities, cfg, eye, dir);
+    match target {
+        Target::Block { pos, .. } => {
+            let end = [0, 1, 2].map(|i| eye[i] + dir[i] * f64::from(cfg.block_reach));
+            let query = Aabb::new(
+                [0, 1, 2].map(|i| eye[i].min(end[i])),
+                [0, 1, 2].map(|i| eye[i].max(end[i])),
+            );
+            let mut all = Vec::new();
+            world.selection_boxes_in(&query, &mut all);
+            let mut base = Vec::new();
+            block_selection_boxes_in(world, &query, &mut base);
+            let boxed = all
+                .iter()
+                .filter(|b| b.pos == pos)
+                .filter_map(|b| ray_vs_box(eye, dir, &b.aabb).map(|h| (h.distance, b.aabb)))
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .map(|(_, aabb)| (aabb, !base.iter().any(|b| b.aabb == aabb)));
+            Aim {
+                target,
+                facts: TargetFacts {
+                    block: Some(
+                        world
+                            .block_at(pos[0], pos[1], pos[2])
+                            .info()
+                            .name
+                            .to_string(),
+                    ),
+                    air_above: world.block_at(pos[0], pos[1] + 1, pos[2]) == Block::Air,
+                    ..TargetFacts::default()
+                },
+                boxed,
+            }
+        }
+        Target::Entity { id } => {
+            let e = entities.iter().find(|e| e.id == id);
+            Aim {
+                target,
+                facts: TargetFacts {
+                    entity: e.map(|e| e.kind.clone()),
+                    ..TargetFacts::default()
+                },
+                boxed: e.map(|e| (e.aabb, false)),
+            }
+        }
+        Target::None => Aim {
+            target,
+            facts: TargetFacts::default(),
+            boxed: None,
+        },
+    }
 }
 
 /// `alpha` (clamped to 0..1) of the way from the previous tick's `prev` to
@@ -381,6 +525,52 @@ mod tests {
                 face: crate::targeting::Face::Top
             }
         );
+    }
+
+    fn stub_animal() -> TargetableEntity {
+        TargetableEntity {
+            id: 1,
+            kind: "animal".into(),
+            aabb: Aabb::new([0.2, 5.2, -2.0], [0.8, 6.0, -1.4]),
+        }
+    }
+
+    #[test]
+    fn a_stub_entity_is_targeted_outlined_and_matched_by_the_rules() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.set_held(HeldThing::Tool("sword".into()));
+        w.tick(&look(0.0, false));
+        assert_eq!(w.target(), Target::Entity { id: 1 });
+        assert_eq!(w.target_box(), Some((stub_animal().aabb, false)));
+        let hit = w.preview(Button::Primary).unwrap();
+        assert_eq!((hit.rule_index, hit.action), (0, ActionKind::Attack));
+        assert!(w.preview(Button::Secondary).is_none());
+        w.set_held(HeldThing::Empty);
+        assert_eq!(w.preview(Button::Primary).unwrap().rule_index, 8);
+    }
+
+    #[test]
+    fn a_press_records_the_matched_rule() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.set_held(HeldThing::Tool("sword".into()));
+        assert_eq!(w.last_rule(), None);
+        w.tick(&TickInput {
+            primary: true,
+            ..look(0.0, false)
+        });
+        assert_eq!(w.last_rule(), Some(0));
+        assert_eq!(w.rule_action(0), Some(ActionKind::Attack));
+    }
+
+    #[test]
+    fn a_block_target_has_a_unit_box_off_the_raft() {
+        let mut w = settled();
+        w.tick(&look(-std::f32::consts::FRAC_PI_2, false));
+        let (b, on_raft) = w.target_box().unwrap();
+        assert!(!on_raft);
+        assert_eq!((b.min, b.max), ([0.0, 3.0, 0.0], [1.0, 4.0, 1.0]));
     }
 
     #[test]

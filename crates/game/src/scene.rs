@@ -2,6 +2,8 @@
 //! structure floating in it, and a spawn in the water in front of it.
 //! See docs/design/basic-gameplay.md section 13, phase 3 (Water and raft).
 
+use crate::collision::Aabb;
+use crate::targeting::TargetableEntity;
 use layout::Structure;
 use terrain::{Block, Region, HEIGHT};
 
@@ -25,6 +27,8 @@ pub struct RaftScene {
     pub raft: Region,
     /// Feet position in the water, facing the raft at yaw 0 (towards -z).
     pub spawn: [f64; 3],
+    /// Stub targets for checking the selection outline: a bare entity box.
+    pub entities: Vec<TargetableEntity>,
 }
 
 fn empty() -> Region {
@@ -71,12 +75,58 @@ pub fn raft_scene() -> RaftScene {
         (min_y - 1) as f64,
         max_z as f64 + 1.0 + SPAWN_GAP,
     ];
+    let entities = add_islet(&mut sea, spawn);
     RaftScene {
         sea,
         cells: cells.iter().map(|&(x, y, z, _)| [x, y, z]).collect(),
         raft,
         spawn,
+        entities,
     }
+}
+
+/// A grassy 3x3 islet beside the spawn with a few placed plants on it, and a
+/// stub animal-like box standing on it. Test scene only: it exists so the
+/// selection outline and the dispatch overlay have plants and an entity to
+/// point at. Returns the stub entities.
+fn add_islet(sea: &mut Region, spawn: [f64; 3]) -> Vec<TargetableEntity> {
+    let (x0, z0) = (spawn[0].floor() as i32 + 1, spawn[2].floor() as i32 - 1);
+    // The grass layer replaces the top water layer, so the islet is level
+    // with the surface and a swimmer's eye sees over it with no water between.
+    let top = SURFACE as u32 - 1;
+    for dz in 0..3 {
+        for dx in 0..3 {
+            let (lx, lz) = ((x0 + dx - SEA_MIN) as u32, (z0 + dz - SEA_MIN) as u32);
+            for y in (FLOOR as u32 + 1)..top {
+                let i = sea.index(lx, y, lz);
+                sea.blocks[i] = Block::Dirt as u8;
+            }
+            let i = sea.index(lx, top, lz);
+            sea.blocks[i] = Block::Grass as u8;
+        }
+    }
+    for (dx, dz, plant) in [
+        (0, 0, Block::TallGrass),
+        (1, 0, Block::Dandelion),
+        (2, 0, Block::Rose),
+    ] {
+        let i = sea.index(
+            (x0 + dx - SEA_MIN) as u32,
+            top + 1,
+            (z0 + dz - SEA_MIN) as u32,
+        );
+        sea.blocks[i] = plant as u8;
+    }
+    let min = [
+        f64::from(x0) + 0.7,
+        f64::from(top) + 1.0,
+        f64::from(z0) + 1.3,
+    ];
+    vec![TargetableEntity {
+        id: 1,
+        kind: "animal".into(),
+        aabb: Aabb::from_size(min, [0.9, 0.9, 0.9]),
+    }]
 }
 
 #[cfg(test)]
