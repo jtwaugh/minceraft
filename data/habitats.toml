@@ -34,7 +34,7 @@ bottom = ["gravel", "stone"]
 
 [[habitat]]
 id = "cold_open"
-temp_max = 0.4
+temp_max = 0.55
 
 [[habitat]]
 id = "temperate_open"

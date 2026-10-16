@@ -3,7 +3,7 @@ use terrain::Block;
 
 fn inp() -> HabitatInputs {
     HabitatInputs {
-        temperature: 0.5,
+        temperature: 0.58,
         depth: 10,
         bottom: Block::Dirt as u8,
         shore_distance: 10,
@@ -108,7 +108,7 @@ fn bounds_are_inclusive() {
     assert_eq!(name(edge), "warm_shallows");
     assert_eq!(
         name(HabitatInputs {
-            temperature: 0.4,
+            temperature: 0.55,
             ..inp()
         }),
         "cold_open"
