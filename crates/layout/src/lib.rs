@@ -273,6 +273,8 @@ mod derived;
 pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
 mod habitat;
 pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
+mod habitat_map;
+pub use habitat_map::{HabitatMap, NO_HABITAT};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
@@ -298,6 +300,8 @@ mod climate_tests;
 mod derived_tests;
 #[cfg(test)]
 mod exclusion_tests;
+#[cfg(test)]
+mod habitat_map_tests;
 #[cfg(test)]
 mod habitat_tests;
 #[cfg(test)]
