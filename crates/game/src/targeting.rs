@@ -1,7 +1,7 @@
 //! Targeting types, the ray-vs-box test and reach tunables
 //! (basic-gameplay.md section 5). Tunables come from `data/targeting.toml`.
 
-use crate::collision::Aabb;
+use crate::collision::{Aabb, CollisionWorld};
 use std::fmt;
 
 const DEFAULT_TARGETING: &str = include_str!("../../../data/targeting.toml");
@@ -83,6 +83,46 @@ pub fn ray_vs_box(origin: [f64; 3], dir: [f64; 3], aabb: &Aabb) -> Option<RayHit
     })
 }
 
+/// Cast the ray `origin + t * dir` through the block selection boxes of
+/// `world` and return the nearest hit within `reach` blocks as
+/// `Target::Block`, with its distance. `dir` need not be unit length.
+/// Returns `None` for a zero direction or when nothing is in reach. A box
+/// containing the origin is never hit (see `ray_vs_box`).
+pub fn cast_block(
+    world: &impl CollisionWorld,
+    origin: [f64; 3],
+    dir: [f64; 3],
+    reach: f64,
+) -> Option<(Target, f64)> {
+    let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt();
+    if !len.is_finite() || len == 0.0 || !reach.is_finite() || reach < 0.0 {
+        return None;
+    }
+    let d = [dir[0] / len, dir[1] / len, dir[2] / len];
+    let end = [0, 1, 2].map(|i| origin[i] + d[i] * reach);
+    let query = Aabb::new(
+        [0, 1, 2].map(|i| origin[i].min(end[i])),
+        [0, 1, 2].map(|i| origin[i].max(end[i])),
+    );
+    let mut boxes = Vec::new();
+    world.selection_boxes_in(&query, &mut boxes);
+    let mut best: Option<(Target, f64)> = None;
+    for b in &boxes {
+        if let Some(hit) = ray_vs_box(origin, d, &b.aabb) {
+            if hit.distance <= reach && best.is_none_or(|(_, bd)| hit.distance < bd) {
+                best = Some((
+                    Target::Block {
+                        pos: b.pos,
+                        face: hit.face,
+                    },
+                    hit.distance,
+                ));
+            }
+        }
+    }
+    best
+}
+
 /// Reach and box tunables from `data/targeting.toml`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TargetingConfig {
@@ -151,6 +191,7 @@ impl TargetingConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collision::MemoryWorld;
 
     fn unit() -> Aabb {
         Aabb::new([0.0; 3], [1.0; 3])
@@ -200,6 +241,89 @@ mod tests {
         assert!(h.is_some());
         // Just above it misses.
         assert!(ray_vs_box([-1.0, 1.0001, 0.5], [1.0, 0.0, 0.0], &unit()).is_none());
+    }
+
+    fn block(pos: [i32; 3], face: Face) -> Option<Target> {
+        Some(Target::Block { pos, face })
+    }
+
+    fn cast(w: &impl CollisionWorld, o: [f64; 3], d: [f64; 3]) -> Option<Target> {
+        let reach = TargetingConfig::default_from_data().unwrap().block_reach as f64;
+        cast_block(w, o, d, reach).map(|(t, _)| t)
+    }
+
+    #[test]
+    fn casts_hit_solid_plant_and_water() {
+        use terrain::Block;
+        let mut w = MemoryWorld::new();
+        w.set(3, 0, 0, Block::Stone);
+        w.set(0, 0, 3, Block::TallGrass);
+        w.set(0, 3, 0, Block::Water);
+        let o = [0.5, 0.5, 0.5];
+        assert_eq!(cast(&w, o, [1.0, 0.0, 0.0]), block([3, 0, 0], Face::West));
+        assert_eq!(cast(&w, o, [0.0, 0.0, 1.0]), block([0, 0, 3], Face::North));
+        assert_eq!(cast(&w, o, [0.0, 1.0, 0.0]), block([0, 3, 0], Face::Bottom));
+        // Air only.
+        assert_eq!(cast(&w, o, [-1.0, 0.0, 0.0]), None);
+        assert_eq!(cast(&w, o, [0.0, 0.0, 0.0]), None);
+    }
+
+    #[test]
+    fn cactus_uses_its_inset_box() {
+        use terrain::Block;
+        let mut w = MemoryWorld::new();
+        w.set(3, 0, 0, Block::Cactus);
+        let (_, d) = cast_block(&w, [0.5, 0.5, 0.5], [1.0, 0.0, 0.0], 9.0).unwrap();
+        assert!((d - (3.0 + 1.0 / 16.0 - 0.5)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn nearest_wins_and_reach_limits() {
+        use terrain::Block;
+        let mut w = MemoryWorld::new();
+        w.set(2, 0, 0, Block::TallGrass);
+        w.set(3, 0, 0, Block::Stone);
+        w.set(9, 4, 4, Block::Stone);
+        let o = [0.5, 0.5, 0.5];
+        assert_eq!(cast(&w, o, [1.0, 0.0, 0.0]), block([2, 0, 0], Face::West));
+        // Stone at x = 5 is 4.5 away from x = 0.5: exactly at the reach.
+        let mut w = MemoryWorld::new();
+        w.set(5, 0, 0, Block::Stone);
+        assert_eq!(cast(&w, o, [1.0, 0.0, 0.0]), block([5, 0, 0], Face::West));
+        let mut w = MemoryWorld::new();
+        w.set(6, 0, 0, Block::Stone);
+        assert_eq!(cast(&w, o, [1.0, 0.0, 0.0]), None);
+        assert_eq!(cast(&w, [0.5, 0.5, 0.5], [2.0, 0.0, 0.0]), None);
+    }
+
+    #[test]
+    fn raft_cells_are_targeted_at_their_current_pose() {
+        use crate::raft::{Raft, RaftFrame, RaftWorld};
+        use terrain::Block;
+        let mut base = MemoryWorld::new();
+        let mut cells = Vec::new();
+        for x in 0..2 {
+            base.set(x, 0, 0, Block::Stone);
+            cells.push([x, 0, 0]);
+        }
+        let mut raft = Raft::new(&cells);
+        let o = [-2.5, 0.5, 0.5];
+        let east = [1.0, 0.0, 0.0];
+        assert_eq!(
+            cast(&RaftWorld::new(&base, &raft), o, east),
+            block([0, 0, 0], Face::West)
+        );
+        let frame = RaftFrame {
+            displacement: [0.0, 0.0, 3.0],
+            ..RaftFrame::default()
+        };
+        let p = crate::physics::PlayerPhysics::default_from_data().unwrap();
+        raft.advance(&frame, &mut [], &p);
+        let world = RaftWorld::new(&base, &raft);
+        // The rest pose is empty now.
+        assert_eq!(cast(&world, o, east), None);
+        let o = [-2.5, 0.5, 3.5];
+        assert_eq!(cast(&world, o, east), block([0, 0, 3], Face::West));
     }
 
     #[test]

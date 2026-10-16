@@ -54,6 +54,31 @@ pub fn block_box(block: Block, x: i32, y: i32, z: i32) -> Option<Aabb> {
     }
 }
 
+/// A block's selection box and the cell it belongs to. Moving cells (the raft)
+/// report their current box under the cell they occupy now.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SelectionBox {
+    pub pos: [i32; 3],
+    pub aabb: Aabb,
+}
+
+/// The selection box of `block` at `(x, y, z)` (basic-gameplay.md section 5):
+/// every non-air block has the full cell, or its collision box where that is
+/// smaller than the cell. Plants and liquids have no collision box and so get
+/// the full cell.
+pub fn selection_box(block: Block, x: i32, y: i32, z: i32) -> Option<Aabb> {
+    if block == Block::Air {
+        return None;
+    }
+    let (fx, fy, fz) = (x as f64, y as f64, z as f64);
+    match block.info().collision {
+        Collision::Inset => block_box(block, x, y, z),
+        Collision::None | Collision::Full => {
+            Some(Aabb::new([fx, fy, fz], [fx + 1.0, fy + 1.0, fz + 1.0]))
+        }
+    }
+}
+
 /// A world that can report the block boxes overlapping a query box.
 pub trait CollisionWorld {
     /// The block at integer coordinates; air where nothing is known.
@@ -81,6 +106,39 @@ pub trait CollisionWorld {
     /// Append every block box that strictly overlaps `query` to `out`.
     fn boxes_in(&self, query: &Aabb, out: &mut Vec<Aabb>) {
         block_boxes_in(self, query, out);
+    }
+
+    /// Append every selection box that overlaps `query` (touching counts, so
+    /// a ray along a face still finds it) to `out`.
+    fn selection_boxes_in(&self, query: &Aabb, out: &mut Vec<SelectionBox>) {
+        block_selection_boxes_in(self, query, out);
+    }
+}
+
+/// The selection boxes of `world` found through `block_at`. This is the
+/// default `CollisionWorld::selection_boxes_in`, exposed for overlays.
+pub fn block_selection_boxes_in<W: CollisionWorld + ?Sized>(
+    world: &W,
+    query: &Aabb,
+    out: &mut Vec<SelectionBox>,
+) {
+    let lo = |i: usize| query.min[i].floor() as i32;
+    let hi = |i: usize| query.max[i].floor() as i32;
+    for x in lo(0)..=hi(0) {
+        for y in lo(1)..=hi(1) {
+            for z in lo(2)..=hi(2) {
+                if let Some(aabb) = selection_box(world.block_at(x, y, z), x, y, z) {
+                    let touches =
+                        (0..3).all(|i| aabb.min[i] <= query.max[i] && aabb.max[i] >= query.min[i]);
+                    if touches {
+                        out.push(SelectionBox {
+                            pos: [x, y, z],
+                            aabb,
+                        });
+                    }
+                }
+            }
+        }
     }
 }
 
