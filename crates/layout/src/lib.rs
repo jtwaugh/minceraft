@@ -273,7 +273,11 @@ mod derived;
 pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
 mod fish;
 pub use fish::{Fish, FishColumn, Species};
+#[cfg(feature = "toml-io")]
+mod fish_rules;
 mod habitat;
+mod habitat_rule;
+#[cfg(feature = "toml-io")]
 mod habitat_rules;
 pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod habitat_map;
@@ -285,6 +289,9 @@ pub use region::{generate_region, Layout, LayoutRegion, StructurePlacement};
 mod retry;
 pub use retry::{find_level, find_v0_level, LevelFound, RetryError};
 mod structure;
+mod structure_error;
+#[cfg(feature = "toml-io")]
+mod structure_rules;
 pub use structure::{Structure, StructureError};
 mod validation;
 pub use validation::{
@@ -303,13 +310,13 @@ mod climate_tests;
 mod derived_tests;
 #[cfg(test)]
 mod exclusion_tests;
-#[cfg(test)]
+#[cfg(all(test, feature = "toml-io"))]
 mod fish_tests;
 #[cfg(test)]
 mod habitat_map_tests;
 #[cfg(test)]
 mod habitat_tests;
-#[cfg(test)]
+#[cfg(all(test, feature = "toml-io"))]
 mod level_tests;
 #[cfg(test)]
 mod raft_tests;

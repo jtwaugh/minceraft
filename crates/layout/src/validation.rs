@@ -16,15 +16,13 @@
 
 use std::fmt;
 
-use serde::Deserialize;
 use terrain::{column_summary, Block, Region, HEIGHT, SEA_LEVEL};
 
 use crate::{Layout, Level, Structure};
 
-const DEFAULT_THRESHOLDS: &str = include_str!("../../../data/validation.toml");
-
 /// Thresholds from `data/validation.toml`.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "toml-io", derive(serde::Deserialize))]
 pub struct Thresholds {
     pub min_island_columns: u32,
     pub window_margin: i32,
@@ -32,22 +30,26 @@ pub struct Thresholds {
     pub raft_clearance: i32,
     pub min_flat_grass_tiles: u32,
     /// Retry loop cap (`find_level`).
-    #[serde(default = "default_max_attempts")]
+    #[cfg_attr(feature = "toml-io", serde(default = "default_max_attempts"))]
     pub max_attempts: u32,
 }
 
+#[cfg(feature = "toml-io")]
 fn default_max_attempts() -> u32 {
     64
 }
 
+include!(concat!(env!("OUT_DIR"), "/validation.rs"));
+
 impl Thresholds {
+    #[cfg(feature = "toml-io")]
     pub fn from_toml(text: &str) -> Result<Self, String> {
         toml::from_str(text).map_err(|e| e.to_string())
     }
 
-    /// The shipped `data/validation.toml`.
+    /// The shipped `data/validation.toml`, baked in at build time.
     pub fn shipped() -> Self {
-        Self::from_toml(DEFAULT_THRESHOLDS).expect("data/validation.toml is valid")
+        SHIPPED_THRESHOLDS.clone()
     }
 }
 

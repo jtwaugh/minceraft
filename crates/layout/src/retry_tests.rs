@@ -64,6 +64,7 @@ fn retry_advances_the_seed() {
     assert_eq!(found.level, default_v0_level(found.seed));
 }
 
+#[cfg(feature = "toml-io")]
 #[test]
 fn committed_v0_level_file_validates_first_try() {
     let file = LevelFile::load(concat!(
