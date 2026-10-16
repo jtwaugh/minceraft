@@ -37,6 +37,17 @@ pub struct PlayerPhysics {
     pub sneak_edge_step: f32,
     /// Fall distance that does no damage.
     pub fall_damage_threshold: f32,
+    /// Horizontal acceleration in water.
+    pub water_accel: f32,
+    /// Per-tick velocity multiplier in water.
+    pub water_velocity_multiplier: f32,
+    pub water_gravity: f32,
+    /// Added to vertical velocity per tick while swimming up.
+    pub water_swim_up_impulse: f32,
+    /// Vertical velocity when climbing out of water onto a ledge.
+    pub water_climb_out_velocity: f32,
+    /// Clearance above the feet required for a climb-out.
+    pub water_climb_out_clearance: f32,
 }
 
 #[derive(Debug)]
@@ -122,6 +133,12 @@ impl PlayerPhysics {
             drag: get("movement", "drag")?,
             sneak_edge_step: get("sneak", "edge_step")?,
             fall_damage_threshold: get("falling", "damage_threshold")?,
+            water_accel: get("water", "accel")?,
+            water_velocity_multiplier: get("water", "velocity_multiplier")?,
+            water_gravity: get("water", "gravity")?,
+            water_swim_up_impulse: get("water", "swim_up_impulse")?,
+            water_climb_out_velocity: get("water", "climb_out_velocity")?,
+            water_climb_out_clearance: get("water", "climb_out_clearance")?,
         })
     }
 }
@@ -152,6 +169,31 @@ mod tests {
         assert_eq!(p.drag, 0.98);
         assert_eq!(p.sneak_edge_step, 0.05);
         assert_eq!(p.fall_damage_threshold, 3.0);
+        assert_eq!(p.water_accel, 0.02);
+        assert_eq!(p.water_velocity_multiplier, 0.8);
+        assert_eq!(p.water_gravity, 0.02);
+        assert_eq!(p.water_swim_up_impulse, 0.04);
+        assert_eq!(p.water_climb_out_velocity, 0.3);
+        assert_eq!(p.water_climb_out_clearance, 0.6);
+    }
+
+    #[test]
+    fn missing_water_key_is_an_error() {
+        let text = without("swim_up_impulse");
+        assert!(matches!(
+            PlayerPhysics::parse(&text),
+            Err(PhysicsError::Missing(k)) if k == "water.swim_up_impulse"
+        ));
+    }
+
+    #[test]
+    fn negative_water_value_is_an_error() {
+        let text =
+            DEFAULT_PLAYER.replace("climb_out_clearance = 0.6", "climb_out_clearance = -0.6");
+        assert!(matches!(
+            PlayerPhysics::parse(&text),
+            Err(PhysicsError::Invalid(_))
+        ));
     }
 
     #[test]

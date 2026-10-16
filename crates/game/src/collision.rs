@@ -59,9 +59,22 @@ pub trait CollisionWorld {
     /// The block at integer coordinates; air where nothing is known.
     fn block_at(&self, x: i32, y: i32, z: i32) -> Block;
 
-    /// Whether a body occupying `bb` is in water. The land-only world has
-    /// none; water movement (Phase 3) overrides this.
-    fn body_in_water(&self, _bb: &Aabb) -> bool {
+    /// Whether a body occupying `bb` is in water: the box strictly overlaps
+    /// any liquid block cell. Water blocks keep `collision = "none"`, so this
+    /// is separate from `boxes_in`. Every world gets this through the block
+    /// lookup, so `RegionWorld`, `MemoryWorld` and `RegionSet` agree.
+    fn body_in_water(&self, bb: &Aabb) -> bool {
+        let lo = |i: usize| bb.min[i].floor() as i32;
+        let hi = |i: usize| bb.max[i].ceil() as i32 - 1;
+        for x in lo(0)..=hi(0) {
+            for y in lo(1)..=hi(1) {
+                for z in lo(2)..=hi(2) {
+                    if self.block_at(x, y, z).info().liquid {
+                        return true;
+                    }
+                }
+            }
+        }
         false
     }
 
@@ -189,6 +202,93 @@ mod tests {
         // Far away.
         let far = Aabb::new([10.0, 0.0, 10.0], [11.0, 1.0, 11.0]);
         assert!(query(&w, &far).is_empty());
+    }
+
+    fn pool() -> MemoryWorld {
+        let mut w = MemoryWorld::new();
+        for x in 0..2 {
+            for z in 0..2 {
+                w.set(x, 4, z, Block::Water);
+                w.set(x, 3, z, Block::Stone);
+            }
+        }
+        w
+    }
+
+    fn body(x: f64, y: f64, z: f64) -> Aabb {
+        Aabb::from_size([x, y, z], [0.6, 1.8, 0.6])
+    }
+
+    #[test]
+    fn body_in_water_detects_overlap() {
+        let w = pool();
+        // Straddling the surface (the water layer is y = 4..5).
+        assert!(w.body_in_water(&body(0.2, 4.0, 0.2)));
+        assert!(w.body_in_water(&body(0.2, 4.5, 0.2)));
+        assert!(w.body_in_water(&body(0.2, 3.2, 0.2)));
+        // Resting on the surface, above it, and in air elsewhere.
+        assert!(!w.body_in_water(&body(0.2, 5.0, 0.2)));
+        assert!(!w.body_in_water(&body(0.2, 6.0, 0.2)));
+        assert!(!w.body_in_water(&body(10.0, 4.0, 10.0)));
+        // Touching the side of the pool only.
+        assert!(!w.body_in_water(&body(2.0, 4.0, 0.2)));
+    }
+
+    /// A one-block-tall-slab region: stone at y = 3, water at (wx, 4, wz).
+    fn slab_region(x0: i32, water: Option<(u32, u32)>) -> Region {
+        let (width, depth) = (4u32, 4u32);
+        let mut r = Region {
+            blocks: vec![Block::Air as u8; width as usize * depth as usize * HEIGHT],
+            width,
+            depth,
+            height: HEIGHT as u32,
+            x0,
+            z0: 0,
+        };
+        for z in 0..depth {
+            for x in 0..width {
+                let i = r.index(x, 3, z);
+                r.blocks[i] = Block::Stone as u8;
+            }
+        }
+        if let Some((x, z)) = water {
+            let i = r.index(x, 4, z);
+            r.blocks[i] = Block::Water as u8;
+        }
+        r
+    }
+
+    #[test]
+    fn body_in_water_region_world_and_region_set() {
+        use crate::walk::RegionSet;
+        let r = slab_region(0, Some((1, 1)));
+        let rw = RegionWorld::new(&r);
+        assert!(rw.body_in_water(&body(1.2, 4.0, 1.2)));
+        assert!(!rw.body_in_water(&body(1.2, 5.0, 1.2)));
+        assert!(!rw.body_in_water(&body(2.2, 4.0, 2.2)));
+        let mut set = RegionSet::default();
+        set.push(slab_region(0, Some((1, 1))));
+        assert!(set.body_in_water(&body(1.2, 4.0, 1.2)));
+        assert!(!set.body_in_water(&body(1.2, 5.0, 1.2)));
+        assert!(!set.body_in_water(&body(100.0, 4.0, 100.0)));
+    }
+
+    #[test]
+    fn body_in_water_spans_region_border() {
+        use crate::walk::RegionSet;
+        // Regions cover x = 0..4 and x = 4..8; water only in the left one.
+        let mut set = RegionSet::default();
+        set.push(slab_region(0, Some((3, 2))));
+        set.push(slab_region(4, None));
+        // Centred on the border: overlaps the water cell at x = 3.
+        assert!(set.body_in_water(&body(3.7, 4.0, 2.2)));
+        // Entirely inside the dry region.
+        assert!(!set.body_in_water(&body(4.2, 4.0, 2.2)));
+        // Water in the right region, body straddling the border from the left.
+        let mut set = RegionSet::default();
+        set.push(slab_region(0, None));
+        set.push(slab_region(4, Some((0, 2))));
+        assert!(set.body_in_water(&body(3.7, 4.0, 2.2)));
     }
 
     #[test]
