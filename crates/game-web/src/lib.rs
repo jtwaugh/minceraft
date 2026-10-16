@@ -3,6 +3,8 @@
 use game::bindings::Bindings;
 use game::input::TickInput;
 use game::sampler::Sampler;
+use game::walk::Walker;
+use terrain::Region;
 use wasm_bindgen::prelude::*;
 
 /// One sim tick's input, as plain getters (see `TickInput`).
@@ -105,5 +107,56 @@ impl InputSampler {
     }
     pub fn drain(&mut self) -> Tick {
         Tick(self.0.drain())
+    }
+}
+
+/// The walking player: stepped from sampled ticks, collides with the terrain
+/// regions the scene hands over, and reports the interpolated eye.
+#[wasm_bindgen]
+pub struct Walk(Walker);
+
+#[wasm_bindgen]
+impl Walk {
+    /// A player with its feet at the given position.
+    #[wasm_bindgen(constructor)]
+    pub fn new(x: f64, y: f64, z: f64) -> Result<Walk, JsError> {
+        Walker::new([x, y, z])
+            .map(Walk)
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
+
+    /// Add generated blocks (`generate_region_decorated` output) covering
+    /// `w` by `d` columns from world `(x0, z0)`.
+    pub fn add_region(&mut self, x0: i32, z0: i32, w: u32, d: u32, blocks: Vec<u8>) {
+        self.0.add_region(Region {
+            blocks,
+            width: w,
+            depth: d,
+            height: terrain::HEIGHT as u32,
+            x0,
+            z0,
+        });
+    }
+
+    pub fn has_world(&self) -> bool {
+        self.0.has_world()
+    }
+
+    pub fn tick(&mut self, input: &Tick) {
+        self.0.tick(&input.0);
+    }
+
+    /// Eye position `[x, y, z]` between the last two ticks, `alpha` in 0..1.
+    pub fn eye(&self, alpha: f64) -> Vec<f64> {
+        self.0.eye(alpha).to_vec()
+    }
+
+    /// Feet position `[x, y, z]` after the latest tick.
+    pub fn feet(&self) -> Vec<f64> {
+        self.0.player().pos.to_vec()
+    }
+
+    pub fn teleport(&mut self, x: f64, y: f64, z: f64) {
+        self.0.teleport([x, y, z]);
     }
 }
