@@ -241,7 +241,7 @@ The raft is a moving rigid body. Phase 3 adds a minimal raft entity in `crates/g
 
 - Before the entity's own movement, translate it by the raft's displacement this tick, and rotate it around the raft's center by the raft's yaw change.
 - The raft's collision boxes are its mask cells, translated by the raft's displacement and rotated in 90-degree steps only, so they stay axis-aligned for the collision resolver of 4.4. A carried entity gets the same quarter turns around the raft's center. (Decided in #140.)
-- Deck tilt from swells does not move the player directly. Instead, it adds a small horizontal push down-slope each tick (data, default 0.004 per degree of tilt), so standing still on a rocking raft means drifting slowly unless you sneak. Sneaking cancels the push.
+- Deck tilt from swells does not move the player directly. Instead, it adds a small horizontal push down-slope each tick (data, default 0.004 per degree of tilt), so standing still on a rocking raft means drifting slowly unless you sneak. Sneaking cancels the push. The sign of `tilt` is the direction of the push: a positive `tilt[0]` pushes towards +z and a positive `tilt[1]` pushes towards +x, each axis separately (push on z is `0.004 * tilt[0]`, push on x is `0.004 * tilt[1]`). (Decided in #158.)
 - Loose item entities on the deck get the same push at double strength, so dropped items slide.
 
 ### 4.8 Movement events
