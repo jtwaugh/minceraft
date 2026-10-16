@@ -5,10 +5,7 @@
 //! Bounds are inclusive. The file must end with a rule that sets nothing, so
 //! every column gets a habitat.
 
-use terrain::BLOCK_INFO;
-
-use crate::habitat_rules::parse_rules;
-pub use crate::habitat_rules::HabitatRule;
+pub use crate::habitat_rule::HabitatRule;
 
 /// A rule as emitted by `build.rs`.
 pub(crate) struct StaticRule {
@@ -66,9 +63,13 @@ pub struct Habitats {
 impl Habitats {
     /// Parse and validate a rule file. For tests and tools: the shipped
     /// rules are baked in at build time and never go through this.
+    #[cfg(feature = "toml-io")]
     pub fn from_toml(text: &str) -> Result<Self, String> {
-        let rules = parse_rules(text, &|n| {
-            BLOCK_INFO.iter().position(|b| b.name == n).map(|i| i as u8)
+        let rules = crate::habitat_rules::parse_rules(text, &|n| {
+            terrain::BLOCK_INFO
+                .iter()
+                .position(|b| b.name == n)
+                .map(|i| i as u8)
         })?;
         Ok(Habitats { rules })
     }

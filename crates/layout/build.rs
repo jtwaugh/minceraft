@@ -1,15 +1,45 @@
-//! Compile-time data: parses and validates `data/habitats.toml` and writes
-//! `$OUT_DIR/habitats.rs` (included by `src/habitat.rs`). A bad rule file
-//! fails the build.
+//! Compile-time data: parses and validates the shipped data files and writes
+//! static tables to `$OUT_DIR`:
 //!
-//! The shipped rules reach the crate as a static table, so the wasm does not
-//! link a parser for them.
+//! - `habitats.rs` from `data/habitats.toml` (included by `src/habitat.rs`)
+//! - `fish.rs` from `data/fish.toml` (`src/fish.rs`)
+//! - `validation.rs` from `data/validation.toml` (`src/validation.rs`)
+//! - `structure.rs` from `data/structures/raft_start.toml` (`src/structure.rs`)
+//!
+//! A bad file fails the build. The shipped data reaches the crate as static
+//! tables, so the wasm links no TOML parser (the `toml-io` feature is off).
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use serde::Deserialize;
+
+#[path = "src/fish_rules.rs"]
+mod fish_rules;
+#[path = "src/habitat_rule.rs"]
+mod habitat_rule;
 #[path = "src/habitat_rules.rs"]
 mod habitat_rules;
+#[path = "src/structure_error.rs"]
+mod structure_error;
+#[path = "src/structure_rules.rs"]
+mod structure_rules;
+
+/// Mirrors `Thresholds` in `src/validation.rs`.
+#[derive(Deserialize)]
+struct Thresholds {
+    min_island_columns: u32,
+    window_margin: i32,
+    min_raft_water_depth: u32,
+    raft_clearance: i32,
+    min_flat_grass_tiles: u32,
+    #[serde(default = "default_max_attempts")]
+    max_attempts: u32,
+}
+
+fn default_max_attempts() -> u32 {
+    64
+}
 
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {
     match v {
@@ -25,7 +55,22 @@ fn main() {
     println!("cargo:rerun-if-changed={}", habitats_path.display());
     println!("cargo:rerun-if-changed={}", blocks_path.display());
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=src/habitat_rules.rs");
+    for f in [
+        "src/habitat_rule.rs",
+        "src/habitat_rules.rs",
+        "src/fish_rules.rs",
+        "src/structure_error.rs",
+        "src/structure_rules.rs",
+    ] {
+        println!("cargo:rerun-if-changed={f}");
+    }
+    let fish_path = root.join("fish.toml");
+    let validation_path = root.join("validation.toml");
+    let raft_path = root.join("structures/raft_start.toml");
+    for p in [&fish_path, &validation_path, &raft_path] {
+        println!("cargo:rerun-if-changed={}", p.display());
+    }
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     let read =
         |p: &PathBuf| std::fs::read_to_string(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
@@ -67,6 +112,58 @@ fn main() {
         .unwrap();
     }
     out.push_str("];\n");
-    let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("habitats.rs");
-    std::fs::write(dest, out).unwrap();
+    std::fs::write(out_dir.join("habitats.rs"), out).unwrap();
+
+    // Fish: habitat names resolve to positions in the rule list above.
+    let species =
+        fish_rules::parse_species(&read(&fish_path), &|n| rules.iter().position(|r| r.id == n))
+            .unwrap_or_else(|e| panic!("{}: {e}", fish_path.display()));
+    let mut out = String::from("pub(crate) static SHIPPED_SPECIES: &[StaticSpecies] = &[\n");
+    for s in &species {
+        let habitats = match &s.habitats {
+            Some(ids) => format!("Some(&{ids:?})"),
+            None => "None".into(),
+        };
+        writeln!(
+            out,
+            "    StaticSpecies {{ id: {:?}, weight: {}, habitats: {}, temp_min: {}, \
+             temp_max: {}, depth_min: {}, depth_max: {} }},",
+            s.id,
+            s.weight,
+            habitats,
+            opt(&s.temp_min),
+            opt(&s.temp_max),
+            opt(&s.depth_min),
+            opt(&s.depth_max)
+        )
+        .unwrap();
+    }
+    out.push_str("];\n");
+    std::fs::write(out_dir.join("fish.rs"), out).unwrap();
+
+    // Validation thresholds.
+    let t: Thresholds = toml::from_str(&read(&validation_path))
+        .unwrap_or_else(|e| panic!("{}: {e}", validation_path.display()));
+    let out = format!(
+        "static SHIPPED_THRESHOLDS: Thresholds = Thresholds {{ min_island_columns: {}, \
+         window_margin: {}, min_raft_water_depth: {}, raft_clearance: {}, \
+         min_flat_grass_tiles: {}, max_attempts: {} }};\n",
+        t.min_island_columns,
+        t.window_margin,
+        t.min_raft_water_depth,
+        t.raft_clearance,
+        t.min_flat_grass_tiles,
+        t.max_attempts
+    );
+    std::fs::write(out_dir.join("validation.rs"), out).unwrap();
+
+    // Built-in structure templates.
+    let raft = structure_rules::parse_structure(&read(&raft_path), &|n| block_id(n))
+        .unwrap_or_else(|e| panic!("{}: {e}", raft_path.display()));
+    let out = format!(
+        "pub(crate) static RAFT_START: StaticStructure = StaticStructure {{ size: {:?}, \
+         origin_offset: {:?}, raft: {}, blocks: &{:?} }};\n",
+        raft.size, raft.origin_offset, raft.raft, raft.blocks
+    );
+    std::fs::write(out_dir.join("structure.rs"), out).unwrap();
 }
