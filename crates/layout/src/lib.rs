@@ -277,8 +277,9 @@ mod structure;
 pub use structure::{Structure, StructureError};
 mod validation;
 pub use validation::{
-    validate_island, validate_level, window, CheckResult, Thresholds, ValidationReport,
-    CHECK_ISLAND_AREA, CHECK_SPAWN_CLEAR,
+    raft_footprint, validate_flat_grass, validate_island, validate_level, validate_raft, window,
+    CheckResult, Thresholds, ValidationReport, CHECK_FLAT_GRASS, CHECK_ISLAND_AREA,
+    CHECK_RAFT_CLEAR, CHECK_RAFT_WATER, CHECK_SPAWN_CLEAR,
 };
 
 #[cfg(test)]

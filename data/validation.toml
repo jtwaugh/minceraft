@@ -8,3 +8,15 @@ min_island_columns = 150
 # Blocks added on every side of the box that contains the island centre and
 # the spawn water zone. The flood fill never leaves this window.
 window_margin = 48
+
+# Water under every raft footprint column, counted down from SEA_LEVEL - 1,
+# must be at least this deep.
+min_raft_water_depth = 3
+
+# The footprint must hold no solid block from SEA_LEVEL up to
+# SEA_LEVEL + raft_clearance.
+raft_clearance = 4
+
+# Island columns with a grass top and all 4 neighbours within 1 block of
+# height, counted on undecorated terrain (design Decision 4).
+min_flat_grass_tiles = 6
