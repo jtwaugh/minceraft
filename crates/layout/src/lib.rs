@@ -270,7 +270,7 @@ pub use builder::{build_layout, default_v0_level};
 mod channel;
 pub use channel::ChannelEval;
 mod derived;
-pub use derived::{DerivedMaps, NO_BOTTOM};
+pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
 mod habitat;
 pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod level;
