@@ -5,7 +5,7 @@ scope: game
 source: "#13"
 superseded_by: ""
 phases:
-  1: todo
+  1: done
   2: todo
   3: todo
   4: todo
@@ -19,7 +19,8 @@ phases:
 
 What exists today that this doc relies on or overlaps (checked against the code):
 
-- **No gameplay code.** There is no sim, player, input, camera, collision,
+- **Phase 1 done (plan #59).** `crates/game` has the input bindings (`data/input.toml`, #68), `TickInput` with latched edges (#71), the fixed 20 Hz clock and free-look camera (#77); `crates/game-web` and `client/` add pointer lock, input sampling (#72), the debug camera scene and frame-time overlay with p99 reporting (#79). The test scene lives in `client/` (#67). Eye height, bobbing, deck roll and hand rendering are left to later phases.
+- **No gameplay code beyond Phase 1.** There is no sim, player, input, camera, collision,
   entity, item, tool, animal or crop code in this repo. `crates/terrain` is the
   generator; `crates/web/src/lib.rs` exports only generation, height, climate
   and biome functions.
