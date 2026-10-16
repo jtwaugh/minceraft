@@ -271,6 +271,8 @@ mod channel;
 pub use channel::ChannelEval;
 mod derived;
 pub use derived::{DerivedMaps, NO_BOTTOM};
+mod habitat;
+pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod region;
@@ -296,6 +298,8 @@ mod climate_tests;
 mod derived_tests;
 #[cfg(test)]
 mod exclusion_tests;
+#[cfg(test)]
+mod habitat_tests;
 #[cfg(test)]
 mod level_tests;
 #[cfg(test)]

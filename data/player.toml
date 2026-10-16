@@ -1,0 +1,41 @@
+# Player body and land-movement tunables. See docs/design/basic-gameplay.md
+# sections 4.1, 4.2, 4.5 and 4.6.
+#
+# These are this game's own values (decided in #90). They make no claim of
+# Beta parity and are not taken from SPEC.md; retune them for feel. Every key
+# is required and must be a non-negative number.
+
+[body]
+# Bounding box, blocks.
+width = 0.6
+height = 1.8
+step_height = 0.5
+max_health = 20
+
+[movement]
+# Forward and strafe input are multiplied by input_scale, and also by
+# sneak_scale while sneaking.
+input_scale = 0.98
+sneak_scale = 0.3
+# Slipperiness of a normal block; the horizontal friction factor on ground is
+# slipperiness * friction.
+slipperiness = 0.6
+# Horizontal friction per tick in air, and the multiplier on slipperiness.
+friction = 0.91
+# On ground: accel = ground_accel * (ground_accel_ref / f^3), f = slipperiness * friction.
+ground_accel = 0.1
+ground_accel_ref = 0.16277136
+air_accel = 0.02
+# Vertical velocity set when jumping from the ground.
+jump_velocity = 0.42
+# Per tick: vy = (vy - gravity) * drag.
+gravity = 0.08
+drag = 0.98
+
+[sneak]
+# Step size when shrinking motion so a sneaking player stays on the ground.
+edge_step = 0.05
+
+[falling]
+# Fall distance that does no damage; damage is ceil(fall_distance - threshold).
+damage_threshold = 3.0

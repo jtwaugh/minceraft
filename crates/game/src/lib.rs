@@ -4,5 +4,7 @@
 pub mod bindings;
 pub mod camera;
 pub mod clock;
+pub mod collision;
 pub mod input;
+pub mod physics;
 pub mod sampler;
