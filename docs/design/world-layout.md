@@ -519,6 +519,8 @@ Done when:
 
 Note: Beta seabeds are not especially deep. If `deep_water` is rare, add a `RadialBaseHeight` with negative delta in open water far from islands, or a dedicated `DeepWater` density bias, rather than lowering global base height (which would also shrink islands).
 
+If `deep_water` does not appear over a sample of seeds, lower its thresholds in `data/habitats.toml` until it makes up at least 1% of water columns over that sample; do not add a layout bias for it, and do not exempt it from the criterion above. (Decided in #94.)
+
 ### Phase D: Multi-region world
 
 Depends on: B.
