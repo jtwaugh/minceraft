@@ -96,16 +96,20 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      issues: read
+      issues: write # says so on the plan if the run made no PR
       id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+      - name: Note the start time
+        id: start
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
         uses: ./.github/actions/claude-deps
-      - uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
+      - id: claude
+        uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         env:
           DOC: ${{ needs.finish-plan.outputs.file }}
           SECTION: ${{ needs.finish-plan.outputs.section }}
@@ -143,7 +147,26 @@ jobs:
             "Design: <title>: <SECTION> done" (or "... still incomplete").
           claude_args: |
             --max-turns 40
-            --allowedTools "Read,Glob,Grep,Edit,Bash(printenv:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api repos/${{ github.repository }}/issues/*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout -b:*),Bash(git add docs/design/*),Bash(git commit:*),Bash(git push -u origin docs/*),Bash(git push origin docs/*),Bash(gh pr create:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(printenv:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api repos/${{ github.repository }}/issues/*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout -b:*),Bash(git add docs/design/*),Bash(git commit:*),Bash(git push -u origin docs/*),Bash(git push origin docs/*),Bash(gh pr create:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --append-system-prompt "Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message."
+
+      # Claude exits "successfully" even when it gives up, so check for the
+      # result itself; a miss fails the job (and says so where given).
+      - name: Check the run left its result
+        id: check
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .github/scripts/expect.py phase-done "${{ needs.finish-plan.outputs.plan }}" "${{ steps.start.outputs.at }}"
+      - name: Report the run
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/claude-report
+        with:
+          execution-file: ${{ steps.claude.outputs.execution_file }}
+          ok: ${{ steps.check.outputs.ok }}
+          expected: ${{ steps.check.outputs.expected }}
+          issue: ${{ needs.finish-plan.outputs.plan }}
+          retry: To retry, reopen this plan and close it again as completed.
 
   drift:
     if: |
@@ -163,7 +186,8 @@ jobs:
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
         uses: ./.github/actions/claude-deps
-      - uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
+      - id: claude
+        uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         env:
           DOC_PATH: ${{ inputs.path }}
         with:
@@ -190,4 +214,12 @@ jobs:
             doc in your final message.
           claude_args: |
             --max-turns 120
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(printenv:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout:*),Bash(git add docs/design/*),Bash(git commit:*),Bash(git push -u origin docs/*),Bash(git push origin docs/*),Bash(gh pr create:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(printenv:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout:*),Bash(git add docs/design/*),Bash(git commit:*),Bash(git push -u origin docs/*),Bash(git push origin docs/*),Bash(gh pr create:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --append-system-prompt "Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message."
+
+      # Refused commands and Claude's last message, in the job summary.
+      - name: Report the run
+        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
+        uses: ./.github/actions/claude-report
+        with:
+          execution-file: ${{ steps.claude.outputs.execution_file }}
