@@ -9,7 +9,9 @@
 //                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
 //   ?plants=D    plant draw distance in blocks (default 48)
-//   ?log=N      console.log the frame-time summary every N frames, for headless runs
+//   ?tool=T     what the walking player holds until the belt exists: empty (default), hoe, sword,
+//                or item:<name>; the overlay shows which interaction rule a press would match
+//   ?log=N       console.log the frame-time summary every N frames, for headless runs
 //
 // window.frameStats() returns { frames, p50, p99 } at any time.
 
@@ -19,6 +21,7 @@ import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadI
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
+import { formatAim, heldFromQuery } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
@@ -30,6 +33,7 @@ const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
 const flying = qs.get('mode') === 'fly';
 const raftScene = qs.get('scene') === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
+const held = heldFromQuery(qs.get('tool'));
 const logEvery = +(qs.get('log') ?? 0);
 
 const canvas = document.getElementById('gl');
@@ -94,6 +98,75 @@ function program(cut) {
   return p;
 }
 
+// Selection outline and entity highlight: a unit cube drawn as lines or as a
+// translucent fill, placed and scaled by uniforms.
+const boxProg = (() => {
+  const sh = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, `#version 300 es
+    layout(location=0) in vec3 pos;
+    uniform mat4 mvp; uniform vec3 lo; uniform vec3 size;
+    void main() { gl_Position = mvp * vec4(lo + pos * size, 1.0); }`));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `#version 300 es
+    precision mediump float;
+    uniform vec4 color; out vec4 o;
+    void main() { o = color; }`));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  p.u = (name) => gl.getUniformLocation(p, name);
+  return p;
+})();
+const unitBox = (() => {
+  const corners = [];
+  for (let i = 0; i < 8; i++) corners.push(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+  const edges = [0, 1, 2, 3, 4, 5, 6, 7, 0, 2, 1, 3, 4, 6, 5, 7, 0, 4, 1, 5, 2, 6, 3, 7];
+  const quads = [0, 1, 3, 0, 3, 2, 4, 6, 7, 4, 7, 5, 0, 4, 5, 0, 5, 1, 2, 3, 7, 2, 7, 6, 0, 2, 6, 0, 6, 4, 1, 5, 7, 1, 7, 3];
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(corners), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  const ib = (data) => {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint8Array(data), gl.STATIC_DRAW);
+    return b;
+  };
+  const edgeIB = ib(edges), quadIB = ib(quads);
+  gl.bindVertexArray(null);
+  return { vao, edgeIB, quadIB, edges: edges.length, quads: quads.length };
+})();
+
+// `box` is [minx, miny, minz, maxx, maxy, maxz]; entities also get a faint fill.
+function drawBox(mvp, box, fill) {
+  const grow = 0.003; // keeps the lines off the block's own faces
+  const lo = [0, 1, 2].map((i) => box[i] - grow);
+  const size = [0, 1, 2].map((i) => box[i + 3] - box[i] + 2 * grow);
+  gl.useProgram(boxProg);
+  gl.uniformMatrix4fv(boxProg.u('mvp'), false, mvp);
+  gl.uniform3fv(boxProg.u('lo'), lo);
+  gl.uniform3fv(boxProg.u('size'), size);
+  gl.bindVertexArray(unitBox.vao);
+  if (fill) {
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false); gl.disable(gl.CULL_FACE);
+    gl.uniform4f(boxProg.u('color'), 1, 1, 1, 0.22);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, unitBox.quadIB);
+    gl.drawElements(gl.TRIANGLES, unitBox.quads, gl.UNSIGNED_BYTE, 0);
+    gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
+  }
+  gl.uniform4f(boxProg.u('color'), 0, 0, 0, 1);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, unitBox.edgeIB);
+  gl.drawElements(gl.LINES, unitBox.edges, gl.UNSIGNED_BYTE, 0);
+  gl.bindVertexArray(null);
+}
+
 // ---------------------------------------------------------------- meshes
 let quadIB = null, quadIBSize = 0;
 function quadIndexBuffer(quads) {
@@ -144,6 +217,7 @@ const sampler = new InputSampler();
 const surfaceY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[1] + 1;
 const scene = raftScene ? new Scene() : null;
 const walk = scene ? Walk.in_scene(scene) : new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
+walk.set_held(held);
 const input = attachInput({ sampler, canvas, document, window });
 
 const names = [];
@@ -228,7 +302,7 @@ function drawParts(prog, parts) {
 function render(now) {
   if (queue.length) meshNextChunk();
 
-  const { alpha, eye, yaw, pitch, flying } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  const { alpha, eye, yaw, pitch, flying, aim } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
 
   const dpr = window.devicePixelRatio || 1;
   const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
@@ -268,6 +342,7 @@ function render(now) {
   bind(solidProg, 0.72); drawParts(solidProg, meshes.ice);
   gl.depthMask(true);
   gl.bindVertexArray(null);
+  if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
 
   if (lastFrame !== null) frames.push(now - lastFrame);
   lastFrame = now;
@@ -275,7 +350,7 @@ function render(now) {
     overlayAt = now;
     const p99 = frames.percentile(99);
     overlay.textContent = `${frames.format()}\n${p99 > FRAME_BUDGET_MS ? 'over' : 'within'} the 16.7 ms p99 budget\n` +
-      `${flying ? 'fly' : 'walk'} (F to switch)\npos ${eye.map((v) => v.toFixed(1)).join(' ')}`;
+      `${flying ? 'fly' : 'walk'} (F to switch)\npos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `\nheld ${held}\n${formatAim(aim)}`}`;
     hint.hidden = input.locked;
   }
   if (logEvery && frames.n % logEvery === 0 && frames.n) console.log(`[frames] ${frames.format()}`);

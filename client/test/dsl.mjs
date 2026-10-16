@@ -17,11 +17,14 @@
 //   mouse <dx> <dy>             pointer-locked mouse movement
 //   wheel <dy>
 //   frame <ms> [xN]             run N frames of ms each (default 1)
+//   held <held>                 what the player holds: empty, tool:hoe, item:seeds
 //   mark                        remember the current eye, for `moved`
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
 // Paths: mode (fly|walk), locked, ticks, alpha, yaw, pitch, eye.x|y|z,
-// moved (distance since mark), moved.x|y|z, lock_requests.
+// moved (distance since mark), moved.x|y|z, lock_requests, target.kind
+// (none|block|entity), target.id, target.face, rule.primary|secondary|last
+// (the matched rule's action, or none), box (outlined: true|false).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
@@ -65,7 +68,7 @@ function world({ mode = 'walk', raft = false }) {
   });
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { canvas, document, window, input, controller, fire, mark: controller.state.eye };
+  return { canvas, document, window, input, controller, walk, fire, mark: controller.state.eye };
 }
 
 const BUTTONS = { left: 0, right: 2 };
@@ -88,6 +91,12 @@ function read(w, path) {
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
   if (['ticks', 'alpha', 'yaw', 'pitch'].includes(path)) return s[path];
+  const aim = s.aim;
+  if (path === 'target.kind') return aim.kind;
+  if (path === 'target.id') return aim.id ?? -1;
+  if (path === 'target.face') return aim.face ?? 'none';
+  if (path === 'box') return aim.box !== null;
+  if (/^rule\.(primary|secondary|last)$/.test(path)) return aim[path.slice(5)]?.action ?? 'none';
   const [head, ax] = path.split('.');
   if (ax in axis && head === 'eye') return s.eye[axis[ax]];
   if (ax in axis && head === 'moved') return d[axis[ax]];
@@ -118,6 +127,7 @@ function step(w, { op, args }) {
       for (let i = 0; i < n; i++) w.controller.frame(+args[0] / 1000);
       return;
     }
+    case 'held': w.walk.set_held(args[0]); return;
     case 'mark': w.mark = w.controller.state.eye.slice(); return;
     case 'expect': {
       const [path, cmp, raw] = args;

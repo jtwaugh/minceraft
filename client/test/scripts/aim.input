@@ -1,0 +1,58 @@
+# The aim read-out: what the eye ray targets and which interaction rule a
+# press of each button would run (docs/design/basic-gameplay.md sections 5, 7).
+# Raft scene: the player starts in the water facing the raft (yaw 0 is -z); a
+# grassy islet with plants and a stub animal box is beside the spawn, to the
+# east (yaw increases turning right, so +x is yaw 1.57). mouse dx = yaw / 0.0025.
+
+case looking at the raft targets a block and outlines it
+start walk raft
+click
+lock
+frame 50 x2
+expect target.kind = block
+expect box = true
+expect rule.primary = none
+expect rule.secondary = none
+
+case looking away from everything targets nothing
+start walk raft
+click
+lock
+mouse 0 -400
+frame 50 x2
+expect target.kind = none
+expect box = false
+
+case the stub animal matches the sword and the punch fallback
+start walk raft
+click
+lock
+mouse 763 -64
+frame 50 x2
+expect target.kind = entity
+expect target.id = 1
+expect box = true
+expect rule.primary = attack
+held tool:sword
+frame 50
+expect rule.primary = attack
+held tool:hoe
+frame 50
+expect rule.primary = attack
+expect rule.secondary = none
+held empty
+frame 50
+expect rule.primary = attack
+
+case a placed plant is targeted and an empty hand forages it
+start walk raft
+click
+lock
+mouse 443 -148
+frame 50 x2
+expect target.kind = block
+expect box = true
+expect rule.secondary = forage
+held tool:hoe
+frame 50
+expect rule.secondary = none
