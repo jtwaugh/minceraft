@@ -1,0 +1,18 @@
+# Tools and carryable items. See docs/design/basic-gameplay.md section 6.
+#
+# Names must match the `held` strings in interactions.toml: `tool:<name>` for
+# a tool, `item:<name>` for a carryable item. Names are unique within each
+# list. Item entity numbers (throw speed, gravity, ...) are added here by the
+# item entity ticket.
+
+[[tool]]
+name = "sword"
+label = "Wooden sword"
+
+[[tool]]
+name = "hoe"
+label = "Wooden hoe"
+
+[[item]]
+name = "seeds"
+label = "Seeds"

@@ -1,0 +1,283 @@
+//! Tool and item definitions loaded from `data/items.toml`, and the player's
+//! belt and hands. See docs/design/basic-gameplay.md section 6.
+//!
+//! Names must match the `held` strings in `data/interactions.toml`;
+//! `Items::check_interactions` verifies that.
+
+use crate::interactions::{Held, Interactions};
+use std::fmt;
+
+const DEFAULT_ITEMS: &str = include_str!("../../../data/items.toml");
+
+/// Number of tool belt slots.
+pub const BELT_SLOTS: usize = 5;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Def {
+    pub name: String,
+    pub label: String,
+}
+
+/// The tool and item tables, in file order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Items {
+    pub tools: Vec<Def>,
+    pub items: Vec<Def>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ItemsError {
+    Parse(String),
+    /// `kind` is `tool` or `item`; `index` is the 1-based position.
+    BadEntry {
+        kind: &'static str,
+        index: usize,
+        problem: String,
+    },
+    Duplicate {
+        kind: &'static str,
+        name: String,
+    },
+    /// A `held` string in the interaction table names something not defined.
+    UnknownHeld {
+        held: String,
+    },
+    /// A belt entry names something not defined.
+    UnknownName {
+        kind: &'static str,
+        name: String,
+    },
+}
+
+impl fmt::Display for ItemsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ItemsError::Parse(e) => write!(f, "items.toml: {e}"),
+            ItemsError::BadEntry {
+                kind,
+                index,
+                problem,
+            } => write!(f, "items.toml: {kind} {index}: {problem}"),
+            ItemsError::Duplicate { kind, name } => {
+                write!(f, "items.toml: duplicate {kind} `{name}`")
+            }
+            ItemsError::UnknownHeld { held } => {
+                write!(f, "interactions.toml: `{held}` is not in items.toml")
+            }
+            ItemsError::UnknownName { kind, name } => {
+                write!(f, "unknown {kind} `{name}`")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ItemsError {}
+
+fn parse_defs(table: &toml::value::Table, kind: &'static str) -> Result<Vec<Def>, ItemsError> {
+    let bad = |index: usize, problem: &str| ItemsError::BadEntry {
+        kind,
+        index,
+        problem: problem.to_string(),
+    };
+    let Some(list) = table.get(kind) else {
+        return Ok(Vec::new());
+    };
+    let list = list
+        .as_array()
+        .ok_or_else(|| bad(0, "not an array of tables"))?;
+    let mut out: Vec<Def> = Vec::new();
+    for (i, entry) in list.iter().enumerate() {
+        let index = i + 1;
+        let entry = entry.as_table().ok_or_else(|| bad(index, "not a table"))?;
+        for field in entry.keys() {
+            if field != "name" && field != "label" {
+                return Err(bad(index, &format!("unknown field `{field}`")));
+            }
+        }
+        let text = |field: &str| {
+            entry
+                .get(field)
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .ok_or_else(|| bad(index, &format!("`{field}` must be a non-empty string")))
+        };
+        let name = text("name")?;
+        if name.contains(':') {
+            return Err(bad(index, "`name` must not contain `:`"));
+        }
+        if out.iter().any(|d| d.name == name) {
+            return Err(ItemsError::Duplicate { kind, name });
+        }
+        out.push(Def {
+            name,
+            label: text("label")?,
+        });
+    }
+    Ok(out)
+}
+
+impl Items {
+    /// The tables shipped in `data/items.toml`.
+    pub fn default_items() -> Items {
+        Items::from_toml(DEFAULT_ITEMS).expect("data/items.toml is valid")
+    }
+
+    pub fn from_toml(text: &str) -> Result<Items, ItemsError> {
+        let table: toml::value::Table =
+            toml::from_str(text).map_err(|e| ItemsError::Parse(e.to_string()))?;
+        Ok(Items {
+            tools: parse_defs(&table, "tool")?,
+            items: parse_defs(&table, "item")?,
+        })
+    }
+
+    pub fn has_tool(&self, name: &str) -> bool {
+        self.tools.iter().any(|d| d.name == name)
+    }
+
+    pub fn has_item(&self, name: &str) -> bool {
+        self.items.iter().any(|d| d.name == name)
+    }
+
+    /// Every `tool:` and `item:` named by a rule must be defined here.
+    pub fn check_interactions(&self, rules: &Interactions) -> Result<(), ItemsError> {
+        for rule in &rules.rules {
+            let (known, held) = match &rule.held {
+                Held::Tool(n) => (self.has_tool(n), format!("tool:{n}")),
+                Held::Item(n) => (self.has_item(n), format!("item:{n}")),
+                _ => continue,
+            };
+            if !known {
+                return Err(ItemsError::UnknownHeld { held });
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A tool on the belt. `tool` names an entry in the tool table.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToolInstance {
+    pub tool: String,
+}
+
+/// A carried item. `item` names an entry in the item table.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ItemInstance {
+    pub item: String,
+}
+
+/// The tool belt and hands (design section 6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlayerState {
+    pub tool_belt: [Option<ToolInstance>; BELT_SLOTS],
+    pub selected: u8,
+    pub hands: Option<ItemInstance>,
+}
+
+impl PlayerState {
+    /// The v0 belt: empty hand, sword, hoe, and two reserved slots (fishing
+    /// rod and bucket). Fails if the tables lack the starting tools.
+    pub fn new(items: &Items) -> Result<PlayerState, ItemsError> {
+        let tool = |name: &str| {
+            if items.has_tool(name) {
+                Ok(Some(ToolInstance {
+                    tool: name.to_string(),
+                }))
+            } else {
+                Err(ItemsError::UnknownName {
+                    kind: "tool",
+                    name: name.to_string(),
+                })
+            }
+        };
+        Ok(PlayerState {
+            tool_belt: [None, tool("sword")?, tool("hoe")?, None, None],
+            selected: 0,
+            hands: None,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_file_loads() {
+        let items = Items::default_items();
+        assert!(items.has_tool("sword") && items.has_tool("hoe"));
+        assert!(items.has_item("seeds"));
+    }
+
+    #[test]
+    fn default_names_match_interactions() {
+        Items::default_items()
+            .check_interactions(&Interactions::default_rules())
+            .unwrap();
+    }
+
+    #[test]
+    fn starting_belt() {
+        let p = PlayerState::new(&Items::default_items()).unwrap();
+        let name = |i: usize| p.tool_belt[i].as_ref().map(|t| t.tool.as_str());
+        assert_eq!(name(0), None);
+        assert_eq!(name(1), Some("sword"));
+        assert_eq!(name(2), Some("hoe"));
+        assert_eq!(name(3), None);
+        assert_eq!(name(4), None);
+        assert_eq!(p.selected, 0);
+        assert_eq!(p.hands, None);
+    }
+
+    #[test]
+    fn rejects_duplicates() {
+        let t = "[[tool]]\nname='a'\nlabel='A'\n[[tool]]\nname='a'\nlabel='B'\n";
+        assert!(matches!(
+            Items::from_toml(t),
+            Err(ItemsError::Duplicate { kind: "tool", .. })
+        ));
+        let i = "[[item]]\nname='a'\nlabel='A'\n[[item]]\nname='a'\nlabel='B'\n";
+        assert!(matches!(
+            Items::from_toml(i),
+            Err(ItemsError::Duplicate { kind: "item", .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_bad_entries() {
+        for bad in [
+            "[[tool]]\nlabel='A'\n",
+            "[[tool]]\nname=''\nlabel='A'\n",
+            "[[tool]]\nname='a:b'\nlabel='A'\n",
+            "[[tool]]\nname='a'\nlabel='A'\nextra=1\n",
+            "[[item]]\nname=3\nlabel='A'\n",
+            "tool = 3\n",
+            "not toml [",
+        ] {
+            assert!(Items::from_toml(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn unknown_held_names_rejected() {
+        let rules = Interactions::from_toml(
+            "[[rule]]\nheld='tool:axe'\nbutton='primary'\ntarget='none'\naction='attack'\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            Items::default_items().check_interactions(&rules),
+            Err(ItemsError::UnknownHeld { .. })
+        ));
+    }
+
+    #[test]
+    fn belt_needs_starting_tools() {
+        let items = Items::from_toml("[[tool]]\nname='sword'\nlabel='S'\n").unwrap();
+        assert!(matches!(
+            PlayerState::new(&items),
+            Err(ItemsError::UnknownName { .. })
+        ));
+    }
+}
