@@ -1,0 +1,78 @@
+name: Claude run report
+description: >-
+  Puts the commands a Claude run was refused and Claude's last message in the
+  job summary. If the run didn't leave what it was meant to (ok is 'false'),
+  also comments that on an issue or PR and fails the job, so a run that gave
+  up never shows as a green tick.
+# Why: claude-code-action hides Claude's transcript in the log (this repo is
+# public), and reports success whenever Claude exits cleanly. Runs that hit
+# refused commands sometimes stopped without their PR and without a word.
+# Only commands and the final message are printed here, never tool output.
+inputs:
+  execution-file:
+    description: steps.<claude step>.outputs.execution_file (may be empty)
+    required: true
+  ok:
+    description: "'false' when the run's expected result is missing (from .github/scripts/expect.py)"
+    default: "true"
+  expected:
+    description: What was missing, for the message
+    default: "what it was asked to make"
+  issue:
+    description: Issue or PR number to comment on when ok is 'false' (optional)
+    default: ""
+  retry:
+    description: How to retry, appended to the comment
+    default: ""
+  token:
+    description: Token for the comment
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        OUT: ${{ inputs.execution-file }}
+        OK: ${{ inputs.ok }}
+        EXPECTED: ${{ inputs.expected }}
+        ISSUE: ${{ inputs.issue }}
+        RETRY: ${{ inputs.retry }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -uo pipefail
+        summary="$RUNNER_TEMP/claude-summary-$GITHUB_JOB.md"
+        : > "$summary"
+        if [ -n "$OUT" ] && [ -f "$OUT" ]; then
+          turns=$(jq -r '[.[] | select(.type == "result")] | last | "\(.num_turns // "?") turns, \(.permission_denials // [] | length) refused"' "$OUT" 2>/dev/null || echo "?")
+          denied=$(jq -r '[.[] | select(.type == "result")] | last | .permission_denials // [] | .[] |
+            "`\(.tool_name)`: `\((.tool_input.command // .tool_input.file_path // (.tool_input | tostring))[0:200] | gsub("`"; "´") | gsub("\n"; " ⏎ "))`"' "$OUT" 2>/dev/null \
+            | sort | uniq -c | sed 's/^ *\([0-9]*\) /- \1× /' || true)
+          last=$(jq -r '[.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // ""' "$OUT" 2>/dev/null | head -c 1500 || true)
+          {
+            echo "### Claude run: $turns"
+            echo
+            echo "**Refused commands**"
+            echo
+            echo "${denied:-none}"
+            echo
+            echo "**Claude's last message**"
+            echo
+            echo '```'
+            echo "${last:-(none)}"
+            echo '```'
+          } > "$summary"
+          cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        [ "$OK" = false ] || exit 0
+
+        msg="This automatic run finished without $EXPECTED ([run log]($RUN)). $RETRY"
+        if [ -n "$ISSUE" ]; then
+          { echo "$msg"; echo; cat "$summary"; } > "$RUNNER_TEMP/claude-report.md"
+          gh api "repos/$REPO/issues/$ISSUE/comments" -F body=@"$RUNNER_TEMP/claude-report.md" --silent \
+            || echo "::warning::Couldn't comment on #$ISSUE"
+        fi
+        echo "::error::Claude finished without $EXPECTED."
+        exit 1

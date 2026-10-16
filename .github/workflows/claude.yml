@@ -24,9 +24,9 @@ on:
 
 env:
   ALLOWED_TOOLS: >-
-    Edit,Write,Bash(cargo fmt:*),Bash(cargo clippy:*),Bash(cargo test:*),Bash(cargo build:*),Bash(cargo run:*),Bash(./build.sh:*),Bash(python3:*),Bash(cd:*),Bash(node viewer/flyover/preview.mjs:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue create:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue comment:*)
+    Edit,Write,Bash(cargo fmt:*),Bash(cargo clippy:*),Bash(cargo test:*),Bash(cargo build:*),Bash(cargo run:*),Bash(./build.sh:*),Bash(python3:*),Bash(cd:*),Bash(node viewer/flyover/preview.mjs:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue create:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue comment:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)
   RULES: >-
-    You are the implementer for this repository. Follow CLAUDE.md exactly, above all its clean-room rules: Beta behaviour comes only from SPEC.md, never edit SPEC.md or design docs, and if the spec is ambiguous or incomplete, open an issue labelled spec-question with gh issue create, then comment on the ticket 'Blocked by #<that issue>' (exactly that phrase, so the ticket restarts by itself once the question is answered) and stop. Before starting, read the ticket with gh issue view and check every issue on its Depends on line is closed; if one isn't, say so in a comment and stop. Run every check in CLAUDE.md's 'Before opening a PR' list before you push. To bring a branch up to date, use git fetch and git merge origin/master (never rebase or force-push). When the work is done, open a pull request with gh pr create whose body says 'Closes #<issue>', cites the spec or design-doc sections implemented, and states whether world output changes for a fixed seed.
+    You are the implementer for this repository. Follow CLAUDE.md exactly, above all its clean-room rules: Beta behaviour comes only from SPEC.md, never edit SPEC.md or design docs, and if the spec is ambiguous or incomplete, open an issue labelled spec-question with gh issue create, then comment on the ticket 'Blocked by #<that issue>' (exactly that phrase, so the ticket restarts by itself once the question is answered) and stop. Before starting, read the ticket with gh issue view and check every issue on its Depends on line is closed; if one isn't, say so in a comment and stop. Run every check in CLAUDE.md's 'Before opening a PR' list before you push. To bring a branch up to date, use git fetch and git merge origin/master (never rebase or force-push). When the work is done, open a pull request with gh pr create whose body says 'Closes #<issue>', cites the spec or design-doc sections implemented, and states whether world output changes for a fixed seed. Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message.
 
 jobs:
   # A ticket was labelled "factory", or someone mentioned @claude.
@@ -87,7 +87,8 @@ jobs:
       - id: claude-deps
         if: success() && (github.event_name != 'issues' || steps.deps.outputs.waiting == '[]')
         uses: ./.github/actions/claude-deps
-      - if: success() && (github.event_name != 'issues' || steps.deps.outputs.waiting == '[]')
+      - id: claude
+        if: success() && (github.event_name != 'issues' || steps.deps.outputs.waiting == '[]')
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         with:
           path_to_bun_executable: ${{ steps.claude-deps.outputs.bun }}
@@ -101,6 +102,13 @@ jobs:
             --max-turns 80
             --allowedTools "${{ env.ALLOWED_TOOLS }}"
             --append-system-prompt "${{ env.RULES }}"
+
+      # Refused commands and Claude's last message, in the job summary.
+      - name: Report the run
+        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
+        uses: ./.github/actions/claude-report
+        with:
+          execution-file: ${{ steps.claude.outputs.execution_file }}
 
   # An issue closed: which approved tickets are now unblocked?
   find-ready:
@@ -197,47 +205,20 @@ jobs:
             --allowedTools "${{ env.ALLOWED_TOOLS }},Bash(git checkout -b claude/*),Bash(git switch -c claude/*),Bash(git add:*),Bash(git commit:*),Bash(git push -u origin claude/*),Bash(git push origin claude/*),Bash(date:*)"
             --append-system-prompt "${{ env.RULES }}"
 
-      # The action hides Claude's transcript in the log (this repo is public).
-      # Print only what's needed to diagnose a run: the commands that were
-      # refused by --allowedTools and Claude's last message.
-      - name: Summarise the run
-        id: summary
-        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
-        env:
-          OUT: ${{ steps.claude.outputs.execution_file }}
-        run: |
-          [ -f "$OUT" ] || exit 0
-          denied=$(jq -r '[.[] | select(.type == "result")] | last | .permission_denials // [] | .[] |
-            "`\(.tool_name)`: `\((.tool_input.command // .tool_input.file_path // (.tool_input | tostring))[0:200] | gsub("`"; "´"))`"' "$OUT" | sort | uniq -c | sed 's/^ *\([0-9]*\) /- \1× /' || true)
-          last=$(jq -r '[.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // ""' "$OUT" | head -c 1500 || true)
-          {
-            echo "### Refused commands"
-            echo "${denied:-none}"
-            echo
-            echo "### Claude's last message"
-            echo '```'
-            echo "${last:-(none)}"
-            echo '```'
-          } | tee -a "$GITHUB_STEP_SUMMARY" > summary.md
-
-      # A run that ends without a PR and without explaining itself would
-      # otherwise leave the ticket silently idle. Say so on the ticket.
-      - name: Report a run that opened no PR
+      # Claude exits "successfully" even when it gives up, so check for the
+      # result itself; a miss fails the job (and says so where given).
+      - name: Check the run left its result
+        id: check
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          N: ${{ matrix.issue }}
-          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          STARTED: ${{ steps.mark.outputs.at }}
-        run: |
-          prs=$(gh api "repos/$REPO/pulls?state=open&per_page=100" \
-            --jq "[.[] | select((.head.ref | startswith(\"claude/issue-$N-\")) or ((.body // \"\") | test(\"(?i)(close[sd]?|fix(e[sd])?|resolve[sd]?) #$N\\\\b\")))] | length")
-          said=$(gh api "repos/$REPO/issues/$N/comments?per_page=100&since=$STARTED" \
-            --jq "[.[] | select(.user.login == \"claude[bot]\" and .created_at > \"$STARTED\")] | length")
-          if [ "$prs" -eq 0 ] && [ "$said" -eq 0 ]; then
-            { echo "The automatic run finished without opening a PR or saying why ([run log]($RUN), outcome: ${{ job.status }}). Comment \`@claude\` here to retry."
-              [ -f summary.md ] && { echo; cat summary.md; }
-            } > body.md
-            gh issue comment "$N" --repo "$REPO" --body-file body.md
-          fi
+        run: python3 -B .github/scripts/expect.py ticket "${{ matrix.issue }}" "${{ steps.mark.outputs.at }}"
+      - name: Report the run
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/claude-report
+        with:
+          execution-file: ${{ steps.claude.outputs.execution_file }}
+          ok: ${{ steps.check.outputs.ok }}
+          expected: ${{ steps.check.outputs.expected }}
+          issue: ${{ matrix.issue }}
+          retry: Comment `@claude` here to retry.
