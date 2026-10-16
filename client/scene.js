@@ -5,13 +5,15 @@
 //
 //   ?seed=N      world seed (default 12345)
 //   ?radius=R    chunks of terrain each way from the spawn chunk (default 1)
+//   ?scene=raft  the Phase 3 test scene: a flat sea, a raft rocking on the scripted swell,
+//                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
 //   ?log=N       console.log the frame-time summary every N frames, for headless runs
 //
 // window.frameStats() returns { frames, p50, p99 } at any time.
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
-import initGame, { InputSampler, Walk } from './pkg/game_web.js';
+import initGame, { InputSampler, Walk, Scene } from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
@@ -24,6 +26,7 @@ const qs = new URLSearchParams(location.search);
 const seed = BigInt(qs.get('seed') ?? 12345);
 const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
 let flying = qs.get('mode') === 'fly';
+const raftScene = qs.get('scene') === 'raft';
 const logEvery = +(qs.get('log') ?? 0);
 
 const canvas = document.getElementById('gl');
@@ -142,7 +145,8 @@ await Promise.all([initTerrain(), initGame()]);
 const sampler = new InputSampler();
 // heightmap_decorated column: [top_block, top_y, ...]; spawn just above the top block.
 const surfaceY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[1] + 1;
-const walk = new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
+const scene = raftScene ? new Scene() : null;
+const walk = scene ? Walk.in_scene(scene) : new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
 const input = attachInput({ sampler, canvas, document, window });
 
 const names = [];
@@ -157,7 +161,8 @@ const meshes = { opaque: [], cutout: [], water: [], ice: [] };
 
 // One chunk per frame, spawn chunk outwards, so the page is flying at once.
 const queue = [];
-for (let r = 0; r <= radius; r++) {
+const raftMeshes = { opaque: [], cutout: [] }; // moved each frame by the sim's raft offset
+for (let r = 0; r <= radius && !scene; r++) {
   for (let cz = -r; cz <= r; cz++) for (let cx = -r; cx <= r; cx++) {
     if (Math.max(Math.abs(cx), Math.abs(cz)) === r) queue.push([cx, cz]);
   }
@@ -177,8 +182,27 @@ function meshNextChunk() {
   }
 }
 
+// The test scene is one sea region plus the raft's blocks meshed apart, so the
+// raft can move over the water. Biome tints come from the terrain under it.
+if (scene) {
+  const { min, size } = scene;
+  const tints = columnTints(terrain, ctx, seed, min, min, size);
+  skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
+  const offset = [min, 0, min];
+  for (const [blocks, into] of [[scene.sea_blocks(), true], [scene.raft_blocks(), false]]) {
+    const m = meshBlocks(ctx, blocks, tints, size, 0);
+    for (const k of Object.keys(meshes)) {
+      const part = upload(m[k], offset);
+      if (!part) continue;
+      if (into) meshes[k].push(part);
+      else if (raftMeshes[k]) raftMeshes[k].push(part);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- loop
 let prev = [CHUNK / 2, surfaceY + 24, CHUNK / 2], cur = prev;
+if (scene) prev = cur = Array.from(walk.eye(1)).map((v, i) => v + (i === 1 ? 24 : 0));
 const clock = new TickClock();
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
@@ -234,6 +258,12 @@ function render(now) {
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
   bind(cutProg, 1); drawParts(cutProg, meshes.cutout);
+  if (scene) {
+    const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
+    const moved = (parts) => parts.map((p) => ({ ...p, offset: [p.offset[0] + dx, p.offset[1] + dy, p.offset[2] + dz] }));
+    bind(solidProg, 1); drawParts(solidProg, moved(raftMeshes.opaque));
+    bind(cutProg, 1); drawParts(cutProg, moved(raftMeshes.cutout));
+  }
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   bind(solidProg, 0.45); drawParts(solidProg, meshes.water);

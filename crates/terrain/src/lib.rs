@@ -62,6 +62,7 @@ pub(crate) const ICE: u8 = Block::Ice as u8;
 const SANDSTONE: u8 = 0x80;
 
 /// A generated region. See the crate docs for the index layout.
+#[derive(Clone)]
 pub struct Region {
     pub blocks: Vec<u8>,
     pub width: u32,

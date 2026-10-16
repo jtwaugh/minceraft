@@ -3,6 +3,7 @@
 use game::bindings::Bindings;
 use game::input::TickInput;
 use game::sampler::Sampler;
+use game::scene::{raft_scene, RaftScene, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
 use terrain::Region;
 use wasm_bindgen::prelude::*;
@@ -110,6 +111,46 @@ impl InputSampler {
     }
 }
 
+/// The raft test scene: a flat sea with the `raft_start` structure in it.
+#[wasm_bindgen]
+pub struct Scene(RaftScene);
+
+#[wasm_bindgen]
+impl Scene {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Scene {
+        Scene(raft_scene())
+    }
+
+    /// World x and z of the scene's first column.
+    #[wasm_bindgen(getter)]
+    pub fn min(&self) -> i32 {
+        SEA_MIN
+    }
+
+    /// Columns along x and z; the block arrays are `size * size * HEIGHT`.
+    #[wasm_bindgen(getter)]
+    pub fn size(&self) -> u32 {
+        SEA_SIZE
+    }
+
+    /// Sea floor and water, in `generate_region_decorated` layout.
+    pub fn sea_blocks(&self) -> Vec<u8> {
+        self.0.sea.blocks.clone()
+    }
+
+    /// The raft's blocks alone, in the same layout, for drawing it apart.
+    pub fn raft_blocks(&self) -> Vec<u8> {
+        self.0.raft.blocks.clone()
+    }
+}
+
+impl Default for Scene {
+    fn default() -> Scene {
+        Scene::new()
+    }
+}
+
 /// The walking player: stepped from sampled ticks, collides with the terrain
 /// regions the scene hands over, and reports the interpolated eye.
 #[wasm_bindgen]
@@ -136,6 +177,20 @@ impl Walk {
             x0,
             z0,
         });
+    }
+
+    /// A player in the water in front of the scene's raft, which moves under
+    /// the scripted swell. The scene's sea is already added.
+    pub fn in_scene(scene: &Scene) -> Result<Walk, JsError> {
+        Walker::in_raft_scene(scene.0.clone())
+            .map(Walk)
+            .map_err(|e| JsError::new(&e))
+    }
+
+    /// How far the raft is from its rest pose `[x, y, z]`, `alpha` of the
+    /// way between the last two ticks.
+    pub fn raft_offset(&self, alpha: f64) -> Vec<f64> {
+        self.0.raft_offset(alpha).to_vec()
     }
 
     pub fn has_world(&self) -> bool {

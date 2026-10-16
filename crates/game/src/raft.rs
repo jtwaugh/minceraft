@@ -83,6 +83,72 @@ impl SwellPush {
     }
 }
 
+/// The scripted swell from `data/raft.toml`: the raft sways along a fixed
+/// direction and its deck tilts, as a pure function of the tick number.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Swell {
+    /// Peak sway from the rest pose, blocks.
+    pub sway_amplitude: f64,
+    /// Peak deck tilt, degrees.
+    pub tilt_amplitude: f64,
+    /// Ticks per swell cycle.
+    pub period_ticks: u64,
+    /// Direction in the xz plane, radians: 0 is +x, a quarter turn is +z.
+    pub direction: f64,
+}
+
+impl Swell {
+    /// The shipped defaults from `data/raft.toml`.
+    pub fn default_from_data() -> Result<Swell, String> {
+        Swell::parse(DEFAULT_RAFT)
+    }
+
+    pub fn parse(text: &str) -> Result<Swell, String> {
+        let root: toml::Value = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
+        let get = |key: &str| -> Result<f64, String> {
+            let n = match root.get("swell").and_then(|t| t.get(key)) {
+                Some(toml::Value::Float(f)) => *f,
+                Some(toml::Value::Integer(i)) => *i as f64,
+                Some(_) => return Err(format!("swell.{key} must be a number")),
+                None => return Err(format!("missing swell.{key}")),
+            };
+            if !n.is_finite() {
+                return Err(format!("swell.{key} must be finite"));
+            }
+            Ok(n)
+        };
+        let period = get("period_ticks")?;
+        if period < 1.0 || period.fract() != 0.0 {
+            return Err("swell.period_ticks must be a whole number of at least 1".into());
+        }
+        Ok(Swell {
+            sway_amplitude: get("sway_amplitude")?,
+            tilt_amplitude: get("tilt_amplitude")?,
+            period_ticks: period as u64,
+            direction: get("direction_degrees")?.to_radians(),
+        })
+    }
+
+    /// The raft's motion for tick `tick`: the step from the sway position at
+    /// `tick` to the one at `tick + 1`, and the deck tilt at `tick`. Tilt
+    /// leads the sway by a quarter cycle and is laid out as `tilt[0]` about
+    /// x (pushing towards +z) and `tilt[1]` about z (pushing towards +x).
+    pub fn frame(&self, tick: u64) -> RaftFrame {
+        let phase = |t: u64| {
+            std::f64::consts::TAU * (t % self.period_ticks) as f64 / self.period_ticks as f64
+        };
+        let (dx, dz) = (self.direction.cos(), self.direction.sin());
+        let sway = |t: u64| self.sway_amplitude * phase(t).sin();
+        let step = sway(tick + 1) - sway(tick);
+        let tilt = self.tilt_amplitude * phase(tick).cos();
+        RaftFrame {
+            displacement: [dx * step, 0.0, dz * step],
+            yaw_delta: 0.0,
+            tilt: [dz * tilt, dx * tilt],
+        }
+    }
+}
+
 /// Rotate `p` by `turns` quarter turns (same sense as positive yaw) about
 /// the point `c`, in the xz plane.
 fn rotate(p: [f64; 3], c: [f64; 2], turns: i32) -> [f64; 3] {
@@ -179,7 +245,9 @@ impl Raft {
     }
 
     /// Move the raft by one frame. Each rider supported by the raft before it
-    /// moves is carried by the same translation and quarter turns.
+    /// moves is carried by the same translation and quarter turns. A body that
+    /// is not carried but ends up overlapping the raft is shoved by the
+    /// translation.
     pub fn advance(
         &mut self,
         frame: &RaftFrame,
@@ -204,6 +272,13 @@ impl Raft {
                     p.pos[i] += frame.displacement[i];
                 }
                 p.pos = rotate(p.pos, centre, step);
+            } else if self.boxes().any(|b| b.intersects(&p.aabb(physics))) {
+                // The moving raft swept into a body it was not carrying, such
+                // as a swimmer beside it: shove it along rather than leave it
+                // inside the raft.
+                for i in 0..3 {
+                    p.pos[i] += frame.displacement[i];
+                }
             }
         }
     }
@@ -448,5 +523,45 @@ mod tests {
         let mut off = Player::new([10.0, 65.0, 2.0], &p);
         raft.push_rider(&mut off, [3.0, 3.0], false, &sp, &p);
         assert_eq!(off.vel, [0.0; 3]);
+    }
+
+    #[test]
+    fn swell_is_periodic_and_sways_back_to_rest() {
+        let sw = Swell::default_from_data().unwrap();
+        let mut sum = [0.0; 3];
+        for t in 0..sw.period_ticks {
+            let f = sw.frame(t);
+            assert_eq!(f, sw.frame(t + sw.period_ticks));
+            for i in 0..3 {
+                sum[i] += f.displacement[i];
+            }
+        }
+        assert!(sum.iter().all(|v| v.abs() < 1e-9), "{sum:?}");
+        let peak = (0..sw.period_ticks)
+            .map(|t| sw.frame(t).tilt[0].hypot(sw.frame(t).tilt[1]))
+            .fold(0.0, f64::max);
+        assert!((peak - sw.tilt_amplitude).abs() < 0.05, "{peak}");
+    }
+
+    #[test]
+    fn swell_parse_rejects_bad_data() {
+        assert!(Swell::parse("[swell]\n").is_err());
+        let bad = "[swell]\nsway_amplitude=0.1\ntilt_amplitude=1.0\nperiod_ticks=0\ndirection_degrees=0\n";
+        assert!(Swell::parse(bad).is_err());
+    }
+
+    #[test]
+    fn raft_shoves_a_swimmer_it_sweeps_into() {
+        let (_, mut raft) = deck();
+        let p = phys();
+        // Just beside the deck's +x edge (x = 4), inside the cells' height.
+        let mut pl = Player::new([4.4, 64.0, 2.0], &p);
+        let before = pl.pos;
+        raft.advance(&slide(0.5), &mut [&mut pl], &p);
+        assert!((pl.pos[0] - before[0] - 0.5).abs() < 1e-12, "{pl:?}");
+        // Nowhere near the raft: left alone.
+        let mut far = Player::new([20.0, 64.0, 2.0], &p);
+        raft.advance(&slide(0.5), &mut [&mut far], &p);
+        assert_eq!(far.pos, [20.0, 64.0, 2.0]);
     }
 }

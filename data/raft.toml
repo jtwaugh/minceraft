@@ -8,3 +8,16 @@
 per_degree = 0.004
 # Loose item entities on the deck get the push times this.
 item_multiplier = 2.0
+
+# The scripted swell that drives the raft each tick (section 4.7): the raft
+# sways back and forth along `direction_degrees` and its deck tilts, which
+# is what pushes riders.
+[swell]
+# Peak sway from the rest pose, in blocks.
+sway_amplitude = 0.4
+# Peak deck tilt, in degrees.
+tilt_amplitude = 3.0
+# Ticks for one full swell cycle (20 ticks per second).
+period_ticks = 160
+# Direction the swell runs, in the xz plane: 0 is +x, 90 is +z.
+direction_degrees = 30.0
