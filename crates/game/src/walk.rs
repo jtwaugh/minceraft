@@ -223,9 +223,7 @@ impl Walker {
         let Some(f) = &self.floating else {
             return [0.0; 3];
         };
-        let a = alpha.clamp(0.0, 1.0);
-        let (p, c) = (f.prev_offset, f.raft.offset());
-        [0, 1, 2].map(|i| p[i] + (c[i] - p[i]) * a)
+        between_ticks(f.prev_offset, f.raft.offset(), alpha)
     }
 
     pub fn has_world(&self) -> bool {
@@ -280,9 +278,7 @@ impl Walker {
 
     /// The eye between the last two ticks, `alpha` in 0..1.
     pub fn eye(&self, alpha: f64) -> [f64; 3] {
-        let a = alpha.clamp(0.0, 1.0);
-        let l = |i: usize| self.prev_eye[i] + (self.cur_eye[i] - self.prev_eye[i]) * a;
-        [l(0), l(1), l(2)]
+        between_ticks(self.prev_eye, self.cur_eye, alpha)
     }
 
     /// Put the player at `feet` with no velocity, e.g. when leaving fly mode.
@@ -295,13 +291,6 @@ impl Walker {
         self.prev_eye = eye;
         self.cur_eye = eye;
     }
-
-    /// Put the player, standing, with its eye at `eye`, e.g. when leaving
-    /// fly mode at the fly camera's position.
-    pub fn teleport_eye(&mut self, eye: [f64; 3]) {
-        let up = self.physics.eye_offset(false) as f64;
-        self.teleport([eye[0], eye[1] - up, eye[2]]);
-    }
 }
 
 /// The block the ray from `eye` along the look angles of `input` hits.
@@ -311,6 +300,13 @@ fn eye_target(world: &impl CollisionWorld, eye: [f64; 3], input: &TickInput, rea
     let (sp, cp) = (input.pitch as f64).sin_cos();
     let dir = [sy * cp, sp, -cy * cp];
     cast_block(world, eye, dir, reach).map_or(Target::None, |(t, _)| t)
+}
+
+/// `alpha` (clamped to 0..1) of the way from the previous tick's `prev` to
+/// the current tick's `cur`.
+fn between_ticks(prev: [f64; 3], cur: [f64; 3], alpha: f64) -> [f64; 3] {
+    let a = alpha.clamp(0.0, 1.0);
+    [0, 1, 2].map(|i| prev[i] + (cur[i] - prev[i]) * a)
 }
 
 /// The eye position for feet at `feet`.

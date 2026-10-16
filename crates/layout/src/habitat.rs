@@ -65,12 +65,7 @@ impl Habitats {
     /// rules are baked in at build time and never go through this.
     #[cfg(feature = "toml-io")]
     pub fn from_toml(text: &str) -> Result<Self, String> {
-        let rules = crate::habitat_rules::parse_rules(text, &|n| {
-            terrain::BLOCK_INFO
-                .iter()
-                .position(|b| b.name == n)
-                .map(|i| i as u8)
-        })?;
+        let rules = crate::habitat_rules::parse_rules(text, &terrain::block_id)?;
         Ok(Habitats { rules })
     }
 
