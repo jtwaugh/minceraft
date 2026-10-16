@@ -267,6 +267,8 @@ impl ProtectedMask for Exclusions {
 
 mod builder;
 pub use builder::{build_layout, default_v0_level};
+mod cache;
+pub use cache::{CacheChange, RegionCache};
 mod channel;
 pub use channel::ChannelEval;
 mod derived;
@@ -304,6 +306,8 @@ pub use validation::{
 
 #[cfg(test)]
 mod builder_tests;
+#[cfg(test)]
+mod cache_tests;
 #[cfg(test)]
 mod channel_tests;
 #[cfg(test)]
