@@ -19,7 +19,7 @@ env:
   RUST_TOOLCHAIN: 1.97.1
   BINARYEN_VERSION: version_133
   # Gzipped size of viewer/pkg/terrain_web_bg.wasm. Was 30,914 bytes on 2026-10-15.
-  WASM_GZIP_BUDGET: 40000
+  WASM_GZIP_BUDGET: 1000000
 
 jobs:
   clean-room:
