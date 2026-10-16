@@ -1,6 +1,6 @@
 ---
 title: Viewer rendering quality and speed
-status: idea
+status: accepted
 scope: generator
 source: ""
 superseded_by: ""
@@ -11,6 +11,76 @@ phases:
   D: todo
   E: todo
 ---
+
+## Current state
+
+Checked against `master` (ba3a7e9). No phase is built; all five stay `todo`.
+
+- **F1** holds: `viewer/index.html` sets `vdist = gl_Position.w` (~line 636)
+  and fogs with a linear ramp from 0.55 to 1.15 × `fogFar` (~line 650).
+  `renderFly` culls by radial distance against `VIEW.fogEnd`
+  (`viewer/flyover/plan.js:574`, `index.html` ~1498); `FLY_FOG` is
+  `VIEW.fogEnd / 1.15` (~1291).
+- **F2** holds: the viewer's tile array uses `NEAREST` mag and
+  `NEAREST_MIPMAP_LINEAR` min (~lines 832 to 833), with no anisotropy.
+- **F3** holds: the viewer's shader tests `t.a < 0.9` for the tint (~649).
+- **F4** holds in the viewer: it calls `gl.generateMipmap` (~831).
+- **F6, F7** hold: `visibilitySchedule` (`plan.js:589`) tests 25 sample
+  points per chunk; `meshBlocks` (`viewer/mesh.js:180`) maps arrays per
+  face and `tintFor` calls `lerp3` per birch or spruce leaf.
+- **Mesh format:** vertex byte 13 is reserved for AO (`mesh.js:10`), as
+  Phase C assumes. `meshBlocks(ctx, blocks, tints, size, pad, {fast})` has
+  no world-origin parameter yet (Phase B.3).
+- **Stats panel** exists (`viewer/index.html`, `?debug=1`), as the
+  acceptance criteria assume.
+- `coarse_heightmap` is exported from `crates/web/src/lib.rs:53` and used
+  by `plan.js` and `viewer/worker.js` (Phase D).
+
+## Reconciliation notes
+
+- **The `client/` renderer shares `viewer/mesh.js` and has its own
+  shaders.** The doc names only `viewer/`. `client/scene.js` imports
+  `meshBlocks` (so Phase B.3, C.1 and E.1 change the client's meshes too)
+  and has its own shader pair, textures and samplers:
+  - Fog uses `gl_Position.w` too (`client/scene.js:82`), so F1 applies
+    there. It uses a linear ramp from `fogStart` to `fogEnd`, not the
+    viewer's 0.55 to 1.15 ramp.
+  - `client/samplers.js` already uses `LINEAR_MIPMAP_LINEAR` and
+    anisotropy, so F2 is already fixed in the client.
+  - `client/tiles.js` already avoids F3: the tint is a separate R8
+    texture array and the colour texture is premultiplied. That is
+    Open question 1, option B, already built for the client.
+  - `client/tiles.js` still calls `gl.generateMipmap`, and the client
+    cutoff has no `fwidth` sharpening. `biome-flora.md` Phase A (A.2, A.4)
+    waits on Phase B.1 and B.2 here (see its Reconciliation notes).
+  Suggest the planner decide whether each phase covers `client/` as well.
+  See Open question 5.
+- **Vertex byte 13 is shared.** Phase C.1 stores AO there. Any other
+  design doc that wants that byte must agree; no other doc claims it now.
+- **Phase B.3 and determinism.** UV variation by world coordinate affects
+  only meshes, not world output. `meshBlocks` needs the world origin
+  parameter; the client's calls (`client/scene.js:260, 276`) must pass it
+  or the client and the viewer will show different variants.
+- **Phase D uses `coarse_heightmap`**, which is tested against full terrain
+  in `crates/terrain/src/tests.rs`, so no generator change is needed.
+- **Phase E.1, option B (mesher in wasm)** would grow the wasm; CLAUDE.md
+  requires gzipped sizes in the PR. `crates/terrain` must stay `no_std`, so
+  the mesher would go in `crates/web` or a new crate.
+- **Invariants:** the doc keeps to plain ES modules with no framework, as
+  CLAUDE.md requires, and changes no world output, so no `stats` diff is
+  needed. Say so in each PR.
+- **`[manual check]` criteria:** the doc already tags the visual ones.
+  Measurable versions: Phase A could compare the fog factor at the frame
+  edge with the centre for equal radial distance (a unit test on a
+  extracted fog function); Phase D's 10% frame-time bound is measurable
+  with the stats panel only on a real GPU, so tag it `[manual check]`
+  too.
+- **Overlap with other docs:** `biome-flora.md` depends on Phase B.1 and
+  B.2 (see above). `basic-gameplay.md` and `world-layout.md` do not touch
+  rendering.
+- **Scope:** `generator` is kept, since the changes are in `viewer/`,
+  although they also reach `client/` through `viewer/mesh.js`. Change it to
+  `both` if Open question 5 answers yes.
 
 # Viewer rendering quality and speed
 
@@ -275,3 +345,8 @@ Show terrain beyond the fog instead of empty sky.
 4. **Distant-terrain colour.** A. Biome surface colour only. B. Sample the
    decorated map tiles where they exist (more accurate near the map, but
    only covers the map's 1024×1024 blocks).
+5. **Does this doc cover the game client (`client/`)?** (Reconciler.)
+   A. Viewer only; the client's shaders are handled by their own tickets
+   (F2 and F3 are already fixed there).
+   B. Both: phases A to C also apply to `client/scene.js`, `tiles.js`
+   and `samplers.js`, and `scope` becomes `both`.
