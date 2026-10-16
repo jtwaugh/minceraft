@@ -5,22 +5,25 @@
 //
 //   ?seed=N      world seed (default 12345)
 //   ?radius=R    chunks of terrain each way from the spawn chunk (default 1)
+//   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
 //   ?log=N       console.log the frame-time summary every N frames, for headless runs
 //
 // window.frameStats() returns { frames, p50, p99 } at any time.
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
-import initGame, { InputSampler } from './pkg/game_web.js';
+import initGame, { InputSampler, Walk } from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
 import { TickClock, stepFly, interpolate, lookVectors } from './fly.js';
+import { simLookVectors, stepWalk } from './walk.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
 const seed = BigInt(qs.get('seed') ?? 12345);
 const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
+let flying = qs.get('mode') === 'fly';
 const logEvery = +(qs.get('log') ?? 0);
 
 const canvas = document.getElementById('gl');
@@ -137,6 +140,9 @@ function mul(a, b) {
 // ---------------------------------------------------------------- setup
 await Promise.all([initTerrain(), initGame()]);
 const sampler = new InputSampler();
+// heightmap_decorated column: [top_block, top_y, ...]; spawn just above the top block.
+const surfaceY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[1] + 1;
+const walk = new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
 const input = attachInput({ sampler, canvas, document, window });
 
 const names = [];
@@ -162,6 +168,7 @@ function meshNextChunk() {
   const blocks = terrain.generate_region_decorated(seed, x - 1, z - 1, CHUNK + 2, CHUNK + 2);
   const tints = columnTints(terrain, ctx, seed, x, z, CHUNK);
   if (cx === 0 && cz === 0) skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
+  walk.add_region(x - 1, z - 1, CHUNK + 2, CHUNK + 2, blocks);
   const m = meshBlocks(ctx, blocks, tints, CHUNK, 1);
   const offset = [x, 0, z];
   for (const k of Object.keys(meshes)) {
@@ -171,8 +178,7 @@ function meshNextChunk() {
 }
 
 // ---------------------------------------------------------------- loop
-const spawnY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[0] + 24;
-let prev = [CHUNK / 2, spawnY, CHUNK / 2], cur = prev;
+let prev = [CHUNK / 2, surfaceY + 24, CHUNK / 2], cur = prev;
 const clock = new TickClock();
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
@@ -190,13 +196,20 @@ function render(now) {
   if (queue.length) meshNextChunk();
 
   const { ticks, alpha } = clock.advance(now);
-  for (let i = 0; i < ticks; i++) {
-    prev = cur;
-    cur = stepFly(cur, input.tick()); // held keys are cleared whenever the pointer is unlocked
-  }
-  const eye = interpolate(prev, cur, alpha);
   const { yaw, pitch } = input.look();
-  const { forward, right } = lookVectors(yaw, pitch);
+  let eye, look;
+  if (flying) {
+    for (let i = 0; i < ticks; i++) {
+      prev = cur;
+      cur = stepFly(cur, input.tick()); // held keys are cleared whenever the pointer is unlocked
+    }
+    eye = interpolate(prev, cur, alpha);
+    look = lookVectors(yaw, pitch);
+  } else {
+    eye = stepWalk(walk, ticks, alpha, () => input.tick());
+    look = simLookVectors(yaw, pitch);
+  }
+  const { forward, right } = look;
 
   const dpr = window.devicePixelRatio || 1;
   const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
@@ -234,12 +247,24 @@ function render(now) {
     overlayAt = now;
     const p99 = frames.percentile(99);
     overlay.textContent = `${frames.format()}\n${p99 > FRAME_BUDGET_MS ? 'over' : 'within'} the 16.7 ms p99 budget\n` +
-      `pos ${eye.map((v) => v.toFixed(1)).join(' ')}`;
+      `${flying ? 'fly' : 'walk'} (F to switch)\npos ${eye.map((v) => v.toFixed(1)).join(' ')}`;
     hint.hidden = input.locked;
   }
   if (logEvery && frames.n % logEvery === 0 && frames.n) console.log(`[frames] ${frames.format()}`);
   requestAnimationFrame(render);
 }
+
+// F swaps between walking and the debug fly camera, keeping the position.
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyF' || e.repeat || !input.locked) return;
+  const eyeNow = walk.eye(1), feet = walk.feet();
+  if (flying) {
+    walk.teleport(cur[0], cur[1] - (eyeNow[1] - feet[1]), cur[2]);
+  } else {
+    prev = cur = Array.from(eyeNow);
+  }
+  flying = !flying;
+});
 
 gl.activeTexture(gl.TEXTURE0);
 for (const p of [solidProg, cutProg]) { gl.useProgram(p); gl.uniform1i(p.u('tex'), 0); }

@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 game = { path = "../game" }
+terrain = { path = "../terrain" }
 wasm-bindgen = "0.2"
 
 [package.metadata.wasm-pack.profile.release]

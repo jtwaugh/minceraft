@@ -14,6 +14,10 @@ pub struct PlayerPhysics {
     pub height: f32,
     pub step_height: f32,
     pub max_health: u32,
+    /// Eye height above the feet, blocks.
+    pub eye_height: f32,
+    /// How much lower the eye sits while sneaking.
+    pub sneak_eye_drop: f32,
     /// Multiplier on forward and strafe input.
     pub input_scale: f32,
     /// Extra multiplier on input while sneaking.
@@ -55,6 +59,15 @@ impl fmt::Display for PhysicsError {
 impl std::error::Error for PhysicsError {}
 
 impl PlayerPhysics {
+    /// Eye height above the feet, lower while sneaking.
+    pub fn eye_offset(&self, sneaking: bool) -> f32 {
+        if sneaking {
+            self.eye_height - self.sneak_eye_drop
+        } else {
+            self.eye_height
+        }
+    }
+
     /// The shipped defaults from `data/player.toml`.
     pub fn default_from_data() -> Result<PlayerPhysics, PhysicsError> {
         PlayerPhysics::parse(DEFAULT_PLAYER)
@@ -95,6 +108,8 @@ impl PlayerPhysics {
             height: get("body", "height")?,
             step_height: get("body", "step_height")?,
             max_health: max_health as u32,
+            eye_height: get("camera", "eye_height")?,
+            sneak_eye_drop: get("camera", "sneak_eye_drop")?,
             input_scale: get("movement", "input_scale")?,
             sneak_scale: get("movement", "sneak_scale")?,
             slipperiness: get("movement", "slipperiness")?,
@@ -122,6 +137,9 @@ mod tests {
         assert_eq!(p.height, 1.8);
         assert_eq!(p.step_height, 0.5);
         assert_eq!(p.max_health, 20);
+        assert_eq!(p.eye_height, 1.62);
+        assert_eq!(p.sneak_eye_drop, 0.08);
+        assert!((p.eye_offset(true) - 1.54).abs() < 1e-6);
         assert_eq!(p.input_scale, 0.98);
         assert_eq!(p.sneak_scale, 0.3);
         assert_eq!(p.slipperiness, 0.6);

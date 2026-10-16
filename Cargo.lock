@@ -28,6 +28,7 @@ name = "game-web"
 version = "0.1.0"
 dependencies = [
  "game",
+ "terrain",
  "wasm-bindgen",
 ]
 

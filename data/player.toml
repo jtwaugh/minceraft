@@ -12,6 +12,12 @@ height = 1.8
 step_height = 0.5
 max_health = 20
 
+[camera]
+# Eye height above the feet, blocks (design section 3), and how much lower
+# the eye sits while sneaking.
+eye_height = 1.62
+sneak_eye_drop = 0.08
+
 [movement]
 # Forward and strafe input are multiplied by input_scale, and also by
 # sneak_scale while sneaking.
