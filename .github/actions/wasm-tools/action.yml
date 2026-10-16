@@ -1,0 +1,48 @@
+name: Wasm tools
+description: >-
+  wasm-pack and binaryen (wasm-opt), restored from the Actions cache instead
+  of downloaded on every run, and put on PATH.
+inputs:
+  wasm-pack:
+    description: wasm-pack version
+    default: 0.15.0
+  binaryen:
+    description: Binaryen release (wasm-opt)
+    default: version_133
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/wasm-tools
+        key: wasm-tools-${{ runner.os }}-${{ runner.arch }}-wasm-pack${{ inputs.wasm-pack }}-binaryen${{ inputs.binaryen }}
+
+    - if: steps.cache.outputs.cache-hit != 'true'
+      uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack@${{ inputs.wasm-pack }}
+
+    - name: Download tools (cache miss only)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        BINARYEN_VERSION: ${{ inputs.binaryen }}
+      run: |
+        set -euo pipefail
+        dir=~/.cache/wasm-tools
+        mkdir -p "$dir/bin"
+        cp "$(command -v wasm-pack)" "$dir/bin/"
+        curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/binaryen-${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
+          | tar xz -C "$dir"
+
+    - shell: bash
+      env:
+        BINARYEN_VERSION: ${{ inputs.binaryen }}
+      run: |
+        set -euo pipefail
+        dir=~/.cache/wasm-tools
+        echo "$dir/bin" >> "$GITHUB_PATH"
+        echo "$dir/binaryen-${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+        "$dir/bin/wasm-pack" --version
+        "$dir/binaryen-${BINARYEN_VERSION}/bin/wasm-opt" --version
