@@ -1,13 +1,16 @@
 //! Animals in the world: the animal entity type and the store that holds
 //! them. See docs/design/basic-gameplay.md section 8.3.
 //!
-//! [`AnimalStore::tick`] moves them (gravity, landing, the deck push).
-//! Wandering, damage, drops and spawning policy are separate tickets.
+//! [`AnimalStore::tick`] moves them (gravity, landing, the deck push) and
+//! makes idle animals wander: pause, pick a heading, walk, repeat (8.2).
+//! Fleeing, damage, drops and spawning policy are separate tickets.
 
-use crate::animals::Animals;
+use crate::animals::{AnimalDef, Animals};
 use crate::collision::{Aabb, CollisionWorld};
 use crate::item_entities::{lift_out_of_blocks, Deck, ItemEntityConfig, TICKS_PER_SECOND};
-use crate::movement::move_box;
+use crate::movement::move_with_step;
+use crate::physics::PlayerPhysics;
+use crate::rng::Rng;
 use crate::targeting::{EntityId, TargetableEntity};
 
 /// The `kind` animal entities report to rule resolution, so a rule target of
@@ -16,6 +19,13 @@ pub const ANIMAL_KIND: &str = "animal";
 
 /// Horizontal speed below which a resting animal stops, blocks per second.
 const REST_SPEED: f64 = 1e-3;
+
+/// Where an animal is in its pause/walk cycle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Wander {
+    pub walking: bool,
+    pub ticks_left: u32,
+}
 
 /// A cow, pig or chicken.
 #[derive(Clone, Debug, PartialEq)]
@@ -32,6 +42,7 @@ pub struct AnimalEntity {
     pub facing: f64,
     /// Box width (x and z) and height (y), from the species.
     pub box_size: [f64; 2],
+    pub wander: Wander,
 }
 
 impl AnimalEntity {
@@ -48,6 +59,23 @@ impl AnimalEntity {
     }
 }
 
+/// Count down the pause or walk; when it runs out, switch. Starting a walk
+/// picks a heading and a duration. Returns whether the animal walks this tick.
+fn advance_wander(w: &mut Wander, facing: &mut f64, def: &AnimalDef, rng: &mut Rng) -> bool {
+    if w.ticks_left == 0 {
+        w.walking = !w.walking;
+        let [lo, hi] = if w.walking {
+            *facing = f64::from(rng.angle()).to_degrees();
+            def.walk_ticks
+        } else {
+            def.pause_ticks
+        };
+        w.ticks_left = rng.range(lo as i32, hi as i32) as u32;
+    }
+    w.ticks_left -= 1;
+    w.walking
+}
+
 /// All animals. Ids are never reused within a store. They share one space
 /// with every other entity the eye ray can target; `first_id` lets the
 /// caller start this store above the others.
@@ -57,16 +85,31 @@ pub struct AnimalStore {
     /// Gravity, drag and ground friction are shared with item entities.
     physics: ItemEntityConfig,
     next_id: EntityId,
+    rng: Rng,
+    /// Step-up height for walking, as for the player (4.4).
+    step_height: f64,
     // Kept sorted by id (ids only grow), so lookups can bisect.
     animals: Vec<AnimalEntity>,
 }
 
 impl AnimalStore {
-    pub fn new(kinds: Animals, physics: ItemEntityConfig, first_id: EntityId) -> AnimalStore {
+    /// `seed` drives every wander choice, so a run replays from it.
+    pub fn new(
+        kinds: Animals,
+        physics: ItemEntityConfig,
+        first_id: EntityId,
+        seed: u64,
+    ) -> AnimalStore {
         AnimalStore {
             kinds,
             physics,
             next_id: first_id,
+            rng: Rng::new(seed),
+            step_height: f64::from(
+                PlayerPhysics::default_from_data()
+                    .expect("data/player.toml is valid")
+                    .step_height,
+            ),
             animals: Vec::new(),
         }
     }
@@ -77,6 +120,13 @@ impl AnimalStore {
         let def = self.kinds.get(species)?;
         let id = self.next_id;
         self.next_id = self.next_id.checked_add(1).expect("animal ids exhausted");
+        let wander = Wander {
+            walking: false,
+            ticks_left: self
+                .rng
+                .range(def.pause_ticks[0] as i32, def.pause_ticks[1] as i32)
+                as u32,
+        };
         self.animals.push(AnimalEntity {
             id,
             species: species.to_string(),
@@ -85,6 +135,7 @@ impl AnimalStore {
             velocity: [0.0; 3],
             facing,
             box_size: def.box_size,
+            wander,
         });
         Some(id)
     }
@@ -120,6 +171,11 @@ impl AnimalStore {
         let dt = 1.0 / TICKS_PER_SECOND;
         let mut scratch = Vec::new();
         for e in &mut self.animals {
+            let def = self
+                .kinds
+                .get(&e.species)
+                .expect("species checked at spawn");
+            let walking = advance_wander(&mut e.wander, &mut e.facing, def, &mut self.rng);
             let mut bb = e.aabb();
             lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
             if let Some(d) = &deck {
@@ -129,9 +185,16 @@ impl AnimalStore {
                     e.velocity[2] += pz * TICKS_PER_SECOND;
                 }
             }
+            if walking {
+                // Facing 0 looks along -z, as for the player's yaw.
+                let (sin, cos) = e.facing.to_radians().sin_cos();
+                e.velocity[0] = sin * def.wander_speed;
+                e.velocity[2] = -cos * def.wander_speed;
+            }
             e.velocity[1] -= cfg.gravity * dt;
             let v = e.velocity.map(|c| c * dt);
-            let m = move_box(world, &bb, v);
+            let on_ground = e.velocity[1] == 0.0;
+            let m = move_with_step(world, &bb, v, self.step_height, on_ground);
             for i in 0..3 {
                 e.pos[i] += m.applied[i];
                 if m.applied[i] != v[i] {
@@ -176,14 +239,21 @@ mod tests {
             Animals::default_animals(),
             ItemEntityConfig::default_from_data(),
             first_id,
+            7,
         )
     }
 
+    /// A stone floor at y=0 inside a two-high wall ring at +-3, so an
+    /// animal can never leave.
     fn floor() -> MemoryWorld {
         let mut w = MemoryWorld::new();
         for x in -8..8 {
             for z in -8..8 {
                 w.set(x, 0, z, Block::Stone);
+                if x.abs().max(z.abs()) == 3 {
+                    w.set(x, 1, z, Block::Stone);
+                    w.set(x, 2, z, Block::Stone);
+                }
             }
         }
         w
@@ -219,10 +289,7 @@ mod tests {
         run(&mut s, &w, 100);
         let e = s.get(id).unwrap();
         assert!((e.pos[1] - 1.0).abs() < 1e-6, "rests on top: {}", e.pos[1]);
-        assert_eq!(e.velocity, [0.0; 3]);
-        let before = e.pos;
-        run(&mut s, &w, 20);
-        assert_eq!(s.get(id).unwrap().pos, before);
+        assert_eq!(e.velocity[1], 0.0);
     }
 
     #[test]
@@ -304,5 +371,66 @@ mod tests {
             s.iter().map(|e| (e.pos, e.velocity)).collect::<Vec<_>>()
         };
         assert_eq!(go(), go());
+    }
+
+    fn wander_run(seed: u64, ticks: usize) -> Vec<([f64; 3], bool)> {
+        let w = floor();
+        let mut s = AnimalStore::new(
+            Animals::default_animals(),
+            ItemEntityConfig::default_from_data(),
+            1,
+            seed,
+        );
+        let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+        let mut trace = Vec::new();
+        for _ in 0..ticks {
+            s.tick(&w, None);
+            let e = s.get(id).unwrap();
+            trace.push((e.pos, e.wander.walking));
+        }
+        trace
+    }
+
+    #[test]
+    fn wandering_moves_pauses_and_stays_on_the_floor() {
+        let trace = wander_run(3, 2000);
+        assert_ne!(trace[0].0, trace[199].0, "moves within 200 ticks");
+        assert!(trace.iter().any(|t| t.1) && trace.iter().any(|t| !t.1));
+        for (p, _) in &trace {
+            assert!((p[1] - 1.0).abs() < 1e-6, "stays on the floor: {p:?}");
+            assert!(
+                p[0].abs() < 3.0 && p[2].abs() < 3.0,
+                "inside the ring: {p:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn pauses_leave_the_animal_still_part_of_the_time() {
+        let trace = wander_run(5, 600);
+        let moved = trace.windows(2).filter(|p| p[0].0 != p[1].0).count();
+        assert!(moved > 0 && moved < 600);
+    }
+
+    #[test]
+    fn wandering_never_enters_a_full_block() {
+        let w = floor();
+        let mut s = store(1);
+        let id = s.spawn("pig", [0.5, 1.0, 0.5], 0.0).unwrap();
+        let half = s.get(id).unwrap().box_size[0] / 2.0;
+        for _ in 0..3000 {
+            s.tick(&w, None);
+            let p = s.get(id).unwrap().pos;
+            assert!(
+                p[0].abs() + half <= 3.0 && p[2].abs() + half <= 3.0,
+                "{p:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn same_seed_same_wander_and_other_seeds_differ() {
+        assert_eq!(wander_run(9, 500), wander_run(9, 500));
+        assert_ne!(wander_run(9, 500), wander_run(10, 500));
     }
 }

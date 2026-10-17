@@ -24,6 +24,12 @@ pub struct AnimalDef {
     /// Box width (x and z) and height (y), in blocks.
     pub box_size: [f64; 2],
     pub drops: Vec<Drop>,
+    /// Wander speed, blocks per second.
+    pub wander_speed: f64,
+    /// Inclusive range of ticks a wander walk lasts.
+    pub walk_ticks: [u32; 2],
+    /// Inclusive range of ticks between walks.
+    pub pause_ticks: [u32; 2],
 }
 
 /// The animal kinds, sorted by name.
@@ -75,7 +81,16 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         .as_table()
         .ok_or_else(|| bad("not a table".to_string()))?;
     for field in table.keys() {
-        if !["health", "drops", "box"].contains(&field.as_str()) {
+        if ![
+            "health",
+            "drops",
+            "box",
+            "wander_speed",
+            "walk_ticks",
+            "pause_ticks",
+        ]
+        .contains(&field.as_str())
+        {
             return Err(bad(format!("unknown field `{field}`")));
         }
     }
@@ -95,6 +110,31 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         })
         .filter(|b| b.iter().all(|c| c.is_finite() && *c > 0.0))
         .ok_or_else(|| bad("`box` must be [width, height], both above zero".to_string()))?;
+    let wander_speed = table
+        .get("wander_speed")
+        .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .ok_or_else(|| bad("`wander_speed` must be above zero".to_string()))?;
+    let ticks = |field: &str| {
+        table
+            .get(field)
+            .and_then(|v| v.as_array())
+            .filter(|a| a.len() == 2)
+            .and_then(|a| {
+                let n = |v: &toml::Value| {
+                    v.as_integer()
+                        .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
+                };
+                let (lo, hi) = (n(&a[0])?, n(&a[1])?);
+                (lo <= hi).then_some([lo as u32, hi as u32])
+            })
+            .ok_or_else(|| {
+                bad(format!(
+                    "`{field}` must be [min, max] ticks, 1 <= min <= max"
+                ))
+            })
+    };
+    let (walk_ticks, pause_ticks) = (ticks("walk_ticks")?, ticks("pause_ticks")?);
     let list = table
         .get("drops")
         .and_then(|v| v.as_array())
@@ -139,6 +179,9 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         health,
         box_size,
         drops,
+        wander_speed,
+        walk_ticks,
+        pause_ticks,
     })
 }
 
@@ -216,7 +259,7 @@ mod tests {
     #[test]
     fn unknown_drop_item_rejected() {
         let a = Animals::from_toml(
-            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
         )
         .unwrap();
         assert!(matches!(
@@ -242,6 +285,9 @@ mod tests {
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = [{ min = 1, max = 1 }]\n",
             "cow = 3\n",
             "[cow]\nhealth = 1\ndrops = []\n[cow]\nhealth = 2\ndrops = []\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 0\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [3, 2]\npause_ticks = [1, 2]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\n",
             "not toml [",
         ] {
             assert!(Animals::from_toml(bad).is_err(), "{bad}");
