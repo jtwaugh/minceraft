@@ -408,10 +408,7 @@ pub fn attack(target: &targeting::Target, damage: u32) -> Option<Hit> {
 }
 
 // Stub actions: real behaviour comes in Phase 7. Each reports that it ran.
-// Till runs in `walk.rs` through `till::Tiller`.
-pub fn plant() -> ActionKind {
-    ActionKind::Plant
-}
+// Till and plant run in `walk.rs` through `till::Tiller` and `plant::plant`.
 pub fn harvest() -> ActionKind {
     ActionKind::Harvest
 }
@@ -427,10 +424,7 @@ fn run_action(
 ) -> ActionKind {
     match action {
         ActionKind::Attack => hits.extend(attack(&ctx.target, damage)),
-        ActionKind::Till => {}
-        ActionKind::Plant => {
-            plant();
-        }
+        ActionKind::Till | ActionKind::Plant => {}
         ActionKind::Harvest => {
             harvest();
         }
