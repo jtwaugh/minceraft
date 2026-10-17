@@ -150,17 +150,12 @@ impl Crops {
             toml::from_str(text).map_err(|e| CropsError::Parse(e.to_string()))?;
         let seeds_item = match table.remove("seeds_item") {
             Some(toml::Value::String(s)) if !s.is_empty() => s,
-            _ => {
-                return Err(CropsError::BadEntry {
-                    crop: "seeds_item".to_string(),
-                    problem: "must be a non-empty string".to_string(),
-                })
-            }
+            _ => return Err(CropsError::Parse("`seeds_item` must be a string".into())),
         };
-        let mut crops = Vec::new();
-        for (name, value) in &table {
-            crops.push(parse_crop(name, value)?);
-        }
+        let crops = table
+            .iter()
+            .map(|(name, value)| parse_crop(name, value))
+            .collect::<Result<_, _>>()?;
         Ok(Crops { seeds_item, crops })
     }
 
@@ -170,17 +165,13 @@ impl Crops {
 
     /// The seeds item and every crop's produce must be defined in `items`.
     pub fn check_items(&self, items: &Items) -> Result<(), CropsError> {
-        if !items.has_item(&self.seeds_item) {
-            return Err(CropsError::UnknownItem {
-                crop: "seeds_item".to_string(),
-                item: self.seeds_item.clone(),
-            });
-        }
-        for c in &self.crops {
-            if !items.has_item(&c.item) {
+        let named = std::iter::once(("seeds_item", &self.seeds_item))
+            .chain(self.crops.iter().map(|c| (c.name.as_str(), &c.item)));
+        for (crop, item) in named {
+            if !items.has_item(item) {
                 return Err(CropsError::UnknownItem {
-                    crop: c.name.clone(),
-                    item: c.item.clone(),
+                    crop: crop.to_string(),
+                    item: item.clone(),
                 });
             }
         }
