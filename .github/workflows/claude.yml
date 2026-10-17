@@ -64,6 +64,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # Claude pushes with the Claude app's token (the action sets the
+          # remote). A persisted workflow token would win and push as
+          # github-actions[bot], which the reviewer then skips.
+          persist-credentials: false
 
       # A labelled ticket whose dependencies are still open waits, without
       # spending a Claude run. It starts later from the start-ready job.
@@ -163,6 +167,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # Claude pushes with the Claude app's token (the action sets the
+          # remote). A persisted workflow token would win and push as
+          # github-actions[bot], which the reviewer then skips.
+          persist-credentials: false
       # Marks the ticket as auto-started, so tickets.py never starts it
       # automatically again (no retry loops). Relabel it, or comment
       # @claude, to try again. Re-checks first: a merge closes its ticket

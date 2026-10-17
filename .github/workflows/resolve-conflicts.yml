@@ -76,6 +76,10 @@ jobs:
         with:
           ref: ${{ matrix.pr.branch }}
           fetch-depth: 0
+          # Push with the Claude app's token (set up by the action), not
+          # this workflow's: the push then counts as the Claude app's, like
+          # the implementer's, and triggers CI and the reviewer.
+          persist-credentials: false
       - name: Note the start time
         id: start
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
