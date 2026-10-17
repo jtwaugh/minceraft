@@ -3,6 +3,7 @@
 //!
 //! The grass stays; each block has a cooldown, kept here by position.
 
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::rng::Rng;
 use std::collections::HashMap;
 use std::fmt;
@@ -22,9 +23,19 @@ pub struct ForageConfig {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForageError(pub String);
 
+impl From<&ForageError> for DataError {
+    fn from(e: &ForageError) -> DataError {
+        let kind = DataErrorKind::BadEntry {
+            entry: "forage".into(),
+            problem: e.0.clone(),
+        };
+        DataError::new(DataFile::Items, kind)
+    }
+}
+
 impl fmt::Display for ForageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "items.toml: forage: {}", self.0)
+        DataError::from(self).fmt(f)
     }
 }
 

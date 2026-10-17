@@ -5,6 +5,7 @@
 //! Pickup and throwing are separate tickets.
 
 use crate::collision::{Aabb, CollisionWorld};
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::items::ItemInstance;
 use crate::movement::move_box;
 use crate::raft::{Raft, SwellPush};
@@ -42,13 +43,20 @@ pub enum ItemEntityError {
     Invalid(String),
 }
 
+impl From<&ItemEntityError> for DataError {
+    fn from(e: &ItemEntityError) -> DataError {
+        let kind = match e {
+            ItemEntityError::Parse(m) => DataErrorKind::Parse(m.clone()),
+            ItemEntityError::Missing(k) => DataErrorKind::MissingKey(k.clone()),
+            ItemEntityError::Invalid(m) => DataErrorKind::Invalid(m.clone()),
+        };
+        DataError::new(DataFile::Items, kind)
+    }
+}
+
 impl fmt::Display for ItemEntityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ItemEntityError::Parse(e) => write!(f, "items.toml: {e}"),
-            ItemEntityError::Missing(k) => write!(f, "items.toml: missing `{k}`"),
-            ItemEntityError::Invalid(e) => write!(f, "items.toml: {e}"),
-        }
+        DataError::from(self).fmt(f)
     }
 }
 
