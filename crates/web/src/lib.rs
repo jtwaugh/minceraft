@@ -95,10 +95,15 @@ pub fn habitat_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<u8> {
 /// the value `habitat_map` uses for that habitat.
 #[wasm_bindgen]
 pub fn habitat_names() -> String {
-    let names: Vec<String> = Habitats::shipped()
-        .rules
-        .iter()
-        .map(|r| alloc::format!("\"{}\"", r.id))
-        .collect();
-    alloc::format!("[{}]", names.join(","))
+    let mut json = String::from("[");
+    for (i, r) in Habitats::shipped().rules.iter().enumerate() {
+        if i > 0 {
+            json.push(',');
+        }
+        json.push('"');
+        json.push_str(&r.id);
+        json.push('"');
+    }
+    json.push(']');
+    json
 }
