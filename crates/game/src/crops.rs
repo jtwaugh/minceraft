@@ -4,6 +4,7 @@
 //! Items named must exist in `data/items.toml`; `Crops::check_items`
 //! verifies that.
 
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::items::Items;
 use std::fmt;
 
@@ -50,15 +51,25 @@ pub enum CropsError {
     },
 }
 
+impl From<CropsError> for DataError {
+    fn from(e: CropsError) -> DataError {
+        let kind = match e {
+            CropsError::Parse(msg) => DataErrorKind::Parse(msg),
+            CropsError::BadEntry { crop, problem } => DataErrorKind::BadEntry {
+                entry: crop,
+                problem,
+            },
+            CropsError::UnknownItem { crop, item } => {
+                DataErrorKind::UnknownItem { entry: crop, item }
+            }
+        };
+        DataError::new(DataFile::Crops, kind)
+    }
+}
+
 impl fmt::Display for CropsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CropsError::Parse(e) => write!(f, "crops.toml: {e}"),
-            CropsError::BadEntry { crop, problem } => write!(f, "crops.toml: {crop}: {problem}"),
-            CropsError::UnknownItem { crop, item } => {
-                write!(f, "crops.toml: {crop}: `{item}` is not in items.toml")
-            }
-        }
+        DataError::from(self.clone()).fmt(f)
     }
 }
 
@@ -256,5 +267,22 @@ mod tests {
         ] {
             assert!(Crops::from_toml(&bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn errors_convert_to_data_error() {
+        let e = CropsError::UnknownItem {
+            crop: "wheat".into(),
+            item: "x".into(),
+        };
+        assert_eq!(e.to_string(), "crops.toml: wheat: `x` is not in items.toml");
+        let d = DataError::from(e);
+        assert_eq!(d.file, DataFile::Crops);
+        assert!(matches!(d.kind, DataErrorKind::UnknownItem { .. }));
+        let b = CropsError::BadEntry {
+            crop: "wheat".into(),
+            problem: "p".into(),
+        };
+        assert_eq!(DataError::from(b).to_string(), "crops.toml: wheat: p");
     }
 }
