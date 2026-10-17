@@ -31,3 +31,24 @@ label = "Wooden hoe"
 [[item]]
 name = "seeds"
 label = "Seeds"
+
+# Animal drops (section 8.3). Which animal drops what is in animals.toml.
+[[item]]
+name = "raw_beef"
+label = "Raw beef"
+
+[[item]]
+name = "leather"
+label = "Leather"
+
+[[item]]
+name = "raw_pork"
+label = "Raw pork"
+
+[[item]]
+name = "raw_chicken"
+label = "Raw chicken"
+
+[[item]]
+name = "feather"
+label = "Feather"

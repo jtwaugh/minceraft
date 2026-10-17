@@ -1,6 +1,7 @@
 //! The game built on top of the terrain generator.
 //! See docs/design/basic-gameplay.md.
 
+pub mod animals;
 pub mod bindings;
 pub mod camera;
 pub mod clock;
