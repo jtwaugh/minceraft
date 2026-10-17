@@ -157,6 +157,11 @@ path.
 > conventions only, this phase shrinks to a `file_prefix` constant per
 > loader.
 
+> **Decision:** Phase B builds a shared data-file error type in
+> `crates/game`. The loader errors convert to it, and the file prefix comes
+> from one place. The Phase B PR reports the gzipped `game-web` size before
+> and after. (Decided in #324.)
+
 #### Phase C: Display cleanup
 
 Replace the `{self:?}` `Display`s, make derives consistent, and fix the
@@ -181,13 +186,6 @@ can't express invalid transitions.
 
 ## Open questions
 
-1. **Shared error type or conventions only?** Is a shared error type worth
-   the wasm size?
-   - A: a shared type in `crates/game` (reported size delta in the PR).
-   - B: conventions plus test helpers only; each enum keeps its own
-     `Display`, with a documented variant set.
-   - C: a shared type, but only if Phase B's measured gzipped growth of
-     `game-web` is under a threshold you set.
 2. **Naming and errors only, or restructure?** Should Phase E stop at
    conventions and tests, or also restructure existing code?
    - A: conventions and tests only.
