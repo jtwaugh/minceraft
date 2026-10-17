@@ -89,7 +89,11 @@ Not present: `MECHANICS_SPEC.md`, animals, crops, the event system and the HUD.
    hoe turns grass into farmland and resets crops. That is a game-side world
    overlay on top of `generate_decorated`; `terrain` must not learn about it
    (determinism invariant). The test "hoe never affects other blocks" should
-   target the overlay.
+   target the overlay. Farmland (`farmland_dry`, `farmland_wet`) and the
+   crop-stage blocks are added to `data/blocks.toml`, but the generator never
+   places them. The game keeps a per-position edit map over the generated
+   region, and `block_at` consults it first. Crop kind and stage come from the
+   block id. (Decided in #288.)
 8. **Rendering and size.** The game renderer is not this repo's viewer
    (CLAUDE.md: no frameworks in `viewer/`; wasm size matters). The selection
    outline, HUD and debug overlays belong to the game.
