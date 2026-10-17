@@ -1,11 +1,6 @@
-//! Debug console command core: registry, parser and outcome buffer.
-//! See docs/design/debug-console.md sections 1 and 10 (Phase 1).
-//!
-//! A command is one [`Command`] entry plus its handler. The handler gets the
-//! world it acts on (`W`, which will be the walker once commands are wired
-//! in) and the registry, and returns its result lines. This part has the
-//! registry and the parser; the console that runs lines, buffers outcomes and
-//! tracks `cheated` comes next.
+//! Debug console command core: registry and parser (docs/design/debug-console.md
+//! Phase 1). A command is one [`Command`] entry plus a handler that gets the
+//! world `W` it acts on and returns its result lines.
 
 use std::fmt;
 
@@ -14,15 +9,6 @@ use std::fmt;
 pub enum GameState {
     Walking,
     Flying,
-}
-
-impl fmt::Display for GameState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            GameState::Walking => "walking",
-            GameState::Flying => "flying",
-        })
-    }
 }
 
 pub const ALL_STATES: &[GameState] = &[GameState::Walking, GameState::Flying];
@@ -109,9 +95,7 @@ impl std::error::Error for RegistryError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CommandError {
-    Unknown {
-        name: String,
-    },
+    Unknown(String),
     WrongArgCount {
         usage: String,
         got: usize,
@@ -126,7 +110,7 @@ pub enum CommandError {
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CommandError::Unknown { name } => {
+            CommandError::Unknown(name) => {
                 write!(f, "unknown command '{name}' (try 'help')")
             }
             CommandError::WrongArgCount { usage, got } => {
@@ -171,15 +155,10 @@ impl<W> Registry<W> {
         Ok(Registry { commands })
     }
 
-    /// Lookup by name or alias.
     pub fn get(&self, name: &str) -> Option<&Command<W>> {
         self.commands
             .iter()
             .find(|c| c.name == name || c.aliases.contains(&name))
-    }
-
-    pub fn commands(&self) -> &[Command<W>] {
-        &self.commands
     }
 }
 
@@ -195,7 +174,7 @@ pub fn parse<'r, W>(
     };
     let cmd = registry
         .get(name)
-        .ok_or_else(|| CommandError::Unknown { name: name.into() })?;
+        .ok_or_else(|| CommandError::Unknown(name.into()))?;
     let words: Vec<&str> = words.collect();
     let required = cmd.args.iter().filter(|a| !a.optional).count();
     if words.len() < required || words.len() > cmd.args.len() {
