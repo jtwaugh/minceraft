@@ -57,3 +57,8 @@ label = "Raw chicken"
 [[item]]
 name = "feather"
 label = "Feather"
+
+# Crop produce (section 9.4). What each crop yields is in crops.toml.
+[[item]]
+name = "wheat"
+label = "Wheat"

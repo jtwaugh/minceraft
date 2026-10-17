@@ -7,6 +7,7 @@ pub mod bindings;
 pub mod camera;
 pub mod clock;
 pub mod collision;
+pub mod crops;
 pub mod input;
 pub mod interactions;
 pub mod item_entities;
