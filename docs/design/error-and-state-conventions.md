@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
   E: todo
 ---
@@ -42,7 +42,8 @@ Verified against the code on `master`:
   `client/test/dsl.mjs` drives it with DOM events and `expect` lines.
 - **Phase A done:** the audit is `docs/errors-and-states.md` (plan #306, ticket #307, PR #310). It confirms 13 error types and no Rust state machines.
 - **Phase B done:** `crates/game/src/data_error.rs` holds the shared `DataError` and `DataFile` type (plan #328, PRs #341, #351, #352, #353, #354, #355, #358). The physics, targeting, item entity, forage, animals, crops, items, bindings and interactions loaders use it.
-- Phases C to E are not built yet.
+- **Phase C done:** `StructureError` has a readable `Display` (plan #360, ticket #361, PR #363); every error type now derives `Clone, Debug, PartialEq, Eq`, and `CropsError`'s `seeds_item` handling is pinned by tests (ticket #362, PR #364).
+- Phases D and E are not built yet.
 
 ## Reconciliation notes
 
