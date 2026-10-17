@@ -16,11 +16,12 @@ concurrency:
 
 jobs:
   reconcile:
-    # Only ideas jtwaugh wrote and labelled.
+    # Only ideas jtwaugh labeled
     if: |
       github.event.label.name == 'idea' &&
       github.event.sender.login == 'jtwaugh' &&
-      github.event.issue.user.login == 'jtwaugh'
+      (github.event.issue.user.login == 'jtwaugh' ||
+       github.event.issue.user.login == 'claude[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
