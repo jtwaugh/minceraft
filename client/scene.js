@@ -17,7 +17,8 @@ import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
-import { loadTiles } from './tiles.js';
+import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
+import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } from './overlay.js';
 import { createSampler } from './samplers.js';
@@ -41,7 +42,8 @@ const gl = canvas.getContext('webgl2', { antialias: true });
 if (!gl) throw new Error('WebGL2 is not available');
 
 // ---------------------------------------------------------------- shaders
-// The viewer's shader, minus water animation, reading the split colour/tint
+// The viewer's shader, including water animation (`waterFrame` offsets the
+// water layers; the frame comes from waterframe.js), reading the split colour/tint
 // textures from tiles.js. `cut` (leaves, plants) outputs coverage as alpha for
 // alpha-to-coverage and discards below `cutoff`; `solid` does neither. Fog
 // runs from `fogStart` to `fogEnd` (eye distance) and `tint` multiplies the
@@ -66,6 +68,7 @@ function program(cut) {
     uniform vec3 unpack;
     uniform vec3 offset;
     uniform vec3 eye; uniform vec2 plantFade; // start, range (blocks)
+    uniform float waterFrame;
     out vec3 vuv; out float vshade; out float vdist; out vec3 vtint;
     void main() {
       vec3 w = pos * unpack.x + offset;
@@ -73,7 +76,8 @@ function program(cut) {
       float s = 1.0 - clamp((distance(w, eye) - plantFade.x) / plantFade.y, 0.0, 1.0);
       w.y -= top * (1.0 - s);` : ''}
       gl_Position = mvp * vec4(w, 1.0);
-      vuv = vec3(uv * unpack.y, layer);
+      bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
+      vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
       vshade = shade * unpack.z;
       vtint = tint;
       vdist = gl_Position.w;
@@ -332,6 +336,8 @@ function drawParts(prog, parts) {
   }
 }
 
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
 function render(now) {
   if (queue.length) meshNextChunk();
 
@@ -362,6 +368,7 @@ function render(now) {
     gl.uniform1f(prog.u('fogEnd'), view.fogEnd);
     gl.uniform3fv(prog.u('tint'), view.tint);
     gl.uniform1f(prog.u('alpha'), a);
+    gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
     if (prog === cutProg) { gl.uniform3fv(prog.u('eye'), eye); gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); }
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
