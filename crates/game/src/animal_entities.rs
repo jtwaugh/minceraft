@@ -2,8 +2,9 @@
 //! them. See docs/design/basic-gameplay.md section 8.3.
 //!
 //! [`AnimalStore::tick`] moves them (gravity, landing, the deck push) and
-//! makes idle animals wander: pause, pick a heading, walk, repeat (8.2).
-//! Fleeing, damage, drops and spawning policy are separate tickets.
+//! makes idle animals wander: pause, pick a heading, walk, repeat (8.2). A
+//! hit animal flees along a random heading for a few seconds, then wanders.
+//! Damage, drops and spawning policy are separate tickets.
 
 use crate::animals::{AnimalDef, Animals};
 use crate::collision::{Aabb, CollisionWorld};
@@ -48,6 +49,8 @@ pub struct AnimalEntity {
     pub hurt_ticks_left: u32,
     /// Damage of the hit that opened the window.
     pub last_damage: u32,
+    /// Ticks of fleeing left after a hit, along `facing`; 0 when not fleeing.
+    pub flee_ticks_left: u32,
 }
 
 impl AnimalEntity {
@@ -143,6 +146,7 @@ impl AnimalStore {
             wander,
             hurt_ticks_left: 0,
             last_damage: 0,
+            flee_ticks_left: 0,
         });
         Some(id)
     }
@@ -205,6 +209,21 @@ impl AnimalStore {
         };
         if applied > 0 {
             e.last_damage = damage;
+            // Flee in a random direction; a new hit re-picks and restarts.
+            // Wandering resumes after the flee with a pause.
+            let def = self
+                .kinds
+                .get(&e.species)
+                .expect("species checked at spawn");
+            e.facing = f64::from(self.rng.angle()).to_degrees();
+            e.flee_ticks_left = self
+                .rng
+                .range(def.flee_ticks[0] as i32, def.flee_ticks[1] as i32)
+                as u32;
+            e.wander = Wander {
+                walking: true,
+                ticks_left: 0,
+            };
         }
         let taken = applied.min(e.health);
         e.health -= taken;
@@ -224,7 +243,10 @@ impl AnimalStore {
                 .kinds
                 .get(&e.species)
                 .expect("species checked at spawn");
-            let walking = advance_wander(&mut e.wander, &mut e.facing, def, &mut self.rng);
+            let fleeing = e.flee_ticks_left > 0;
+            e.flee_ticks_left = e.flee_ticks_left.saturating_sub(1);
+            let walking =
+                !fleeing && advance_wander(&mut e.wander, &mut e.facing, def, &mut self.rng);
             let mut bb = e.aabb();
             lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
             if let Some(d) = &deck {
@@ -235,11 +257,16 @@ impl AnimalStore {
                 }
             }
             // The wander drive would overwrite a knockback, so it waits.
-            if walking && e.hurt_ticks_left == 0 {
+            if (walking || fleeing) && e.hurt_ticks_left == 0 {
+                let speed = if fleeing {
+                    def.flee_speed
+                } else {
+                    def.wander_speed
+                };
                 // Facing 0 looks along -z, as for the player's yaw.
                 let (sin, cos) = e.facing.to_radians().sin_cos();
-                e.velocity[0] = sin * def.wander_speed;
-                e.velocity[2] = -cos * def.wander_speed;
+                e.velocity[0] = sin * speed;
+                e.velocity[2] = -cos * speed;
             }
             e.velocity[1] -= cfg.gravity * dt;
             let v = e.velocity.map(|c| c * dt);
@@ -623,5 +650,109 @@ mod tests {
             s.get(id).unwrap().clone()
         };
         assert_eq!(go(), go());
+    }
+
+    /// Hit `id` (which stands alone on an open floor) and trace its position
+    /// each tick for `n` ticks after the knockback window.
+    fn flee_run(seed: u64, n: usize) -> (Vec<[f64; 3]>, AnimalStore, EntityId) {
+        let w = floor();
+        let mut s = AnimalStore::new(
+            Animals::default_animals(),
+            ItemEntityConfig::default_from_data(),
+            1,
+            seed,
+        );
+        let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+        run(&mut s, &w, 30);
+        s.hit(id, 1, [0.5, 1.0, 0.5]);
+        let mut trace = Vec::new();
+        for _ in 0..n {
+            s.tick(&w, None);
+            trace.push(s.get(id).unwrap().pos);
+        }
+        (trace, s, id)
+    }
+
+    #[test]
+    fn flee_speeds_are_faster_than_wandering_and_slower_than_the_player() {
+        // The player's walking speed is about 4.3 blocks per second.
+        for a in &Animals::default_animals().kinds {
+            assert!(a.flee_speed > a.wander_speed, "{}", a.kind);
+            assert!(a.flee_speed < 4.0, "{}", a.kind);
+        }
+    }
+
+    #[test]
+    fn a_hit_animal_runs_one_way_at_flee_speed_then_wanders() {
+        let def = Animals::default_animals().get("cow").unwrap().clone();
+        let (trace, s, id) = flee_run(4, 200);
+        let flee = s.get(id).unwrap().flee_ticks_left;
+        assert_eq!(flee, 0, "flee ended");
+        // Past the hurt window, early in the flee: speed is the flee speed.
+        let step = |i: usize| {
+            let (a, b) = (trace[i], trace[i + 1]);
+            [b[0] - a[0], b[2] - a[2]]
+        };
+        let start = def.hurt_ticks as usize + 5;
+        let v = step(start);
+        let speed = v[0].hypot(v[1]) * TICKS_PER_SECOND;
+        // The ring wall may be in the way, so only bound it from above, and
+        // require it to beat the wander speed when unobstructed.
+        assert!(speed <= def.flee_speed + 1e-6, "{speed}");
+        let (mut peak, mut dirs) = (0.0f64, Vec::new());
+        for i in start..start + 20 {
+            let v = step(i);
+            peak = peak.max(v[0].hypot(v[1]) * TICKS_PER_SECOND);
+            if v[0].hypot(v[1]) > 1e-4 {
+                dirs.push(v[1].atan2(v[0]));
+            }
+        }
+        assert!(peak > def.wander_speed, "peak {peak}");
+        // One direction: no turning while fleeing.
+        assert!(dirs.windows(2).all(|d| (d[0] - d[1]).abs() < 1e-3));
+    }
+
+    #[test]
+    fn the_flee_lasts_within_the_configured_range() {
+        let def = Animals::default_animals().get("pig").unwrap().clone();
+        let w = floor();
+        let mut s = store(1);
+        let id = s.spawn("pig", [0.5, 1.0, 0.5], 0.0).unwrap();
+        s.hit(id, 1, ORIGIN);
+        let left = s.get(id).unwrap().flee_ticks_left;
+        assert!((def.flee_ticks[0]..=def.flee_ticks[1]).contains(&left));
+        run(&mut s, &w, left as usize - 1);
+        assert_eq!(s.get(id).unwrap().flee_ticks_left, 1);
+        s.tick(&w, None);
+        assert_eq!(s.get(id).unwrap().flee_ticks_left, 0);
+    }
+
+    #[test]
+    fn a_new_hit_while_fleeing_restarts_the_timer() {
+        let w = floor();
+        let mut s = store(1);
+        let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+        s.hit(id, 1, ORIGIN);
+        let first = s.get(id).unwrap().flee_ticks_left;
+        run(&mut s, &w, first as usize - 20);
+        s.hit(id, 1, ORIGIN);
+        let e = s.get(id).unwrap();
+        assert!(e.flee_ticks_left >= 60, "restarted: {}", e.flee_ticks_left);
+    }
+
+    #[test]
+    fn an_ignored_hit_does_not_start_a_flee() {
+        let mut s = store(1);
+        let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+        s.hit(id, 4, ORIGIN);
+        let e = s.get(id).unwrap().clone();
+        s.hit(id, 4, ORIGIN);
+        assert_eq!(s.get(id).unwrap(), &e);
+    }
+
+    #[test]
+    fn the_same_seed_and_hits_give_the_same_flee_path() {
+        assert_eq!(flee_run(8, 150).0, flee_run(8, 150).0);
+        assert_ne!(flee_run(8, 150).0, flee_run(9, 150).0);
     }
 }
