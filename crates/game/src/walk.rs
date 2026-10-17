@@ -5,6 +5,7 @@
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
+use crate::commands::{run_line, GameState, Registry};
 use crate::events::GameEvent;
 use crate::forage::{ForageConfig, Forager};
 use crate::input::TickInput;
@@ -23,6 +24,7 @@ use crate::targeting::{cast_target, ray_vs_box, Target, TargetableEntity, Target
 use layout::Layout;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
+use std::sync::Arc;
 use terrain::{Block, Region, HEIGHT};
 
 /// Side of the square column cells the lookup index is split into.
@@ -173,6 +175,12 @@ pub struct Walker {
     held_override: Option<HeldThing>,
     facts: TargetFacts,
     target_box: Option<(Aabb, bool)>,
+    /// Command lines submitted since the last tick, in order.
+    command_queue: Vec<String>,
+    /// Output lines from commands run, until `drain_command_output`.
+    command_output: Vec<String>,
+    commands: Arc<Registry<Walker>>,
+    cheated: bool,
 }
 
 impl Walker {
@@ -213,7 +221,33 @@ impl Walker {
             held_override: None,
             facts: TargetFacts::default(),
             target_box: None,
+            command_queue: Vec::new(),
+            command_output: Vec::new(),
+            commands: Arc::new(
+                Registry::new(Vec::new()).map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+            ),
+            cheated: false,
         })
+    }
+
+    /// The commands this walker understands (none until a host sets them).
+    pub fn set_commands(&mut self, registry: Registry<Walker>) {
+        self.commands = Arc::new(registry);
+    }
+
+    /// Queue a command line; it runs at the start of the next `tick`.
+    pub fn submit_command(&mut self, line: &str) {
+        self.command_queue.push(line.to_string());
+    }
+
+    /// The output lines of commands run since the last call.
+    pub fn drain_command_output(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.command_output)
+    }
+
+    /// Whether a cheat command has run this session.
+    pub fn cheated(&self) -> bool {
+        self.cheated
     }
 
     pub fn add_region(&mut self, region: Region) {
@@ -289,8 +323,20 @@ impl Walker {
         &self.player
     }
 
+    fn run_queued_commands(&mut self) {
+        let lines = std::mem::take(&mut self.command_queue);
+        let registry = Arc::clone(&self.commands);
+        for line in lines {
+            let mut cheated = self.cheated;
+            let out = run_line(&registry, self, GameState::Walking, &line, &mut cheated);
+            self.cheated = cheated;
+            self.command_output.extend(out);
+        }
+    }
+
     /// One 20 Hz step.
     pub fn tick(&mut self, input: &TickInput) {
+        self.run_queued_commands();
         self.sim_tick += 1;
         let entities = self.all_entities();
         if let Some(slot) = input.tool_slot {
@@ -1230,6 +1276,83 @@ mod tests {
             tool_slot: Some(n),
             ..TickInput::default()
         }
+    }
+
+    fn belt_cmd(name: &'static str, cheat: bool) -> crate::commands::Command<Walker> {
+        use crate::commands::*;
+        Command {
+            name,
+            aliases: &[],
+            args: &[ArgSpec {
+                name: "slot",
+                kind: ArgKind::Int,
+                optional: false,
+            }],
+            help: "select a belt slot",
+            states: &[GameState::Walking],
+            cheat,
+            handler: |ctx, args| {
+                let Some(Arg::Int(n)) = args.first() else {
+                    return Err("missing".into());
+                };
+                ctx.world.player_state_mut().select(*n as u8);
+                Ok(vec![format!("selected {n}")])
+            },
+        }
+    }
+
+    fn with_cmds() -> Walker {
+        let mut w = settled();
+        w.set_commands(
+            Registry::new(vec![belt_cmd("sel", false), belt_cmd("csel", true)]).unwrap(),
+        );
+        w
+    }
+
+    #[test]
+    fn commands_wait_for_the_tick_and_run_before_input() {
+        let mut w = with_cmds();
+        w.submit_command("sel 1");
+        assert_eq!(w.player_state().selected, 0);
+        assert!(w.drain_command_output().is_empty());
+        w.submit_command("sel 2");
+        w.tick(&slot(1));
+        // Commands ran in order, then the input's slot won.
+        assert_eq!(w.player_state().selected, 1);
+        assert_eq!(w.drain_command_output(), vec!["selected 1", "selected 2"]);
+        assert!(w.drain_command_output().is_empty());
+        w.tick(&TickInput::default());
+        assert!(w.drain_command_output().is_empty());
+    }
+
+    #[test]
+    fn errors_are_output_and_cheats_are_flagged() {
+        let mut w = with_cmds();
+        w.submit_command("nope");
+        w.submit_command("sel 1");
+        w.tick(&TickInput::default());
+        assert_eq!(w.drain_command_output().len(), 2);
+        assert!(!w.cheated());
+        w.submit_command("csel 2");
+        w.tick(&TickInput::default());
+        assert!(w.cheated());
+    }
+
+    #[test]
+    fn same_inputs_and_commands_give_the_same_state() {
+        let run = || {
+            let mut w = with_cmds();
+            w.submit_command("sel 2");
+            w.tick(&TickInput::default());
+            w.submit_command("csel 1");
+            w.tick(&slot(2));
+            (
+                w.player_state().selected,
+                w.cheated(),
+                w.drain_command_output(),
+            )
+        };
+        assert_eq!(run(), run());
     }
 
     #[test]

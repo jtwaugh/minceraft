@@ -197,6 +197,34 @@ pub fn parse<'r, W>(
     Ok(Some((cmd, args)))
 }
 
+/// Runs one line against `world` in game state `state` and returns its output
+/// lines. A parse error, or a command not valid in `state`, gives one error
+/// line and changes nothing. `cheated` is set when a cheat command runs.
+pub fn run_line<W>(
+    registry: &Registry<W>,
+    world: &mut W,
+    state: GameState,
+    line: &str,
+    cheated: &mut bool,
+) -> Vec<String> {
+    let (cmd, args) = match parse(registry, line) {
+        Ok(Some(parsed)) => parsed,
+        Ok(None) => return Vec::new(),
+        Err(e) => return vec![e.to_string()],
+    };
+    if !cmd.states.contains(&state) {
+        return vec![format!("'{}' can't be used in this state", cmd.name)];
+    }
+    if cmd.cheat {
+        *cheated = true;
+    }
+    let mut ctx = Ctx { world, registry };
+    match (cmd.handler)(&mut ctx, &args) {
+        Ok(lines) => lines,
+        Err(msg) => vec![msg],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
