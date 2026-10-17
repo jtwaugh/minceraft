@@ -4,6 +4,7 @@
 //! Names must match the `held` strings in `data/interactions.toml`;
 //! `Items::check_interactions` verifies that.
 
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::interactions::{Held, HeldThing, Interactions};
 use std::fmt;
 
@@ -53,24 +54,46 @@ pub enum ItemsError {
     },
 }
 
-impl fmt::Display for ItemsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ItemsError::Parse(e) => write!(f, "items.toml: {e}"),
+impl From<ItemsError> for DataError {
+    fn from(e: ItemsError) -> DataError {
+        match e {
+            ItemsError::Parse(msg) => DataError::new(DataFile::Items, DataErrorKind::Parse(msg)),
             ItemsError::BadEntry {
                 kind,
                 index,
                 problem,
-            } => write!(f, "items.toml: {kind} {index}: {problem}"),
-            ItemsError::Duplicate { kind, name } => {
-                write!(f, "items.toml: duplicate {kind} `{name}`")
-            }
-            ItemsError::UnknownHeld { held } => {
-                write!(f, "interactions.toml: `{held}` is not in items.toml")
-            }
-            ItemsError::UnknownName { kind, name } => {
-                write!(f, "unknown {kind} `{name}`")
-            }
+            } => DataError::new(
+                DataFile::Items,
+                DataErrorKind::BadEntry {
+                    entry: format!("{kind} {index}"),
+                    problem,
+                },
+            ),
+            ItemsError::Duplicate { kind, name } => DataError::new(
+                DataFile::Items,
+                DataErrorKind::Duplicate {
+                    kind: kind.into(),
+                    name,
+                },
+            ),
+            ItemsError::UnknownHeld { held } => DataError::new(
+                DataFile::Interactions,
+                DataErrorKind::Invalid(format!("`{held}` is not in {}", DataFile::Items.name())),
+            ),
+            ItemsError::UnknownName { kind, name } => DataError::new(
+                DataFile::Items,
+                DataErrorKind::Invalid(format!("unknown {kind} `{name}`")),
+            ),
+        }
+    }
+}
+
+impl fmt::Display for ItemsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // A belt name is not a file problem, so it keeps no file prefix.
+            ItemsError::UnknownName { kind, name } => write!(f, "unknown {kind} `{name}`"),
+            other => DataError::from(other.clone()).fmt(f),
         }
     }
 }
@@ -250,6 +273,45 @@ impl PlayerState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn errors_convert_to_data_error_with_same_text() {
+        let cases = [
+            (ItemsError::Parse("bad".into()), "items.toml: bad"),
+            (
+                ItemsError::BadEntry {
+                    kind: "tool",
+                    index: 2,
+                    problem: "no name".into(),
+                },
+                "items.toml: tool 2: no name",
+            ),
+            (
+                ItemsError::Duplicate {
+                    kind: "item",
+                    name: "stick".into(),
+                },
+                "items.toml: duplicate item `stick`",
+            ),
+            (
+                ItemsError::UnknownHeld { held: "x".into() },
+                "interactions.toml: `x` is not in items.toml",
+            ),
+        ];
+        for (e, text) in cases {
+            assert_eq!(e.to_string(), text);
+            assert_eq!(DataError::from(e).to_string(), text);
+        }
+        let e = ItemsError::UnknownName {
+            kind: "tool",
+            name: "x".into(),
+        };
+        assert_eq!(e.to_string(), "unknown tool `x`");
+        assert_eq!(
+            DataError::from(e).to_string(),
+            "items.toml: unknown tool `x`"
+        );
+    }
 
     #[test]
     fn default_file_loads() {
