@@ -38,6 +38,16 @@ Checked against `master` (ba3a7e9). No phase is built; all five stay `todo`.
 
 ## Reconciliation notes
 
+- **Phase A is incomplete: the viewer is done, the client is not**
+  (checked after plan #242 closed; PRs #248, #250, #252). `viewer/index.html`
+  now has radial fog (`camPos`, `distance(wp, camPos)`, `viewer/fog.js`),
+  `LINEAR_MIPMAP_LINEAR` with anisotropy, `textureGrad` texel snapping and
+  the tint weight. Still missing for `client/`, which #243 put in scope:
+  `client/scene.js:79` still sets `vdist = gl_Position.w` with a linear
+  `fogStart` to `fogEnd` ramp (F1; A.1, A.2), and its fragment shader has no
+  texel snapping (A.4). F2 and F3 are already fixed in the client. Suggest a
+  follow-up ticket for client radial fog, the fog curve and texel snapping,
+  then marking Phase A `done`.
 - **The `client/` renderer shares `viewer/mesh.js` and has its own
   shaders.** The doc names only `viewer/`. `client/scene.js` imports
   `meshBlocks` (so Phase B.3, C.1 and E.1 change the client's meshes too)
