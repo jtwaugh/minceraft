@@ -159,6 +159,7 @@ pub struct Walker {
     dispatcher: Dispatcher,
     items: ItemStore,
     animals: AnimalStore,
+    item_table: Items,
     state: PlayerState,
     /// Test override of the derived held thing.
     held_override: Option<HeldThing>,
@@ -195,6 +196,7 @@ impl Walker {
                 FIRST_ANIMAL_ID,
                 ANIMAL_SEED,
             ),
+            item_table: Items::default_items(),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             held_override: None,
@@ -416,7 +418,15 @@ impl Walker {
         // Tools are stowed while carrying: primary does nothing.
         let mut pressed = *input;
         pressed.primary &= self.state.hands.is_none();
-        self.dispatcher.dispatch(&self.rules, &pressed, &ctx);
+        let damage = match &ctx.held {
+            HeldThing::Tool(name) => self.item_table.damage(Some(name)),
+            _ => self.item_table.damage(None),
+        };
+        self.dispatcher
+            .dispatch(&self.rules, &pressed, &ctx, damage);
+        for hit in &self.dispatcher.hits {
+            self.animals.hit(hit.id, hit.damage);
+        }
         self.facts = ctx.facts;
         if input.interact {
             self.interact();
@@ -717,6 +727,67 @@ mod tests {
             w.preview(Button::Primary).map(|r| r.action),
             Some(ActionKind::Attack)
         );
+    }
+
+    fn cow_health(w: &Walker, id: crate::targeting::EntityId) -> u32 {
+        w.animals().get(id).unwrap().health
+    }
+
+    fn click() -> TickInput {
+        TickInput {
+            primary: true,
+            ..look(-0.4, false)
+        }
+    }
+
+    #[test]
+    fn one_press_hits_with_the_sword_for_four_and_the_hand_for_one() {
+        let mut w = settled();
+        let id = w.spawn_animal("cow", [0.5, 4.0, -2.0], 0.0).unwrap();
+        let full = cow_health(&w, id);
+        w.tick(&look(-0.4, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        w.tick(&click());
+        assert_eq!(cow_health(&w, id), full - 1);
+        // Let the invulnerability window close, then use the sword.
+        w.player_state_mut().select(1);
+        for _ in 0..40 {
+            w.tick(&look(-0.4, false));
+        }
+        w.tick(&click());
+        assert_eq!(cow_health(&w, id), full - 5);
+    }
+
+    #[test]
+    fn holding_does_not_repeat_and_a_latched_click_hits_once() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let id = w.spawn_animal("cow", [0.5, 4.0, -2.0], 0.0).unwrap();
+        let full = cow_health(&w, id);
+        w.tick(&look(-0.4, false));
+        // A click latched between ticks arrives as one edge on the next tick.
+        w.tick(&click());
+        assert_eq!(cow_health(&w, id), full - 4);
+        for _ in 0..40 {
+            w.tick(&look(-0.4, false));
+        }
+        assert_eq!(cow_health(&w, id), full - 4);
+    }
+
+    #[test]
+    fn primary_on_a_block_or_nothing_changes_no_animal() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let id = w.spawn_animal("cow", [0.5, 4.0, -2.0], 0.0).unwrap();
+        let full = cow_health(&w, id);
+        for pitch in [-1.5, 0.0] {
+            w.tick(&TickInput {
+                primary: true,
+                ..look(pitch, false)
+            });
+            assert!(!matches!(w.target(), Target::Entity { .. }));
+            assert_eq!(cow_health(&w, id), full);
+        }
     }
 
     #[test]

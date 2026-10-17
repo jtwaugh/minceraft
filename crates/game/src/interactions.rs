@@ -9,7 +9,7 @@
 //! (`farmland`, `crop`, `planter_dirt`, animals) arrive in later phases.
 
 use crate::input::TickInput;
-use crate::targeting::{self, Face};
+use crate::targeting::{self, EntityId, Face};
 use std::fmt;
 
 const DEFAULT_INTERACTIONS: &str = include_str!("../../../data/interactions.toml");
@@ -391,10 +391,23 @@ pub fn resolve(rules: &[Rule], ctx: &ResolveCtx) -> Option<Resolved> {
         })
 }
 
-// Stub actions: real behaviour comes in Phases 6 and 7. Each reports that it ran.
-pub fn attack() -> ActionKind {
-    ActionKind::Attack
+/// An attack that landed on an entity, for the caller to apply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Hit {
+    pub id: EntityId,
+    pub damage: u32,
 }
+
+/// Attack the targeted entity for `damage`. Swings at blocks or nothing do
+/// nothing (section 8.1).
+pub fn attack(target: &targeting::Target, damage: u32) -> Option<Hit> {
+    match target {
+        targeting::Target::Entity { id } => Some(Hit { id: *id, damage }),
+        _ => None,
+    }
+}
+
+// Stub actions: real behaviour comes in Phase 7. Each reports that it ran.
 pub fn till() -> ActionKind {
     ActionKind::Till
 }
@@ -408,14 +421,28 @@ pub fn forage() -> ActionKind {
     ActionKind::Forage
 }
 
-fn run_action(action: ActionKind) -> ActionKind {
+fn run_action(
+    action: ActionKind,
+    ctx: &ResolveCtx,
+    damage: u32,
+    hits: &mut Vec<Hit>,
+) -> ActionKind {
     match action {
-        ActionKind::Attack => attack(),
-        ActionKind::Till => till(),
-        ActionKind::Plant => plant(),
-        ActionKind::Harvest => harvest(),
-        ActionKind::Forage => forage(),
+        ActionKind::Attack => hits.extend(attack(&ctx.target, damage)),
+        ActionKind::Till => {
+            till();
+        }
+        ActionKind::Plant => {
+            plant();
+        }
+        ActionKind::Harvest => {
+            harvest();
+        }
+        ActionKind::Forage => {
+            forage();
+        }
     }
+    action
 }
 
 /// Per-tick dispatch state.
@@ -424,19 +451,24 @@ pub struct Dispatcher {
     /// Rule matched by the most recent press edge; `None` if that press
     /// matched nothing. Unchanged on ticks with no press. For the overlay.
     pub last_rule: Option<usize>,
+    /// Attacks that landed in the most recent `dispatch` call.
+    pub hits: Vec<Hit>,
 }
 
 impl Dispatcher {
     /// Resolves each press edge in `input` (primary, then secondary) against
-    /// `ctx` (its `button` is overridden) and runs the matched stub. Returns
-    /// the actions that ran: at most one per edge, none without a press.
+    /// `ctx` (its `button` is overridden) and runs the matched action; an
+    /// attack deals `damage` and lands in `self.hits`. Returns the actions
+    /// that ran: at most one per edge, none without a press.
     pub fn dispatch(
         &mut self,
         rules: &Interactions,
         input: &TickInput,
         ctx: &ResolveCtx,
+        damage: u32,
     ) -> Vec<ActionKind> {
         let mut ran = Vec::new();
+        self.hits.clear();
         for (pressed, button) in [
             (input.primary, Button::Primary),
             (input.secondary, Button::Secondary),
@@ -451,7 +483,7 @@ impl Dispatcher {
             let resolved = resolve(&rules.rules, &ctx);
             self.last_rule = resolved.map(|r| r.rule_index);
             if let Some(r) = resolved {
-                ran.push(run_action(r.action));
+                ran.push(run_action(r.action, &ctx, damage, &mut self.hits));
             }
         }
         ran
@@ -569,23 +601,24 @@ mod tests {
         let mut d = Dispatcher::default();
         let c = animal(tool("sword"));
         let idle = TickInput::default();
-        assert!(d.dispatch(&rules, &idle, &c).is_empty());
+        assert!(d.dispatch(&rules, &idle, &c, 4).is_empty());
         assert_eq!(d.last_rule, None);
         let press = TickInput {
             primary: true,
             ..TickInput::default()
         };
-        assert_eq!(d.dispatch(&rules, &press, &c), vec![ActionKind::Attack]);
+        assert_eq!(d.dispatch(&rules, &press, &c, 4), vec![ActionKind::Attack]);
         assert_eq!(d.last_rule, Some(0));
+        assert_eq!(d.hits, vec![Hit { id: 1, damage: 4 }]);
         // No new press: nothing runs, the overlay keeps the last match.
-        assert!(d.dispatch(&rules, &idle, &c).is_empty());
+        assert!(d.dispatch(&rules, &idle, &c, 4).is_empty());
         assert_eq!(d.last_rule, Some(0));
         // A press that matches nothing clears it.
         let none = ResolveCtx {
             target: targeting::Target::None,
             ..c
         };
-        assert!(d.dispatch(&rules, &press, &none).is_empty());
+        assert!(d.dispatch(&rules, &press, &none, 4).is_empty());
         assert_eq!(d.last_rule, None);
     }
 
