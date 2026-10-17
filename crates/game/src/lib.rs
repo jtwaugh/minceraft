@@ -9,6 +9,7 @@ pub mod clock;
 pub mod collision;
 pub mod commands;
 pub mod crops;
+pub mod data_error;
 pub mod events;
 pub mod farm;
 pub mod forage;
