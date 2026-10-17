@@ -534,9 +534,10 @@ impl Walker {
                 self.items.spawn(item, at, [0.0; 3]);
             }
         }
-        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Plant), ctx.target) {
+        if let (true, Target::Block { pos, face }) = (ran.contains(&ActionKind::Plant), ctx.target)
+        {
             // The seed leaves the hands only if a crop went in.
-            if plant(&mut self.world, pos) {
+            if plant(&mut self.world, pos, face) {
                 self.state.hands = None;
             }
         }
