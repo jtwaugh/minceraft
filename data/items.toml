@@ -58,6 +58,15 @@ label = "Raw chicken"
 name = "feather"
 label = "Feather"
 
+# Foraging tall grass with empty hands (section 9.5).
+[forage]
+# The item dropped, which must be in the item list.
+item = "seeds"
+# A forage drops it with probability 1 in `chance`.
+chance = 6
+# Ticks before the same grass block can be foraged again: one minute at 20 Hz.
+cooldown_ticks = 1200
+
 # Crop produce (section 9.4). What each crop yields is in crops.toml.
 [[item]]
 name = "wheat"

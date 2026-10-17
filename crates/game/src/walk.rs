@@ -5,6 +5,7 @@
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
+use crate::forage::{ForageConfig, Forager};
 use crate::input::TickInput;
 use crate::interactions::{
     resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
@@ -133,6 +134,7 @@ const FIRST_ITEM_ID: crate::targeting::EntityId = 1 << 20;
 const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
 /// Fixed seed for animal wandering until the world seed reaches the walker.
 const ANIMAL_SEED: u64 = 0;
+const FORAGE_SEED: u64 = 1;
 
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
@@ -159,6 +161,9 @@ pub struct Walker {
     dispatcher: Dispatcher,
     items: ItemStore,
     animals: AnimalStore,
+    forager: Forager,
+    /// Ticks stepped so far, for cooldowns.
+    sim_tick: u64,
     item_table: Items,
     state: PlayerState,
     /// Test override of the derived held thing.
@@ -196,6 +201,8 @@ impl Walker {
                 FIRST_ANIMAL_ID,
                 ANIMAL_SEED,
             ),
+            forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
+            sim_tick: 0,
             item_table: Items::default_items(),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
@@ -280,6 +287,7 @@ impl Walker {
 
     /// One 20 Hz step.
     pub fn tick(&mut self, input: &TickInput) {
+        self.sim_tick += 1;
         let entities = self.all_entities();
         if let Some(slot) = input.tool_slot {
             self.state.select(slot);
@@ -431,8 +439,16 @@ impl Walker {
             HeldThing::Tool(name) => self.item_table.damage(Some(name)),
             _ => self.item_table.damage(None),
         };
-        self.dispatcher
+        let ran = self
+            .dispatcher
             .dispatch(&self.rules, &pressed, &ctx, damage);
+        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
+            if let Some(item) = self.forager.forage(pos, self.sim_tick) {
+                let item = item.to_string();
+                let at = pos.map(|c| f64::from(c) + 0.5);
+                self.items.spawn(ItemInstance { item }, at, [0.0; 3]);
+            }
+        }
         for hit in &self.dispatcher.hits {
             self.animals.hit(hit.id, hit.damage, self.player.pos);
         }
@@ -1070,6 +1086,87 @@ mod tests {
         let r = resolve(&w.rules.rules, &ctx).unwrap();
         assert_eq!(r.action, ActionKind::Plant);
         assert_eq!(w.held(), HeldThing::Item("seeds".into()));
+    }
+
+    fn grass_walker(chance: u32) -> Walker {
+        let mut region = flat(-8, -8, 16, 3);
+        let i = region.index(8, 5, 6); // world (0, 5, -2), straight ahead
+        region.blocks[i] = Block::TallGrass as u8;
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.add_region(region);
+        for _ in 0..40 {
+            w.tick(&TickInput::default());
+        }
+        let cfg = ForageConfig {
+            chance,
+            cooldown_ticks: 100,
+            ..ForageConfig::default_from_data()
+        };
+        w.forager = Forager::new(cfg, 3);
+        w
+    }
+
+    fn press_secondary() -> TickInput {
+        TickInput {
+            secondary: true,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn forage_drops_seeds_once_per_cooldown_and_keeps_the_grass() {
+        let mut w = grass_walker(1);
+        w.tick(&look(0.0, false));
+        assert_eq!(
+            w.target(),
+            Target::Block {
+                pos: [0, 5, -2],
+                face: crate::targeting::Face::South
+            }
+        );
+        w.tick(&press_secondary());
+        assert_eq!(w.items().len(), 1);
+        assert_eq!(w.items().iter().next().unwrap().item.item, "seeds");
+        assert_eq!(
+            w.target(),
+            Target::Block {
+                pos: [0, 5, -2],
+                face: crate::targeting::Face::South
+            }
+        );
+        w.tick(&press_secondary());
+        assert_eq!(w.items().len(), 1, "inside the cooldown");
+        for _ in 0..100 {
+            w.tick(&look(0.0, false));
+        }
+        w.tick(&press_secondary());
+        assert_eq!(w.items().len(), 2, "after the cooldown");
+    }
+
+    #[test]
+    fn forage_needs_empty_hands() {
+        let mut w = grass_walker(1);
+        w.set_held(HeldThing::Tool("hoe".into()));
+        w.tick(&look(0.0, false));
+        w.tick(&press_secondary());
+        assert_eq!(w.items().len(), 0);
+        w.clear_held_override();
+        w.state.hands = Some(seeds());
+        w.tick(&press_secondary());
+        assert_eq!(w.items().len(), 0);
+    }
+
+    #[test]
+    fn forage_replays_identically() {
+        let run = || {
+            let mut w = grass_walker(2);
+            for _ in 0..600 {
+                w.tick(&look(0.0, false));
+                w.tick(&press_secondary());
+            }
+            w.items().len()
+        };
+        assert_eq!(run(), run());
     }
 
     fn slot(n: u8) -> TickInput {
