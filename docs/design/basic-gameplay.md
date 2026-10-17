@@ -413,7 +413,7 @@ Drops spawn as item entities. Their scatter velocity is the game's own, in `data
 
 ### 8.4 Animal respawn
 
-Island animal counts are topped up at the start of each day (not continuously) to the level's target count, spawning on valid grass tiles out of the player's view.
+Island animal counts are topped up at the start of each day (not continuously) to the level's target count, spawning on valid grass tiles out of the player's view. Phase 6 does not build this: it places animals from a data list (kind and position, or kind and count per level) in the test scene only. The daily top-up and any day clock wait for a later phase. (Decided in #255.)
 
 ---
 
