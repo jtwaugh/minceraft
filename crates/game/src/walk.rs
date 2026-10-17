@@ -5,6 +5,7 @@
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
+use crate::events::GameEvent;
 use crate::forage::{ForageConfig, Forager};
 use crate::input::TickInput;
 use crate::interactions::{
@@ -162,6 +163,8 @@ pub struct Walker {
     items: ItemStore,
     animals: AnimalStore,
     forager: Forager,
+    /// Events emitted since the last `drain_events`.
+    events: Vec<GameEvent>,
     /// Ticks stepped so far, for cooldowns.
     sim_tick: u64,
     item_table: Items,
@@ -202,6 +205,7 @@ impl Walker {
                 ANIMAL_SEED,
             ),
             forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
+            events: Vec::new(),
             sim_tick: 0,
             item_table: Items::default_items(),
             state: PlayerState::new(&Items::default_items())
@@ -409,6 +413,11 @@ impl Walker {
         }
     }
 
+    /// Take the events emitted since the last call, oldest first.
+    pub fn drain_events(&mut self) -> Vec<GameEvent> {
+        std::mem::take(&mut self.events)
+    }
+
     /// The carried item, if any.
     pub fn hands(&self) -> Option<&ItemInstance> {
         self.state.hands.as_ref()
@@ -446,7 +455,12 @@ impl Walker {
             if let Some(item) = self.forager.forage(pos, self.sim_tick) {
                 let item = item.to_string();
                 let at = pos.map(|c| f64::from(c) + 0.5);
-                self.items.spawn(ItemInstance { item }, at, [0.0; 3]);
+                self.items
+                    .spawn(ItemInstance { item: item.clone() }, at, [0.0; 3]);
+                self.events.push(GameEvent::Foraged {
+                    position: pos,
+                    yields: vec![item],
+                });
             }
         }
         for hit in &self.dispatcher.hits {
@@ -1167,6 +1181,48 @@ mod tests {
             w.items().len()
         };
         assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn forage_emits_foraged_only_on_success() {
+        let mut w = grass_walker(1);
+        w.tick(&look(0.0, false));
+        assert!(w.drain_events().is_empty());
+        w.tick(&press_secondary());
+        assert_eq!(
+            w.drain_events(),
+            vec![GameEvent::Foraged {
+                position: [0, 5, -2],
+                yields: vec!["seeds".to_string()],
+            }]
+        );
+        w.tick(&press_secondary());
+        assert!(w.drain_events().is_empty(), "blocked by the cooldown");
+
+        // A failed roll: chance so low that the first rolls miss.
+        let mut w = grass_walker(1_000_000);
+        w.tick(&look(0.0, false));
+        w.tick(&press_secondary());
+        assert_eq!(w.items().len(), 0);
+        assert!(w.drain_events().is_empty(), "failed roll");
+    }
+
+    #[test]
+    fn forage_events_replay_identically() {
+        let run = || {
+            let mut w = grass_walker(2);
+            let mut seen = Vec::new();
+            for _ in 0..600 {
+                w.tick(&look(0.0, false));
+                w.tick(&press_secondary());
+                seen.extend(w.drain_events());
+            }
+            (seen, w.items().len())
+        };
+        let (a, n) = run();
+        assert!(!a.is_empty());
+        assert_eq!(a.len(), n, "one event per drop");
+        assert_eq!((a, n), run());
     }
 
     fn slot(n: u8) -> TickInput {
