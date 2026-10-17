@@ -10,7 +10,7 @@ phases:
   3: done
   4: done
   5: done
-  6: todo
+  6: done
   7: todo
   8: todo
 ---
@@ -24,7 +24,8 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Phase 3 done (plan #137).** `crates/game` has the water tunables and body-in-water detection (#152), the water movement tick and swim up (#154), climbing out (#155), the raft entity with collision and carrying the player (#156, `crates/game/src/raft.rs`, `data/raft.toml`), the swell push on the deck (#163), and the headless tests `crates/game/tests/swim_climb.rs` (#159) and `crates/game/tests/raft_stability.rs` (#164). The browser test scene has swimming and a rocking raft at `client/?scene=raft` (#166). Movement events (4.8) belong to Phase 8.
 - **Phase 4 done (plan #173).** `crates/game` has the `Target` type, ray-vs-box test and `data/targeting.toml` (#187), block selection boxes and the block raycast (#190, shapes decided in #174), entity targets with the nearest-hit rule (#193), the per-tick eye ray on the walking player (#196), `data/interactions.toml` and its loader (#186), first-match rule resolution with stub actions (#197), and the selection outline and rule overlay in `client/` (#200, `client/overlay.js`). Held tool and hands state are Phase 5.
 - **Phase 5 done (plan #213).** `crates/game` has `data/items.toml` and the belt and hands in `PlayerState` (#228, `items.rs`, `player.rs`), tool selection and the derived held thing (#229), item entities with the world store and targeting (#230, `item_entities.rs`), item gravity and settling (#232), pickup with tools stowed while carrying (#233), Drop throwing the item (#239), interact-while-carrying pinned as a no-op per #215 (#238), the headless test `crates/game/tests/hands.rs` (#244) and the belt in the browser test scene with input scripts, e.g. `client/test/scripts/belt.input` (#249). Put-down arrives with stations.
-- **No gameplay code beyond Phase 5.** There is no animal, crop, event or HUD code in this repo. `crates/terrain` is the
+- **Phase 6 done (plan #253).** `crates/game` has `data/animals.toml` and the animal loader and drop items (#269, `animals.rs`), the deterministic sim RNG (#270, `rng.rs`), the animal store and targeting (#273, #274, `animal_entities.rs`), wander (#275), sword damage and the hit rule (#276), primary press attacking the target (#277), knockback and hurt state (#278), flee (#279), death, tip-over and drops (#280), the headless test `crates/game/tests/animals.rs` (#283) and animals in the browser test scene (#285). Section 8.4 (daily top-up) and carrying drops to a crate are left to later phases, as decided in #255.
+- **No gameplay code beyond Phase 6.** There is no crop, event or HUD code in this repo. `crates/terrain` is the
   generator; `crates/web/src/lib.rs` exports only generation, height, climate
   and biome functions.
 - **Layout crate.** `crates/layout` (world-layout Phase A: bias terms,
