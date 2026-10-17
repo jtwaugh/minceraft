@@ -22,12 +22,13 @@ concurrency:
 jobs:
   review:
     # Public repo: review only PRs from branches in this repo (not forks),
-    # opened and updated by jtwaugh or the Claude app.
+    # opened by jtwaugh or the Claude app, and updated by them or by this
+    # repo's own workflows (a conflict merge can be pushed as github-actions).
     if: |
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.pull_request.user.login) &&
-      contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.actor)
+      contains(fromJSON('["jtwaugh", "claude[bot]", "github-actions[bot]"]'), github.actor)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -62,7 +63,7 @@ jobs:
           use_sticky_comment: true
           # PRs opened or updated by the Claude app have it as the actor; the
           # if: above already limits runs to this repo's own PRs.
-          allowed_bots: claude
+          allowed_bots: claude,github-actions
           include_comments_by_actor: jtwaugh,claude[bot]
           prompt: |
             REPO: ${{ github.repository }}

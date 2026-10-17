@@ -33,6 +33,14 @@ undone by the next run, with one exception: a card dragged to Idea is sent
 back to being an idea. The run labels the issue `idea` and removes `factory`,
 so nothing builds it until it's approved again.
 
+Dependencies are shown two ways, so the board says what each ticket waits on:
+- GitHub's own "blocked by" relationships: every issue on a ticket's
+  "Depends on:" line or in a "Blocked by #n" is added as a blocked-by
+  dependency (shown on the issue, and on the card if the board shows it);
+- a text field named "Waiting on", if the project has one, set to what the
+  ticket waits on right now: open dependencies, and open PRs editing the
+  same files (see tickets.py). Empty once nothing blocks it.
+
 Every run recomputes everything, so a missed event is fixed by the next one.
 Uses the REST API (GH_TOKEN) to read the repo and GraphQL (PROJECT_TOKEN, a
 classic token with the `project` scope) for the project, which belongs to the
@@ -47,6 +55,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import review_gate  # noqa: E402  (verdict parsing and the merge-gate decision)
+import tickets  # noqa: E402  (dependency and file-overlap rules)
 
 REPO = os.environ["GITHUB_REPOSITORY"]
 STATUSES = ["Inbox", "Approved", "Blocked", "Nits", "Ready for Merge", "Done"]
@@ -165,8 +174,13 @@ def issue_status(issue, pr_by_ticket):
     return "Inbox", "not approved yet"
 
 
+WAITS = {}      # issue number -> ["#219", "PR #233"]: what it waits on now
+TICKETS = []    # open tickets (issue dicts) whose dependencies are mirrored
+
+
 def desired():
-    """{(kind, number): (status, reason, node_id)} for every open ticket and PR."""
+    """{(kind, number): (status, reason, node_id)} for every open ticket and PR.
+    Also fills WAITS and TICKETS."""
     pulls = rest(f"repos/{REPO}/pulls?state=open&per_page=100")
     pr_by_ticket, want = {}, {}
     for pr in pulls:
@@ -191,9 +205,47 @@ def desired():
             s, why = pr_cache[pr["number"]]
         else:
             s, why = issue_status(issue, {})
+            if s and "spec-question" not in labels:
+                TICKETS.append(issue)
+                waits = [f"#{d}" for d in tickets.open_deps(issue)] + \
+                        [f"PR #{n}" for n in tickets.busy_prs(issue, pulls)]
+                if waits:
+                    WAITS[issue["number"]] = waits
+                    why = f"{why}; waiting on {', '.join(waits)}"
         if s:
             want[("Issue", issue["number"])] = (s, why, issue["node_id"])
     return want
+
+
+def declared_deps(issue):
+    """Every issue a ticket declares it depends on, open or closed."""
+    return sorted((tickets.deps(issue.get("body")) |
+                   {b for b, _ in tickets.comment_blockers(issue["number"])}) - {issue["number"]})
+
+
+def sync_dependencies():
+    """Mirror each ticket's declared dependencies as GitHub blocked-by links.
+    Only adds; a link someone added by hand is left alone."""
+    added = 0
+    for issue in TICKETS:
+        n = issue["number"]
+        try:
+            have = {d["number"] for d in rest(f"repos/{REPO}/issues/{n}/dependencies/blocked_by?per_page=100")}
+            for d in declared_deps(issue):
+                if d in have:
+                    continue
+                dep = rest(f"repos/{REPO}/issues/{d}")
+                if "pull_request" in dep:
+                    continue  # PRs can't be dependencies
+                subprocess.run(["gh", "api", "-X", "POST",
+                                f"repos/{REPO}/issues/{n}/dependencies/blocked_by",
+                                "-F", f"issue_id={dep['id']}"],
+                               check=True, capture_output=True, text=True)
+                print(f"Issue #{n}: marked blocked by #{d}")
+                added += 1
+        except subprocess.CalledProcessError as e:
+            print(f"::warning::Couldn't sync dependencies for #{n}: {(e.stderr or '').strip()[:200]}")
+    return added
 
 
 # ------------------------------------------------------------------- project
@@ -206,6 +258,9 @@ query($login: String!, $number: Int!, $after: String) {
       field(name: "Status") {
         ... on ProjectV2SingleSelectField { id options { id name } }
       }
+      waitingField: field(name: "Waiting on") {
+        ... on ProjectV2Field { id dataType }
+      }
       items(first: 100, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
@@ -215,8 +270,11 @@ query($login: String!, $number: Int!, $after: String) {
             ... on Issue { number state repository { nameWithOwner } }
             ... on PullRequest { number state repository { nameWithOwner } }
           }
-          fieldValueByName(name: "Status") {
+          status: fieldValueByName(name: "Status") {
             ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }
+          }
+          waiting: fieldValueByName(name: "Waiting on") {
+            ... on ProjectV2ItemFieldTextValue { text }
           }
         }
       }
@@ -228,6 +286,18 @@ SET_STATUS = """
 mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
   updateProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item,
       fieldId: $field, value: {singleSelectOptionId: $option}}) { projectV2Item { id } }
+}"""
+
+SET_TEXT = """
+mutation($project: ID!, $item: ID!, $field: ID!, $text: String!) {
+  updateProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item,
+      fieldId: $field, value: {text: $text}}) { projectV2Item { id } }
+}"""
+
+CLEAR = """
+mutation($project: ID!, $item: ID!, $field: ID!) {
+  clearProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item,
+      fieldId: $field}) { projectV2Item { id } }
 }"""
 
 ADD_ITEM = """
@@ -259,11 +329,28 @@ def load_project(login, number):
     if missing:
         raise SystemExit("Add these options to the project's Status field (exact names): "
                          + ", ".join(missing))
-    return project["id"], field["id"], options, items
+    wf = project.get("waitingField") or {}
+    waiting_field = wf.get("id") if wf.get("dataType") == "TEXT" else None
+    if not waiting_field:
+        print("No 'Waiting on' text field on the project; add one to see dependencies on cards.")
+    return project["id"], field["id"], options, items, waiting_field
+
+
+def set_waiting(project, item, field, key, current):
+    """Set the card's "Waiting on" text; True if it changed."""
+    text = ", ".join(WAITS.get(key[1], [])) if key[0] == "Issue" else ""
+    if (current or "") == text:
+        return False
+    if text:
+        graphql(SET_TEXT, project=project, item=item, field=field, text=text)
+    else:
+        graphql(CLEAR, project=project, item=item, field=field)
+    print(f"{key[0]} #{key[1]}: waiting on {text or 'nothing'}")
+    return True
 
 
 def sync(login, number, want):
-    project, field, options, items = load_project(login, number)
+    project, field, options, items, waiting_field = load_project(login, number)
     seen = set()
     changed = 0
     for it in items:
@@ -273,13 +360,16 @@ def sync(login, number, want):
             continue
         key = (c["__typename"], c["number"])
         seen.add(key)
+        if waiting_field and set_waiting(project, it["id"], waiting_field, key,
+                                         (it.get("waiting") or {}).get("text")):
+            changed += 1
         if c["state"] in ("CLOSED", "MERGED"):
             status, why = "Done", "closed"
         elif key in want:
             status, why = want[key][:2]
         else:
             continue  # a plan, or something this script doesn't manage
-        value = it.get("fieldValueByName") or {}
+        value = it.get("status") or {}
         current = value.get("name")
         # In the Idea column without the label: either dragged there (make it
         # an idea) or the label was just removed to approve it again (move it
@@ -301,6 +391,8 @@ def sync(login, number, want):
             continue
         item = graphql(ADD_ITEM, project=project, content=node)["addProjectV2ItemById"]["item"]["id"]
         graphql(SET_STATUS, project=project, item=item, field=field, option=options[status])
+        if waiting_field:
+            set_waiting(project, item, waiting_field, key, "")
         print(f"{key[0]} #{key[1]}: added as {status} ({why})")
         changed += 1
     print(f"{changed} card(s) updated, {len(items)} on the board.")
@@ -322,6 +414,7 @@ def main():
         raise SystemExit("Set the PROJECT_NUMBER repository variable to the project's number.")
     login = os.environ.get("PROJECT_OWNER") or REPO.split("/")[0]
     sync(login, int(number), want)
+    print(f"{sync_dependencies()} blocked-by link(s) added.")
 
 
 if __name__ == "__main__":
