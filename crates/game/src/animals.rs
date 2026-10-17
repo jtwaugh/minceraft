@@ -32,6 +32,10 @@ pub struct AnimalDef {
     pub pause_ticks: [u32; 2],
     /// Ticks after a hit during which weaker hits are ignored (8.2).
     pub hurt_ticks: u32,
+    /// Horizontal speed given by a hit, away from the attacker, blocks per second.
+    pub knockback_speed: f64,
+    /// Upward speed given by a hit, blocks per second.
+    pub knockback_lift: f64,
 }
 
 /// The animal kinds, sorted by name.
@@ -91,6 +95,8 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
             "walk_ticks",
             "pause_ticks",
             "hurt_ticks",
+            "knockback_speed",
+            "knockback_lift",
         ]
         .contains(&field.as_str())
         {
@@ -144,6 +150,14 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
         .ok_or_else(|| bad("`hurt_ticks` must be a positive integer".to_string()))?
         as u32;
+    let speed = |field: &str| {
+        table
+            .get(field)
+            .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+            .filter(|c| c.is_finite() && *c >= 0.0)
+            .ok_or_else(|| bad(format!("`{field}` must be zero or more")))
+    };
+    let (knockback_speed, knockback_lift) = (speed("knockback_speed")?, speed("knockback_lift")?);
     let list = table
         .get("drops")
         .and_then(|v| v.as_array())
@@ -192,6 +206,8 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         walk_ticks,
         pause_ticks,
         hurt_ticks,
+        knockback_speed,
+        knockback_lift,
     })
 }
 
@@ -269,7 +285,7 @@ mod tests {
     #[test]
     fn unknown_drop_item_rejected() {
         let a = Animals::from_toml(
-            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
         )
         .unwrap();
         assert!(matches!(
@@ -298,7 +314,7 @@ mod tests {
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 0\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [3, 2]\npause_ticks = [1, 2]\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\n",
-            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 0\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 0\nknockback_speed = 1\nknockback_lift = 1\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
             "not toml [",
         ] {

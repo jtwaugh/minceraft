@@ -425,7 +425,7 @@ impl Walker {
         self.dispatcher
             .dispatch(&self.rules, &pressed, &ctx, damage);
         for hit in &self.dispatcher.hits {
-            self.animals.hit(hit.id, hit.damage);
+            self.animals.hit(hit.id, hit.damage, self.player.pos);
         }
         self.facts = ctx.facts;
         if input.interact {
@@ -751,9 +751,13 @@ mod tests {
         assert_eq!(cow_health(&w, id), full - 1);
         // Let the invulnerability window close, then use the sword.
         w.player_state_mut().select(1);
-        for _ in 0..40 {
+        for _ in 0..11 {
             w.tick(&look(-0.4, false));
         }
+        // The hit knocked the cow back; step after it to keep the aim.
+        let (cow, me) = (w.animals().get(id).unwrap().pos, w.player().pos);
+        w.teleport([me[0], me[1], cow[2] + 2.0]);
+        w.tick(&look(-0.4, false));
         w.tick(&click());
         assert_eq!(cow_health(&w, id), full - 5);
     }

@@ -44,7 +44,8 @@ pub struct AnimalEntity {
     pub box_size: [f64; 2],
     pub wander: Wander,
     /// Ticks left in the invulnerability window after a hit; 0 when open.
-    pub hurt_ticks: u32,
+    /// The red flash lasts as long.
+    pub hurt_ticks_left: u32,
     /// Damage of the hit that opened the window.
     pub last_damage: u32,
 }
@@ -140,7 +141,7 @@ impl AnimalStore {
             facing,
             box_size: def.box_size,
             wander,
-            hurt_ticks: 0,
+            hurt_ticks_left: 0,
             last_damage: 0,
         });
         Some(id)
@@ -173,17 +174,31 @@ impl AnimalStore {
     /// invulnerability window the hit applies in full and opens the window.
     /// Inside it, a hit is ignored unless it exceeds the last hit, and then
     /// only the difference applies. Returns the health taken off (0 if
-    /// ignored), or `None` if there is no such animal. No knockback or death
-    /// handling here: health just stops at 0.
-    pub fn hit(&mut self, id: EntityId, damage: u32) -> Option<u32> {
+    /// ignored), or `None` if there is no such animal. A hit that opens the
+    /// window also knocks the animal away from `attacker` (a world position)
+    /// with a small kick upward; the move itself happens in `tick`, through
+    /// the collision resolver. No death handling here: health just stops at 0.
+    pub fn hit(&mut self, id: EntityId, damage: u32, attacker: [f64; 3]) -> Option<u32> {
         let i = self.animals.binary_search_by_key(&id, |e| e.id).ok()?;
         let e = &mut self.animals[i];
-        let applied = if e.hurt_ticks == 0 {
-            e.hurt_ticks = self
+        let applied = if e.hurt_ticks_left == 0 {
+            let def = self
                 .kinds
                 .get(&e.species)
-                .expect("species checked at spawn")
-                .hurt_ticks;
+                .expect("species checked at spawn");
+            e.hurt_ticks_left = def.hurt_ticks;
+            let (dx, dz) = (e.pos[0] - attacker[0], e.pos[2] - attacker[2]);
+            let len = dx.hypot(dz);
+            // Attacker straight above or below: push along the facing.
+            let (ux, uz) = if len > 1e-9 {
+                (dx / len, dz / len)
+            } else {
+                let (sin, cos) = e.facing.to_radians().sin_cos();
+                (sin, -cos)
+            };
+            e.velocity[0] = ux * def.knockback_speed;
+            e.velocity[2] = uz * def.knockback_speed;
+            e.velocity[1] = def.knockback_lift;
             damage
         } else {
             damage.saturating_sub(e.last_damage)
@@ -204,7 +219,7 @@ impl AnimalStore {
         let dt = 1.0 / TICKS_PER_SECOND;
         let mut scratch = Vec::new();
         for e in &mut self.animals {
-            e.hurt_ticks = e.hurt_ticks.saturating_sub(1);
+            e.hurt_ticks_left = e.hurt_ticks_left.saturating_sub(1);
             let def = self
                 .kinds
                 .get(&e.species)
@@ -219,7 +234,8 @@ impl AnimalStore {
                     e.velocity[2] += pz * TICKS_PER_SECOND;
                 }
             }
-            if walking {
+            // The wander drive would overwrite a knockback, so it waits.
+            if walking && e.hurt_ticks_left == 0 {
                 // Facing 0 looks along -z, as for the player's yaw.
                 let (sin, cos) = e.facing.to_radians().sin_cos();
                 e.velocity[0] = sin * def.wander_speed;
@@ -292,6 +308,8 @@ mod tests {
         }
         w
     }
+
+    const ORIGIN: [f64; 3] = [0.0; 3];
 
     fn run(s: &mut AnimalStore, w: &impl CollisionWorld, n: usize) {
         for _ in 0..n {
@@ -482,26 +500,30 @@ mod tests {
         let w = MemoryWorld::new();
         let window = Animals::default_animals().get("cow").unwrap().hurt_ticks;
         for want in [6, 2, 0] {
-            assert!(s.hit(cow, sword()).is_some());
+            assert!(s.hit(cow, sword(), ORIGIN).is_some());
             assert_eq!(s.get(cow).unwrap().health, want);
             run(&mut s, &w, window as usize);
         }
-        assert_eq!(s.hit(hen, sword()), Some(4));
+        assert_eq!(s.hit(hen, sword(), ORIGIN), Some(4));
         assert_eq!(s.get(hen).unwrap().health, 0);
-        assert_eq!(s.hit(999, 1), None);
+        assert_eq!(s.hit(999, 1, ORIGIN), None);
     }
 
     #[test]
     fn weaker_hit_in_the_window_is_ignored_and_stronger_applies_the_difference() {
         let mut s = store(1);
         let id = s.spawn("cow", [0.0; 3], 0.0).unwrap();
-        assert_eq!(s.hit(id, 4), Some(4));
-        assert_eq!(s.hit(id, 4), Some(0));
-        assert_eq!(s.hit(id, 1), Some(0));
+        assert_eq!(s.hit(id, 4, ORIGIN), Some(4));
+        assert_eq!(s.hit(id, 4, ORIGIN), Some(0));
+        assert_eq!(s.hit(id, 1, ORIGIN), Some(0));
         assert_eq!(s.get(id).unwrap().health, 6);
-        assert_eq!(s.hit(id, 6), Some(2));
+        assert_eq!(s.hit(id, 6, ORIGIN), Some(2));
         assert_eq!(s.get(id).unwrap().health, 4);
-        assert_eq!(s.hit(id, 6), Some(0), "difference is against the new last");
+        assert_eq!(
+            s.hit(id, 6, ORIGIN),
+            Some(0),
+            "difference is against the new last"
+        );
     }
 
     #[test]
@@ -510,19 +532,23 @@ mod tests {
         let n = Animals::default_animals().get("pig").unwrap().hurt_ticks;
         let mut s = store(1);
         let id = s.spawn("pig", [0.0; 3], 0.0).unwrap();
-        s.hit(id, 1);
+        s.hit(id, 1, ORIGIN);
         run(&mut s, &w, n as usize - 1);
-        assert_eq!(s.hit(id, 1), Some(0), "still inside after n-1 ticks");
+        assert_eq!(
+            s.hit(id, 1, ORIGIN),
+            Some(0),
+            "still inside after n-1 ticks"
+        );
         s.tick(&w, None);
-        assert_eq!(s.get(id).unwrap().hurt_ticks, 0);
-        assert_eq!(s.hit(id, 1), Some(1), "open after n ticks");
+        assert_eq!(s.get(id).unwrap().hurt_ticks_left, 0);
+        assert_eq!(s.hit(id, 1, ORIGIN), Some(1), "open after n ticks");
     }
 
     #[test]
     fn health_stops_at_zero() {
         let mut s = store(1);
         let id = s.spawn("chicken", [0.0; 3], 0.0).unwrap();
-        assert_eq!(s.hit(id, 100), Some(4));
+        assert_eq!(s.hit(id, 100, ORIGIN), Some(4));
         assert_eq!(s.get(id).unwrap().health, 0);
     }
 
@@ -530,5 +556,72 @@ mod tests {
     fn same_seed_same_wander_and_other_seeds_differ() {
         assert_eq!(wander_run(9, 500), wander_run(9, 500));
         assert_ne!(wander_run(9, 500), wander_run(10, 500));
+    }
+
+    #[test]
+    fn a_hit_pushes_away_and_up() {
+        let w = floor();
+        for (attacker, dir) in [
+            ([-1.0, 1.0, 0.5], [1.0, 0.0]),
+            ([0.5, 1.0, 2.0], [0.0, -1.0]),
+        ] {
+            let mut s = store(1);
+            let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+            run(&mut s, &w, 30);
+            let before = s.get(id).unwrap().pos;
+            s.hit(id, 1, attacker);
+            assert!(s.get(id).unwrap().hurt_ticks_left > 0);
+            let mut top = before[1];
+            for _ in 0..6 {
+                s.tick(&w, None);
+                top = top.max(s.get(id).unwrap().pos[1]);
+            }
+            let after = s.get(id).unwrap().pos;
+            assert!(top > before[1] + 0.05, "gains height");
+            let moved = [after[0] - before[0], after[2] - before[2]];
+            assert!(moved[0] * dir[0] + moved[1] * dir[1] > 0.1, "{moved:?}");
+        }
+    }
+
+    #[test]
+    fn an_ignored_hit_gives_no_knockback_and_the_window_closes() {
+        let w = floor();
+        let mut s = store(1);
+        let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+        run(&mut s, &w, 30);
+        s.hit(id, 4, [-1.0, 1.0, 0.5]);
+        s.tick(&w, None);
+        let v = s.get(id).unwrap().velocity;
+        s.hit(id, 4, [0.5, 1.0, 3.0]);
+        assert_eq!(s.get(id).unwrap().velocity, v, "unchanged");
+        let n = Animals::default_animals().get("cow").unwrap().hurt_ticks;
+        run(&mut s, &w, n as usize);
+        assert_eq!(s.get(id).unwrap().hurt_ticks_left, 0);
+    }
+
+    #[test]
+    fn knockback_into_a_wall_stops_at_the_wall() {
+        let w = floor();
+        let mut s = store(1);
+        // Wall block at x=3 starts at x=3.0; the cow is 0.9 wide.
+        let id = s.spawn("cow", [2.4, 1.0, 0.5], 0.0).unwrap();
+        run(&mut s, &w, 30);
+        s.hit(id, 1, [0.0, 1.0, 0.5]);
+        run(&mut s, &w, 30);
+        let e = s.get(id).unwrap();
+        assert!(e.pos[0] + 0.45 <= 3.0 + 1e-9, "inside: {}", e.pos[0]);
+    }
+
+    #[test]
+    fn knockback_is_deterministic() {
+        let go = || {
+            let w = floor();
+            let mut s = store(1);
+            let id = s.spawn("pig", [0.5, 1.0, 0.5], 0.0).unwrap();
+            s.hit(id, 1, [-1.0, 1.0, 0.0]);
+            run(&mut s, &w, 40);
+            s.get(id).unwrap().clone()
+        };
+        assert_eq!(go(), go());
     }
 }
