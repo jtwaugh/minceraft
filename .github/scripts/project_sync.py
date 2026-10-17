@@ -6,7 +6,9 @@
 
 Statuses, in the order a ticket moves through them:
 
-  Inbox            open ticket, question or idea nobody has approved: no
+  Idea             labelled `idea`: an idea, or a ticket sent back to being
+                   one (falls back to Inbox if the board has no Idea column)
+  Inbox            open ticket or question nobody has approved: no
                    `factory` label and no pull request
   Approved         labelled `factory`, no pull request yet: waiting on
                    dependencies or files, or being built
@@ -26,6 +28,11 @@ A ticket and its PR (the PR says "Closes #n" or is on a claude/issue-n-
 branch) get the same status, so it doesn't matter which one is on the board.
 "Plan:" issues are left alone; their sub-issue progress says more.
 
+Labels are the source of truth, so dragging a card to another column is
+undone by the next run, with one exception: a card dragged to Idea is sent
+back to being an idea. The run labels the issue `idea` and removes `factory`,
+so nothing builds it until it's approved again.
+
 Every run recomputes everything, so a missed event is fixed by the next one.
 Uses the REST API (GH_TOKEN) to read the repo and GraphQL (PROJECT_TOKEN, a
 classic token with the `project` scope) for the project, which belongs to the
@@ -43,7 +50,7 @@ import review_gate  # noqa: E402  (verdict parsing and the merge-gate decision)
 
 REPO = os.environ["GITHUB_REPOSITORY"]
 STATUSES = ["Inbox", "Approved", "Blocked", "Nits", "Ready for Merge", "Done"]
-OPTIONAL = {"Submitted": "Approved"}  # status: what to use if the board lacks it
+OPTIONAL = {"Submitted": "Approved", "Idea": "Inbox"}  # status: what to use if the board lacks it
 # Check runs from agent and housekeeping jobs (including this sync, which is
 # cancelled whenever a newer run starts), not checks on the code.
 AGENT_JOBS = {"implement", "find-ready", "start-ready", "edit-spec", "reconcile",
@@ -76,6 +83,22 @@ def graphql(query, **variables):
 
 
 # ---------------------------------------------------------------- repo state
+
+def demote_to_idea(n):
+    """Label issue #n `idea` and take `factory` off (it was dragged to Idea)."""
+    subprocess.run(["gh", "api", "-X", "POST", f"repos/{REPO}/issues/{n}/labels",
+                    "-f", "labels[]=idea"], check=True, capture_output=True)
+    subprocess.run(["gh", "api", "-X", "DELETE", f"repos/{REPO}/issues/{n}/labels/factory"],
+                   capture_output=True)  # fine if it wasn't there
+
+
+def unlabelled_idea_at(n):
+    """When the `idea` label was last removed from #n, or "" if never."""
+    events = rest(f"repos/{REPO}/issues/{n}/events?per_page=100")
+    times = [e["created_at"] for e in events
+             if e.get("event") == "unlabeled" and (e.get("label") or {}).get("name") == "idea"]
+    return max(times, default="")
+
 
 def ticket_of(pr):
     """The issue number a PR closes, from its branch or body, or None."""
@@ -160,6 +183,9 @@ def desired():
         labels = {l["name"] for l in issue.get("labels", [])}
         if not labels & {"planned", "spec-question", "idea", "factory"}:
             continue
+        if "idea" in labels and not issue["title"].startswith("Plan:"):
+            want[("Issue", issue["number"])] = ("Idea", "labelled idea", issue["node_id"])
+            continue
         pr = pr_by_ticket.get(issue["number"])
         if pr:
             s, why = pr_cache[pr["number"]]
@@ -190,7 +216,7 @@ query($login: String!, $number: Int!, $after: String) {
             ... on PullRequest { number state repository { nameWithOwner } }
           }
           fieldValueByName(name: "Status") {
-            ... on ProjectV2ItemFieldSingleSelectValue { name }
+            ... on ProjectV2ItemFieldSingleSelectValue { name updatedAt }
           }
         }
       }
@@ -253,7 +279,18 @@ def sync(login, number, want):
             status, why = want[key][:2]
         else:
             continue  # a plan, or something this script doesn't manage
-        current = (it.get("fieldValueByName") or {}).get("name")
+        value = it.get("fieldValueByName") or {}
+        current = value.get("name")
+        # In the Idea column without the label: either dragged there (make it
+        # an idea) or the label was just removed to approve it again (move it
+        # out). Whichever happened last wins.
+        if current == "Idea" and status != "Idea" and key[0] == "Issue" and c["state"] == "OPEN" \
+                and (value.get("updatedAt") or "") > unlabelled_idea_at(key[1]):
+            # Dragged to Idea on the board: make it an idea for real.
+            demote_to_idea(key[1])
+            print(f"Issue #{key[1]}: moved to Idea on the board; labelled idea, factory removed")
+            changed += 1
+            continue
         if current != status:
             graphql(SET_STATUS, project=project, item=it["id"], field=field, option=options[status])
             print(f"{key[0]} #{key[1]}: {current} -> {status} ({why})")

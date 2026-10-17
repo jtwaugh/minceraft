@@ -157,7 +157,8 @@ def open_prs():
 
 def ready_tickets(prs):
     tickets = [i for i in gh(f"repos/{REPO}/issues?state=open&labels=factory&per_page=100")
-               if "pull_request" not in i and not i["title"].startswith("Plan:")]
+               if "pull_request" not in i and not i["title"].startswith("Plan:")
+               and "idea" not in {l["name"] for l in i.get("labels", [])}]
     ready, claimed = [], {}
     for t in sorted(tickets, key=lambda t: t["number"]):
         n = t["number"]
