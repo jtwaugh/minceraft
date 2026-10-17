@@ -99,3 +99,45 @@ fn bad_templates_are_rejected() {
     ));
     assert!(Structure::parse(&with("[0,1,1]", p, "[[\"\"]]")).is_err());
 }
+
+#[test]
+fn structure_error_display_is_readable() {
+    let cases = [
+        (StructureError::Toml("bad".into()), vec!["TOML", "bad"]),
+        (StructureError::Field("size"), vec!["`size`"]),
+        (StructureError::BadPaletteKey("ab".into()), vec!["\"ab\""]),
+        (StructureError::UnknownBlock("mud".into()), vec!["`mud`"]),
+        (StructureError::UnknownSymbol('Z'), vec!["'Z'"]),
+        (
+            StructureError::LayerCount {
+                expected: 3,
+                found: 5,
+            },
+            vec!["3", "5", "layers"],
+        ),
+        (
+            StructureError::RowCount {
+                layer: 2,
+                expected: 4,
+                found: 7,
+            },
+            vec!["layer 2", "7", "4"],
+        ),
+        (
+            StructureError::RowLength {
+                layer: 1,
+                row: 6,
+                expected: 8,
+                found: 9,
+            },
+            vec!["layer 1", "row 6", "9", "8"],
+        ),
+    ];
+    for (err, keys) in cases {
+        let text = err.to_string();
+        assert!(!text.contains(" { "), "debug-style output: {text}");
+        for k in keys {
+            assert!(text.contains(k), "{text:?} lacks {k:?}");
+        }
+    }
+}
