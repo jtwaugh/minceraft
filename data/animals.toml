@@ -1,15 +1,19 @@
 # Animal kinds: health and drops. See docs/design/basic-gameplay.md
-# section 8.3. Drop items must be defined in items.toml. Box sizes and
-# movement numbers are added by later tickets.
+# section 8.3. Drop items must be defined in items.toml. `box` is [width, height] in
+# blocks. These numbers are the game's own (decided in #254). Movement
+# numbers are added by later tickets.
 
 [cow]
 health = 10
+box = [0.9, 1.4]
 drops = [{ item = "raw_beef", min = 1, max = 3 }, { item = "leather", min = 0, max = 1 }]
 
 [pig]
 health = 10
+box = [0.9, 0.9]
 drops = [{ item = "raw_pork", min = 1, max = 3 }]
 
 [chicken]
 health = 4
+box = [0.4, 0.7]
 drops = [{ item = "raw_chicken", min = 1, max = 1 }, { item = "feather", min = 0, max = 2 }]

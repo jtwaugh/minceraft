@@ -2,6 +2,8 @@
 //! over loaded terrain regions, plus the eye pose between ticks.
 //! See docs/design/basic-gameplay.md sections 1 (rule 1) and 3.
 
+use crate::animal_entities::AnimalStore;
+use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::input::TickInput;
 use crate::interactions::{
@@ -127,6 +129,9 @@ impl CollisionWorld for RegionSet {
 /// Item entity ids start here, above the ids of the stub entities.
 const FIRST_ITEM_ID: crate::targeting::EntityId = 1 << 20;
 
+/// Animal entity ids start here, above the item ids.
+const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
+
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
     raft: Raft,
@@ -151,6 +156,7 @@ pub struct Walker {
     rules: Interactions,
     dispatcher: Dispatcher,
     items: ItemStore,
+    animals: AnimalStore,
     state: PlayerState,
     /// Test override of the derived held thing.
     held_override: Option<HeldThing>,
@@ -181,6 +187,11 @@ impl Walker {
             rules: Interactions::default_rules(),
             dispatcher: Dispatcher::default(),
             items: ItemStore::new(ItemEntityConfig::default_from_data(), FIRST_ITEM_ID),
+            animals: AnimalStore::new(
+                Animals::default_animals(),
+                ItemEntityConfig::default_from_data(),
+                FIRST_ANIMAL_ID,
+            ),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             held_override: None,
@@ -294,6 +305,7 @@ impl Walker {
                     push: &f.push,
                 };
                 self.items.tick(&world, Some(deck));
+                self.animals.tick(&world, Some(deck));
                 let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -302,6 +314,7 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&self.world, None);
+                self.animals.tick(&self.world, None);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -352,15 +365,31 @@ impl Walker {
         &self.items
     }
 
+    /// Put an animal of `species` in the world, returning its entity id, or
+    /// `None` for an unknown species.
+    pub fn spawn_animal(
+        &mut self,
+        species: &str,
+        pos: [f64; 3],
+        facing: f64,
+    ) -> Option<crate::targeting::EntityId> {
+        self.animals.spawn(species, pos, facing)
+    }
+
+    pub fn animals(&self) -> &AnimalStore {
+        &self.animals
+    }
+
     /// The carried item, if any.
     pub fn hands(&self) -> Option<&ItemInstance> {
         self.state.hands.as_ref()
     }
 
-    /// Stub entities plus the loose items, as the eye ray sees them.
+    /// Stub entities plus the loose items and animals, as the eye ray sees them.
     fn all_entities(&self) -> Vec<TargetableEntity> {
         let mut all = self.entities.clone();
         all.extend(self.items.targetables());
+        all.extend(self.animals.targetables());
         all
     }
 
@@ -669,6 +698,24 @@ mod tests {
         ItemInstance {
             item: "seeds".into(),
         }
+    }
+
+    #[test]
+    fn walker_targets_an_animal_and_ids_stay_apart() {
+        let mut w = settled();
+        // Eye is at y 5.62; a cow 1.5 blocks north, standing on the ground.
+        let cow = w.spawn_animal("cow", [0.5, 4.5, -1.0], 0.0).unwrap();
+        let item = w.spawn_item(seeds(), [0.5, 5.62, -5.0]);
+        assert_ne!(cow, item);
+        assert!(cow > item);
+        w.set_held(HeldThing::Tool("sword".into()));
+        w.tick(&look(0.0, false));
+        assert_eq!(w.target(), Target::Entity { id: cow });
+        assert_eq!(w.animals().get(cow).unwrap().species, "cow");
+        assert_eq!(
+            w.preview(Button::Primary).unwrap().action,
+            ActionKind::Attack
+        );
     }
 
     fn interact() -> TickInput {

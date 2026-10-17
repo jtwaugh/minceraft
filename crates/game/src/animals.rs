@@ -17,15 +17,17 @@ pub struct Drop {
     pub max: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AnimalDef {
     pub kind: String,
     pub health: u32,
+    /// Box width (x and z) and height (y), in blocks.
+    pub box_size: [f64; 2],
     pub drops: Vec<Drop>,
 }
 
 /// The animal kinds, sorted by name.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Animals {
     pub kinds: Vec<AnimalDef>,
 }
@@ -73,7 +75,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         .as_table()
         .ok_or_else(|| bad("not a table".to_string()))?;
     for field in table.keys() {
-        if field != "health" && field != "drops" {
+        if !["health", "drops", "box"].contains(&field.as_str()) {
             return Err(bad(format!("unknown field `{field}`")));
         }
     }
@@ -83,6 +85,16 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         .filter(|h| (1..=i64::from(u32::MAX)).contains(h))
         .ok_or_else(|| bad("`health` must be a positive integer".to_string()))?
         as u32;
+    let box_size = table
+        .get("box")
+        .and_then(|v| v.as_array())
+        .filter(|a| a.len() == 2)
+        .and_then(|a| {
+            let n = |v: &toml::Value| v.as_float().or_else(|| v.as_integer().map(|i| i as f64));
+            Some([n(&a[0])?, n(&a[1])?])
+        })
+        .filter(|b| b.iter().all(|c| c.is_finite() && *c > 0.0))
+        .ok_or_else(|| bad("`box` must be [width, height], both above zero".to_string()))?;
     let list = table
         .get("drops")
         .and_then(|v| v.as_array())
@@ -125,6 +137,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
     Ok(AnimalDef {
         kind: kind.to_string(),
         health,
+        box_size,
         drops,
     })
 }
@@ -203,7 +216,7 @@ mod tests {
     #[test]
     fn unknown_drop_item_rejected() {
         let a = Animals::from_toml(
-            "[cow]\nhealth = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
         )
         .unwrap();
         assert!(matches!(
@@ -215,15 +228,18 @@ mod tests {
     #[test]
     fn rejects_bad_entries() {
         for bad in [
-            "[cow]\nhealth = 1\ndrops = []\nspeed = 2\n",
-            "[cow]\nhealth = 1\ndrops = [{ item = 'a', min = 1, max = 1, extra = 1 }]\n",
-            "[cow]\nhealth = 1\ndrops = [{ item = 'a', min = 3, max = 2 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nspeed = 2\n",
+            "[cow]\nhealth = 1\ndrops = []\n",
+            "[cow]\nhealth = 1\nbox = [0, 1]\ndrops = []\n",
+            "[cow]\nhealth = 1\nbox = [1]\ndrops = []\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = [{ item = 'a', min = 1, max = 1, extra = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = [{ item = 'a', min = 3, max = 2 }]\n",
             "[cow]\nhealth = 0\ndrops = []\n",
             "[cow]\nhealth = -4\ndrops = []\n",
             "[cow]\ndrops = []\n",
             "[cow]\nhealth = 1\n",
-            "[cow]\nhealth = 1\ndrops = [{ item = 'a', min = -1, max = 1 }]\n",
-            "[cow]\nhealth = 1\ndrops = [{ min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = [{ item = 'a', min = -1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = [{ min = 1, max = 1 }]\n",
             "cow = 3\n",
             "[cow]\nhealth = 1\ndrops = []\n[cow]\nhealth = 2\ndrops = []\n",
             "not toml [",
