@@ -9,6 +9,7 @@ pub mod clock;
 pub mod collision;
 pub mod crops;
 pub mod events;
+pub mod farm;
 pub mod forage;
 pub mod input;
 pub mod interactions;

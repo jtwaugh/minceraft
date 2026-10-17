@@ -276,3 +276,96 @@ collision = "full"
 opacity = 255
 opaque_cube = true
 color = "#8b5a2b"
+
+# Farm blocks (basic-gameplay.md 9, decided in #288). The generator never
+# places these; the game's edit map does (crates/game/src/farm.rs).
+
+[[block]]
+id = 29
+name = "farmland_dry"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#6b4a2e"
+
+[[block]]
+id = 30
+name = "farmland_wet"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#4a3320"
+
+[[block]]
+id = 31
+name = "wheat_0"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#7fae4a"
+
+[[block]]
+id = 32
+name = "wheat_1"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#7fae4a"
+
+[[block]]
+id = 33
+name = "wheat_2"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#8fb04a"
+
+[[block]]
+id = 34
+name = "wheat_3"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#a3b04a"
+
+[[block]]
+id = 35
+name = "wheat_4"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#b8a84a"
+
+[[block]]
+id = 36
+name = "wheat_5"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#c8a040"
+
+[[block]]
+id = 37
+name = "wheat_6"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#d0a03c"
+
+[[block]]
+id = 38
+name = "wheat_7"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#d9b048"
