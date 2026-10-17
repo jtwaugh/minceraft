@@ -19,7 +19,7 @@ import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadI
 import { attachInput } from './input.js';
 import { loadTiles } from './tiles.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
-import { formatAim, formatBelt, spawnTestItems } from './overlay.js';
+import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { NEAR, farPlane, look } from './view.js';
@@ -111,8 +111,8 @@ const boxProg = (() => {
   const p = gl.createProgram();
   gl.attachShader(p, sh(gl.VERTEX_SHADER, `#version 300 es
     layout(location=0) in vec3 pos;
-    uniform mat4 mvp; uniform vec3 lo; uniform vec3 size;
-    void main() { gl_Position = mvp * vec4(lo + pos * size, 1.0); }`));
+    uniform mat4 mvp; uniform mat4 model; uniform vec3 lo; uniform vec3 size;
+    void main() { gl_Position = mvp * model * vec4(lo + pos * size, 1.0); }`));
   gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
     uniform vec4 color; out vec4 o;
@@ -144,6 +144,37 @@ const unitBox = (() => {
   return { vao, edgeIB, quadIB, edges: edges.length, quads: quads.length };
 })();
 
+const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+
+// No animal art exists yet: each kind is a plain coloured box (own colours).
+const ANIMAL_COLORS = { cow: [0.42, 0.28, 0.18], pig: [0.9, 0.62, 0.62], chicken: [0.95, 0.95, 0.9] };
+
+// Animals as solid boxes: red while hurt, tipped onto their side while dying.
+// The model matrix turns the box about its bottom centre, then moves it there.
+function drawAnimals(mvp, animals) {
+  gl.useProgram(boxProg);
+  gl.uniformMatrix4fv(boxProg.u('mvp'), false, mvp);
+  gl.bindVertexArray(unitBox.vao);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, unitBox.quadIB);
+  for (const a of animals) {
+    const [w, h] = a.size, f = a.facing * Math.PI / 180;
+    // Facing 0 looks along -z, so local x is (cos f, 0, sin f) and local z
+    // (-sin f, 0, cos f). Tipping rolls the body 90 degrees about local z:
+    // x goes up and y goes to the -x side, so the lift is half the width.
+    const c = Math.cos(f), s = Math.sin(f);
+    const model = new Float32Array(a.dying
+      ? [0, 1, 0, 0, -c, 0, -s, 0, -s, 0, c, 0, a.pos[0], a.pos[1] + w / 2, a.pos[2], 1]
+      : [c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, a.pos[0], a.pos[1], a.pos[2], 1]);
+    gl.uniformMatrix4fv(boxProg.u('model'), false, model);
+    gl.uniform3f(boxProg.u('lo'), -w / 2, 0, -w / 2);
+    gl.uniform3f(boxProg.u('size'), w, h, w);
+    const [r, g, b] = a.hurt ? [0.85, 0.12, 0.1] : ANIMAL_COLORS[a.species] ?? [0.7, 0.7, 0.7];
+    gl.uniform4f(boxProg.u('color'), r, g, b, 1);
+    gl.drawElements(gl.TRIANGLES, unitBox.quads, gl.UNSIGNED_BYTE, 0);
+  }
+  gl.bindVertexArray(null);
+}
+
 // `box` is [minx, miny, minz, maxx, maxy, maxz]; entities also get a faint fill.
 function drawBox(mvp, box, fill) {
   const grow = 0.003; // keeps the lines off the block's own faces
@@ -153,6 +184,7 @@ function drawBox(mvp, box, fill) {
   gl.uniformMatrix4fv(boxProg.u('mvp'), false, mvp);
   gl.uniform3fv(boxProg.u('lo'), lo);
   gl.uniform3fv(boxProg.u('size'), size);
+  gl.uniformMatrix4fv(boxProg.u('model'), false, IDENTITY);
   gl.bindVertexArray(unitBox.vao);
   if (fill) {
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -218,7 +250,7 @@ const sampler = new InputSampler();
 const surfaceY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[1] + 1;
 const scene = raftScene ? new Scene() : null;
 const walk = scene ? Walk.in_scene(scene) : new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
-if (scene) spawnTestItems(walk);
+if (scene) { spawnTestItems(walk); spawnTestAnimals(walk); }
 const input = attachInput({ sampler, canvas, document, window });
 
 const names = [];
@@ -350,6 +382,7 @@ function render(now) {
   bind(solidProg, 0.72); drawParts(solidProg, meshes.ice);
   gl.depthMask(true);
   gl.bindVertexArray(null);
+  if (scene) drawAnimals(mvp, readAnimals(walk));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
 
   if (lastFrame !== null) frames.push(now - lastFrame);

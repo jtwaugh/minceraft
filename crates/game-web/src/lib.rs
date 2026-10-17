@@ -274,6 +274,45 @@ impl Walk {
             .spawn_item(ItemInstance { item: name.into() }, [x, y, z]) as i32
     }
 
+    /// Put an animal of `species` (`cow`, `pig`, `chicken`) at `(x, y, z)`
+    /// facing `facing` degrees; returns its entity id, or -1 for an unknown
+    /// species.
+    pub fn spawn_animal(&mut self, species: &str, x: f64, y: f64, z: f64, facing: f64) -> i32 {
+        self.0
+            .spawn_animal(species, [x, y, z], facing)
+            .map_or(-1, |id| id as i32)
+    }
+
+    /// The animals, nine numbers each: `id, x, y, z, facing, w, h, hurt,
+    /// dying`. `(x, y, z)` is the centre of the bottom face, `facing` is in
+    /// degrees (0 looks along -z), `w` and `h` are the box width and height,
+    /// and `hurt` and `dying` are 0 or 1. Species names are in
+    /// [`Walk::animal_species`], in the same order.
+    pub fn animals(&self) -> Vec<f64> {
+        self.0
+            .animals()
+            .iter()
+            .flat_map(|e| {
+                [
+                    e.id as f64,
+                    e.pos[0],
+                    e.pos[1],
+                    e.pos[2],
+                    e.facing,
+                    e.box_size[0],
+                    e.box_size[1],
+                    f64::from(e.hurt_ticks_left > 0),
+                    f64::from(e.death_ticks_left.is_some()),
+                ]
+            })
+            .collect()
+    }
+
+    /// The species of each animal in [`Walk::animals`], in the same order.
+    pub fn animal_species(&self) -> Vec<String> {
+        self.0.animals().iter().map(|e| e.species.clone()).collect()
+    }
+
     /// How many loose items lie in the world.
     pub fn loose_items(&self) -> u32 {
         self.0.items().len() as u32
