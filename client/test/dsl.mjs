@@ -18,6 +18,9 @@
 //   mouse <dx> <dy>             pointer-locked mouse movement
 //   wheel <dy>
 //   frame <ms> [xN]             run N frames of ms each (default 1)
+//   spawn animal <kind>         put a cow, pig or chicken on the raft scene's islet
+//   face animal                 turn to look at the first animal (a mousemove)
+//   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
 //   mark                        remember the current eye, for `moved`
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
@@ -27,13 +30,14 @@
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
 // belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
-// item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world).
+// item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
+// animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
-import { spawnTestItems } from '../overlay.js';
+import { spawnTestItems, readAnimals, faceAnimal, spawnTestAnimals } from '../overlay.js';
 
 let ready = false;
 function init() {
@@ -101,6 +105,9 @@ function read(w, path) {
   if (path === 'hands') return s.belt.hands ?? 'none';
   if (path === 'held') return s.belt.held;
   if (path === 'items') return w.walk.loose_items();
+  if (path === 'animals') return readAnimals(w.walk).length;
+  if (path === 'animals.dying') return readAnimals(w.walk).filter((a) => a.dying).length;
+  if (path === 'animals.hurt') return readAnimals(w.walk).filter((a) => a.hurt).length;
   const aim = s.aim;
   if (path === 'target.kind') return aim.kind;
   if (path === 'target.id') return aim.id ?? -1;
@@ -135,6 +142,27 @@ function step(w, { op, args }) {
     case 'frame': {
       const n = args[1] ? +args[1].replace(/^x/, '') : 1;
       for (let i = 0; i < n; i++) w.controller.frame(+args[0] / 1000);
+      return;
+    }
+    case 'spawn': {
+      if (args[0] !== 'animal' || !args[1]) throw new Error('spawn animal <kind>');
+      spawnTestAnimals(w.walk, [args[1]]);
+      return;
+    }
+    case 'face': {
+      if (args[0] !== 'animal') throw new Error('face animal');
+      const [dx, dy] = faceAnimal(w.walk, w.controller.state);
+      return fire(document, 'mousemove', { movementX: dx, movementY: dy });
+    }
+    case 'approach': { 
+      if (args[0] !== 'animal') throw new Error('approach animal');
+      const a = readAnimals(w.walk)[0];
+      if (!a) throw new Error('no animal to approach');
+      const [fx, , fz] = w.walk.feet();
+      const d = Math.hypot(a.pos[0] - fx, a.pos[2] - fz) || 1;
+      const k = 1 - 1.2 / d;
+      // feet 1.62 below the animal's middle, so the eye ray runs level
+      w.walk.teleport(fx + (a.pos[0] - fx) * k, a.pos[1] + a.size[1] / 2 - 1.62, fz + (a.pos[2] - fz) * k);
       return;
     }
     case 'held': w.walk.set_held(args[0]); return;

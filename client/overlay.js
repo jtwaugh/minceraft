@@ -14,6 +14,12 @@
 //     held     what interaction rules see: empty | tool:<name> | item:<name>
 //   formatBelt(belt) -> overlay lines (a minimum readout; the real HUD is Phase 8)
 //   spawnTestItems(walk) puts a few loose items on the raft scene's islet
+//   readAnimals(walk) -> [{ id, species, pos, facing, size, hurt, dying }]
+//     pos     centre of the bottom face; facing in degrees (0 looks along -z);
+//     size    [width, height] of the box
+//   spawnTestAnimals(walk, kinds) puts animals on the raft scene's islet
+//   faceAnimal(walk, look) -> [dx, dy] mouse movement that turns `look` ({ yaw, pitch })
+//     to the first animal's middle
 
 export const FACES = ['bottom', 'top', 'north', 'south', 'west', 'east'];
 const KINDS = ['none', 'block', 'entity'];
@@ -69,4 +75,32 @@ export function spawnTestItems(walk) {
   const [fx, , fz] = walk.feet();
   const x0 = Math.floor(fx) + 1, z = Math.floor(fz);
   TEST_ITEMS.forEach((name, i) => walk.spawn_item(name, x0 + 0.5 + i, 64.2, z));
+}
+
+export function readAnimals(walk) {
+  const rows = Array.from(walk.animals()), species = walk.animal_species();
+  return species.map((name, i) => {
+    const [id, x, y, z, facing, w, h, hurt, dying] = rows.slice(i * 9, i * 9 + 9);
+    return { id, species: name, pos: [x, y, z], facing, size: [w, h], hurt: hurt === 1, dying: dying === 1 };
+  });
+}
+
+// Animals stand on the islet's top row, clear of the seeds, a block apart.
+export function spawnTestAnimals(walk, kinds = ['cow', 'pig', 'chicken']) {
+  const [fx, , fz] = walk.feet();
+  const x0 = Math.floor(fx) + 1, z = Math.floor(fz) - 0.5;
+  kinds.forEach((kind, i) => walk.spawn_animal(kind, x0 + 0.5 + i, 64.05, z, 0));
+}
+
+// Same look convention as the sim: yaw 0 looks along -z and grows turning
+// right, pitch grows looking up.
+export function faceAnimal(walk, { yaw, pitch }, sensitivity = 0.0025) {
+  const a = readAnimals(walk)[0];
+  if (!a) throw new Error('no animal to face');
+  const eye = walk.eye(1);
+  const dx = a.pos[0] - eye[0], dy = a.pos[1] + a.size[1] / 2 - eye[1], dz = a.pos[2] - eye[2];
+  const want = [Math.atan2(dx, -dz), Math.atan2(dy, Math.hypot(dx, dz))];
+  let dyaw = want[0] - yaw;
+  dyaw -= 2 * Math.PI * Math.round(dyaw / (2 * Math.PI));
+  return [Math.round(dyaw / sensitivity), Math.round(-(want[1] - pitch) / sensitivity)];
 }

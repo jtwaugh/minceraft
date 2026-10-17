@@ -1,0 +1,57 @@
+# Animals in the raft scene (docs/design/basic-gameplay.md section 8). `face
+# animal` turns to the first animal, since it wanders and flees; a frame of
+# 50 ms is one sim tick.
+
+case three sword hits kill a cow and it drops items
+start walk raft
+click
+lock
+spawn animal cow
+expect animals = 1
+expect items = 3
+held tool:sword
+face animal
+frame 50 x2
+expect target.kind = entity
+expect rule.primary = attack
+button down left
+frame 50
+button up left
+frame 50 x2
+expect animals.hurt = 1
+expect animals.dying = 0
+# the hurt window (10 ticks) must pass before the next hit counts in full
+frame 50 x12
+approach animal
+face animal
+frame 50
+button down left
+frame 50
+button up left
+frame 50 x12
+approach animal
+face animal
+frame 50
+button down left
+frame 50
+button up left
+frame 50
+expect animals.dying = 1
+frame 50 x30
+expect animals = 0
+expect items > 3
+
+case a hit animal flees instead of standing still
+start walk raft
+click
+lock
+spawn animal pig
+held tool:sword
+face animal
+frame 50 x2
+button down left
+frame 50
+button up left
+frame 50 x2
+expect animals.hurt = 1
+expect animals = 1
