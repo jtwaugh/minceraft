@@ -2,7 +2,7 @@
 // Run: node --test client/test/overlay.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readAim, formatAim, heldFromQuery } from '../overlay.js';
+import { readAim, formatAim, readBelt, formatBelt } from '../overlay.js';
 
 function fakeWalk({ target = [0, 0, 0, 0, 0], box = [], rules = {}, last = -1 } = {}) {
   return {
@@ -44,9 +44,11 @@ test('overlay text names the target and the matched rules', () => {
   assert.equal(formatAim(aim), 'target block 1 2 3 bottom\nrule primary #0 attack | secondary #1 till\nlast press none');
 });
 
-test('?tool values map to held strings', () => {
-  assert.equal(heldFromQuery(null), 'empty');
-  assert.equal(heldFromQuery('empty'), 'empty');
-  assert.equal(heldFromQuery('hoe'), 'tool:hoe');
-  assert.equal(heldFromQuery('item:seeds'), 'item:seeds');
+test('the belt reads slots, selection and hands and formats as text', () => {
+  const slots = ['', 'sword', 'hoe', '', ''];
+  const belt = readBelt({
+    belt_len: () => 5, belt_slot: (i) => slots[i], selected_slot: () => 1, hands: () => '', held: () => 'tool:sword',
+  });
+  assert.deepEqual(belt, { slots: [null, 'sword', 'hoe', null, null], selected: 1, hands: null, held: 'tool:sword' });
+  assert.equal(formatBelt(belt), 'belt  1:- >2:sword  3:hoe  4:-  5:-\nhands empty | held tool:sword');
 });
