@@ -30,6 +30,8 @@ pub struct AnimalDef {
     pub walk_ticks: [u32; 2],
     /// Inclusive range of ticks between walks.
     pub pause_ticks: [u32; 2],
+    /// Ticks after a hit during which weaker hits are ignored (8.2).
+    pub hurt_ticks: u32,
 }
 
 /// The animal kinds, sorted by name.
@@ -88,6 +90,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
             "wander_speed",
             "walk_ticks",
             "pause_ticks",
+            "hurt_ticks",
         ]
         .contains(&field.as_str())
         {
@@ -135,6 +138,12 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
             })
     };
     let (walk_ticks, pause_ticks) = (ticks("walk_ticks")?, ticks("pause_ticks")?);
+    let hurt_ticks = table
+        .get("hurt_ticks")
+        .and_then(|v| v.as_integer())
+        .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
+        .ok_or_else(|| bad("`hurt_ticks` must be a positive integer".to_string()))?
+        as u32;
     let list = table
         .get("drops")
         .and_then(|v| v.as_array())
@@ -182,6 +191,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         wander_speed,
         walk_ticks,
         pause_ticks,
+        hurt_ticks,
     })
 }
 
@@ -259,7 +269,7 @@ mod tests {
     #[test]
     fn unknown_drop_item_rejected() {
         let a = Animals::from_toml(
-            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
         )
         .unwrap();
         assert!(matches!(
@@ -288,6 +298,8 @@ mod tests {
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 0\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [3, 2]\npause_ticks = [1, 2]\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 0\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
             "not toml [",
         ] {
             assert!(Animals::from_toml(bad).is_err(), "{bad}");

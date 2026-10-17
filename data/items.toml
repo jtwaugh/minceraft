@@ -4,6 +4,10 @@
 # a tool, `item:<name>` for a carryable item. Names are unique within each
 # list.
 
+# Attack damage in half-hearts (section 8.1). `hand_damage` applies when the
+# hand or a tool with no `damage` is used. Stone and iron swords come later.
+hand_damage = 1
+
 # Loose items in the world. These numbers are this game's own, tuned to feel
 # right (decided in #214).
 [item_entity]
@@ -23,6 +27,7 @@ throw_speed = 8.0
 [[tool]]
 name = "sword"
 label = "Wooden sword"
+damage = 4
 
 [[tool]]
 name = "hoe"

@@ -2,7 +2,8 @@
 # section 8.3. Drop items must be defined in items.toml. `box` is [width, height] in
 # blocks. These numbers are the game's own (decided in #254). Wandering:
 # `wander_speed` in blocks per second; `walk_ticks` and `pause_ticks` are
-# inclusive [min, max] tick ranges. Flee and knockback numbers come later.
+# inclusive [min, max] tick ranges. `hurt_ticks` is the invulnerability window
+# after a hit (section 8.2). Flee and knockback numbers come later.
 
 [cow]
 health = 10
@@ -10,6 +11,7 @@ box = [0.9, 1.4]
 wander_speed = 0.8
 walk_ticks = [20, 60]
 pause_ticks = [20, 100]
+hurt_ticks = 10
 drops = [{ item = "raw_beef", min = 1, max = 3 }, { item = "leather", min = 0, max = 1 }]
 
 [pig]
@@ -18,6 +20,7 @@ box = [0.9, 0.9]
 wander_speed = 0.9
 walk_ticks = [20, 60]
 pause_ticks = [20, 100]
+hurt_ticks = 10
 drops = [{ item = "raw_pork", min = 1, max = 3 }]
 
 [chicken]
@@ -26,4 +29,5 @@ box = [0.4, 0.7]
 wander_speed = 1.0
 walk_ticks = [20, 60]
 pause_ticks = [20, 100]
+hurt_ticks = 10
 drops = [{ item = "raw_chicken", min = 1, max = 1 }, { item = "feather", min = 0, max = 2 }]

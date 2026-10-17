@@ -43,6 +43,10 @@ pub struct AnimalEntity {
     /// Box width (x and z) and height (y), from the species.
     pub box_size: [f64; 2],
     pub wander: Wander,
+    /// Ticks left in the invulnerability window after a hit; 0 when open.
+    pub hurt_ticks: u32,
+    /// Damage of the hit that opened the window.
+    pub last_damage: u32,
 }
 
 impl AnimalEntity {
@@ -136,6 +140,8 @@ impl AnimalStore {
             facing,
             box_size: def.box_size,
             wander,
+            hurt_ticks: 0,
+            last_damage: 0,
         });
         Some(id)
     }
@@ -163,6 +169,33 @@ impl AnimalStore {
         self.animals.iter()
     }
 
+    /// Hit animal `id` for `damage` half-hearts (8.1, 8.2). Outside the
+    /// invulnerability window the hit applies in full and opens the window.
+    /// Inside it, a hit is ignored unless it exceeds the last hit, and then
+    /// only the difference applies. Returns the health taken off (0 if
+    /// ignored), or `None` if there is no such animal. No knockback or death
+    /// handling here: health just stops at 0.
+    pub fn hit(&mut self, id: EntityId, damage: u32) -> Option<u32> {
+        let i = self.animals.binary_search_by_key(&id, |e| e.id).ok()?;
+        let e = &mut self.animals[i];
+        let applied = if e.hurt_ticks == 0 {
+            e.hurt_ticks = self
+                .kinds
+                .get(&e.species)
+                .expect("species checked at spawn")
+                .hurt_ticks;
+            damage
+        } else {
+            damage.saturating_sub(e.last_damage)
+        };
+        if applied > 0 {
+            e.last_damage = damage;
+        }
+        let taken = applied.min(e.health);
+        e.health -= taken;
+        Some(taken)
+    }
+
     /// Advance every animal one tick, in id order, against `world` (which
     /// should include the raft's boxes where there is one). Same motion as
     /// items: the deck push, gravity, a swept move, drag and ground friction.
@@ -171,6 +204,7 @@ impl AnimalStore {
         let dt = 1.0 / TICKS_PER_SECOND;
         let mut scratch = Vec::new();
         for e in &mut self.animals {
+            e.hurt_ticks = e.hurt_ticks.saturating_sub(1);
             let def = self
                 .kinds
                 .get(&e.species)
@@ -426,6 +460,70 @@ mod tests {
                 "{p:?}"
             );
         }
+    }
+
+    fn sword() -> u32 {
+        crate::items::Items::default_items().damage(Some("sword"))
+    }
+
+    #[test]
+    fn damage_comes_from_the_item_table() {
+        let items = crate::items::Items::default_items();
+        assert_eq!(items.damage(None), 1);
+        assert_eq!(items.damage(Some("sword")), 4);
+        assert_eq!(items.damage(Some("hoe")), 1, "no damage set: hand");
+    }
+
+    #[test]
+    fn cow_takes_three_sword_hits_and_chicken_one() {
+        let mut s = store(1);
+        let cow = s.spawn("cow", [0.0; 3], 0.0).unwrap();
+        let hen = s.spawn("chicken", [1.0, 0.0, 0.0], 0.0).unwrap();
+        let w = MemoryWorld::new();
+        let window = Animals::default_animals().get("cow").unwrap().hurt_ticks;
+        for want in [6, 2, 0] {
+            assert!(s.hit(cow, sword()).is_some());
+            assert_eq!(s.get(cow).unwrap().health, want);
+            run(&mut s, &w, window as usize);
+        }
+        assert_eq!(s.hit(hen, sword()), Some(4));
+        assert_eq!(s.get(hen).unwrap().health, 0);
+        assert_eq!(s.hit(999, 1), None);
+    }
+
+    #[test]
+    fn weaker_hit_in_the_window_is_ignored_and_stronger_applies_the_difference() {
+        let mut s = store(1);
+        let id = s.spawn("cow", [0.0; 3], 0.0).unwrap();
+        assert_eq!(s.hit(id, 4), Some(4));
+        assert_eq!(s.hit(id, 4), Some(0));
+        assert_eq!(s.hit(id, 1), Some(0));
+        assert_eq!(s.get(id).unwrap().health, 6);
+        assert_eq!(s.hit(id, 6), Some(2));
+        assert_eq!(s.get(id).unwrap().health, 4);
+        assert_eq!(s.hit(id, 6), Some(0), "difference is against the new last");
+    }
+
+    #[test]
+    fn the_window_lasts_exactly_n_ticks() {
+        let w = MemoryWorld::new();
+        let n = Animals::default_animals().get("pig").unwrap().hurt_ticks;
+        let mut s = store(1);
+        let id = s.spawn("pig", [0.0; 3], 0.0).unwrap();
+        s.hit(id, 1);
+        run(&mut s, &w, n as usize - 1);
+        assert_eq!(s.hit(id, 1), Some(0), "still inside after n-1 ticks");
+        s.tick(&w, None);
+        assert_eq!(s.get(id).unwrap().hurt_ticks, 0);
+        assert_eq!(s.hit(id, 1), Some(1), "open after n ticks");
+    }
+
+    #[test]
+    fn health_stops_at_zero() {
+        let mut s = store(1);
+        let id = s.spawn("chicken", [0.0; 3], 0.0).unwrap();
+        assert_eq!(s.hit(id, 100), Some(4));
+        assert_eq!(s.get(id).unwrap().health, 0);
     }
 
     #[test]
