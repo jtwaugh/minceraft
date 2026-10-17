@@ -21,6 +21,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Phase A is done** (plan #17): base-height hook (#33), humidity hook (#34), `crates/layout` with `RadialBaseHeight` (#35), `Exclusion` as a `ProtectedMask` (#37), `ClimateBias` (#39), `Layout` and the `generate_region` wrapper (#40), `Channel` (#45, with #31, #27 and #43). The bullets below predate it.
 - **Phase B is done** (plan #47): raft blocks (#57), `Level` and the level file loader (#56), structure templates and `raft_start` (#69), stamping and the raft mask (#73), `build_layout` (#74), validation config and island checks (#70), raft footprint and flat grass checks (#78), retry loop and the v0 level file (#80). The game-side criteria (loading the level, spawning on the deck, the sim building its raft entity) wait for the game crates; the layout crate returns the level and raft mask.
 - **Phase C is done** (plan #89): derived water maps (#118), shore distance (#122), habitat rules and classifier (#120), habitat map per region (#125), sampling across seeds (#133), habitat viewer mode (#129) and `species_for` with the `fish.toml` loader (#130). Tests in `crates/layout/src/habitat_map_tests.rs` and `fish_tests.rs` cover the three criteria; `data/fish.toml` ships no species, as decided in #93.
+- **Phase D's sim half is built, the renderer half is not** (plan #169): region coordinates and region-keyed generation (#185), region cache with load and unload radii (#188), region-keyed collision set with unload (#189), streaming around the player (#195), raft and rider across region borders (#194). Code: `crates/layout/src/region_coord.rs`, `crates/game/src/stream.rs`. The phase stays `todo`; see the Phase D note below.
 - **Generator entry points.** `crates/terrain/src/lib.rs` has
   `generate_region(seed, x0, z0, w, d)`, `generate_decorated`,
   `generate_region_with_biases(.., &Biases, decorate)` and
@@ -140,6 +141,13 @@ and any game, sim or streaming code.
     the fish spawner.
 12. **Phase status.** No phase is done. Phase A is partly built (hooks above),
     and the decoration half of Phase D is done, so both stay `todo`.
+13. **Phase D is incomplete: no streaming in the renderer.** The doc's Adds list
+    includes "Streaming in the renderer and sim". The sim side exists (see
+    Current state), but nothing in `client/` or `crates/game-web` loads or
+    unloads regions on demand; `client/` only receives regions the scene hands
+    over (`add_region`). Plan #169 deferred browser bindings and chunk meshing
+    on wasm size grounds (#157, #160). Suggest a follow-up plan for the
+    browser streaming bindings and renderer unload, then mark Phase D done.
 
 ## Mince Raft: World Layout Specification
 
