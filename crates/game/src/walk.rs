@@ -6,6 +6,7 @@ use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::events::GameEvent;
+use crate::farm::FarmWorld;
 use crate::forage::{ForageConfig, Forager};
 use crate::input::TickInput;
 use crate::interactions::{
@@ -20,6 +21,7 @@ use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::scene::RaftScene;
 use crate::stream::{StreamConfig, Streamer};
 use crate::targeting::{cast_target, ray_vs_box, Target, TargetableEntity, TargetingConfig};
+use crate::till::{TillConfig, Tiller};
 use layout::Layout;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
@@ -136,6 +138,7 @@ const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
 /// Fixed seed for animal wandering until the world seed reaches the walker.
 const ANIMAL_SEED: u64 = 0;
 const FORAGE_SEED: u64 = 1;
+const TILL_SEED: u64 = 2;
 
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
@@ -150,7 +153,7 @@ struct Floating {
 pub struct Walker {
     player: Player,
     physics: PlayerPhysics,
-    world: RegionSet,
+    world: FarmWorld<RegionSet>,
     floating: Option<Floating>,
     streamer: Option<Streamer>,
     prev_eye: [f64; 3],
@@ -163,6 +166,7 @@ pub struct Walker {
     items: ItemStore,
     animals: AnimalStore,
     forager: Forager,
+    tiller: Tiller,
     /// Events emitted since the last `drain_events`.
     events: Vec<GameEvent>,
     /// Ticks stepped so far, for cooldowns.
@@ -187,7 +191,7 @@ impl Walker {
         Ok(Walker {
             player,
             physics,
-            world: RegionSet::default(),
+            world: FarmWorld::new(RegionSet::default()),
             floating: None,
             streamer: None,
             prev_eye: eye,
@@ -205,6 +209,7 @@ impl Walker {
                 ANIMAL_SEED,
             ),
             forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
+            tiller: Tiller::new(TillConfig::default_from_data(), TILL_SEED),
             events: Vec::new(),
             sim_tick: 0,
             item_table: Items::default_items(),
@@ -217,17 +222,17 @@ impl Walker {
     }
 
     pub fn add_region(&mut self, region: Region) {
-        self.world.insert(region);
+        self.world.base_mut().insert(region);
     }
 
     /// Unload the region whose origin is `(x0, z0)`.
     pub fn remove_region(&mut self, x0: i32, z0: i32) -> Option<Region> {
-        self.world.remove(x0, z0)
+        self.world.base_mut().remove(x0, z0)
     }
 
     /// Origins `(x0, z0)` of the loaded regions, in no particular order.
     pub fn loaded_regions(&self) -> Vec<(i32, i32)> {
-        self.world.loaded().collect()
+        self.world.base().loaded().collect()
     }
 
     /// A walker with its feet at `feet` over a streamed world: the player's
@@ -236,14 +241,14 @@ impl Walker {
     pub fn with_layout(layout: Layout, feet: [f64; 3]) -> Result<Walker, String> {
         let mut w = Walker::new(feet).map_err(|e| e.to_string())?;
         let mut streamer = Streamer::new(layout, StreamConfig::default_from_data()?);
-        streamer.update(feet, &mut w.world);
+        streamer.update(feet, w.world.base_mut());
         w.streamer = Some(streamer);
         Ok(w)
     }
 
     /// Number of regions currently loaded for collision.
     pub fn loaded_region_count(&self) -> usize {
-        self.world.len()
+        self.world.base().len()
     }
 
     /// The region the stream is centred on, if this walker streams.
@@ -282,7 +287,7 @@ impl Walker {
     }
 
     pub fn has_world(&self) -> bool {
-        !self.world.is_empty()
+        !self.world.base().is_empty()
     }
 
     pub fn player(&self) -> &Player {
@@ -346,7 +351,7 @@ impl Walker {
             }
         }
         if let Some(s) = &mut self.streamer {
-            s.update(self.player.pos, &mut self.world);
+            s.update(self.player.pos, self.world.base_mut());
         }
     }
 
@@ -444,6 +449,12 @@ impl Walker {
         // Tools are stowed while carrying: primary does nothing.
         let mut pressed = *input;
         pressed.primary &= self.state.hands.is_none();
+        // Holding secondary with the hoe tills again on a newly targeted block.
+        if let (true, HeldThing::Tool(tool), Target::Block { pos, .. }) =
+            (input.secondary_held, &ctx.held, ctx.target)
+        {
+            pressed.secondary |= tool == "hoe" && self.tiller.repeat_due(pos, self.sim_tick);
+        }
         let damage = match &ctx.held {
             HeldThing::Tool(name) => self.item_table.damage(Some(name)),
             _ => self.item_table.damage(None),
@@ -461,6 +472,19 @@ impl Walker {
                     position: pos,
                     yields: vec![item],
                 });
+            }
+        }
+        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Till), ctx.target) {
+            if let Some(Some(item)) = self.tiller.till(&mut self.world, pos, self.sim_tick) {
+                let at = [
+                    pos[0] as f64 + 0.5,
+                    pos[1] as f64 + 1.0,
+                    pos[2] as f64 + 0.5,
+                ];
+                let item = ItemInstance {
+                    item: item.to_string(),
+                };
+                self.items.spawn(item, at, [0.0; 3]);
             }
         }
         for hit in &self.dispatcher.hits {
@@ -563,7 +587,7 @@ impl Walker {
     pub fn teleport(&mut self, feet: [f64; 3]) {
         self.player = Player::new(feet, &self.physics);
         if let Some(s) = &mut self.streamer {
-            s.update(feet, &mut self.world);
+            s.update(feet, self.world.base_mut());
         }
         let eye = eye_above(feet, &self.physics, false);
         self.prev_eye = eye;
@@ -1608,5 +1632,86 @@ mod tests {
         assert_eq!(w.raft_offset(0.0), [0.0; 3]);
         let mid = w.raft_offset(0.5);
         assert!((mid[0] - end[0] / 2.0).abs() < 1e-12);
+    }
+
+    fn grass_floor_walker(chance: u32) -> Walker {
+        let mut region = flat(-8, -8, 16, 3);
+        for z in 0..16 {
+            for x in 0..16 {
+                let i = region.index(x, 3, z);
+                region.blocks[i] = Block::Grass as u8;
+            }
+        }
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.add_region(region);
+        for _ in 0..40 {
+            w.tick(&TickInput::default());
+        }
+        let cfg = TillConfig {
+            chance,
+            ..TillConfig::default_from_data()
+        };
+        w.tiller = Tiller::new(cfg, 5);
+        w.set_held(HeldThing::Tool("hoe".into()));
+        w
+    }
+
+    fn down(secondary: bool, held: bool) -> TickInput {
+        TickInput {
+            pitch: -std::f32::consts::FRAC_PI_2,
+            secondary,
+            secondary_held: held,
+            ..TickInput::default()
+        }
+    }
+
+    fn tilled(w: &Walker, x: i32) -> bool {
+        w.world.get(x, 3, 0).is_some()
+    }
+
+    #[test]
+    fn hoe_tills_the_targeted_grass_and_nothing_else() {
+        let mut w = grass_floor_walker(1);
+        w.tick(&down(false, false));
+        assert!(!tilled(&w, 0), "no press, no till");
+        w.tick(&down(true, true));
+        assert_eq!(w.world.block_at(0, 3, 0), Block::FarmlandDry);
+        assert_eq!(w.world.block_at(1, 3, 0), Block::Grass);
+        assert_eq!(w.world.block_at(0, 2, 0), Block::Stone);
+        assert_eq!(w.items().len(), 1, "chance 1 always drops seeds");
+    }
+
+    #[test]
+    fn other_tools_and_empty_hands_do_not_till() {
+        for held in [HeldThing::Empty, HeldThing::Tool("sword".into())] {
+            let mut w = grass_floor_walker(1);
+            w.set_held(held);
+            w.tick(&down(true, true));
+            assert!(!tilled(&w, 0));
+            assert_eq!(w.items().len(), 0);
+        }
+    }
+
+    #[test]
+    fn holding_repeats_every_four_ticks_on_new_blocks_only() {
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, true));
+        assert!(tilled(&w, 0));
+        // Same block while held: no repeat, however long.
+        for _ in 0..8 {
+            w.tick(&down(false, true));
+        }
+        assert!(!tilled(&w, 1));
+        // A new block is tilled once the interval since the last till is up.
+        w.teleport([1.5, 4.0, 0.5]);
+        w.tick(&down(false, true));
+        assert!(tilled(&w, 1));
+        w.teleport([2.5, 4.0, 0.5]);
+        for _ in 0..3 {
+            w.tick(&down(false, true));
+        }
+        assert!(!tilled(&w, 2), "inside the interval");
+        w.tick(&down(false, true));
+        assert!(tilled(&w, 2), "after the interval");
     }
 }

@@ -25,4 +25,5 @@ pub mod sampler;
 pub mod scene;
 pub mod stream;
 pub mod targeting;
+pub mod till;
 pub mod walk;
