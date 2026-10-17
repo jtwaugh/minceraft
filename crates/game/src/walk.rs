@@ -534,14 +534,15 @@ impl Walker {
                 self.items.spawn(item, at, [0.0; 3]);
             }
         }
-        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Plant), ctx.target) {
+        if let (true, Target::Block { pos, face }) = (ran.contains(&ActionKind::Plant), ctx.target)
+        {
             // The seed leaves the hands only if a crop went in.
             let kind = self
                 .state
                 .hands
                 .as_ref()
                 .and_then(|h| crop_for_item(&h.item));
-            if kind.is_some_and(|kind| plant(&mut self.world, pos, kind)) {
+            if kind.is_some_and(|kind| plant(&mut self.world, pos, face, kind)) {
                 self.state.hands = None;
             }
         }

@@ -4,6 +4,7 @@
 
 use crate::collision::CollisionWorld;
 use crate::farm::{CropKind, FarmTile, FarmWorld};
+use crate::targeting::Face;
 use terrain::Block;
 
 /// Which crop each seed item plants. The one place the mapping lives.
@@ -15,11 +16,18 @@ pub fn crop_for_item(item: &str) -> Option<CropKind> {
 }
 
 /// Plant a stage-0 `kind` crop on the farmland at `pos`. Returns true if one was
-/// placed. Anything but farmland with air above changes nothing, so an
-/// already planted tile (its crop fills the air above) is left alone.
-pub fn plant<W: CollisionWorld>(world: &mut FarmWorld<W>, pos: [i32; 3], kind: CropKind) -> bool {
+/// placed. Only the top `face` plants. Anything but farmland with air above
+/// changes nothing, so an already planted tile (its crop fills the air above)
+/// is left alone.
+pub fn plant<W: CollisionWorld>(
+    world: &mut FarmWorld<W>,
+    pos: [i32; 3],
+    face: Face,
+    kind: CropKind,
+) -> bool {
     let [x, y, z] = pos;
-    if !matches!(world.get(x, y, z), Some(FarmTile::Farmland { .. }))
+    if face != Face::Top
+        || !matches!(world.get(x, y, z), Some(FarmTile::Farmland { .. }))
         || world.block_at(x, y + 1, z) != Block::Air
     {
         return false;
@@ -48,9 +56,24 @@ mod tests {
     fn farmland_with_air_above_gets_a_stage_zero_crop() {
         for wet in [false, true] {
             let mut w = world(Some(FarmTile::Farmland { wet }), Block::Air);
-            assert!(plant(&mut w, [0, 5, 0], CropKind::Wheat));
+            assert!(plant(&mut w, [0, 5, 0], Face::Top, CropKind::Wheat));
             assert_eq!(w.block_at(0, 6, 0), Block::Wheat0);
             assert_eq!(w.get(0, 5, 0), Some(FarmTile::Farmland { wet }));
+        }
+    }
+
+    #[test]
+    fn non_top_faces_do_nothing() {
+        for face in [
+            Face::Bottom,
+            Face::North,
+            Face::South,
+            Face::West,
+            Face::East,
+        ] {
+            let mut w = world(Some(FarmTile::Farmland { wet: false }), Block::Air);
+            assert!(!plant(&mut w, [0, 5, 0], face, CropKind::Wheat), "{face:?}");
+            assert_eq!(w.block_at(0, 6, 0), Block::Air);
         }
     }
 
@@ -64,16 +87,22 @@ mod tests {
     #[test]
     fn planting_twice_does_nothing_the_second_time() {
         let mut w = world(Some(FarmTile::Farmland { wet: false }), Block::Air);
-        assert!(plant(&mut w, [0, 5, 0], CropKind::Wheat));
-        assert!(!plant(&mut w, [0, 5, 0], CropKind::Wheat));
+        assert!(plant(&mut w, [0, 5, 0], Face::Top, CropKind::Wheat));
+        assert!(!plant(&mut w, [0, 5, 0], Face::Top, CropKind::Wheat));
     }
 
     #[test]
     fn other_blocks_and_blocked_tops_do_nothing() {
         let mut w = world(None, Block::Air);
-        assert!(!plant(&mut w, [0, 5, 0], CropKind::Wheat), "plain dirt");
+        assert!(
+            !plant(&mut w, [0, 5, 0], Face::Top, CropKind::Wheat),
+            "plain dirt"
+        );
         let mut w = world(Some(FarmTile::Farmland { wet: false }), Block::Stone);
-        assert!(!plant(&mut w, [0, 5, 0], CropKind::Wheat), "blocked above");
+        assert!(
+            !plant(&mut w, [0, 5, 0], Face::Top, CropKind::Wheat),
+            "blocked above"
+        );
         assert_eq!(w.block_at(0, 6, 0), Block::Stone);
         let crop = FarmTile::Crop {
             kind: CropKind::Wheat,
@@ -81,7 +110,7 @@ mod tests {
         };
         let mut w = world(Some(crop), Block::Air);
         assert!(
-            !plant(&mut w, [0, 5, 0], CropKind::Wheat),
+            !plant(&mut w, [0, 5, 0], Face::Top, CropKind::Wheat),
             "a crop is not farmland"
         );
     }
