@@ -194,7 +194,7 @@ Test: a recorded session that uses `give`, `spawn`, `tp` and `pause/step` produc
 ## 9. Tests
 
 - Parser: every command's usage parses, bad arguments give a useful error, aliases expand, aliases can't shadow commands.
-- Execution: `give tool` uses the first empty slot and selects it; `give item` fails with full hands and changes nothing; `spawn seeds 5` adds 5 entities; `clear belt` restores the v0 belt.
+- Execution: `give tool` uses the first empty slot and selects it; `give item` with full hands drops the item at the player's feet as a loose item entity instead of failing, and `give tool` with no empty belt slot does the same; `spawn seeds 5` adds 5 entities; `clear belt` restores the v0 belt. (Decided in #315.)
 - Ordering: `give hoe` and a primary press in the same tick resolve with the hoe.
 - Pause: no ticks pass while paused; `step 3` advances exactly 3.
 - State validity: a command run in a state it doesn't allow errors and changes nothing.
@@ -226,7 +226,6 @@ Each later gameplay phase adds its own commands in its own tickets.
 1. **Sim while the console is open.** A: keeps running with neutral input (proposed above). B: auto-pauses while open, like a single-player menu.
 2. **Pointer lock while typing.** A: unlock on open and re-lock on Enter (proposed). B: stay locked and route keys to the box, so there's no re-lock and no browser cooldown risk, but every key handler must check for console mode.
 3. **Shipping.** A: the console is always compiled in and gated by `?debug=1`. B: behind a cargo feature and left out of release wasm to save size. Report the size difference in Phase 1 and decide then.
-4. **`give` with full hands or belt.** A: error (proposed). B: drop the item at the player's feet instead.
 5. **Cheat flag scope.** A: per session (proposed). B: per save/world once saves exist, like a permanent "cheats used" mark.
 
 ## Open questions (reconciler)
