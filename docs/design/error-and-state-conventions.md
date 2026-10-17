@@ -6,7 +6,7 @@ source: "#302"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
   E: todo
@@ -41,7 +41,8 @@ Verified against the code on `master`:
   `state.flying` (fly/walk) and the pointer-lock state; the DSL in
   `client/test/dsl.mjs` drives it with DOM events and `expect` lines.
 - **Phase A done:** the audit is `docs/errors-and-states.md` (plan #306, ticket #307, PR #310). It confirms 13 error types and no Rust state machines.
-- Phases B to E are not built yet.
+- **Phase B done:** `crates/game/src/data_error.rs` holds the shared `DataError` and `DataFile` type (plan #328, PRs #341, #351, #352, #353, #354, #355, #358). The physics, targeting, item entity, forage, animals, crops, items, bindings and interactions loaders use it.
+- Phases C to E are not built yet.
 
 ## Reconciliation notes
 
