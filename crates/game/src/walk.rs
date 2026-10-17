@@ -131,6 +131,8 @@ const FIRST_ITEM_ID: crate::targeting::EntityId = 1 << 20;
 
 /// Animal entity ids start here, above the item ids.
 const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
+/// Fixed seed for animal wandering until the world seed reaches the walker.
+const ANIMAL_SEED: u64 = 0;
 
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
@@ -191,6 +193,7 @@ impl Walker {
                 Animals::default_animals(),
                 ItemEntityConfig::default_from_data(),
                 FIRST_ANIMAL_ID,
+                ANIMAL_SEED,
             ),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
