@@ -597,6 +597,8 @@ let prog, progs, opaque = null, cutout = null, water = null, ice = null;
 const cam = { yaw: 0.8, pitch: 0.55, dist: 95, ty: 68 };
 let sky = [0.61, 0.76, 0.9];
 
+const TEX_SIZE = 16; // side of every layer in the tile array
+
 function shader(type, src) {
   const s = gl.createShader(type);
   gl.shaderSource(s, src); gl.compileShader(s);
@@ -647,7 +649,11 @@ function program(cut) {
     out vec4 o;
     ${FOG_GLSL}
     void main() {
-      vec4 t = texture(tex, vuv);
+      // snap UVs to texel centres; the unsnapped derivatives keep mip selection
+      vec2 px = vuv.xy * ${TEX_SIZE}.0;
+      vec2 fw = max(fwidth(px), vec2(1e-4));
+      vec2 snapped = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / ${TEX_SIZE}.0;
+      vec4 t = textureGrad(tex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy));
       ${cut ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
       // texels stored with alpha ~0.78 are greyscale and take the climate tint
       vec3 c = (t.a < 0.9 ? t.rgb * vtint : t.rgb) * vshade;
@@ -722,7 +728,7 @@ const SPRITES = {
 const TINT_A = 200; // alpha marking a greyscale, climate-tinted texel
 
 async function loadTextures() {
-  const S = 16;
+  const S = TEX_SIZE;
   const col = (b) => COLORS[B[b]];
   const dark = (c, k = 0.72) => c.map((v) => v * k);
   const solid = (c, a = 255) => () => [...c, a];
@@ -833,8 +839,13 @@ async function loadTextures() {
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
   gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, S, S, layers.length, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
   gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+  if (aniso) {
+    gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT,
+      Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  }
   gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
   return textured;
