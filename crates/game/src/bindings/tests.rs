@@ -72,3 +72,45 @@ fn rejects_malformed_input() {
         Err(BindingsError::Invalid(_))
     ));
 }
+
+#[test]
+fn errors_convert_to_data_error_with_same_message() {
+    let cases = [
+        (
+            BindingsError::Parse("expected `=`".into()),
+            "input.toml: expected `=`",
+        ),
+        (
+            BindingsError::UnknownAction("fly".into()),
+            "input.toml: unknown action `fly`",
+        ),
+        (
+            BindingsError::MissingAction("drop"),
+            "input.toml: missing action `drop`",
+        ),
+        (
+            BindingsError::DuplicateKey {
+                key: "KeyW".into(),
+                first: "jump",
+                second: "jump",
+            },
+            "input.toml: key `KeyW` listed twice for action `jump`",
+        ),
+        (
+            BindingsError::DuplicateKey {
+                key: "KeyW".into(),
+                first: "jump",
+                second: "drop",
+            },
+            "input.toml: key `KeyW` bound to both `jump` and `drop`",
+        ),
+        (BindingsError::Invalid("bad".into()), "input.toml: bad"),
+    ];
+    for (err, msg) in cases {
+        let shown = err.to_string();
+        let data = DataError::from(err);
+        assert_eq!(data.file, DataFile::Input);
+        assert_eq!(data.to_string(), msg);
+        assert_eq!(shown, msg);
+    }
+}

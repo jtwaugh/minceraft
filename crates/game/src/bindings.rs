@@ -4,6 +4,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::data_error::{DataError, DataErrorKind, DataFile};
+
 const DEFAULT_INPUT: &str = include_str!("../../../data/input.toml");
 
 /// Every bindable action, in the order of the design table.
@@ -103,24 +105,31 @@ pub enum BindingsError {
     Invalid(String),
 }
 
+impl From<BindingsError> for DataError {
+    fn from(e: BindingsError) -> DataError {
+        let kind = match e {
+            BindingsError::Parse(e) => DataErrorKind::Parse(e),
+            BindingsError::UnknownAction(a) => {
+                DataErrorKind::Invalid(format!("unknown action `{a}`"))
+            }
+            BindingsError::MissingAction(a) => {
+                DataErrorKind::Invalid(format!("missing action `{a}`"))
+            }
+            BindingsError::DuplicateKey { key, first, second } if first == second => {
+                DataErrorKind::Invalid(format!("key `{key}` listed twice for action `{first}`"))
+            }
+            BindingsError::DuplicateKey { key, first, second } => DataErrorKind::Invalid(format!(
+                "key `{key}` bound to both `{first}` and `{second}`"
+            )),
+            BindingsError::Invalid(e) => DataErrorKind::Invalid(e),
+        };
+        DataError::new(DataFile::Input, kind)
+    }
+}
+
 impl fmt::Display for BindingsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BindingsError::Parse(e) => write!(f, "input.toml: {e}"),
-            BindingsError::UnknownAction(a) => write!(f, "input.toml: unknown action `{a}`"),
-            BindingsError::MissingAction(a) => write!(f, "input.toml: missing action `{a}`"),
-            BindingsError::DuplicateKey { key, first, second } if first == second => {
-                write!(
-                    f,
-                    "input.toml: key `{key}` listed twice for action `{first}`"
-                )
-            }
-            BindingsError::DuplicateKey { key, first, second } => write!(
-                f,
-                "input.toml: key `{key}` bound to both `{first}` and `{second}`"
-            ),
-            BindingsError::Invalid(e) => write!(f, "input.toml: {e}"),
-        }
+        DataError::from(self.clone()).fmt(f)
     }
 }
 
