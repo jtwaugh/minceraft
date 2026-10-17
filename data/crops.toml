@@ -1,0 +1,13 @@
+# Crops: stage count and harvest yield. See docs/design/basic-gameplay.md
+# sections 9.2 and 9.4. `stages` is the number of growth stages; a crop is
+# mature at its last stage. `yield` is the produce dropped on harvest and
+# `seeds` the seeds dropped with it, both inclusive count ranges. The yield
+# item and `seeds_item` must be defined in items.toml. Growth odds are not
+# here.
+
+seeds_item = "seeds"
+
+[wheat]
+stages = 8
+yield = { item = "wheat", min = 1, max = 1 }
+seeds = { min = 0, max = 2 }
