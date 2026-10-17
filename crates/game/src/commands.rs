@@ -3,9 +3,9 @@
 //!
 //! A command is one [`Command`] entry plus its handler. The handler gets the
 //! world it acts on (`W`, which will be the walker once commands are wired
-//! in) and the registry, and returns its result lines. [`Console`] parses a
-//! line, checks the game state, runs the handler and buffers the outcome
-//! lines until the front end drains them.
+//! in) and the registry, and returns its result lines. This part has the
+//! registry and the parser; the console that runs lines, buffers outcomes and
+//! tracks `cheated` comes next.
 
 use std::fmt;
 
@@ -121,15 +121,6 @@ pub enum CommandError {
         arg: &'static str,
         value: String,
     },
-    WrongState {
-        command: &'static str,
-        state: GameState,
-    },
-    /// The handler refused; the message is its own.
-    Failed {
-        command: &'static str,
-        message: String,
-    },
 }
 
 impl fmt::Display for CommandError {
@@ -144,10 +135,6 @@ impl fmt::Display for CommandError {
             CommandError::BadArg { usage, arg, value } => {
                 write!(f, "bad value '{value}' for <{arg}>; usage: {usage}")
             }
-            CommandError::WrongState { command, state } => {
-                write!(f, "'{command}' can't be used while {state}")
-            }
-            CommandError::Failed { command, message } => write!(f, "{command}: {message}"),
         }
     }
 }
@@ -231,123 +218,6 @@ pub fn parse<'r, W>(
     Ok(Some((cmd, args)))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Outcome {
-    Result(String),
-    Error(String),
-}
-
-/// The registry plus the outcome buffer and the `cheated` flag.
-pub struct Console<W> {
-    registry: Registry<W>,
-    outcomes: Vec<Outcome>,
-    cheated: bool,
-}
-
-impl<W> Console<W> {
-    /// Adds the built-in `help` to `commands`.
-    pub fn new(mut commands: Vec<Command<W>>) -> Result<Self, RegistryError> {
-        commands.push(help_command());
-        Ok(Console {
-            registry: Registry::new(commands)?,
-            outcomes: Vec::new(),
-            cheated: false,
-        })
-    }
-
-    pub fn registry(&self) -> &Registry<W> {
-        &self.registry
-    }
-
-    /// True once any cheat command has run successfully.
-    pub fn cheated(&self) -> bool {
-        self.cheated
-    }
-
-    /// Runs one line. Failures go to the buffer as error lines and change
-    /// nothing; `cheated` is set only when a cheat handler succeeds.
-    pub fn run(&mut self, line: &str, state: GameState, world: &mut W) {
-        match self.try_run(line, state, world) {
-            Ok(lines) => self.outcomes.extend(lines.into_iter().map(Outcome::Result)),
-            Err(e) => self.outcomes.push(Outcome::Error(e.to_string())),
-        }
-    }
-
-    fn try_run(
-        &mut self,
-        line: &str,
-        state: GameState,
-        world: &mut W,
-    ) -> Result<Vec<String>, CommandError> {
-        let Some((cmd, args)) = parse(&self.registry, line)? else {
-            return Ok(Vec::new());
-        };
-        if !cmd.states.contains(&state) {
-            return Err(CommandError::WrongState {
-                command: cmd.name,
-                state,
-            });
-        }
-        let mut ctx = Ctx {
-            world,
-            registry: &self.registry,
-        };
-        let lines = (cmd.handler)(&mut ctx, &args).map_err(|message| CommandError::Failed {
-            command: cmd.name,
-            message,
-        })?;
-        self.cheated |= cmd.cheat;
-        Ok(lines)
-    }
-
-    /// Takes the buffered outcome lines, oldest first.
-    pub fn drain(&mut self) -> Vec<Outcome> {
-        std::mem::take(&mut self.outcomes)
-    }
-}
-
-fn help_command<W>() -> Command<W> {
-    Command {
-        name: "help",
-        aliases: &[],
-        args: &[ArgSpec {
-            name: "command",
-            kind: ArgKind::Word,
-            optional: true,
-        }],
-        help: "list commands, or show one command's usage",
-        states: ALL_STATES,
-        cheat: false,
-        handler: help_handler::<W>,
-    }
-}
-
-fn help_handler<W>(ctx: &mut Ctx<'_, W>, args: &[Arg]) -> Result<Vec<String>, String> {
-    match args.first() {
-        None => Ok(ctx
-            .registry
-            .commands()
-            .iter()
-            .map(|c| format!("{} - {}", c.usage(), c.help))
-            .collect()),
-        Some(Arg::Word(name)) => {
-            let c = ctx
-                .registry
-                .get(name)
-                .ok_or_else(|| format!("unknown command '{name}'"))?;
-            let mut lines = vec![format!("usage: {}", c.usage()), c.help.to_string()];
-            if !c.aliases.is_empty() {
-                lines.push(format!("aliases: {}", c.aliases.join(", ")));
-            }
-            if c.cheat {
-                lines.push("cheat: sets the cheated flag".to_string());
-            }
-            Ok(lines)
-        }
-        Some(_) => Err("expected a command name".to_string()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,10 +233,6 @@ mod tests {
         };
         ctx.world.count += n;
         Ok(vec![format!("count is {}", ctx.world.count)])
-    }
-
-    fn fail(_: &mut Ctx<'_, World>, _: &[Arg]) -> Result<Vec<String>, String> {
-        Err("nope".into())
     }
 
     fn cmd(name: &'static str, aliases: &'static [&'static str]) -> Command<World> {
@@ -385,25 +251,10 @@ mod tests {
         }
     }
 
-    fn console() -> Console<World> {
+    fn registry() -> Registry<World> {
         let mut cheat = cmd("cheat", &["ch"]);
         cheat.cheat = true;
-        let mut walk_only = cmd("walkonly", &[]);
-        walk_only.states = &[GameState::Walking];
-        let mut failing = cmd("failing", &[]);
-        failing.cheat = true;
-        failing.handler = fail;
-        Console::new(vec![cmd("add", &["plus"]), cheat, walk_only, failing]).unwrap()
-    }
-
-    fn errors(c: &mut Console<World>) -> Vec<String> {
-        c.drain()
-            .into_iter()
-            .map(|o| match o {
-                Outcome::Error(e) => e,
-                Outcome::Result(r) => panic!("unexpected result {r}"),
-            })
-            .collect()
+        Registry::new(vec![cmd("add", &["plus"]), cheat]).unwrap()
     }
 
     #[test]
@@ -420,31 +271,29 @@ mod tests {
         ));
         let shadow_alias = Registry::new(vec![cmd("a", &["x"]), cmd("b", &["x"])]);
         assert!(shadow_alias.is_err());
-        // A user command can't replace the built-in help.
-        assert!(Console::new(vec![cmd("help", &[])]).is_err());
     }
 
     #[test]
     fn lookup_by_name_and_alias() {
-        let c = console();
-        assert_eq!(c.registry().get("add").unwrap().name, "add");
-        assert_eq!(c.registry().get("plus").unwrap().name, "add");
-        assert!(c.registry().get("nothing").is_none());
+        let c = registry();
+        assert_eq!(c.get("add").unwrap().name, "add");
+        assert_eq!(c.get("plus").unwrap().name, "add");
+        assert!(c.get("nothing").is_none());
     }
 
     #[test]
     fn parser_splits_and_types_arguments() {
-        let c = console();
-        let (cmd, args) = parse(c.registry(), "  plus   -3 ").unwrap().unwrap();
+        let c = registry();
+        let (cmd, args) = parse(&c, "  plus   -3 ").unwrap().unwrap();
         assert_eq!(cmd.name, "add");
         assert_eq!(args, vec![Arg::Int(-3)]);
-        assert!(parse(c.registry(), "   ").unwrap().is_none());
+        assert!(parse(&c, "   ").unwrap().is_none());
     }
 
     #[test]
     fn parser_errors_are_readable() {
-        let c = console();
-        let e = |l| parse(c.registry(), l).err().unwrap().to_string();
+        let c = registry();
+        let e = |l| parse(&c, l).err().unwrap().to_string();
         assert_eq!(e("fly"), "unknown command 'fly' (try 'help')");
         assert_eq!(e("add"), "wrong number of arguments (0); usage: add <n>");
         assert_eq!(
@@ -452,93 +301,5 @@ mod tests {
             "wrong number of arguments (2); usage: add <n>"
         );
         assert_eq!(e("add x"), "bad value 'x' for <n>; usage: add <n>");
-    }
-
-    #[test]
-    fn outcomes_buffer_and_drain() {
-        let mut c = console();
-        let mut w = World::default();
-        c.run("add 2", GameState::Walking, &mut w);
-        c.run("add 3", GameState::Walking, &mut w);
-        c.run("bogus", GameState::Walking, &mut w);
-        assert_eq!(
-            c.drain(),
-            vec![
-                Outcome::Result("count is 2".into()),
-                Outcome::Result("count is 5".into()),
-                Outcome::Error("unknown command 'bogus' (try 'help')".into()),
-            ]
-        );
-        assert!(c.drain().is_empty());
-        c.run("", GameState::Walking, &mut w);
-        assert!(c.drain().is_empty());
-    }
-
-    #[test]
-    fn help_lists_and_describes_without_cheating() {
-        let mut c = console();
-        let mut w = World::default();
-        c.run("help", GameState::Walking, &mut w);
-        let all = c.drain();
-        assert_eq!(all.len(), 5);
-        assert!(all.contains(&Outcome::Result(
-            "help [command] - list commands, or show one command's usage".into()
-        )));
-        c.run("help ch", GameState::Walking, &mut w);
-        assert_eq!(
-            c.drain(),
-            vec![
-                Outcome::Result("usage: cheat <n>".into()),
-                Outcome::Result("add n to the count".into()),
-                Outcome::Result("aliases: ch".into()),
-                Outcome::Result("cheat: sets the cheated flag".into()),
-            ]
-        );
-        c.run("help nope", GameState::Walking, &mut w);
-        assert_eq!(errors(&mut c), vec!["help: unknown command 'nope'"]);
-        assert!(!c.cheated());
-    }
-
-    #[test]
-    fn cheated_is_set_on_first_cheat_only() {
-        let mut c = console();
-        let mut w = World::default();
-        c.run("add 1", GameState::Walking, &mut w);
-        assert!(!c.cheated());
-        c.drain();
-        c.run("failing 1", GameState::Walking, &mut w);
-        assert!(!c.cheated(), "a refused cheat did not run");
-        assert_eq!(errors(&mut c), vec!["failing: nope"]);
-        c.run("ch 1", GameState::Walking, &mut w);
-        assert!(c.cheated());
-        c.run("add 1", GameState::Walking, &mut w);
-        assert!(c.cheated(), "stays set");
-        assert_eq!(w.count, 3);
-    }
-
-    #[test]
-    fn disallowed_state_errors_and_changes_nothing() {
-        let mut c = console();
-        let mut w = World::default();
-        c.run("walkonly 5", GameState::Flying, &mut w);
-        assert_eq!(w.count, 0);
-        assert_eq!(
-            errors(&mut c),
-            vec!["'walkonly' can't be used while flying"]
-        );
-        c.run("walkonly 5", GameState::Walking, &mut w);
-        assert_eq!(w.count, 5);
-    }
-
-    #[test]
-    fn disallowed_cheat_does_not_set_cheated() {
-        let mut cheat = cmd("cheat", &[]);
-        cheat.cheat = true;
-        cheat.states = &[GameState::Walking];
-        let mut c = Console::new(vec![cheat]).unwrap();
-        let mut w = World::default();
-        c.run("cheat 1", GameState::Flying, &mut w);
-        assert!(!c.cheated());
-        assert_eq!(w.count, 0);
     }
 }
