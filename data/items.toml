@@ -71,3 +71,13 @@ cooldown_ticks = 1200
 [[item]]
 name = "wheat"
 label = "Wheat"
+
+# Tilling grass with the hoe (section 9.1). This is Mince Raft's own value;
+# research in #289 may change it.
+[till]
+# The item dropped when grass is tilled, which must be in the item list.
+item = "seeds"
+# Tilling grass drops it with probability 1 in `chance`.
+chance = 8
+# Holding secondary retries every this many ticks, on a newly targeted block.
+repeat_ticks = 4
