@@ -62,6 +62,12 @@ pub struct Command<W> {
 
 impl<W> Command<W> {
     /// `name <required> [optional]`.
+    /// Whether `word` is this command's name or one of its aliases; the one
+    /// place name matching is defined.
+    pub fn answers_to(&self, word: &str) -> bool {
+        self.name == word || self.aliases.contains(&word)
+    }
+
     pub fn usage(&self) -> String {
         let mut s = self.name.to_string();
         for a in self.args {
@@ -176,9 +182,7 @@ impl<W> Registry<W> {
     }
 
     pub fn get(&self, name: &str) -> Option<&Command<W>> {
-        self.commands
-            .iter()
-            .find(|c| c.name == name || c.aliases.contains(&name))
+        self.commands.iter().find(|c| c.answers_to(name))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Command<W>> {
@@ -256,10 +260,29 @@ pub enum Outcome {
     Error(String),
 }
 
+/// The one definition of the built-in `help`, used by its listing line, by
+/// `help help` and by argument checking.
+fn help_command<W>() -> Command<W> {
+    Command {
+        name: "help",
+        aliases: &[],
+        args: &[ArgSpec {
+            name: "command",
+            kind: ArgKind::Word,
+            optional: true,
+        }],
+        help: "show this list or one command",
+        states: ALL_STATES,
+        cheat: false,
+        handler: |_, _| Ok(Vec::new()),
+    }
+}
+
 /// A registry plus the session state around it: the outcome buffer and the
 /// `cheated` flag. The built-in `help` is handled here, not in the registry.
 pub struct Console<W> {
     registry: Registry<W>,
+    help: Command<W>,
     outcome: Vec<Outcome>,
     cheated: bool,
 }
@@ -267,13 +290,15 @@ pub struct Console<W> {
 impl<W> Console<W> {
     /// Rejects a registry that already uses the name `help`.
     pub fn new(registry: Registry<W>) -> Result<Self, RegistryError> {
-        if registry.get("help").is_some() {
+        let help = help_command();
+        if registry.get(help.name).is_some() {
             return Err(RegistryError::DuplicateName {
-                name: "help".into(),
+                name: help.name.into(),
             });
         }
         Ok(Console {
             registry,
+            help,
             outcome: Vec::new(),
             cheated: false,
         })
@@ -304,8 +329,15 @@ impl<W> Console<W> {
         line: &str,
     ) -> Result<Vec<String>, CommandError> {
         let mut words = line.split_whitespace();
-        if words.next() == Some("help") {
-            return self.help(words.next());
+        if words.next().is_some_and(|w| self.help.answers_to(w)) {
+            let rest: Vec<&str> = words.collect();
+            if rest.len() > self.help.args.len() {
+                return Err(CommandError::WrongArgCount {
+                    usage: self.help.usage(),
+                    got: rest.len(),
+                });
+            }
+            return self.help(rest.first().copied());
         }
         let Some((cmd, args)) = parse(&self.registry, line)? else {
             return Ok(Vec::new());
@@ -329,7 +361,7 @@ impl<W> Console<W> {
 
     fn help(&self, topic: Option<&str>) -> Result<Vec<String>, CommandError> {
         let Some(topic) = topic else {
-            let mut lines = vec!["help [command]: show this list or one command".to_string()];
+            let mut lines = vec![format!("{}: {}", self.help.usage(), self.help.help)];
             lines.extend(
                 self.registry
                     .iter()
@@ -337,10 +369,13 @@ impl<W> Console<W> {
             );
             return Ok(lines);
         };
-        let c = self
-            .registry
-            .get(topic)
-            .ok_or_else(|| CommandError::Unknown(topic.into()))?;
+        let c = if self.help.answers_to(topic) {
+            &self.help
+        } else {
+            self.registry
+                .get(topic)
+                .ok_or_else(|| CommandError::Unknown(topic.into()))?
+        };
         let mut lines = vec![format!("usage: {}", c.usage()), c.help.to_string()];
         if !c.aliases.is_empty() {
             lines.push(format!("aliases: {}", c.aliases.join(", ")));
@@ -466,6 +501,49 @@ mod tests {
         c.run(&mut w, GameState::Walking, "help nothing");
         assert!(matches!(c.drain()[0], Outcome::Error(_)));
         assert!(!c.cheated());
+    }
+
+    #[test]
+    fn help_rejects_extra_args_and_describes_itself() {
+        let (mut c, mut w) = (console(), World::default());
+        c.run(&mut w, GameState::Walking, "help add cheat");
+        assert_eq!(
+            c.drain(),
+            vec![Outcome::Error(
+                "wrong number of arguments (2); usage: help [command]".into()
+            )]
+        );
+        c.run(&mut w, GameState::Walking, "help");
+        let listing = c.drain();
+        c.run(&mut w, GameState::Walking, "help help");
+        let own = c.drain();
+        assert_eq!(own[0], Outcome::Result("usage: help [command]".into()));
+        assert_eq!(
+            own[1],
+            Outcome::Result("show this list or one command".into())
+        );
+        assert_eq!(
+            listing[0],
+            Outcome::Result("help [command]: show this list or one command".into())
+        );
+        assert!(!c.cheated());
+    }
+
+    #[test]
+    fn cheat_refused_for_state_leaves_cheated_false() {
+        let mut w = World::default();
+        let mut fly_cheat = cmd("fc", &[]);
+        fly_cheat.states = &[GameState::Flying];
+        fly_cheat.cheat = true;
+        let mut reg = registry();
+        reg.commands.push(fly_cheat);
+        let mut c2 = Console::new(reg).unwrap();
+        c2.run(&mut w, GameState::Walking, "fc 1");
+        assert!(matches!(c2.drain()[0], Outcome::Error(_)));
+        assert!(!c2.cheated());
+        assert_eq!(w.count, 0);
+        c2.run(&mut w, GameState::Flying, "fc 1");
+        assert!(c2.cheated());
     }
 
     #[test]
