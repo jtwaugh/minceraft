@@ -29,6 +29,11 @@ contaminate the codebase in a way that can't be undone.
 - **Never read or touch `work/` or any `*.jar`.** They exist only on the
   maintainer's machine, are gitignored, and must never be committed,
   copied, quoted or summarised.
+  Exception: on the maintainer's machine, when the maintainer asks for a
+  spec-lane research task, an agent may read `work/` and the jar. It
+  reports facts and numbers only (no code, names or code structure),
+  writes nothing to the repo, and does no implementation work in the same
+  session.
 - **Never edit `SPEC.md` in an implementation change.** Spec changes are
   decided and merged by the maintainer, in PRs that change nothing else.
   The only agent that drafts them is the spec editor
