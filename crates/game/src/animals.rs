@@ -40,6 +40,12 @@ pub struct AnimalDef {
     pub flee_speed: f64,
     /// Inclusive range of ticks a flee lasts.
     pub flee_ticks: [u32; 2],
+    /// Ticks the death animation lasts before the drops spawn (8.2).
+    pub death_ticks: u32,
+    /// Horizontal speed of a spawned drop, random direction, blocks per second.
+    pub scatter_speed: f64,
+    /// Upward speed of a spawned drop, blocks per second.
+    pub scatter_lift: f64,
 }
 
 /// The animal kinds, sorted by name.
@@ -103,6 +109,9 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
             "knockback_lift",
             "flee_speed",
             "flee_ticks",
+            "death_ticks",
+            "scatter_speed",
+            "scatter_lift",
         ]
         .contains(&field.as_str())
         {
@@ -157,6 +166,12 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
         .ok_or_else(|| bad("`hurt_ticks` must be a positive integer".to_string()))?
         as u32;
+    let death_ticks = table
+        .get("death_ticks")
+        .and_then(|v| v.as_integer())
+        .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
+        .ok_or_else(|| bad("`death_ticks` must be a positive integer".to_string()))?
+        as u32;
     let speed = |field: &str| {
         table
             .get(field)
@@ -165,6 +180,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
             .ok_or_else(|| bad(format!("`{field}` must be zero or more")))
     };
     let (knockback_speed, knockback_lift) = (speed("knockback_speed")?, speed("knockback_lift")?);
+    let (scatter_speed, scatter_lift) = (speed("scatter_speed")?, speed("scatter_lift")?);
     let flee_speed = table
         .get("flee_speed")
         .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
@@ -222,6 +238,9 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         knockback_lift,
         flee_speed,
         flee_ticks,
+        death_ticks,
+        scatter_speed,
+        scatter_lift,
     })
 }
 
@@ -299,7 +318,7 @@ mod tests {
     #[test]
     fn unknown_drop_item_rejected() {
         let a = Animals::from_toml(
-            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
         )
         .unwrap();
         assert!(matches!(
@@ -328,7 +347,7 @@ mod tests {
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 0\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [3, 2]\npause_ticks = [1, 2]\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\n",
-            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 0\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 0\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
             "not toml [",
         ] {

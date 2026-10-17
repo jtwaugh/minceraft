@@ -4,7 +4,9 @@
 //! [`AnimalStore::tick`] moves them (gravity, landing, the deck push) and
 //! makes idle animals wander: pause, pick a heading, walk, repeat (8.2). A
 //! hit animal flees along a random heading for a few seconds, then wanders.
-//! Damage, drops and spawning policy are separate tickets.
+//! A killed animal plays out its death animation, then is removed and
+//! [`AnimalStore::tick`] returns its drops for the caller to spawn as items
+//! (8.2, 8.3). Spawning policy is a separate ticket.
 
 use crate::animals::{AnimalDef, Animals};
 use crate::collision::{Aabb, CollisionWorld};
@@ -13,6 +15,14 @@ use crate::movement::move_with_step;
 use crate::physics::PlayerPhysics;
 use crate::rng::Rng;
 use crate::targeting::{EntityId, TargetableEntity};
+
+/// One item an animal dropped on dying: where and how fast to spawn it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DroppedItem {
+    pub item: String,
+    pub pos: [f64; 3],
+    pub velocity: [f64; 3],
+}
 
 /// The `kind` animal entities report to rule resolution, so a rule target of
 /// `entity:animal` matches them. The species is [`AnimalEntity::species`].
@@ -51,6 +61,10 @@ pub struct AnimalEntity {
     pub last_damage: u32,
     /// Ticks of fleeing left after a hit, along `facing`; 0 when not fleeing.
     pub flee_ticks_left: u32,
+    /// Ticks of death animation left once health reached 0 (the body tips
+    /// over for as long); `None` while alive. A dying animal cannot be hit,
+    /// walk or be targeted.
+    pub death_ticks_left: Option<u32>,
 }
 
 impl AnimalEntity {
@@ -147,6 +161,7 @@ impl AnimalStore {
             hurt_ticks_left: 0,
             last_damage: 0,
             flee_ticks_left: 0,
+            death_ticks_left: None,
         });
         Some(id)
     }
@@ -181,10 +196,14 @@ impl AnimalStore {
     /// ignored), or `None` if there is no such animal. A hit that opens the
     /// window also knocks the animal away from `attacker` (a world position)
     /// with a small kick upward; the move itself happens in `tick`, through
-    /// the collision resolver. No death handling here: health just stops at 0.
+    /// the collision resolver. A hit that takes health to 0 starts the death
+    /// animation; a dying animal ignores hits.
     pub fn hit(&mut self, id: EntityId, damage: u32, attacker: [f64; 3]) -> Option<u32> {
         let i = self.animals.binary_search_by_key(&id, |e| e.id).ok()?;
         let e = &mut self.animals[i];
+        if e.death_ticks_left.is_some() {
+            return Some(0);
+        }
         let applied = if e.hurt_ticks_left == 0 {
             let def = self
                 .kinds
@@ -227,13 +246,27 @@ impl AnimalStore {
         }
         let taken = applied.min(e.health);
         e.health -= taken;
+        if e.health == 0 {
+            let def = self
+                .kinds
+                .get(&e.species)
+                .expect("species checked at spawn");
+            e.death_ticks_left = Some(def.death_ticks);
+            e.flee_ticks_left = 0;
+        }
         Some(taken)
     }
 
     /// Advance every animal one tick, in id order, against `world` (which
     /// should include the raft's boxes where there is one). Same motion as
     /// items: the deck push, gravity, a swept move, drag and ground friction.
-    pub fn tick(&mut self, world: &impl CollisionWorld, deck: Option<Deck<'_>>) {
+    /// Animals whose death animation ends this tick are removed, and their
+    /// drops (counts drawn from each drop's range) are returned.
+    pub fn tick(
+        &mut self,
+        world: &impl CollisionWorld,
+        deck: Option<Deck<'_>>,
+    ) -> Vec<DroppedItem> {
         let cfg = self.physics;
         let dt = 1.0 / TICKS_PER_SECOND;
         let mut scratch = Vec::new();
@@ -243,10 +276,12 @@ impl AnimalStore {
                 .kinds
                 .get(&e.species)
                 .expect("species checked at spawn");
-            let fleeing = e.flee_ticks_left > 0;
+            let dying = e.death_ticks_left.is_some();
+            let fleeing = !dying && e.flee_ticks_left > 0;
             e.flee_ticks_left = e.flee_ticks_left.saturating_sub(1);
-            let walking =
-                !fleeing && advance_wander(&mut e.wander, &mut e.facing, def, &mut self.rng);
+            let walking = !dying
+                && !fleeing
+                && advance_wander(&mut e.wander, &mut e.facing, def, &mut self.rng);
             let mut bb = e.aabb();
             lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
             if let Some(d) = &deck {
@@ -287,13 +322,46 @@ impl AnimalStore {
                     }
                 }
             }
+            if let Some(left) = &mut e.death_ticks_left {
+                *left = left.saturating_sub(1);
+            }
         }
+        let mut dropped = Vec::new();
+        let mut i = 0;
+        while i < self.animals.len() {
+            if self.animals[i].death_ticks_left != Some(0) {
+                i += 1;
+                continue;
+            }
+            let e = self.animals.remove(i);
+            let def = self
+                .kinds
+                .get(&e.species)
+                .expect("species checked at spawn");
+            let pos = [e.pos[0], e.pos[1] + e.box_size[1] / 2.0, e.pos[2]];
+            for d in &def.drops {
+                for _ in 0..self.rng.range(d.min as i32, d.max as i32) {
+                    let a = f64::from(self.rng.angle());
+                    dropped.push(DroppedItem {
+                        item: d.item.clone(),
+                        pos,
+                        velocity: [
+                            a.cos() * def.scatter_speed,
+                            def.scatter_lift,
+                            a.sin() * def.scatter_speed,
+                        ],
+                    });
+                }
+            }
+        }
+        dropped
     }
 
     /// The animals as targets, of kind `animal`, for `cast_target`.
     pub fn targetables(&self) -> Vec<TargetableEntity> {
         self.animals
             .iter()
+            .filter(|e| e.death_ticks_left.is_none())
             .map(|e| TargetableEntity {
                 id: e.id,
                 kind: ANIMAL_KIND.to_string(),
@@ -754,5 +822,124 @@ mod tests {
     fn the_same_seed_and_hits_give_the_same_flee_path() {
         assert_eq!(flee_run(8, 150).0, flee_run(8, 150).0);
         assert_ne!(flee_run(8, 150).0, flee_run(9, 150).0);
+    }
+
+    fn kill(s: &mut AnimalStore, id: EntityId) {
+        let hp = s.get(id).unwrap().health;
+        assert_eq!(s.hit(id, hp, ORIGIN), Some(hp));
+    }
+
+    #[test]
+    fn a_killed_animal_stays_for_the_death_duration_then_drops() {
+        let w = floor();
+        let mut s = store(1);
+        let id = s.spawn("chicken", [0.5, 1.0, 0.5], 0.0).unwrap();
+        kill(&mut s, id);
+        let n = Animals::default_animals()
+            .get("chicken")
+            .unwrap()
+            .death_ticks;
+        assert_eq!(s.get(id).unwrap().death_ticks_left, Some(n));
+        for _ in 0..n - 1 {
+            assert!(s.tick(&w, None).is_empty());
+            assert!(s.get(id).is_some());
+        }
+        let dropped = s.tick(&w, None);
+        assert!(s.get(id).is_none());
+        assert!(s.is_empty());
+        assert!(dropped.iter().any(|d| d.item == "raw_chicken"));
+    }
+
+    #[test]
+    fn a_dying_animal_cannot_be_hit_moved_or_targeted() {
+        let w = floor();
+        let mut s = store(1);
+        let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+        kill(&mut s, id);
+        assert!(s.targetables().is_empty());
+        assert_eq!(s.hit(id, 5, ORIGIN), Some(0));
+        let before = s.get(id).unwrap().clone();
+        run(&mut s, &w, 5);
+        let e = s.get(id).unwrap();
+        assert_eq!(e.health, 0);
+        assert_eq!(e.flee_ticks_left, 0);
+        assert_eq!(e.wander, before.wander, "no wandering");
+        assert_eq!(
+            e.death_ticks_left,
+            Some(before.death_ticks_left.unwrap() - 5)
+        );
+    }
+
+    #[test]
+    fn drop_counts_stay_in_range_and_a_chicken_always_drops_raw_chicken() {
+        let w = floor();
+        let kinds = Animals::default_animals();
+        let mut s = store(1);
+        let mut seen = std::collections::HashMap::<(String, String), (u32, u32)>::new();
+        for i in 0..300 {
+            let species = ["cow", "pig", "chicken"][i % 3];
+            let id = s.spawn(species, [0.5, 1.0, 0.5], 0.0).unwrap();
+            kill(&mut s, id);
+            let mut dropped = Vec::new();
+            for _ in 0..20 {
+                dropped.extend(s.tick(&w, None));
+            }
+            let def = kinds.get(species).unwrap();
+            for d in &def.drops {
+                let n = dropped.iter().filter(|x| x.item == d.item).count() as u32;
+                assert!((d.min..=d.max).contains(&n), "{species} {}: {n}", d.item);
+                let r = seen
+                    .entry((species.to_string(), d.item.clone()))
+                    .or_insert((n, n));
+                *r = (r.0.min(n), r.1.max(n));
+            }
+            assert!(dropped
+                .iter()
+                .all(|x| def.drops.iter().any(|d| d.item == x.item)));
+            if species == "chicken" {
+                assert_eq!(
+                    dropped.iter().filter(|x| x.item == "raw_chicken").count(),
+                    1
+                );
+            }
+        }
+        assert_eq!(
+            seen[&("cow".into(), "raw_beef".into())],
+            (1, 3),
+            "range is used"
+        );
+        assert_eq!(seen[&("cow".into(), "leather".into())], (0, 1));
+    }
+
+    #[test]
+    fn drops_scatter_from_the_body_with_the_data_velocity() {
+        let w = floor();
+        let mut s = store(1);
+        let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+        s.hit(id, 99, ORIGIN);
+        let mut dropped = Vec::new();
+        for _ in 0..20 {
+            dropped.extend(s.tick(&w, None));
+        }
+        let def = Animals::default_animals().get("cow").unwrap().clone();
+        assert!(!dropped.is_empty());
+        for d in &dropped {
+            let h = d.velocity[0].hypot(d.velocity[2]);
+            assert!((h - def.scatter_speed).abs() < 1e-9);
+            assert_eq!(d.velocity[1], def.scatter_lift);
+            assert!(d.pos[1] > 1.0 && d.pos[1] < 1.0 + def.box_size[1] + 1e-9);
+        }
+    }
+
+    #[test]
+    fn the_same_kills_give_the_same_drops() {
+        let go = || {
+            let w = floor();
+            let mut s = store(1);
+            let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
+            kill(&mut s, id);
+            (0..20).flat_map(|_| s.tick(&w, None)).collect::<Vec<_>>()
+        };
+        assert_eq!(go(), go());
     }
 }
