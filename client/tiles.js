@@ -1,8 +1,8 @@
 // Texture array and block-face table for the client scene, built from the
 // viewer's tileset export (viewer/textures.json, written by build.sh) so the
 // client draws the same blocks as the viewer through viewer/mesh.js.
-// Same layer order as viewer/index.html; water is a single still frame here and
-// tiles missing from the export fall back to flat grey.
+// Same layer order as viewer/index.html; water is two runs of 4 frames (tileFor
+// returns frame 0; the shader adds the animation frame) and tiles missing from the export fall back to flat grey.
 //
 // Unlike the viewer, the tint flag is not packed into alpha (mipmapping averages
 // alpha, so a flag there flips unpredictably at a distance). Instead each texel
@@ -14,13 +14,16 @@
 import { faceLayers } from '../viewer/mesh.js';
 
 const S = 16;
-const NAMES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel', 'water_0', 'water_flow_0',
+const NAMES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel', 'water_0', 'water_1', 'water_2', 'water_3',
+  'water_flow_0', 'water_flow_1', 'water_flow_2', 'water_flow_3',
   'log_side', 'log_top', 'leaves', 'birch_log_side', 'birch_log_top', 'spruce_log_side', 'spruce_log_top',
   'ice', 'snow', 'cactus_side', 'cactus_top', 'pumpkin_side', 'pumpkin_top',
   'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose', 'sugar_cane', 'brown_mushroom', 'red_mushroom',
   'leaves_fast'];
 const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89' };
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
+/** Layers [ANIM_FIRST, ANIM_END) are the water runs; the shader offsets them by the frame. */
+export const ANIM_FIRST = L.water_0, ANIM_END = L.water_flow_3 + 1;
 
 /** Layer for block id b on a face with vertical normal dy; `names` maps block id to name. */
 function tileFor(B, names, b, dy, fast) {
