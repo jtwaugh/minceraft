@@ -4,6 +4,7 @@
 //! Drop items must exist in `data/items.toml`; `Animals::check_items`
 //! verifies that.
 
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::items::Items;
 use std::fmt;
 
@@ -69,20 +70,27 @@ pub enum AnimalsError {
     },
 }
 
+impl From<AnimalsError> for DataError {
+    fn from(e: AnimalsError) -> DataError {
+        let kind = match e {
+            AnimalsError::Parse(msg) => DataErrorKind::Parse(msg),
+            AnimalsError::BadEntry { kind, problem } => DataErrorKind::BadEntry {
+                entry: kind,
+                problem,
+            },
+            // The message names the drop, which `UnknownItem` has no room for.
+            AnimalsError::UnknownItem { kind, item } => DataErrorKind::BadEntry {
+                entry: kind,
+                problem: format!("drop `{item}` is not in {}", DataFile::Items.name()),
+            },
+        };
+        DataError::new(DataFile::Animals, kind)
+    }
+}
+
 impl fmt::Display for AnimalsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AnimalsError::Parse(e) => write!(f, "animals.toml: {e}"),
-            AnimalsError::BadEntry { kind, problem } => {
-                write!(f, "animals.toml: {kind}: {problem}")
-            }
-            AnimalsError::UnknownItem { kind, item } => {
-                write!(
-                    f,
-                    "animals.toml: {kind}: drop `{item}` is not in items.toml"
-                )
-            }
-        }
+        DataError::from(self.clone()).fmt(f)
     }
 }
 
@@ -353,5 +361,24 @@ mod tests {
         ] {
             assert!(Animals::from_toml(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn errors_convert_to_data_error() {
+        let e = AnimalsError::UnknownItem {
+            kind: "cow".into(),
+            item: "x".into(),
+        };
+        assert_eq!(
+            e.to_string(),
+            "animals.toml: cow: drop `x` is not in items.toml"
+        );
+        assert_eq!(DataError::from(e.clone()).file, DataFile::Animals);
+        assert_eq!(
+            DataError::from(e).to_string(),
+            "animals.toml: cow: drop `x` is not in items.toml"
+        );
+        let p = AnimalsError::Parse("bad".into());
+        assert_eq!(DataError::from(p).kind, DataErrorKind::Parse("bad".into()));
     }
 }
