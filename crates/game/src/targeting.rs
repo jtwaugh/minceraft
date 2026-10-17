@@ -2,6 +2,7 @@
 //! (basic-gameplay.md section 5). Tunables come from `data/targeting.toml`.
 
 use crate::collision::{Aabb, CollisionWorld};
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use std::fmt;
 
 const DEFAULT_TARGETING: &str = include_str!("../../../data/targeting.toml");
@@ -189,20 +190,27 @@ pub struct TargetingConfig {
     pub entity_box_expansion: f32,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TargetingError {
     Parse(String),
     Missing(String),
     Invalid(String),
 }
 
+impl From<TargetingError> for DataError {
+    fn from(e: TargetingError) -> DataError {
+        let kind = match e {
+            TargetingError::Parse(m) => DataErrorKind::Parse(m),
+            TargetingError::Missing(k) => DataErrorKind::MissingKey(k),
+            TargetingError::Invalid(m) => DataErrorKind::Invalid(m),
+        };
+        DataError::new(DataFile::Targeting, kind)
+    }
+}
+
 impl fmt::Display for TargetingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TargetingError::Parse(e) => write!(f, "targeting.toml: {e}"),
-            TargetingError::Missing(k) => write!(f, "targeting.toml: missing `{k}`"),
-            TargetingError::Invalid(e) => write!(f, "targeting.toml: {e}"),
-        }
+        DataError::from(self.clone()).fmt(f)
     }
 }
 

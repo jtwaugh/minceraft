@@ -1,6 +1,7 @@
 //! Player body and land-movement tunables loaded from `data/player.toml`.
 //! See docs/design/basic-gameplay.md sections 4.1, 4.2, 4.5 and 4.6.
 
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use std::fmt;
 
 const DEFAULT_PLAYER: &str = include_str!("../../../data/player.toml");
@@ -50,20 +51,27 @@ pub struct PlayerPhysics {
     pub water_climb_out_clearance: f32,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PhysicsError {
     Parse(String),
     Missing(String),
     Invalid(String),
 }
 
+impl From<PhysicsError> for DataError {
+    fn from(e: PhysicsError) -> DataError {
+        let kind = match e {
+            PhysicsError::Parse(m) => DataErrorKind::Parse(m),
+            PhysicsError::Missing(k) => DataErrorKind::MissingKey(k),
+            PhysicsError::Invalid(m) => DataErrorKind::Invalid(m),
+        };
+        DataError::new(DataFile::Player, kind)
+    }
+}
+
 impl fmt::Display for PhysicsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PhysicsError::Parse(e) => write!(f, "player.toml: {e}"),
-            PhysicsError::Missing(k) => write!(f, "player.toml: missing `{k}`"),
-            PhysicsError::Invalid(e) => write!(f, "player.toml: {e}"),
-        }
+        DataError::from(self.clone()).fmt(f)
     }
 }
 
