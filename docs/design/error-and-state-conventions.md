@@ -5,7 +5,7 @@ scope: both
 source: "#302"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -40,7 +40,8 @@ Verified against the code on `master`:
 - **Client state machine.** `client/controller.js` keeps
   `state.flying` (fly/walk) and the pointer-lock state; the DSL in
   `client/test/dsl.mjs` drives it with DOM events and `expect` lines.
-- Nothing in this doc is built yet.
+- **Phase A done:** the audit is `docs/errors-and-states.md` (plan #306, ticket #307, PR #310). It confirms 13 error types and no Rust state machines.
+- Phases B to E are not built yet.
 
 ## Reconciliation notes
 
