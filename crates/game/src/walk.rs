@@ -6,9 +6,11 @@ use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::commands::{run_line, GameState, Registry};
+use crate::crops::Crops;
 use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
 use crate::forage::{ForageConfig, Forager};
+use crate::harvest::{harvest, tile_crop_state};
 use crate::input::TickInput;
 use crate::interactions::{
     resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
@@ -20,6 +22,7 @@ use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
+use crate::rng::Rng;
 use crate::scene::RaftScene;
 use crate::stream::{StreamConfig, Streamer};
 use crate::targeting::{cast_target, ray_vs_box, Target, TargetableEntity, TargetingConfig};
@@ -142,6 +145,7 @@ const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
 const ANIMAL_SEED: u64 = 0;
 const FORAGE_SEED: u64 = 1;
 const TILL_SEED: u64 = 2;
+const HARVEST_SEED: u64 = 3;
 
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
@@ -170,6 +174,8 @@ pub struct Walker {
     animals: AnimalStore,
     forager: Forager,
     tiller: Tiller,
+    crops: Crops,
+    harvest_rng: Rng,
     /// Events emitted since the last `drain_events`.
     events: Vec<GameEvent>,
     /// Ticks stepped so far, for cooldowns.
@@ -219,6 +225,8 @@ impl Walker {
             ),
             forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
             tiller: Tiller::new(TillConfig::default_from_data(), TILL_SEED),
+            crops: Crops::default_crops(),
+            harvest_rng: Rng::new(HARVEST_SEED),
             events: Vec::new(),
             sim_tick: 0,
             item_table: Items::default_items(),
@@ -546,6 +554,14 @@ impl Walker {
                 self.state.hands = None;
             }
         }
+        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Harvest), ctx.target)
+        {
+            let drops = harvest(&mut self.world, &self.crops, &mut self.harvest_rng, pos);
+            let at = pos.map(|c| f64::from(c) + 0.5);
+            for item in drops.into_iter().flatten() {
+                self.items.spawn(ItemInstance { item }, at, [0.0; 3]);
+            }
+        }
         for hit in &self.dispatcher.hits {
             self.animals.hit(hit.id, hit.damage, self.player.pos);
         }
@@ -673,6 +689,7 @@ fn look_dir(input: &TickInput) -> [f64; 3] {
 fn rule_block_name(block: Block) -> String {
     match FarmTile::from_block(block) {
         Some(FarmTile::Farmland { .. }) => "farmland".to_string(),
+        Some(FarmTile::Crop { .. }) => "crop".to_string(),
         _ => block.info().name.to_string(),
     }
 }
@@ -710,6 +727,9 @@ fn aim(
                 facts: TargetFacts {
                     block: Some(rule_block_name(world.block_at(pos[0], pos[1], pos[2]))),
                     air_above: world.block_at(pos[0], pos[1] + 1, pos[2]) == Block::Air,
+                    crop_state: FarmTile::from_block(world.block_at(pos[0], pos[1], pos[2]))
+                        .and_then(tile_crop_state)
+                        .map(String::from),
                     ..TargetFacts::default()
                 },
                 boxed,
@@ -1892,6 +1912,68 @@ mod tests {
         w.tick(&down(true, false));
         assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat0);
         assert!(w.hands().is_some(), "second seed is kept");
+    }
+
+    fn crop_walker(stage: u32) -> Walker {
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, true));
+        let kind = crate::farm::CropKind::Wheat;
+        w.world.set(0, 4, 0, FarmTile::Crop { kind, stage });
+        w
+    }
+
+    fn mature() -> u32 {
+        crate::farm::CropKind::Wheat.stages() - 1
+    }
+
+    #[test]
+    fn mature_crop_drops_yields_and_resets_with_any_tool_or_empty_hands() {
+        for held in [
+            HeldThing::Empty,
+            HeldThing::Tool("hoe".into()),
+            HeldThing::Tool("sword".into()),
+        ] {
+            let mut w = crop_walker(mature());
+            w.held_override = Some(held);
+            w.tick(&down(true, false));
+            assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat0);
+            let names: Vec<_> = w.items().iter().map(|e| e.item.item.clone()).collect();
+            assert_eq!(names[0], "wheat");
+            assert!(names.len() <= 3 && names[1..].iter().all(|n| n == "seeds"));
+        }
+    }
+
+    #[test]
+    fn immature_crop_is_left_alone() {
+        let mut w = crop_walker(mature() - 1);
+        w.tick(&down(true, false));
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat6);
+        assert_eq!(w.items().len(), 0);
+    }
+
+    #[test]
+    fn carrying_an_item_blocks_harvest() {
+        let mut w = crop_walker(mature());
+        w.clear_held_override();
+        w.state.hands = Some(ItemInstance {
+            item: "wheat".into(),
+        });
+        w.tick(&down(true, false));
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat7);
+        assert_eq!(w.items().len(), 0);
+    }
+
+    #[test]
+    fn harvest_replays_identically() {
+        let run = || {
+            let mut w = crop_walker(mature());
+            w.tick(&down(true, false));
+            w.items()
+                .iter()
+                .map(|e| e.item.item.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(run(), run());
     }
 
     #[test]

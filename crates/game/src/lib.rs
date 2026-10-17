@@ -13,6 +13,7 @@ pub mod data_error;
 pub mod events;
 pub mod farm;
 pub mod forage;
+pub mod harvest;
 pub mod input;
 pub mod interactions;
 pub mod item_entities;
