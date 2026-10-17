@@ -57,3 +57,13 @@ label = "Raw chicken"
 [[item]]
 name = "feather"
 label = "Feather"
+
+# Foraging tall grass with empty hands (section 9.5).
+[forage]
+# The item dropped, which must be in the item list.
+item = "seeds"
+# A forage drops it with probability 1 in `chance`.
+chance = 6
+# Ticks before the same grass block can be foraged again. No day clock yet
+# (decided in #255), so this is the 4-minute day of section 9.3 at 20 Hz.
+cooldown_ticks = 4800
