@@ -1,7 +1,7 @@
 ---
 title: Viewer rendering quality and speed
 status: accepted
-scope: generator
+scope: both
 source: ""
 superseded_by: ""
 phases:
@@ -53,8 +53,7 @@ Checked against `master` (ba3a7e9). No phase is built; all five stay `todo`.
   - `client/tiles.js` still calls `gl.generateMipmap`, and the client
     cutoff has no `fwidth` sharpening. `biome-flora.md` Phase A (A.2, A.4)
     waits on Phase B.1 and B.2 here (see its Reconciliation notes).
-  Suggest the planner decide whether each phase covers `client/` as well.
-  See Open question 5.
+  Phases A to C cover `client/` as well (see Scope below).
 - **Vertex byte 13 is shared.** Phase C.1 stores AO there. Any other
   design doc that wants that byte must agree; no other doc claims it now.
 - **Phase B.3 and determinism.** UV variation by world coordinate affects
@@ -78,9 +77,9 @@ Checked against `master` (ba3a7e9). No phase is built; all five stay `todo`.
 - **Overlap with other docs:** `biome-flora.md` depends on Phase B.1 and
   B.2 (see above). `basic-gameplay.md` and `world-layout.md` do not touch
   rendering.
-- **Scope:** `generator` is kept, since the changes are in `viewer/`,
-  although they also reach `client/` through `viewer/mesh.js`. Change it to
-  `both` if Open question 5 answers yes.
+- **Scope:** `both`. Phases A to C also apply to `client/scene.js`,
+  `client/tiles.js` and `client/samplers.js`, not only to `viewer/`.
+  (Decided in #243.)
 
 # Viewer rendering quality and speed
 
@@ -345,8 +344,3 @@ Show terrain beyond the fog instead of empty sky.
 4. **Distant-terrain colour.** A. Biome surface colour only. B. Sample the
    decorated map tiles where they exist (more accurate near the map, but
    only covers the map's 1024×1024 blocks).
-5. **Does this doc cover the game client (`client/`)?** (Reconciler.)
-   A. Viewer only; the client's shaders are handled by their own tickets
-   (F2 and F3 are already fixed there).
-   B. Both: phases A to C also apply to `client/scene.js`, `tiles.js`
-   and `samplers.js`, and `scope` becomes `both`.
