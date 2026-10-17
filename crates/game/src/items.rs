@@ -16,6 +16,8 @@ pub const BELT_SLOTS: usize = 5;
 pub struct Def {
     pub name: String,
     pub label: String,
+    /// Attack damage in half-hearts; only tools may set it.
+    pub damage: Option<u32>,
 }
 
 /// The tool and item tables, in file order.
@@ -23,6 +25,8 @@ pub struct Def {
 pub struct Items {
     pub tools: Vec<Def>,
     pub items: Vec<Def>,
+    /// Attack damage with the hand, and with any tool that sets none.
+    pub hand_damage: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -90,7 +94,7 @@ fn parse_defs(table: &toml::value::Table, kind: &'static str) -> Result<Vec<Def>
         let index = i + 1;
         let entry = entry.as_table().ok_or_else(|| bad(index, "not a table"))?;
         for field in entry.keys() {
-            if field != "name" && field != "label" {
+            if field != "name" && field != "label" && !(kind == "tool" && field == "damage") {
                 return Err(bad(index, &format!("unknown field `{field}`")));
             }
         }
@@ -112,6 +116,15 @@ fn parse_defs(table: &toml::value::Table, kind: &'static str) -> Result<Vec<Def>
         out.push(Def {
             name,
             label: text("label")?,
+            damage: match entry.get("damage") {
+                None => None,
+                Some(v) => Some(
+                    v.as_integer()
+                        .filter(|d| (1..=i64::from(u32::MAX)).contains(d))
+                        .ok_or_else(|| bad(index, "`damage` must be a positive integer"))?
+                        as u32,
+                ),
+            },
         });
     }
     Ok(out)
@@ -126,10 +139,25 @@ impl Items {
     pub fn from_toml(text: &str) -> Result<Items, ItemsError> {
         let table: toml::value::Table =
             toml::from_str(text).map_err(|e| ItemsError::Parse(e.to_string()))?;
+        let hand_damage = table
+            .get("hand_damage")
+            .and_then(|v| v.as_integer())
+            .filter(|d| (1..=i64::from(u32::MAX)).contains(d))
+            .ok_or_else(|| ItemsError::Parse("`hand_damage` must be a positive integer".into()))?
+            as u32;
         Ok(Items {
             tools: parse_defs(&table, "tool")?,
             items: parse_defs(&table, "item")?,
+            hand_damage,
         })
+    }
+
+    /// Attack damage in half-hearts with `tool` in hand, or with the bare
+    /// hand when `None` (section 8.1).
+    pub fn damage(&self, tool: Option<&str>) -> u32 {
+        tool.and_then(|t| self.tools.iter().find(|d| d.name == t))
+            .and_then(|d| d.damage)
+            .unwrap_or(self.hand_damage)
     }
 
     pub fn has_tool(&self, name: &str) -> bool {
@@ -252,12 +280,12 @@ mod tests {
 
     #[test]
     fn rejects_duplicates() {
-        let t = "[[tool]]\nname='a'\nlabel='A'\n[[tool]]\nname='a'\nlabel='B'\n";
+        let t = "hand_damage=1\n[[tool]]\nname='a'\nlabel='A'\n[[tool]]\nname='a'\nlabel='B'\n";
         assert!(matches!(
             Items::from_toml(t),
             Err(ItemsError::Duplicate { kind: "tool", .. })
         ));
-        let i = "[[item]]\nname='a'\nlabel='A'\n[[item]]\nname='a'\nlabel='B'\n";
+        let i = "hand_damage=1\n[[item]]\nname='a'\nlabel='A'\n[[item]]\nname='a'\nlabel='B'\n";
         assert!(matches!(
             Items::from_toml(i),
             Err(ItemsError::Duplicate { kind: "item", .. })
@@ -273,6 +301,10 @@ mod tests {
             "[[tool]]\nname='a'\nlabel='A'\nextra=1\n",
             "[[item]]\nname=3\nlabel='A'\n",
             "tool = 3\n",
+            "hand_damage=1\n[[tool]]\nname='a'\nlabel='A'\ndamage=0\n",
+            "hand_damage=1\n[[item]]\nname='a'\nlabel='A'\ndamage=2\n",
+            "hand_damage=0\n",
+            "[[tool]]\nname='a'\nlabel='A'\n",
             "not toml [",
         ] {
             assert!(Items::from_toml(bad).is_err(), "{bad}");
@@ -293,7 +325,7 @@ mod tests {
 
     #[test]
     fn belt_needs_starting_tools() {
-        let items = Items::from_toml("[[tool]]\nname='sword'\nlabel='S'\n").unwrap();
+        let items = Items::from_toml("hand_damage=1\n[[tool]]\nname='sword'\nlabel='S'\n").unwrap();
         assert!(matches!(
             PlayerState::new(&items),
             Err(ItemsError::UnknownName { .. })
