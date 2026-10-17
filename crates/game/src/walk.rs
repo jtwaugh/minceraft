@@ -2,6 +2,8 @@
 //! over loaded terrain regions, plus the eye pose between ticks.
 //! See docs/design/basic-gameplay.md sections 1 (rule 1) and 3.
 
+use crate::animal_entities::AnimalStore;
+use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::input::TickInput;
 use crate::interactions::{
@@ -127,6 +129,9 @@ impl CollisionWorld for RegionSet {
 /// Item entity ids start here, above the ids of the stub entities.
 const FIRST_ITEM_ID: crate::targeting::EntityId = 1 << 20;
 
+/// Animal entity ids start here, above the item ids.
+const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
+
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
     raft: Raft,
@@ -151,6 +156,7 @@ pub struct Walker {
     rules: Interactions,
     dispatcher: Dispatcher,
     items: ItemStore,
+    animals: AnimalStore,
     state: PlayerState,
     /// Test override of the derived held thing.
     held_override: Option<HeldThing>,
@@ -181,6 +187,11 @@ impl Walker {
             rules: Interactions::default_rules(),
             dispatcher: Dispatcher::default(),
             items: ItemStore::new(ItemEntityConfig::default_from_data(), FIRST_ITEM_ID),
+            animals: AnimalStore::new(
+                Animals::default_animals(),
+                ItemEntityConfig::default_from_data(),
+                FIRST_ANIMAL_ID,
+            ),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             held_override: None,
@@ -294,6 +305,14 @@ impl Walker {
                     push: &f.push,
                 };
                 self.items.tick(&world, Some(deck));
+                self.animals.tick(
+                    &world,
+                    Some(Deck {
+                        raft: &f.raft,
+                        tilt: frame.tilt,
+                        push: &f.push,
+                    }),
+                );
                 let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -302,6 +321,7 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&self.world, None);
+                self.animals.tick(&self.world, None);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -352,15 +372,31 @@ impl Walker {
         &self.items
     }
 
+    /// Put an animal of `species` in the world, returning its entity id, or
+    /// `None` for an unknown species.
+    pub fn spawn_animal(
+        &mut self,
+        species: &str,
+        pos: [f64; 3],
+        facing: f64,
+    ) -> Option<crate::targeting::EntityId> {
+        self.animals.spawn(species, pos, facing)
+    }
+
+    pub fn animals(&self) -> &AnimalStore {
+        &self.animals
+    }
+
     /// The carried item, if any.
     pub fn hands(&self) -> Option<&ItemInstance> {
         self.state.hands.as_ref()
     }
 
-    /// Stub entities plus the loose items, as the eye ray sees them.
+    /// Stub entities plus the loose items and animals, as the eye ray sees them.
     fn all_entities(&self) -> Vec<TargetableEntity> {
         let mut all = self.entities.clone();
         all.extend(self.items.targetables());
+        all.extend(self.animals.targetables());
         all
     }
 
@@ -663,6 +699,46 @@ mod tests {
         assert!(w.preview(Button::Secondary).is_none());
         w.set_held(HeldThing::Empty);
         assert_eq!(w.preview(Button::Primary).unwrap().rule_index, 8);
+    }
+
+    #[test]
+    fn the_eye_ray_targets_a_spawned_animal_and_the_sword_attacks() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let id = w.spawn_animal("cow", [0.5, 4.0, -2.0], 0.0).unwrap();
+        assert!(w.spawn_animal("nope", [0.5, 4.0, -2.0], 0.0).is_none());
+        // The eye is above the animal's back: look down at it.
+        w.tick(&look(-0.4, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        assert_eq!(
+            w.preview(Button::Primary).map(|r| r.action),
+            Some(ActionKind::Attack)
+        );
+    }
+
+    #[test]
+    fn animal_ids_do_not_collide_with_items_or_stubs() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        let item = w.spawn_item(seeds(), [3.5, 4.0, 3.5]);
+        let a = w.spawn_animal("pig", [-3.5, 4.0, 3.5], 0.0).unwrap();
+        let b = w.spawn_animal("pig", [-3.5, 4.0, -3.5], 0.0).unwrap();
+        let mut ids: Vec<_> = w.all_entities().iter().map(|e| e.id).collect();
+        assert_eq!(ids.len(), 4);
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 4);
+        assert!(a > item && b > a && item > 1);
+    }
+
+    #[test]
+    fn animals_settle_on_the_ground() {
+        let mut w = settled();
+        let id = w.spawn_animal("cow", [3.5, 7.0, 3.5], 0.0).unwrap();
+        for _ in 0..60 {
+            w.tick(&TickInput::default());
+        }
+        assert_eq!(w.animals().get(id).unwrap().pos[1], 4.0);
     }
 
     fn seeds() -> ItemInstance {
@@ -1220,6 +1296,21 @@ mod tests {
         assert!(moved > 0.05, "standing still should drift: {moved}");
         let (still, on) = drift(true);
         assert!(still < 1e-6 && on, "sneaking should hold: {still}");
+    }
+
+    #[test]
+    fn an_animal_rides_the_raft_deck() {
+        let mut w = boarded();
+        let c = w.floating.as_ref().unwrap().raft.centre();
+        let y = w.player().pos[1];
+        let id = w.spawn_animal("pig", [c[0], y + 1.0, c[1]], 0.0).unwrap();
+        for _ in 0..60 {
+            w.tick(&TickInput::default());
+        }
+        let f = w.floating.as_ref().unwrap();
+        let e = w.animals().get(id).unwrap();
+        assert!(f.raft.supports(&e.aabb()), "{:?}", e.pos);
+        assert!((e.pos[1] - y).abs() < 1.0, "{:?} vs {y}", e.pos);
     }
 
     #[test]
