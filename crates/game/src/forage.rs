@@ -116,7 +116,7 @@ mod tests {
         let c = ForageConfig::default_from_data();
         assert_eq!(
             (c.item.as_str(), c.chance, c.cooldown_ticks),
-            ("seeds", 6, 4800)
+            ("seeds", 6, 1200)
         );
     }
 
