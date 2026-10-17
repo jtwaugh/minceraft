@@ -19,7 +19,7 @@ use crate::interactions::{
 use crate::item_entities::{Deck, ItemEntityConfig, ItemStore};
 use crate::items::{ItemInstance, Items, PlayerState};
 use crate::physics::{PhysicsError, PlayerPhysics};
-use crate::plant::plant;
+use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::rng::Rng;
@@ -544,7 +544,12 @@ impl Walker {
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Plant), ctx.target) {
             // The seed leaves the hands only if a crop went in.
-            if plant(&mut self.world, pos) {
+            let kind = self
+                .state
+                .hands
+                .as_ref()
+                .and_then(|h| crop_for_item(&h.item));
+            if kind.is_some_and(|kind| plant(&mut self.world, pos, kind)) {
                 self.state.hands = None;
             }
         }
@@ -1968,5 +1973,18 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn non_seed_items_are_not_planted() {
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, true));
+        w.clear_held_override();
+        w.state.hands = Some(ItemInstance {
+            item: "leather".into(),
+        });
+        w.tick(&down(true, false));
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Air);
+        assert!(w.hands().is_some());
     }
 }
