@@ -68,7 +68,14 @@ fn range(
     table: &toml::value::Table,
     bad: &dyn Fn(String) -> CropsError,
     what: &str,
+    extra: &[&str],
 ) -> Result<Range, CropsError> {
+    if let Some(f) = table
+        .keys()
+        .find(|f| !["min", "max"].contains(&f.as_str()) && !extra.contains(&f.as_str()))
+    {
+        return Err(bad(format!("{what}: unknown field `{f}`")));
+    }
     let count = |field: &str| {
         table
             .get(field)
@@ -107,28 +114,18 @@ fn parse_crop(name: &str, value: &toml::Value) -> Result<CropDef, CropsError> {
         .get("yield")
         .and_then(|v| v.as_table())
         .ok_or_else(|| bad("`yield` must be a table".to_string()))?;
-    for field in produce.keys() {
-        if !["item", "min", "max"].contains(&field.as_str()) {
-            return Err(bad(format!("yield: unknown field `{field}`")));
-        }
-    }
     let item = produce
         .get("item")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| bad("yield: `item` must be a non-empty string".to_string()))?
         .to_string();
-    let item_count = range(produce, &bad, "yield")?;
+    let item_count = range(produce, &bad, "yield", &["item"])?;
     let seeds_table = table
         .get("seeds")
         .and_then(|v| v.as_table())
         .ok_or_else(|| bad("`seeds` must be a table".to_string()))?;
-    for field in seeds_table.keys() {
-        if !["min", "max"].contains(&field.as_str()) {
-            return Err(bad(format!("seeds: unknown field `{field}`")));
-        }
-    }
-    let seeds = range(seeds_table, &bad, "seeds")?;
+    let seeds = range(seeds_table, &bad, "seeds", &[])?;
     Ok(CropDef {
         name: name.to_string(),
         stages,
