@@ -8,6 +8,7 @@
 //! as written and not checked against the block table, because some of them
 //! (`farmland`, `crop`, `planter_dirt`, animals) arrive in later phases.
 
+use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::input::TickInput;
 use crate::targeting::{self, EntityId, Face};
 use std::fmt;
@@ -109,44 +110,45 @@ pub enum InteractionsError {
     },
 }
 
-impl fmt::Display for InteractionsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InteractionsError::Parse(e) => write!(f, "interactions.toml: {e}"),
+impl From<InteractionsError> for DataError {
+    fn from(e: InteractionsError) -> DataError {
+        let (rule, problem) = match e {
+            InteractionsError::Parse(msg) => {
+                return DataError::new(DataFile::Interactions, DataErrorKind::Parse(msg));
+            }
             InteractionsError::UnknownField { rule, field } => {
-                write!(f, "interactions.toml: rule {rule}: unknown field `{field}`")
+                (rule, format!("unknown field `{field}`"))
             }
             InteractionsError::MissingField { rule, field } => {
-                write!(f, "interactions.toml: rule {rule}: missing field `{field}`")
+                (rule, format!("missing field `{field}`"))
             }
             InteractionsError::WrongType { rule, field } => {
-                write!(
-                    f,
-                    "interactions.toml: rule {rule}: wrong type for `{field}`"
-                )
+                (rule, format!("wrong type for `{field}`"))
             }
             InteractionsError::UnknownHeld { rule, value } => {
-                write!(f, "interactions.toml: rule {rule}: unknown held `{value}`")
+                (rule, format!("unknown held `{value}`"))
             }
             InteractionsError::UnknownButton { rule, value } => {
-                write!(
-                    f,
-                    "interactions.toml: rule {rule}: unknown button `{value}`"
-                )
+                (rule, format!("unknown button `{value}`"))
             }
             InteractionsError::UnknownTarget { rule, value } => {
-                write!(
-                    f,
-                    "interactions.toml: rule {rule}: unknown target `{value}`"
-                )
+                (rule, format!("unknown target `{value}`"))
             }
             InteractionsError::UnknownAction { rule, value } => {
-                write!(
-                    f,
-                    "interactions.toml: rule {rule}: unknown action `{value}`"
-                )
+                (rule, format!("unknown action `{value}`"))
             }
-        }
+        };
+        let kind = DataErrorKind::BadEntry {
+            entry: format!("rule {rule}"),
+            problem,
+        };
+        DataError::new(DataFile::Interactions, kind)
+    }
+}
+
+impl fmt::Display for InteractionsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        DataError::from(self.clone()).fmt(f)
     }
 }
 
@@ -787,5 +789,19 @@ mod tests {
             err,
             InteractionsError::UnknownAction { rule: 2, .. }
         ));
+    }
+
+    #[test]
+    fn converts_to_data_error() {
+        let err = with_base(&BASE.replace("forage", "dance")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "interactions.toml: rule 1: unknown action `dance`"
+        );
+        let d = DataError::from(err);
+        assert_eq!(d.file, DataFile::Interactions);
+        assert!(matches!(d.kind, DataErrorKind::BadEntry { .. }));
+        let p = DataError::from(InteractionsError::Parse("bad".into()));
+        assert_eq!(p.to_string(), "interactions.toml: bad");
     }
 }
