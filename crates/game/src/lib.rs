@@ -7,6 +7,7 @@ pub mod bindings;
 pub mod camera;
 pub mod clock;
 pub mod collision;
+pub mod commands;
 pub mod crops;
 pub mod events;
 pub mod forage;
