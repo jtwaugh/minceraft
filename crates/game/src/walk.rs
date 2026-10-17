@@ -7,7 +7,7 @@ use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::commands::{run_line, GameState, Registry};
 use crate::events::GameEvent;
-use crate::farm::FarmWorld;
+use crate::farm::{FarmTile, FarmWorld};
 use crate::forage::{ForageConfig, Forager};
 use crate::input::TickInput;
 use crate::interactions::{
@@ -17,6 +17,7 @@ use crate::interactions::{
 use crate::item_entities::{Deck, ItemEntityConfig, ItemStore};
 use crate::items::{ItemInstance, Items, PlayerState};
 use crate::physics::{PhysicsError, PlayerPhysics};
+use crate::plant::plant;
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
 use crate::scene::RaftScene;
@@ -533,6 +534,12 @@ impl Walker {
                 self.items.spawn(item, at, [0.0; 3]);
             }
         }
+        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Plant), ctx.target) {
+            // The seed leaves the hands only if a crop went in.
+            if plant(&mut self.world, pos) {
+                self.state.hands = None;
+            }
+        }
         for hit in &self.dispatcher.hits {
             self.animals.hit(hit.id, hit.damage, self.player.pos);
         }
@@ -656,6 +663,14 @@ fn look_dir(input: &TickInput) -> [f64; 3] {
     [sy * cp, sp, -cy * cp]
 }
 
+/// The name rules use for a block: both farmland blocks are `farmland`.
+fn rule_block_name(block: Block) -> String {
+    match FarmTile::from_block(block) {
+        Some(FarmTile::Farmland { .. }) => "farmland".to_string(),
+        _ => block.info().name.to_string(),
+    }
+}
+
 /// What the ray from `eye` along the look angles of `input` hits, blocks and
 /// entities both, with the names rules match on and the box to outline.
 fn aim(
@@ -687,13 +702,7 @@ fn aim(
             Aim {
                 target,
                 facts: TargetFacts {
-                    block: Some(
-                        world
-                            .block_at(pos[0], pos[1], pos[2])
-                            .info()
-                            .name
-                            .to_string(),
-                    ),
+                    block: Some(rule_block_name(world.block_at(pos[0], pos[1], pos[2]))),
                     air_above: world.block_at(pos[0], pos[1] + 1, pos[2]) == Block::Air,
                     ..TargetFacts::default()
                 },
@@ -1836,5 +1845,46 @@ mod tests {
         assert!(!tilled(&w, 2), "inside the interval");
         w.tick(&down(false, true));
         assert!(tilled(&w, 2), "after the interval");
+    }
+
+    #[test]
+    fn seeds_plant_on_farmland_top_and_leave_the_hands() {
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, true));
+        assert_eq!(w.world.block_at(0, 3, 0), Block::FarmlandDry);
+        w.clear_held_override();
+        w.state.hands = Some(ItemInstance {
+            item: "seeds".into(),
+        });
+        w.tick(&down(true, false));
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat0);
+        assert!(w.hands().is_none());
+        assert_eq!(w.items().len(), 0);
+    }
+
+    #[test]
+    fn seeds_stay_when_nothing_can_be_planted() {
+        let seeds = || {
+            Some(ItemInstance {
+                item: "seeds".into(),
+            })
+        };
+        // Untilled grass.
+        let mut w = grass_floor_walker(8);
+        w.clear_held_override();
+        w.state.hands = seeds();
+        w.tick(&down(true, false));
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Air);
+        assert!(w.hands().is_some());
+        // An already planted tile: the crop is targeted, not the farmland.
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, true));
+        w.clear_held_override();
+        w.state.hands = seeds();
+        w.tick(&down(true, false));
+        w.state.hands = seeds();
+        w.tick(&down(true, false));
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat0);
+        assert!(w.hands().is_some(), "second seed is kept");
     }
 }
