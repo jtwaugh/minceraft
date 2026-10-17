@@ -125,7 +125,7 @@ pub struct Deck<'a> {
 /// Raise an item whose box overlaps a block until it is clear, so it never
 /// rests inside a full block. Gives up after 64 blocks of lift.
 /// `boxes` is scratch space, reused across calls.
-fn lift_out_of_blocks(
+pub(crate) fn lift_out_of_blocks(
     world: &impl CollisionWorld,
     bb: &mut Aabb,
     pos: &mut [f64; 3],
