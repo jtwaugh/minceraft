@@ -227,6 +227,36 @@ mod tests {
     }
 
     #[test]
+    fn unknown_seeds_item_reports_variant_and_message() {
+        let c = Crops::from_toml("seeds_item = 'nope'\n").unwrap();
+        let e = c.check_items(&Items::default_items()).unwrap_err();
+        assert_eq!(
+            e,
+            CropsError::UnknownItem {
+                crop: "seeds_item".into(),
+                item: "nope".into()
+            }
+        );
+        assert_eq!(
+            e.to_string(),
+            "crops.toml: seeds_item: `nope` is not in items.toml"
+        );
+    }
+
+    #[test]
+    fn non_string_seeds_item_is_parse_error() {
+        for text in [
+            "seeds_item = 3\n",
+            "seeds_item = ''\n",
+            "seeds_item = ['a']\n",
+        ] {
+            let e = Crops::from_toml(text).unwrap_err();
+            assert_eq!(e, CropsError::Parse("`seeds_item` must be a string".into()));
+            assert!(e.to_string().contains("`seeds_item` must be a string"));
+        }
+    }
+
+    #[test]
     fn zero_stages_rejected() {
         let text = format!("{HEAD}[w]\nstages = 0\n{YIELD}{SEEDS}");
         assert!(matches!(

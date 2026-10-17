@@ -36,7 +36,7 @@ pub struct ItemEntityConfig {
     pub throw_speed: f64,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ItemEntityError {
     Parse(String),
     Missing(String),
@@ -322,6 +322,13 @@ mod tests {
     fn cast(w: &MemoryWorld, es: &[TargetableEntity]) -> Target {
         let cfg = TargetingConfig::default_from_data().unwrap();
         cast_target(w, es, &cfg, [0.5, 0.5, 0.5], [1.0, 0.0, 0.0])
+    }
+
+    #[test]
+    fn errors_compare_and_clone() {
+        let e = ItemEntityError::Missing("gravity".into());
+        assert_eq!(e.clone(), e);
+        assert_ne!(e, ItemEntityError::Invalid("gravity".into()));
     }
 
     #[test]

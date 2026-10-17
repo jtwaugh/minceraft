@@ -36,7 +36,7 @@ pub struct LevelFile {
     pub levels: Vec<Level>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LevelFileError {
     /// Malformed TOML, or a missing or mistyped field (the message names it).
     Parse(String),
