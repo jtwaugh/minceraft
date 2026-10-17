@@ -1,5 +1,16 @@
 use super::*;
 
+#[test]
+fn errors_compare_and_clone() {
+    let e = BindingsError::DuplicateKey {
+        key: "KeyW".into(),
+        first: "jump",
+        second: "sneak",
+    };
+    assert_eq!(e.clone(), e);
+    assert_ne!(e, BindingsError::Invalid("x".into()));
+}
+
 fn shipped() -> String {
     DEFAULT_INPUT.to_owned()
 }

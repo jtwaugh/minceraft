@@ -92,7 +92,7 @@ pub struct Bindings {
     actions: HashMap<Action, Binding>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BindingsError {
     Parse(String),
     UnknownAction(String),

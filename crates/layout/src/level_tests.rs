@@ -55,7 +55,8 @@ fn round_trip() {
 fn rejects_sea_level() {
     let t = EXAMPLE.replace("sea_level = 64", "sea_level = 62");
     let e = LevelFile::from_toml(&t).unwrap_err();
-    assert!(matches!(e, LevelFileError::SeaLevelMismatch { found: 62 }));
+    assert_eq!(e, LevelFileError::SeaLevelMismatch { found: 62 });
+    assert_eq!(e.clone(), e);
     assert!(e.to_string().contains("sea_level"));
 }
 
