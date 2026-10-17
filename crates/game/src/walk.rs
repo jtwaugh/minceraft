@@ -2,7 +2,7 @@
 //! over loaded terrain regions, plus the eye pose between ticks.
 //! See docs/design/basic-gameplay.md sections 1 (rule 1) and 3.
 
-use crate::animal_entities::AnimalStore;
+use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::input::TickInput;
@@ -310,7 +310,7 @@ impl Walker {
                     push: &f.push,
                 };
                 self.items.tick(&world, Some(deck));
-                self.animals.tick(
+                let dropped = self.animals.tick(
                     &world,
                     Some(Deck {
                         raft: &f.raft,
@@ -318,6 +318,7 @@ impl Walker {
                         push: &f.push,
                     }),
                 );
+                Self::spawn_drops(&mut self.items, dropped);
                 let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -326,7 +327,8 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&self.world, None);
-                self.animals.tick(&self.world, None);
+                let dropped = self.animals.tick(&self.world, None);
+                Self::spawn_drops(&mut self.items, dropped);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -390,6 +392,13 @@ impl Walker {
 
     pub fn animals(&self) -> &AnimalStore {
         &self.animals
+    }
+
+    /// Loose items for what dying animals dropped.
+    fn spawn_drops(items: &mut ItemStore, dropped: Vec<DroppedItem>) {
+        for d in dropped {
+            items.spawn(ItemInstance { item: d.item }, d.pos, d.velocity);
+        }
     }
 
     /// The carried item, if any.
@@ -848,6 +857,34 @@ mod tests {
         assert_eq!(w.hands(), Some(&seeds()));
         assert!(w.items().get(id).is_none());
         assert_eq!(w.target(), Target::None);
+    }
+
+    #[test]
+    fn a_killed_chicken_drops_items_that_are_picked_up_one_at_a_time() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let id = w.spawn_animal("chicken", [0.5, 4.0, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        w.tick(&click());
+        assert!(w.animals().get(id).is_some(), "plays the death animation");
+        assert!(w.items().is_empty());
+        for _ in 0..25 {
+            w.tick(&look(0.0, false));
+        }
+        assert!(w.animals().get(id).is_none());
+        let ids: Vec<_> = w.items().iter().map(|e| e.id).collect();
+        assert!(!ids.is_empty());
+        assert!(w.items().iter().any(|e| e.item.item == "raw_chicken"));
+        // Park the first drop in front of the eye and take it.
+        let first = ids[0];
+        let e = w.items.get_mut(first).unwrap();
+        e.pos = [0.5, 5.62, -1.0];
+        e.velocity = [0.0; 3];
+        let name = e.item.item.clone();
+        w.tick(&look(0.0, false));
+        w.tick(&interact());
+        assert_eq!(w.hands().map(|h| h.item.clone()), Some(name));
+        assert_eq!(w.items().len(), ids.len() - 1);
     }
 
     #[test]
