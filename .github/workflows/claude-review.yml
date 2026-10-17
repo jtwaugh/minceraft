@@ -71,8 +71,16 @@ jobs:
             You are reviewing this pull request. You did not write it. Read
             CLAUDE.md first, then the linked issue, then the diff.
 
+            Use `gh pr diff` for the diff. The checkout is shallow, so `git diff origin/master...HEAD` fails with "no merge base".
+
             Check, in this order:
 
+            0. Scope. From the linked issue, note what it asks for and its "Out of
+               scope" and "Files" sections. Judge the PR against that, not against
+               what else the repo could contain. Work the issue puts out of scope
+               is never a finding, and neither is its absence. Flag only work the
+               ticket doesn't ask for (scope creep) or ticket requirements the PR
+               skips.
             1. Clean room. Does anything look derived from Minecraft source
                rather than SPEC.md: structure, constants or names the spec
                doesn't give? Does the PR edit SPEC.md? Either is a blocker.
@@ -117,8 +125,13 @@ jobs:
             - something the PR claims or depends on that nobody has checked,
               such as a test it says it didn't run.
 
-            Everything else is a nit, however strongly you feel: naming,
-            structure, taste, docs, test style, "consider" and "could".
+            Everything else is a nit, however strongly you feel: naming, structure,
+            taste, docs, test style. A nit must name something wrong or fragile in
+            the code this PR changes, and say what to change. Don't list things the
+            PR could additionally cover, files it doesn't touch, or "fine if X"
+            observations. If a point is a question about intent, ask it in one line
+            or leave it out. When in doubt, leave it out: "Ready" with no nits is
+            a normal verdict.
 
             Prove a defect when you can. Write a small test that fails on
             this PR (a file under crates/<crate>/tests/review_*.rs, or one
