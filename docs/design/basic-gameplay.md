@@ -385,6 +385,7 @@ From the mechanics spec's living-entity rules:
 - Red flash for the duration of the hurt time.
 - On death: death animation (tip over, about 20 ticks), then drops spawn and the entity is removed.
 - Animals respond to being hit by fleeing in a random direction for a few seconds. Beta animals only wander, so this is a Mince Raft addition; keep the flee speed modest so chasing a cow around an island stays funny rather than frustrating.
+- The animal numbers in this section and the next (box size per kind, wander speed and pause lengths, flee speed and duration, knockback, upward kick, invulnerability ticks, death ticks) are the game's own, not Beta's: they live in `data/animals.toml` and are tuned to feel right, as with player physics. The **(verify)** marks on them do not mean they need research. (Decided in #254.)
 
 ### 8.3 Animals and drops
 
@@ -408,7 +409,7 @@ drops = [{ item = "raw_chicken", min = 1, max = 1 }, { item = "feather", min = 0
 
 Expected: a wooden sword kills a cow or pig in 3 hits and a chicken in 1.
 
-Drops spawn as item entities with Beta's scatter velocity. Since pickup is deliberate (section 6), the player carries drops one at a time. That makes hunting trips a real cost in a two-minute gathering phase, which is intended.
+Drops spawn as item entities. Their scatter velocity is the game's own, in `data/animals.toml`, tuned to feel right. Since pickup is deliberate (section 6), the player carries drops one at a time. That makes hunting trips a real cost in a two-minute gathering phase, which is intended. (Decided in #254.)
 
 ### 8.4 Animal respawn
 
