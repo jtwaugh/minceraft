@@ -118,6 +118,16 @@ impl<W: CollisionWorld> FarmWorld<W> {
             .and_then(|b| FarmTile::from_block(*b))
     }
 
+    /// Positions and stages of every crop in the overlay, in no set order.
+    pub fn crops(&self) -> impl Iterator<Item = ([i32; 3], CropKind, u32)> + '_ {
+        self.edits
+            .iter()
+            .filter_map(|(&(x, y, z), &b)| match FarmTile::from_block(b) {
+                Some(FarmTile::Crop { kind, stage }) => Some(([x, y, z], kind, stage)),
+                _ => None,
+            })
+    }
+
     /// Remove the tile at `(x, y, z)`, restoring the generated block. Returns
     /// the tile that was there.
     pub fn clear(&mut self, x: i32, y: i32, z: i32) -> Option<FarmTile> {

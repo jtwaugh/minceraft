@@ -10,6 +10,7 @@ use crate::crops::Crops;
 use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
 use crate::forage::{ForageConfig, Forager};
+use crate::growth::grow_crops;
 use crate::harvest::{harvest, tile_crop_state};
 use crate::input::TickInput;
 use crate::interactions::{
@@ -147,6 +148,7 @@ const FORAGE_SEED: u64 = 1;
 const TILL_SEED: u64 = 2;
 const HARVEST_SEED: u64 = 3;
 const SPAWN_SEED: u64 = 4;
+const GROWTH_SEED: u64 = 5;
 
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
@@ -380,6 +382,7 @@ impl Walker {
         self.run_queued_commands();
         self.look_yaw = input.yaw;
         self.sim_tick += 1;
+        grow_crops(&mut self.world, &self.crops, GROWTH_SEED, self.sim_tick);
         let entities = self.all_entities();
         if let Some(slot) = input.tool_slot {
             self.state.select(slot);
