@@ -224,7 +224,7 @@ Test: a recorded session that uses `give`, `spawn`, `tp` and `pause/step` produc
 - Parser: every command's usage parses, bad arguments give a useful error, aliases expand, aliases can't shadow commands.
 - Execution: `give tool` uses the first empty slot and selects it; `give item` with full hands drops the item at the player's feet as a loose item entity instead of failing, and `give tool` with no empty belt slot drops an item instance named after the tool, which can't be used when picked up; `spawn seeds 5` adds 5 entities; `clear belt` restores the v0 belt. (Decided in #315 and #378.)
 - Ordering: `give hoe` and a primary press in the same tick resolve with the hoe.
-- Pause: no ticks pass while paused; `step 3` advances exactly 3.
+- Pause: no ticks pass while paused; `step 3` advances exactly 3. Pause lives in `client/controller.js`, which stops calling the tick while paused; it is not part of the Rust command layer, so `Walker::tick` knows nothing about it and this test is not headless-testable in `crates/game`. (Decided in #421.)
 - State validity: a command run in a state it doesn't allow errors and changes nothing.
 - Client input scripts (`client/test/scripts/*.input`): `` ` `` opens the console and releases held W; typing "f" in the console doesn't toggle fly; Enter returns to the mode it came from; Escape leaves the pointer unlocked; the console key does nothing without debug mode. Extend `client/test/dsl.mjs` with `type <text>` and expectations on `mode = console`, `hands`, `belt.N` and `items.count`.
 - Replay with commands (section 7).
@@ -261,10 +261,6 @@ Each later gameplay phase adds its own commands in its own tickets.
    - A: paste them into this file so the planner can read them.
    - B: let the Phase 1 plan define each command's syntax, with the
      maintainer answering in the plan's `decision` issues.
-7. **Where pause lives.**
-   - A: in the Rust command layer, so `pause`, `resume` and `step` are
-     headless-testable (suggested).
-   - B: in `client/controller.js`, which just stops calling the tick.
 8. **Replay infrastructure.**
    - A: Phase 3 builds the minimal recorder and world hash in `crates/game`
      and basic-gameplay's replay test reuses them (suggested).
