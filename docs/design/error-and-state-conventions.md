@@ -187,6 +187,10 @@ can't express invalid transitions.
 > only through the maintainer, since the implementer may not touch it
 > casually.
 
+> **Decision:** Phase E's first target is the client's fly/walk and
+> pointer-lock handling (`client/controller.js`, `client/input.js`), tested
+> through the DSL. (Decided in #383.)
+
 ## Open questions
 
 2. **Naming and errors only, or restructure?** Should Phase E stop at
@@ -194,8 +198,3 @@ can't express invalid transitions.
    - A: conventions and tests only.
    - B: also convert code that Phase A finds to be a de facto state machine
      into an explicit enum, one ticket each.
-3. **First target for Phase E**, since `bindings::Mode` has no
-   transitions:
-   - A: client fly/walk and pointer lock (`client/controller.js`).
-   - B: whichever Rust state Phase A finds.
-   - C: skip Phase E if Phase A finds no real state machines.
