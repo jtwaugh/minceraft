@@ -9,7 +9,8 @@
 //                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
 //   ?plants=D    plant draw distance in blocks (default 48)
-//   ?log=N       console.log the frame-time summary every N frames, for headless runs
+//   ?debug=1     debug mode on (also on whenever ?scene= is set); see debug.js
+//   ?log=N      console.log the frame-time summary every N frames, for headless runs
 //
 // window.frameStats() returns { frames, p50, p99 } at any time.
 
@@ -25,6 +26,7 @@ import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { NEAR, farPlane, look } from './view.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
+import { debugEnabled } from './debug.js';
 
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
@@ -34,6 +36,8 @@ const flying = qs.get('mode') === 'fly';
 const raftScene = qs.get('scene') === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
 const logEvery = +(qs.get('log') ?? 0);
+const debug = debugEnabled(location.search); // ?debug=1 or any ?scene=; console keys are gated on it
+window.debugMode = debug;
 
 const canvas = document.getElementById('gl');
 const overlay = document.getElementById('overlay');
