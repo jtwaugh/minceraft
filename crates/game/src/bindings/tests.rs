@@ -1,4 +1,5 @@
 use super::*;
+use crate::data_error::test_support::assert_err_contains;
 
 #[test]
 fn errors_compare_and_clone() {
@@ -47,14 +48,14 @@ fn rejects_duplicate_key_within_action() {
     let text = shipped().replace("keys = [\"KeyE\"]", "keys = [\"KeyE\", \"KeyE\"]");
     let err = Bindings::parse(&text).unwrap_err();
     assert!(matches!(err, BindingsError::DuplicateKey { first, second, .. } if first == second));
-    assert!(err.to_string().contains("listed twice"));
+    assert_err_contains::<(), _>(Err(err), "listed twice");
 }
 
 #[test]
 fn rejects_key_shared_between_actions() {
     let text = shipped().replace("keys = [\"KeyQ\"]", "keys = [\"KeyE\"]");
     let err = Bindings::parse(&text).unwrap_err();
-    assert!(err.to_string().contains("bound to both"), "{err}");
+    assert_err_contains::<(), _>(Err(err), "bound to both");
 }
 
 #[test]

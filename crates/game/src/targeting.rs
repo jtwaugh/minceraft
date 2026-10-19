@@ -258,6 +258,7 @@ impl TargetingConfig {
 mod tests {
     use super::*;
     use crate::collision::MemoryWorld;
+    use crate::data_error::test_support::*;
 
     fn unit() -> Aabb {
         Aabb::new([0.0; 3], [1.0; 3])
@@ -497,18 +498,15 @@ mod tests {
 
     #[test]
     fn loader_rejects_bad_data() {
-        assert!(matches!(
-            TargetingConfig::parse("[reach]\nblock = 4.5\n"),
-            Err(TargetingError::Missing(_))
-        ));
+        let err = TargetingConfig::parse("[reach]\nblock = 4.5\n").unwrap_err();
+        assert!(matches!(err, TargetingError::Missing(_)));
+        assert_err_contains::<(), _>(Err(err), "targeting.toml");
         let bad = "[reach]\nblock = -1\nentity = 3\n[entity]\nbox_expansion = 0.1\n";
-        assert!(matches!(
-            TargetingConfig::parse(bad),
-            Err(TargetingError::Invalid(_))
-        ));
-        assert!(matches!(
-            TargetingConfig::parse("not toml ="),
-            Err(TargetingError::Parse(_))
-        ));
+        let err = TargetingConfig::parse(bad).unwrap_err();
+        assert!(matches!(err, TargetingError::Invalid(_)));
+        assert_err_contains::<(), _>(Err(err), "targeting.toml");
+        let err = TargetingConfig::parse("not toml =").unwrap_err();
+        assert!(matches!(err, TargetingError::Parse(_)));
+        assert_parse_error(err, DataFile::Targeting);
     }
 }
