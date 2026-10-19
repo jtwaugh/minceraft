@@ -136,6 +136,8 @@ Unlocked | page load, Escape, blur | nothing (the sampler holds no keys)
 Locked, walking | click the canvas | the sampler, via data/input.toml
 Locked, flying | F while locked | the sampler, driving the fly camera
 
+The console is a fourth state, console mode, opened by the `Backquote` key code (only with debug mode on). Opening it releases pointer lock, and the keys go to the text box instead of the sampler. Enter submits the line, closes the console, returns to the mode it came from and requests pointer lock again. Escape closes the console without submitting and leaves the pointer unlocked. (Decided in #403.)
+
 Later phases add their own commands with their own tickets: `spawn cow`, `grow` (advance the aimed crop a stage), `phase gathering|service`, `time <seconds>`, `heal`.
 
 `spawn` is how you get more than one of anything, because the hands only hold one item. It's also the debug replacement for the test scene's `?tool=` stub and the scattered items in `client/`.
@@ -239,7 +241,6 @@ Each later gameplay phase adds its own commands in its own tickets.
 ## 11. Open questions
 
 1. **Sim while the console is open.** A: keeps running with neutral input (proposed above). B: auto-pauses while open, like a single-player menu.
-2. **Pointer lock while typing.** A: unlock on open and re-lock on Enter (proposed). B: stay locked and route keys to the box, so there's no re-lock and no browser cooldown risk, but every key handler must check for console mode.
 3. **Shipping.** A: the console is always compiled in and gated by `?debug=1`. B: behind a cargo feature and left out of release wasm to save size. Report the size difference in Phase 1 and decide then.
 5. **Cheat flag scope.** A: per session (proposed). B: per save/world once saves exist, like a permanent "cheats used" mark.
 
