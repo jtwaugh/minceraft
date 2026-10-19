@@ -391,6 +391,38 @@ impl<W> Console<W> {
     }
 }
 
+/// The commands a player session starts with: `help`, `give`, `spawn` and
+/// `clear`. `Walker` runs lines with [`run_line`], so `help` is a registry
+/// entry here rather than [`Console`]'s built-in.
+pub fn default_registry() -> Result<Registry<Walker>, RegistryError> {
+    let mut help = help_command();
+    help.handler = help_handler;
+    Registry::new(vec![help, give_command(), spawn_command(), clear_command()])
+}
+
+/// `help` lists every command; `help <name>` describes one.
+fn help_handler(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    match args.first() {
+        None => Ok(ctx
+            .registry
+            .iter()
+            .map(|c| format!("{}: {}", c.usage(), c.help))
+            .collect()),
+        Some(Arg::Word(name)) => {
+            let c = ctx
+                .registry
+                .get(name)
+                .ok_or_else(|| format!("unknown command '{name}' (try 'help')"))?;
+            let mut lines = vec![format!("usage: {}", c.usage()), c.help.to_string()];
+            if c.cheat {
+                lines.push("cheat: sets the cheated flag".to_string());
+            }
+            Ok(lines)
+        }
+        Some(_) => Err("bad command name".into()),
+    }
+}
+
 /// `give tool|item <name>`: one unit, following the belt and hands rules
 /// (docs/design/debug-console.md sections 1 and 3; full cases from #315, #378).
 pub fn give_command() -> Command<Walker> {
@@ -773,6 +805,19 @@ mod tests {
             ]
         );
         assert!(c.drain().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod default_registry_tests {
+    use super::*;
+
+    #[test]
+    fn default_registry_has_exactly_the_four_commands() {
+        let reg = default_registry().unwrap();
+        let names: Vec<&str> = reg.iter().map(|c| c.name).collect();
+        assert_eq!(names, vec!["help", "give", "spawn", "clear"]);
+        assert!(!reg.get("help").unwrap().cheat);
     }
 }
 

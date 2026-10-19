@@ -5,6 +5,7 @@
 use game::bindings::Bindings;
 use game::camera::{Camera, Pose};
 use game::clock::Clock;
+use game::commands::default_registry;
 use game::input::TickInput;
 use game::interactions::{Button, HeldThing};
 use game::items::ItemInstance;
@@ -167,9 +168,8 @@ impl Walk {
     /// A player with its feet at the given position.
     #[wasm_bindgen(constructor)]
     pub fn new(x: f64, y: f64, z: f64) -> Result<Walk, JsError> {
-        Walker::new([x, y, z])
-            .map(Walk)
-            .map_err(|e| JsError::new(&e.to_string()))
+        let walker = Walker::new([x, y, z]).map_err(|e| JsError::new(&e.to_string()))?;
+        with_default_commands(walker)
     }
 
     /// Add generated blocks (`generate_region_decorated` output) covering
@@ -188,9 +188,23 @@ impl Walk {
     /// A player in the water in front of the scene's raft, which moves under
     /// the scripted swell. The scene's sea is already added.
     pub fn in_scene(scene: &Scene) -> Result<Walk, JsError> {
-        Walker::in_raft_scene(scene.0.clone())
-            .map(Walk)
-            .map_err(|e| JsError::new(&e))
+        let walker = Walker::in_raft_scene(scene.0.clone()).map_err(|e| JsError::new(&e))?;
+        with_default_commands(walker)
+    }
+
+    /// Queue a console line; it runs at the start of the next `tick`.
+    pub fn submit_command(&mut self, line: &str) {
+        self.0.submit_command(line);
+    }
+
+    /// Output lines of commands run since the last call, oldest first.
+    pub fn drain_command_output(&mut self) -> Vec<String> {
+        self.0.drain_command_output()
+    }
+
+    /// Whether a cheat command has run this session.
+    pub fn cheated(&self) -> bool {
+        self.0.cheated()
     }
 
     /// How far the raft is from its rest pose `[x, y, z]`, `alpha` of the
@@ -381,6 +395,41 @@ impl Walk {
 
     pub fn teleport(&mut self, x: f64, y: f64, z: f64) {
         self.0.teleport([x, y, z]);
+    }
+}
+
+fn with_default_commands(mut walker: Walker) -> Result<Walk, JsError> {
+    let registry = default_registry().map_err(|e| JsError::new(&e.to_string()))?;
+    walker.set_commands(registry);
+    Ok(Walk(walker))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn walk() -> Walk {
+        with_default_commands(Walker::new([0.5, 5.0, 0.5]).unwrap()).unwrap_or_else(|_| panic!())
+    }
+
+    #[test]
+    fn help_answers_after_a_tick_only() {
+        let mut w = walk();
+        w.submit_command("help");
+        assert!(
+            w.drain_command_output().is_empty(),
+            "rule 1: waits for tick"
+        );
+        w.0.tick(&TickInput::default());
+        let out = w.drain_command_output();
+        assert!(out.iter().any(|l| l.starts_with("give ")));
+        assert!(out.iter().any(|l| l.starts_with("spawn ")));
+        assert!(out.iter().any(|l| l.starts_with("clear ")));
+        assert!(!w.cheated());
+        w.submit_command("spawn seeds 2");
+        w.0.tick(&TickInput::default());
+        assert_eq!(w.drain_command_output(), vec!["spawned 2 seeds"]);
+        assert!(w.cheated());
     }
 }
 
