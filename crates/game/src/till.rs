@@ -124,6 +124,7 @@ impl Tiller {
 mod tests {
     use super::*;
     use crate::collision::MemoryWorld;
+    use crate::data_error::test_support::assert_err_contains;
 
     fn cfg(chance: u32) -> TillConfig {
         TillConfig {
@@ -149,8 +150,11 @@ mod tests {
 
     #[test]
     fn rejects_bad_data() {
-        assert!(TillConfig::parse("").is_err());
-        assert!(TillConfig::parse("[till]\nitem=\"s\"\nchance=0\nrepeat_ticks=4\n").is_err());
+        assert_err_contains(TillConfig::parse(""), "missing [till]");
+        assert_err_contains(
+            TillConfig::parse("[till]\nitem=\"s\"\nchance=0\nrepeat_ticks=4\n"),
+            "`chance` must be a positive integer",
+        );
     }
 
     #[test]

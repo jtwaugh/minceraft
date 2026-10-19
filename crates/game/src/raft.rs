@@ -345,6 +345,7 @@ impl<W: CollisionWorld> CollisionWorld for RaftWorld<'_, W> {
 mod tests {
     use super::*;
     use crate::collision::MemoryWorld;
+    use crate::data_error::test_support::assert_err_contains;
     use crate::input::TickInput;
 
     fn phys() -> PlayerPhysics {
@@ -574,9 +575,9 @@ mod tests {
 
     #[test]
     fn swell_parse_rejects_bad_data() {
-        assert!(Swell::parse("[swell]\n").is_err());
+        assert_err_contains(Swell::parse("[swell]\n"), "missing swell.");
         let bad = "[swell]\nsway_amplitude=0.1\ntilt_amplitude=1.0\nperiod_ticks=0\ndirection_degrees=0\n";
-        assert!(Swell::parse(bad).is_err());
+        assert_err_contains(Swell::parse(bad), "swell.period_ticks must be");
     }
 
     #[test]

@@ -102,6 +102,7 @@ impl Streamer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_error::test_support::assert_err_contains;
     use crate::input::TickInput;
     use crate::walk::Walker;
     use layout::REGION_SIZE;
@@ -116,10 +117,22 @@ mod tests {
     #[test]
     fn bad_radii_are_rejected() {
         let swap = |from: &str, to: &str| DEFAULT_STREAMING.replace(from, to);
-        assert!(StreamConfig::parse(&swap("unload = 2", "unload = 0")).is_err());
-        assert!(StreamConfig::parse(&swap("load = 1", "load = -1")).is_err());
-        assert!(StreamConfig::parse(&swap("load = 1", "load = \"x\"")).is_err());
-        assert!(StreamConfig::parse(&swap("decorate = true", "")).is_err());
+        assert_err_contains(
+            StreamConfig::parse(&swap("unload = 2", "unload = 0")),
+            "need 0 <= load <= unload",
+        );
+        assert_err_contains(
+            StreamConfig::parse(&swap("load = 1", "load = -1")),
+            "need 0 <= load <= unload",
+        );
+        assert_err_contains(
+            StreamConfig::parse(&swap("load = 1", "load = \"x\"")),
+            "missing integer radii.load",
+        );
+        assert_err_contains(
+            StreamConfig::parse(&swap("decorate = true", "")),
+            "missing boolean generation.decorate",
+        );
     }
 
     fn layout() -> Layout {
