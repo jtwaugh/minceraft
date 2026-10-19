@@ -5,7 +5,7 @@ scope: game
 source: "#309"
 superseded_by: ""
 phases:
-  1: todo
+  1: done
   2: todo
   3: todo
 ---
@@ -36,17 +36,8 @@ What exists today that this doc relies on or overlaps (checked against the code)
   `client/test/scripts/*.input` exist. The DSL has `spawn animal <kind>`,
   `held`, and the paths `mode`, `hands`, `belt.slot.<1-5>`, `items`. It has
   no `type` statement and no `mode = console`.
-- **Phase 1 started, not done.** `crates/game/src/commands.rs` has the
-  generic registry (`Command`, `Registry`, `ArgSpec`, aliases, per-state
-  validity, a `cheat` flag), the parser, a built-in `help`, and `Console`
-  (the `cheated` flag, set on the first successful cheat, and an outcome
-  buffer). `Walker` (`walk.rs`) holds a command queue, drains it at the top of
-  `tick` before the tick's input, and exposes `set_commands`, `submit_command`,
-  `drain_command_output` and `cheated`. Tests are in `commands.rs` and
-  `walk.rs`. `Walker` starts with an empty registry, so no host registers
-  `give`, `spawn` or `clear` yet.
-- **Not present:** the `give`, `spawn` and `clear` handlers (section 3),
-  `data/commands.toml`, command exports in `game-web`, a `?debug=1` flag or
+- **Phase 1 done** (plan #313; PRs #326, #329, #397, #380, #388). `crates/game/src/commands.rs` has the registry, parser, built-in `help`, `Console` (`cheated` flag, outcome buffer) and the `give_command`, `spawn_command` and `clear_command` entries with handlers, tested headless in `commands.rs`. `Walker` (`walk.rs`) holds a command queue, drains it at the top of `tick` before the tick's input, and exposes `set_commands`, `submit_command`, `drain_command_output` and `cheated`. `Walker` still starts with an empty registry; a host calls `set_commands` with these entries (Phase 2).
+- **Not present:** `data/commands.toml`, command exports in `game-web`, a `?debug=1` flag or
   any debug-mode gate, a pause or step facility, an input recording format,
   a world hash, a teleport function, and a console UI. Nothing in the repo
   reads `?tool=`.
