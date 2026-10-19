@@ -7,8 +7,9 @@
 // One statement per line; `#` starts a comment. A file holds one or more cases.
 //
 //   case <name>                 a fresh world: fake canvas/document/window, new sim
-//   start fly|walk [raft]       mode, and the raft test scene (default: walk, no terrain);
-//                               the raft scene has three loose seeds on its islet
+//   start fly|walk [raft] [debug]  mode, and the raft test scene (default: walk, no terrain);
+//                               the raft scene has three loose seeds on its islet and
+//                               implies debug; `debug` turns the console keys on elsewhere
 //   click                       click the canvas (requests pointer lock)
 //   lock | unlock | blur        pointer lock gained / lost; window loses focus
 //   down <code> | up <code>     KeyboardEvent.code, e.g. KeyW, Space, ShiftLeft
@@ -17,6 +18,11 @@
 //   button down|up left|right   mouse buttons
 //   mouse <dx> <dy>             pointer-locked mouse movement
 //   wheel <dy>
+//   type <text>                 printable keys (letters, digits, space, - _) into the console's
+//                               text box while it is open; elsewhere plain key presses.
+//                               With the console open, `press Enter` submits the box, Backspace
+//                               deletes a character, Escape closes it without submitting
+//                               (the browser's exit from pointer lock is faked: it unlocks)
 //   frame <ms> [xN]             run N frames of ms each (default 1)
 //   spawn animal <kind>         put a cow, pig or chicken on the raft scene's islet
 //   face animal                 turn to look at the first animal (a mousemove)
@@ -25,7 +31,8 @@
 //   mark                        remember the current eye, for `moved`
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
-// Paths: mode (fly|walk), locked, ticks, alpha, yaw, pitch, eye.x|y|z,
+// Paths: mode (fly|walk|console), console.last (last command output line, or none),
+// console.lines (output lines so far), console.text (the box), cheated, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
@@ -61,14 +68,20 @@ export function parse(src) {
   return cases;
 }
 
-function world({ mode = 'walk', raft = false }) {
+function world({ mode = 'walk', raft = false, debug = raft }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
   const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
-  const document = target({ pointerLockElement: null });
+  const document = target({
+    pointerLockElement: null,
+    exitPointerLock() {
+      this.pointerLockElement = null;
+      this.dispatchEvent(new Event('pointerlockchange'));
+    },
+  });
   const window = target();
   const sampler = new InputSampler();
-  const input = attachInput({ sampler, canvas, document, window });
+  const input = attachInput({ sampler, canvas, document, window, debug });
   const walk = raft ? Walk.in_scene(new Scene()) : new Walk(32, 70.5, 32);
   if (raft) spawnTestItems(walk);
   const fly = new FlyCamera(32, 94, 32);
@@ -77,7 +90,16 @@ function world({ mode = 'walk', raft = false }) {
   });
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { canvas, document, window, input, controller, walk, fire, mark: controller.state.eye };
+  return { canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, text: '', output: [] };
+}
+
+const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
+
+function keyCode(ch) {
+  if (/^[a-z]$/i.test(ch)) return `Key${ch.toUpperCase()}`;
+  if (/^[0-9]$/.test(ch)) return `Digit${ch}`;
+  if (SYMBOLS[ch]) return SYMBOLS[ch];
+  throw new Error(`cannot type '${ch}'`);
 }
 
 const BUTTONS = { left: 0, right: 2 };
@@ -95,7 +117,14 @@ function read(w, path) {
   const s = w.controller.state;
   const d = s.eye.map((v, i) => v - w.mark[i]);
   const axis = { x: 0, y: 1, z: 2 };
-  if (path === 'mode') return s.flying ? 'fly' : 'walk';
+  if (path === 'mode') return w.input.console ? 'console' : s.flying ? 'fly' : 'walk';
+  if (path.startsWith('console.') || path === 'cheated') {
+    w.output.push(...w.walk.drain_command_output());
+    if (path === 'cheated') return w.walk.cheated();
+    if (path === 'console.last') return w.output.at(-1) ?? 'none';
+    if (path === 'console.lines') return w.output.length;
+    if (path === 'console.text') return w.text;
+  }
   if (path === 'locked') return w.input.locked;
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
@@ -122,7 +151,15 @@ function read(w, path) {
 
 function step(w, { op, args }) {
   const { canvas, document, window, fire } = w;
-  const key = (type, code, repeat = false) => fire(document, type, { code, repeat });
+  const key = (type, code, repeat = false) => {
+    if (w.input.console && type === 'keydown') {
+      // the text box owns these keys while the console is open
+      if (code === 'Enter') { w.controller.submitConsole(w.text); w.text = ''; return; }
+      if (code === 'Backspace') { w.text = w.text.slice(0, -1); return; }
+      if (code === 'Escape') { w.controller.closeConsole(); w.text = ''; return; }
+    }
+    fire(document, type, { code, repeat });
+  };
   switch (op) {
     case 'click': return fire(canvas, 'click');
     case 'lock': document.pointerLockElement = canvas; return fire(document, 'pointerlockchange');
@@ -165,10 +202,20 @@ function step(w, { op, args }) {
       w.walk.teleport(fx + (a.pos[0] - fx) * k, a.pos[1] + a.size[1] / 2 - 1.62, fz + (a.pos[2] - fz) * k);
       return;
     }
+    case 'type': {
+      const text = args.join(' ');
+      for (const ch of text) {
+        if (w.input.console) w.text += ch;
+        key('keydown', keyCode(ch));
+        key('keyup', keyCode(ch));
+      }
+      return;
+    }
     case 'held': w.walk.set_held(args[0]); return;
     case 'mark': w.mark = w.controller.state.eye.slice(); return;
     case 'expect': {
-      const [path, cmp, raw] = args;
+      const [path, cmp, ...rest] = args;
+      const raw = rest.join(' ');
       if (!OPS[cmp]) throw new Error(`unknown operator '${cmp}'`);
       const got = read(w, path);
       const want = typeof got === 'number' ? +raw : typeof got === 'boolean' ? raw === 'true' : raw;
@@ -184,9 +231,12 @@ export function run(c) {
   let i = 0;
   const opts = {};
   if (c.steps[0]?.op === 'start') {
-    const [mode, scene] = c.steps[0].args;
-    if (!['fly', 'walk'].includes(mode)) throw new Error(`line ${c.steps[0].line}: start fly|walk [raft]`);
-    Object.assign(opts, { mode, raft: scene === 'raft' });
+    const [mode, ...flags] = c.steps[0].args;
+    if (!['fly', 'walk'].includes(mode) || flags.some((f) => !['raft', 'debug'].includes(f))) {
+      throw new Error(`line ${c.steps[0].line}: start fly|walk [raft] [debug]`);
+    }
+    Object.assign(opts, { mode, raft: flags.includes('raft') });
+    if (flags.includes('debug')) opts.debug = true;
     i = 1;
   }
   const w = world(opts);
