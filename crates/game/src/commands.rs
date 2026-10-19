@@ -2,6 +2,8 @@
 //! Phase 1). A command is one [`Command`] entry plus a handler that gets the
 //! world `W` it acts on and returns its result lines.
 
+use crate::items::ItemInstance;
+use crate::walk::Walker;
 use std::fmt;
 
 /// The game states a command can be restricted to.
@@ -227,7 +229,7 @@ pub fn parse<'r, W>(
 
 /// Runs one line against `world` in game state `state` and returns its output
 /// lines. A parse error, or a command not valid in `state`, gives one error
-/// line and changes nothing. `cheated` is set when a cheat command runs.
+/// line and changes nothing. `cheated` is set when a cheat command succeeds.
 pub fn run_line<W>(
     registry: &Registry<W>,
     world: &mut W,
@@ -243,12 +245,14 @@ pub fn run_line<W>(
     if !cmd.states.contains(&state) {
         return vec![format!("'{}' can't be used in this state", cmd.name)];
     }
-    if cmd.cheat {
-        *cheated = true;
-    }
     let mut ctx = Ctx { world, registry };
     match (cmd.handler)(&mut ctx, &args) {
-        Ok(lines) => lines,
+        Ok(lines) => {
+            if cmd.cheat {
+                *cheated = true;
+            }
+            lines
+        }
         Err(msg) => vec![msg],
     }
 }
@@ -385,6 +389,76 @@ impl<W> Console<W> {
         }
         Ok(lines)
     }
+}
+
+/// Most entities one `spawn` may add.
+pub const SPAWN_MAX: i64 = 64;
+/// How far ahead of the player the scatter is centred, and its radius.
+const SPAWN_AHEAD: f64 = 2.0;
+const SPAWN_RADIUS: f64 = 2.0;
+
+/// `spawn <name> [count]`: loose items or animals, scattered ahead of the
+/// player with the sim RNG (docs/design/debug-console.md section 3).
+pub fn spawn_command() -> Command<Walker> {
+    Command {
+        name: "spawn",
+        aliases: &[],
+        args: &[
+            ArgSpec {
+                name: "name",
+                kind: ArgKind::Word,
+                optional: false,
+            },
+            ArgSpec {
+                name: "count",
+                kind: ArgKind::Int,
+                optional: true,
+            },
+        ],
+        help: "spawn loose items or animals ahead of you (count 1 to 64)",
+        states: &[GameState::Walking],
+        cheat: true,
+        handler: spawn,
+    }
+}
+
+fn spawn(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    let (Some(Arg::Word(name)), count) = (args.first(), args.get(1)) else {
+        return Err("missing name".into());
+    };
+    let count = match count {
+        Some(Arg::Int(n)) => *n,
+        _ => 1,
+    };
+    if !(1..=SPAWN_MAX).contains(&count) {
+        return Err(format!("count must be 1 to {SPAWN_MAX}, got {count}"));
+    }
+    let walker = &mut *ctx.world;
+    let is_item = walker.knows_item(name);
+    let feet = walker.player().pos;
+    let yaw = walker.look_yaw() as f64;
+    let centre = [
+        feet[0] + SPAWN_AHEAD * yaw.sin(),
+        feet[2] - SPAWN_AHEAD * yaw.cos(),
+    ];
+    for _ in 0..count {
+        let rng = walker.spawn_rng_mut();
+        let angle = rng.angle() as f64;
+        let r = SPAWN_RADIUS * (rng.next_u32() as f64 / (u32::MAX as f64 + 1.0)).sqrt();
+        let facing = rng.angle() as f64;
+        let pos = [
+            centre[0] + r * angle.cos(),
+            feet[1] + 0.5,
+            centre[1] + r * angle.sin(),
+        ];
+        if is_item {
+            walker.spawn_item(ItemInstance { item: name.clone() }, pos);
+        } else if walker.spawn_animal(name, pos, facing).is_none() {
+            // Only the first iteration can fail, before anything is added.
+            return Err(format!("unknown item or animal '{name}'"));
+        }
+    }
+    Ok(vec![format!("spawned {count} {name}")])
 }
 
 #[cfg(test)]
@@ -593,5 +667,81 @@ mod tests {
             ]
         );
         assert!(c.drain().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod spawn_tests {
+    use super::*;
+    use crate::input::TickInput;
+
+    fn walker() -> Walker {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(Registry::new(vec![spawn_command()]).unwrap());
+        w
+    }
+
+    fn run(w: &mut Walker, lines: &[&str]) -> Vec<String> {
+        for l in lines {
+            w.submit_command(l);
+        }
+        w.tick(&TickInput::default());
+        w.drain_command_output()
+    }
+
+    #[test]
+    fn spawn_items_and_animals_by_name() {
+        let mut w = walker();
+        run(&mut w, &["spawn seeds 5", "spawn cow", "spawn cow 2"]);
+        assert_eq!(w.items().len(), 5);
+        assert_eq!(w.animals().len(), 3);
+        assert!(w.cheated());
+    }
+
+    #[test]
+    fn spawns_land_within_the_scatter_ahead_of_the_player() {
+        let mut w = walker();
+        run(&mut w, &["spawn seeds 64"]);
+        // Yaw 0 faces -z: centre is (0.5, -1.5), radius 2.
+        for e in w.items().iter() {
+            let (dx, dz) = (e.pos[0] - 0.5, e.pos[2] + 1.5);
+            assert!((dx * dx + dz * dz).sqrt() <= 2.0 + 1e-6);
+        }
+    }
+
+    #[test]
+    fn same_commands_give_the_same_positions() {
+        let positions = || {
+            let mut w = walker();
+            run(&mut w, &["spawn seeds 8", "spawn cow 4"]);
+            let mut p: Vec<[f64; 3]> = w.items().iter().map(|e| e.pos).collect();
+            p.extend(w.animals().iter().map(|a| a.pos));
+            p
+        };
+        assert_eq!(positions(), positions());
+    }
+
+    #[test]
+    fn bad_names_and_counts_change_nothing() {
+        let mut w = walker();
+        let out = run(
+            &mut w,
+            &[
+                "spawn nothing 3",
+                "spawn seeds 65",
+                "spawn seeds 0",
+                "spawn seeds -1",
+            ],
+        );
+        assert_eq!(out.len(), 4);
+        assert!(out[0].contains("unknown item or animal 'nothing'"));
+        assert!(out[1].contains("count must be 1 to 64"));
+        assert!(out[2].contains("count must be 1 to 64"));
+        assert!(out[3].contains("count must be 1 to 64"));
+        assert_eq!(w.items().len(), 0);
+        assert_eq!(w.animals().len(), 0);
+        assert!(!w.cheated());
+        assert_eq!(run(&mut w, &["spawn seeds 64"]), vec!["spawned 64 seeds"]);
+        assert_eq!(w.items().len(), 64);
     }
 }

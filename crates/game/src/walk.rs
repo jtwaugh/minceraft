@@ -146,6 +146,7 @@ const ANIMAL_SEED: u64 = 0;
 const FORAGE_SEED: u64 = 1;
 const TILL_SEED: u64 = 2;
 const HARVEST_SEED: u64 = 3;
+const SPAWN_SEED: u64 = 4;
 
 /// A raft under the scripted swell, and the swell's clock.
 struct Floating {
@@ -176,6 +177,10 @@ pub struct Walker {
     tiller: Tiller,
     crops: Crops,
     harvest_rng: Rng,
+    /// Scatter for the `spawn` command.
+    spawn_rng: Rng,
+    /// Yaw of the last ticked input, so commands can place things ahead.
+    look_yaw: f32,
     /// Events emitted since the last `drain_events`.
     events: Vec<GameEvent>,
     /// Ticks stepped so far, for cooldowns.
@@ -227,6 +232,8 @@ impl Walker {
             tiller: Tiller::new(TillConfig::default_from_data(), TILL_SEED),
             crops: Crops::default_crops(),
             harvest_rng: Rng::new(HARVEST_SEED),
+            spawn_rng: Rng::new(SPAWN_SEED),
+            look_yaw: 0.0,
             events: Vec::new(),
             sim_tick: 0,
             item_table: Items::default_items(),
@@ -337,6 +344,21 @@ impl Walker {
         &self.player
     }
 
+    /// The yaw of the last ticked input.
+    pub fn look_yaw(&self) -> f32 {
+        self.look_yaw
+    }
+
+    /// The sim RNG that `spawn` scatters with.
+    pub fn spawn_rng_mut(&mut self) -> &mut Rng {
+        &mut self.spawn_rng
+    }
+
+    /// Whether `name` is a loose-item name in the item table.
+    pub fn knows_item(&self, name: &str) -> bool {
+        self.item_table.has_item(name)
+    }
+
     fn run_queued_commands(&mut self) {
         let lines = std::mem::take(&mut self.command_queue);
         let registry = Arc::clone(&self.commands);
@@ -351,6 +373,7 @@ impl Walker {
     /// One 20 Hz step.
     pub fn tick(&mut self, input: &TickInput) {
         self.run_queued_commands();
+        self.look_yaw = input.yaw;
         self.sim_tick += 1;
         let entities = self.all_entities();
         if let Some(slot) = input.tool_slot {
