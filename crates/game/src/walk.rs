@@ -489,6 +489,27 @@ impl Walker {
         &self.animals
     }
 
+    /// Put the belt, selection and hands back to the v0 start (`clear belt`
+    /// and `clear hands` use the parts they name).
+    pub fn reset_belt(&mut self) -> Result<(), crate::items::ItemsError> {
+        let fresh = PlayerState::new(&self.item_table)?;
+        self.state.tool_belt = fresh.tool_belt;
+        self.state.selected = fresh.selected;
+        Ok(())
+    }
+
+    pub fn clear_hands(&mut self) {
+        self.state.hands = None;
+    }
+
+    pub fn clear_items(&mut self) {
+        self.items.clear();
+    }
+
+    pub fn clear_animals(&mut self) {
+        self.animals.clear();
+    }
+
     /// Loose items for what dying animals dropped.
     fn spawn_drops(items: &mut ItemStore, dropped: Vec<DroppedItem>) {
         for d in dropped {

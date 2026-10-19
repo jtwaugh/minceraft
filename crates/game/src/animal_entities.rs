@@ -166,6 +166,11 @@ impl AnimalStore {
         Some(id)
     }
 
+    /// Remove every animal. Ids are not reused.
+    pub fn clear(&mut self) {
+        self.animals.clear();
+    }
+
     pub fn get(&self, id: EntityId) -> Option<&AnimalEntity> {
         let i = self.animals.binary_search_by_key(&id, |e| e.id).ok()?;
         Some(&self.animals[i])
