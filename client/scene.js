@@ -15,6 +15,7 @@
 // window.frameStats() returns { frames, p50, p99 } at any time.
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
+import * as game from './pkg/game_web.js';
 import initGame, { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
@@ -27,6 +28,8 @@ import { createController } from './controller.js';
 import { NEAR, farPlane, look } from './view.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
+import { History, complete, nameLists } from './consolelogic.js';
+import { OutputBuffer, createConsoleUI } from './consoleui.js';
 
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
@@ -330,6 +333,22 @@ if (scene) {
 const controller = createController({ input, walk, fly, clock, document, flying });
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
+const outputBuffer = new OutputBuffer();
+window.consoleOutput = () => outputBuffer.lines; // every line this session, for scripts
+let storage = null;
+try { storage = localStorage; } catch { /* blocked storage: history stays in memory */ }
+const consoleUI = debug && createConsoleUI({
+  document,
+  buffer: outputBuffer,
+  history: new History(storage),
+  complete,
+  names: nameLists(game),
+  onSubmit(line) {
+    outputBuffer.echo(line, performance.now());
+    controller.submitConsole(line);
+  },
+  onCancel: () => controller.closeConsole(),
+});
 window.frameStats = () => frames.summary();
 
 function drawParts(prog, parts) {
@@ -398,11 +417,16 @@ function render(now) {
 
   if (lastFrame !== null) frames.push(now - lastFrame);
   lastFrame = now;
+  if (consoleUI) {
+    for (const text of walk.drain_command_output()) outputBuffer.output(text, now);
+    consoleUI.update(input.console, now);
+  }
   if (now - overlayAt > 250) {
     overlayAt = now;
     const p99 = frames.percentile(99);
     overlay.textContent = `${frames.format()}\n${p99 > FRAME_BUDGET_MS ? 'over' : 'within'} the 16.7 ms p99 budget\n` +
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
+cheated: ${walk.cheated() ? 'yes' : 'no'}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;
