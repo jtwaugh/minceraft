@@ -172,6 +172,16 @@ test('key, mouse and wheel events are not sampled in console mode', () => {
   assert.deepEqual([t.move_forward, t.primary, t.yaw, t.tool_slot], [0, false, 0, null]);
 });
 
+test('clicking the canvas in console mode does not relock the pointer', () => {
+  const s = setup();
+  s.lock();
+  key(s, 'Backquote');
+  s.unlock();
+  s.fire(s.canvas, 'click');
+  assert.equal(s.canvas.locks, 1); // only the first click
+  assert.equal(s.input.console, true);
+});
+
 test('closing after submit relocks the pointer; plain close does not', () => {
   const s = setup();
   s.lock();

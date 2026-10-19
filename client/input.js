@@ -36,7 +36,7 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
   const release = () => sampler.clear_held();
 
   on(canvas, 'click', () => {
-    if (!locked) canvas.requestPointerLock();
+    if (!locked && !consoleOpen) canvas.requestPointerLock();
   });
 
   // Escape (and any other way out) arrives here, as the browser owns that key.
