@@ -144,6 +144,19 @@ Later phases add their own commands with their own tickets: `spawn cow`, `grow` 
 
 ---
 
+## 3. Phase 1 commands
+
+All four are valid in a single game state, "playing". Names are case-sensitive snake_case, as in `data/items.toml` and `data/animals.toml`.
+
+- `help`: lists the registered commands.
+- `give tool <name>` and `give item <name>`: give one unit of the named tool or item. The kind is required.
+- `spawn <name> [count]`: `<name>` is an item or an animal species, and `count` defaults to 1. Each entity appears 2 blocks in front of the player, scattered within a radius of 2 blocks, with the scatter drawn from the sim RNG. The count is at most 64; a larger count is an error and spawns nothing.
+- `clear belt|hands|items|animals`: `belt` restores the v0 belt, `hands` empties the hands, `items` removes all loose item entities, and `animals` removes all animals.
+
+(Decided in #314.)
+
+---
+
 ## 6. Debug mode and cheats
 
 - **Debug mode** is on when the page loads with `?debug=1`, or always in the test scene. With it off, the console keys do nothing.
@@ -230,7 +243,8 @@ Each later gameplay phase adds its own commands in its own tickets.
 
 ## Open questions (reconciler)
 
-6. **Missing sections 2 (console mode), 3 to 5 (command set and syntax).**
+6. **Missing section 2 (console mode) and 3 to 5 (command set and syntax),
+   except the Phase 1 commands, which section 3 now defines.**
    - A: paste them into this file so the planner can read them.
    - B: let the Phase 1 plan define each command's syntax, with the
      maintainer answering in the plan's `decision` issues.
