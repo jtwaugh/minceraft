@@ -193,6 +193,9 @@ impl Crops {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_error::test_support::{
+        assert_bad_entry, assert_err_contains, assert_parse_error,
+    };
 
     const HEAD: &str = "seeds_item = 'seeds'\n";
     const YIELD: &str = "yield = { item = 'wheat', min = 1, max = 1 }\n";
@@ -252,17 +255,20 @@ mod tests {
         ] {
             let e = Crops::from_toml(text).unwrap_err();
             assert_eq!(e, CropsError::Parse("`seeds_item` must be a string".into()));
-            assert!(e.to_string().contains("`seeds_item` must be a string"));
+            assert_err_contains(Err::<(), _>(e.clone()), "`seeds_item` must be a string");
+            assert_parse_error(e, DataFile::Crops);
         }
     }
 
     #[test]
     fn zero_stages_rejected() {
         let text = format!("{HEAD}[w]\nstages = 0\n{YIELD}{SEEDS}");
-        assert!(matches!(
-            Crops::from_toml(&text),
-            Err(CropsError::BadEntry { .. })
-        ));
+        assert_bad_entry(
+            Crops::from_toml(&text).unwrap_err(),
+            DataFile::Crops,
+            "w",
+            "`stages` must be a positive integer",
+        );
     }
 
     #[test]
@@ -273,10 +279,12 @@ mod tests {
             ),
             format!("{HEAD}[w]\nstages = 2\n{YIELD}seeds = {{ min = 3, max = 2 }}\n"),
         ] {
-            assert!(matches!(
-                Crops::from_toml(&bad),
-                Err(CropsError::BadEntry { .. })
-            ));
+            assert_bad_entry(
+                Crops::from_toml(&bad).unwrap_err(),
+                DataFile::Crops,
+                "w",
+                "`min` is greater than `max`",
+            );
         }
     }
 
@@ -295,7 +303,7 @@ mod tests {
             format!("[w]\nstages = 2\n{YIELD}{SEEDS}"),
             "not toml [".to_string(),
         ] {
-            assert!(Crops::from_toml(&bad).is_err(), "{bad}");
+            assert_err_contains(Crops::from_toml(&bad), "crops.toml");
         }
     }
 

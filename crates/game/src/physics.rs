@@ -154,6 +154,9 @@ impl PlayerPhysics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_error::test_support::{
+        assert_err_contains, assert_missing_key, assert_parse_error,
+    };
 
     #[test]
     fn defaults_match_design_doc() {
@@ -224,16 +227,17 @@ mod tests {
     #[test]
     fn missing_value_is_an_error() {
         let text = without("jump_velocity");
-        assert!(matches!(
-            PlayerPhysics::parse(&text),
-            Err(PhysicsError::Missing(k)) if k == "movement.jump_velocity"
-        ));
+        assert_missing_key(
+            PlayerPhysics::parse(&text).unwrap_err(),
+            DataFile::Player,
+            "movement.jump_velocity",
+        );
     }
 
     #[test]
     fn missing_table_is_an_error() {
         let text = without("[falling]");
-        assert!(PlayerPhysics::parse(&text).is_err());
+        assert_err_contains(PlayerPhysics::parse(&text), "player.toml");
     }
 
     #[test]
@@ -257,14 +261,11 @@ mod tests {
     #[test]
     fn fractional_health_is_an_error() {
         let text = DEFAULT_PLAYER.replace("max_health = 20", "max_health = 20.5");
-        assert!(PlayerPhysics::parse(&text).is_err());
+        assert_err_contains(PlayerPhysics::parse(&text), "player.toml");
     }
 
     #[test]
     fn garbage_is_a_parse_error() {
-        assert!(matches!(
-            PlayerPhysics::parse("[body"),
-            Err(PhysicsError::Parse(_))
-        ));
+        assert_parse_error(PlayerPhysics::parse("[body").unwrap_err(), DataFile::Player);
     }
 }

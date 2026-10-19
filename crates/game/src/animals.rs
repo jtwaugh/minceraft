@@ -295,6 +295,7 @@ impl Animals {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_error::test_support::assert_err_contains;
 
     fn drops(a: &Animals, kind: &str) -> Vec<(String, u32, u32)> {
         a.get(kind)
@@ -359,7 +360,7 @@ mod tests {
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
             "not toml [",
         ] {
-            assert!(Animals::from_toml(bad).is_err(), "{bad}");
+            assert_err_contains(Animals::from_toml(bad), "animals.toml");
         }
     }
 
