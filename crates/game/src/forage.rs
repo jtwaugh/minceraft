@@ -113,6 +113,7 @@ impl Forager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_error::test_support::assert_err_contains;
 
     fn cfg(chance: u32, cooldown_ticks: u64) -> ForageConfig {
         ForageConfig {
@@ -133,8 +134,11 @@ mod tests {
 
     #[test]
     fn rejects_bad_data() {
-        assert!(ForageConfig::parse("").is_err());
-        assert!(ForageConfig::parse("[forage]\nitem=\"s\"\nchance=0\ncooldown_ticks=1\n").is_err());
+        assert_err_contains(ForageConfig::parse(""), "missing [forage]");
+        assert_err_contains(
+            ForageConfig::parse("[forage]\nitem=\"s\"\nchance=0\ncooldown_ticks=1\n"),
+            "`chance` must be a positive integer",
+        );
     }
 
     #[test]
