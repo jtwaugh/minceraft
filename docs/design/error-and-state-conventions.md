@@ -8,7 +8,7 @@ phases:
   A: done
   B: done
   C: done
-  D: todo
+  D: done
   E: todo
 ---
 
@@ -43,7 +43,8 @@ Verified against the code on `master`:
 - **Phase A done:** the audit is `docs/errors-and-states.md` (plan #306, ticket #307, PR #310). It confirms 13 error types and no Rust state machines.
 - **Phase B done:** `crates/game/src/data_error.rs` holds the shared `DataError` and `DataFile` type (plan #328, PRs #341, #351, #352, #353, #354, #355, #358). The physics, targeting, item entity, forage, animals, crops, items, bindings and interactions loaders use it.
 - **Phase C done:** `StructureError` has a readable `Display` (plan #360, ticket #361, PR #363); every error type now derives `Clone, Debug, PartialEq, Eq`, and `CropsError`'s `seeds_item` handling is pinned by tests (ticket #362, PR #364).
-- Phases D and E are not built yet.
+- **Phase D done:** `crates/game/src/data_error.rs` has the `#[cfg(test)]` `test_support` helpers (`assert_err_contains`, `assert_bad_entry`, `assert_unknown_item`, `assert_parse_error`, `assert_missing_key`), used by the error tests in `game` (plan #367, PRs #372, #373, #374, #375). `crates/layout` tests are not converted: it does not depend on `game`.
+- Phase E is not built yet.
 
 ## Reconciliation notes
 
