@@ -2,12 +2,14 @@
 //! the debug fly camera. The DOM side is `client/input.js`; the render loop is
 //! `client/scene.js`.
 
+use game::animals::Animals;
 use game::bindings::Bindings;
 use game::camera::{Camera, Pose};
 use game::clock::Clock;
+use game::commands::{clear_command, give_command, spawn_command, Registry};
 use game::input::TickInput;
 use game::interactions::{Button, HeldThing};
-use game::items::ItemInstance;
+use game::items::{ItemInstance, Items};
 use game::sampler::Sampler;
 use game::scene::{raft_scene, RaftScene, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
@@ -467,4 +469,45 @@ pub fn view_matrix(x: f32, y: f32, z: f32, yaw: f32, pitch: f32) -> Vec<f32> {
     }
     .view_matrix()
     .to_vec()
+}
+
+/// Command names for Tab completion: the built-in `help` and every command
+/// of the debug console's registry (docs/design/debug-console.md section 8).
+#[wasm_bindgen]
+pub fn command_names() -> Vec<String> {
+    let registry = Registry::new(vec![give_command(), spawn_command(), clear_command()])
+        .expect("built-in commands are valid");
+    let mut names = vec!["help".to_string()];
+    names.extend(registry.iter().map(|c| c.name.to_string()));
+    names
+}
+
+/// Tool names from `data/items.toml`, in file order.
+#[wasm_bindgen]
+pub fn tool_names() -> Vec<String> {
+    Items::default_items()
+        .tools
+        .into_iter()
+        .map(|d| d.name)
+        .collect()
+}
+
+/// Item names from `data/items.toml`, in file order.
+#[wasm_bindgen]
+pub fn item_names() -> Vec<String> {
+    Items::default_items()
+        .items
+        .into_iter()
+        .map(|d| d.name)
+        .collect()
+}
+
+/// Animal species names from `data/animals.toml`, sorted.
+#[wasm_bindgen]
+pub fn species_names() -> Vec<String> {
+    Animals::default_animals()
+        .kinds
+        .into_iter()
+        .map(|a| a.kind)
+        .collect()
 }
