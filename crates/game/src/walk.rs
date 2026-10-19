@@ -359,6 +359,11 @@ impl Walker {
         self.item_table.has_item(name)
     }
 
+    /// Whether `name` is a tool in the item table.
+    pub fn knows_tool(&self, name: &str) -> bool {
+        self.item_table.has_tool(name)
+    }
+
     fn run_queued_commands(&mut self) {
         let lines = std::mem::take(&mut self.command_queue);
         let registry = Arc::clone(&self.commands);
