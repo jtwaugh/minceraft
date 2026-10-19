@@ -1145,3 +1145,25 @@ substituted or omitted.
   attempt counts); their shapes are not specified here.
 - **Spawn caps** (70 / 15 / 5) are the per-type caps from the creature-type
   definition; how they scale with loaded chunks at runtime is out of scope.
+
+---
+
+### Crop growth (Part III, farming)
+
+Random-tick growth of a crop:
+- The crop can grow only if the light at the block above it is at least 9. That light includes time-of-day darkening.
+- Let f start at 1. Add 3 if the farmland under the crop is wet, or 1 if dry. "Wet" means moisture above 0.
+- For each of the 8 farmland squares around it, add 0.75 if wet or 0.25 if dry. They count even with nothing planted on them.
+- Halve f if any crop sits diagonally, or if crops lie along both the X and Z axes. A single straight row is not penalised.
+- The chance per random tick is 1 in trunc(100 / f).
+
+| Case | f | Odds per random tick |
+|---|---|---|
+| Single row, fully wet | 10 | 1 in 10 |
+| Single row, dry | 4 | 1 in 25 |
+| Full field, wet | 5 | 1 in 20 |
+| Full field, dry | 2 | 1 in 50 |
+
+Wheat has 8 stages, 0 to 7. Each success advances it by exactly 1, and stage 7 is the cap.
+
+Uncertain items: the random-tick rate, whether freshly tilled farmland starts dry, and light under slabs or stairs.
