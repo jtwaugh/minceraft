@@ -15,8 +15,7 @@
 // window.frameStats() returns { frames, p50, p99 } at any time.
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
-import * as game from './pkg/game_web.js';
-import initGame, { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } from './pkg/game_web.js';
+import initGame, * as game from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
@@ -30,6 +29,8 @@ import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
+
+const { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } = game;
 
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
@@ -334,7 +335,6 @@ const controller = createController({ input, walk, fly, clock, document, flying 
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 const outputBuffer = new OutputBuffer();
-window.consoleOutput = () => outputBuffer.lines; // every line this session, for scripts
 let storage = null;
 try { storage = localStorage; } catch { /* blocked storage: history stays in memory */ }
 const consoleUI = debug && createConsoleUI({
@@ -349,6 +349,7 @@ const consoleUI = debug && createConsoleUI({
   },
   onCancel: () => controller.closeConsole(),
 });
+if (consoleUI) window.consoleOutput = () => outputBuffer.lines; // every line this session, for scripts
 window.frameStats = () => frames.summary();
 
 function drawParts(prog, parts) {
