@@ -1151,7 +1151,7 @@ substituted or omitted.
 ### Crop growth (Part III, farming)
 
 Random-tick growth of a crop:
-- The crop can grow only if the light at the block above it is at least 9. That light includes time-of-day darkening.
+- The crop can grow only if the light at the block above it is at least 9. That light includes time-of-day darkening. This game gets a light value of its own (sky light with time-of-day darkening, blocked by solid blocks above), built as separate work, and crop growth waits for it. (Decided in #392.)
 - Let f start at 1. Add 3 if the farmland under the crop is wet, or 1 if dry. "Wet" means moisture above 0.
 - For each of the 8 farmland squares around it, add 0.75 if wet or 0.25 if dry. They count even with nothing planted on them.
 - Halve f if any crop sits diagonally, or if crops lie along both the X and Z axes. A single straight row is not penalised.
