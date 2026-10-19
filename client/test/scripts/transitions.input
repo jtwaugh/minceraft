@@ -1,0 +1,64 @@
+# Invalid state-machine transitions are ignored silently (docs/errors-and-states.md,
+# "State machines"). Each case fires the invalid event and asserts the state is unchanged.
+# Not repeated here: F while unlocked and F on auto-repeat, in modes.input
+# ("F does nothing while unlocked, or on auto-repeat").
+
+case click while already locked makes no second lock request
+click
+expect lock_requests = 1
+lock
+expect locked = true
+click
+click
+expect lock_requests = 1
+expect locked = true
+expect mode = walk
+
+case click while locked in fly mode leaves lock and mode unchanged
+start fly
+click
+lock
+click
+expect lock_requests = 1
+expect locked = true
+expect mode = fly
+
+case input while unlocked does not change mode or position
+start walk raft
+frame 50 x40
+mark
+down KeyW
+down Space
+down ShiftLeft
+press KeyF
+mouse 40 25
+wheel 3
+button down left
+button up left
+frame 50 x10
+expect locked = false
+expect mode = walk
+expect moved.x < 0.02
+expect moved.x > -0.02
+expect moved.z < 0.02
+expect moved.z > -0.02
+expect yaw = 0
+expect pitch = 0
+
+case input after unlocking does not change mode or position
+start walk raft
+click
+lock
+frame 50 x40
+unlock
+mark
+down KeyW
+press KeyF
+mouse 40 25
+frame 50 x10
+expect locked = false
+expect mode = walk
+expect moved.x < 0.02
+expect moved.x > -0.02
+expect moved.z < 0.02
+expect moved.z > -0.02
