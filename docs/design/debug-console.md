@@ -162,6 +162,14 @@ All four are valid in a single game state, "playing". Names are case-sensitive s
 
 (Decided in #314.)
 
+Phase 3 adds `pause`, `resume`, `step [n]` and `tp <x> <z>`, valid in both walking and flying:
+
+- `tp <x> <z>`: places the player on the surface at that column. It is a cheat and sets `cheated`.
+- `pause` and `resume` are not cheats. Running `pause` when already paused, or `resume` when not paused, is a harmless no-op with a result line, not an error.
+- `step [n]` is not a cheat. `n` defaults to 1.
+
+(Decided in #423.)
+
 ---
 
 ## 6. Debug mode and cheats
