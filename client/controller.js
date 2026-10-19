@@ -7,6 +7,8 @@
 //   const c = createController({ input, walk, fly, clock, document, flying });
 //   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying, aim, belt, underwater }
 //                          (aim and belt as in overlay.js; the walking player's, stale while flying)
+//   c.submitConsole(line)  queue the line on the walk, close the console, relock the pointer
+//   c.closeConsole()       close the console without submitting; the pointer stays unlocked
 //   c.detach()          remove the F listener
 //
 // `underwater` is whether the drawn eye is in a water cell, in either mode;
@@ -21,7 +23,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
   const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null, belt: null, underwater: false };
 
   const onKey = (e) => {
-    if (e.code !== 'KeyF' || e.repeat || !input.locked) return;
+    if (e.code !== 'KeyF' || e.repeat || !input.locked || input.console) return;
     const eyeNow = walk.eye(1), feet = walk.feet();
     if (state.flying) {
       const [x, y, z] = fly.eye(1);
@@ -53,6 +55,14 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
       Object.assign(state, { ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha), belt: readBelt(walk), underwater });
       return state;
+    },
+    submitConsole(line) {
+      if (!input.console) return;
+      walk.submit_command(line);
+      input.closeConsole({ submitted: true });
+    },
+    closeConsole() {
+      input.closeConsole();
     },
     detach() {
       document.removeEventListener('keydown', onKey);

@@ -259,7 +259,7 @@ const surfaceY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[1
 const scene = raftScene ? new Scene() : null;
 const walk = scene ? Walk.in_scene(scene) : new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
 if (scene) { spawnTestItems(walk); spawnTestAnimals(walk); }
-const input = attachInput({ sampler, canvas, document, window });
+const input = attachInput({ sampler, canvas, document, window, debug });
 
 const names = [];
 const legendJson = terrain.legend();
