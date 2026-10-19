@@ -2,7 +2,7 @@
 //! Phase 1). A command is one [`Command`] entry plus a handler that gets the
 //! world `W` it acts on and returns its result lines.
 
-use crate::items::ItemInstance;
+use crate::items::{ItemInstance, ToolInstance};
 use crate::walk::Walker;
 use std::fmt;
 
@@ -388,6 +388,75 @@ impl<W> Console<W> {
             lines.push("cheat: sets the cheated flag".to_string());
         }
         Ok(lines)
+    }
+}
+
+/// `give tool|item <name>`: one unit, following the belt and hands rules
+/// (docs/design/debug-console.md sections 1 and 3; full cases from #315, #378).
+pub fn give_command() -> Command<Walker> {
+    Command {
+        name: "give",
+        aliases: &[],
+        args: &[
+            ArgSpec {
+                name: "kind",
+                kind: ArgKind::Word,
+                optional: false,
+            },
+            ArgSpec {
+                name: "name",
+                kind: ArgKind::Word,
+                optional: false,
+            },
+        ],
+        help: "give tool <name> (first empty belt slot, selected) or item <name> (hands)",
+        states: &[GameState::Walking],
+        cheat: true,
+        handler: give,
+    }
+}
+
+fn give(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    let (Some(Arg::Word(kind)), Some(Arg::Word(name))) = (args.first(), args.get(1)) else {
+        return Err("missing kind or name".into());
+    };
+    let walker = &mut *ctx.world;
+    let feet = walker.player().pos;
+    let at_feet = [feet[0], feet[1] + 0.5, feet[2]];
+    let instance = || ItemInstance { item: name.clone() };
+    match kind.as_str() {
+        "tool" => {
+            if !walker.knows_tool(name) {
+                return Err(format!("unknown tool '{name}'"));
+            }
+            let state = walker.player_state_mut();
+            // Slot 0 is the empty hand by design (basic-gameplay v0 belt).
+            match (1..state.tool_belt.len()).find(|&i| state.tool_belt[i].is_none()) {
+                Some(i) => {
+                    state.tool_belt[i] = Some(ToolInstance { tool: name.clone() });
+                    state.select(i as u8);
+                    Ok(vec![format!("gave tool {name} (slot {})", i + 1)])
+                }
+                None => {
+                    walker.spawn_item(instance(), at_feet);
+                    Ok(vec![format!("belt full: dropped {name} at your feet")])
+                }
+            }
+        }
+        "item" => {
+            if !walker.knows_item(name) {
+                return Err(format!("unknown item '{name}'"));
+            }
+            let state = walker.player_state_mut();
+            if state.hands.is_none() {
+                state.hands = Some(instance());
+                Ok(vec![format!("gave item {name}")])
+            } else {
+                walker.spawn_item(instance(), at_feet);
+                Ok(vec![format!("hands full: dropped {name} at your feet")])
+            }
+        }
+        _ => Err(format!("unknown kind '{kind}' (tool or item)")),
     }
 }
 
@@ -862,5 +931,94 @@ mod clear_tests {
         let mut w2 = walker();
         run(&mut w2, &["clear everything"]);
         assert!(!w2.cheated());
+    }
+}
+
+#[cfg(test)]
+mod give_tests {
+    use super::*;
+    use crate::input::TickInput;
+
+    fn walker() -> Walker {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(Registry::new(vec![give_command()]).unwrap());
+        w
+    }
+
+    fn run(w: &mut Walker, lines: &[&str]) -> Vec<String> {
+        for l in lines {
+            w.submit_command(l);
+        }
+        w.tick(&TickInput::default());
+        w.drain_command_output()
+    }
+
+    fn tool(name: &str) -> Option<ToolInstance> {
+        Some(ToolInstance { tool: name.into() })
+    }
+
+    #[test]
+    fn give_tool_uses_first_empty_slot_and_selects_it() {
+        let mut w = walker();
+        run(&mut w, &["give tool hoe"]);
+        let s = w.player_state();
+        assert_eq!(s.tool_belt[3], tool("hoe"));
+        assert_eq!(s.selected, 3);
+        assert_eq!(s.tool_belt[0], None, "slot 0 stays the empty hand");
+        run(&mut w, &["give tool sword"]);
+        assert_eq!(w.player_state().tool_belt[4], tool("sword"));
+        assert_eq!(w.player_state().selected, 4);
+        assert!(w.cheated());
+    }
+
+    #[test]
+    fn give_item_fills_empty_hands() {
+        let mut w = walker();
+        assert_eq!(run(&mut w, &["give item seeds"]), vec!["gave item seeds"]);
+        assert_eq!(w.hands().unwrap().item, "seeds");
+        assert_eq!(w.items().len(), 0);
+        assert!(w.cheated());
+    }
+
+    #[test]
+    fn give_item_with_full_hands_drops_at_feet() {
+        let mut w = walker();
+        run(&mut w, &["give item seeds", "give item wheat"]);
+        assert_eq!(w.hands().unwrap().item, "seeds");
+        let dropped: Vec<_> = w.items().iter().collect();
+        assert_eq!(dropped.len(), 1);
+        assert_eq!(dropped[0].item.item, "wheat");
+        assert!((dropped[0].pos[0] - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn give_tool_with_full_belt_drops_item_named_after_tool() {
+        let mut w = walker();
+        run(&mut w, &["give tool hoe", "give tool hoe"]);
+        let before = w.player_state().clone();
+        let out = run(&mut w, &["give tool sword"]);
+        assert!(out[0].contains("belt full"));
+        assert_eq!(*w.player_state(), before);
+        let dropped: Vec<_> = w.items().iter().collect();
+        assert_eq!(dropped.len(), 1);
+        assert_eq!(dropped[0].item.item, "sword");
+    }
+
+    #[test]
+    fn unknown_names_and_kinds_error_and_change_nothing() {
+        let mut w = walker();
+        let before = w.player_state().clone();
+        for line in [
+            "give tool banana",
+            "give item hoe",
+            "give tool seeds",
+            "give thing x",
+        ] {
+            let out = run(&mut w, &[line]);
+            assert!(out[0].contains("unknown"), "{line}: {out:?}");
+        }
+        assert_eq!(*w.player_state(), before);
+        assert_eq!(w.items().len(), 0);
+        assert!(!w.cheated());
     }
 }
