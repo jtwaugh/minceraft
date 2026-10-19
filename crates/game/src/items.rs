@@ -273,6 +273,7 @@ impl PlayerState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_error::test_support::assert_err_contains;
 
     #[test]
     fn errors_convert_to_data_error_with_same_text() {
@@ -369,7 +370,7 @@ mod tests {
             "[[tool]]\nname='a'\nlabel='A'\n",
             "not toml [",
         ] {
-            assert!(Items::from_toml(bad).is_err(), "{bad}");
+            assert_err_contains(Items::from_toml(bad), "items.toml");
         }
     }
 
