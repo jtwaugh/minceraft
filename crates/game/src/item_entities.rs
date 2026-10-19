@@ -217,6 +217,11 @@ impl ItemStore {
         Some(self.items.remove(i))
     }
 
+    /// Remove every item. Ids are not reused.
+    pub fn clear(&mut self) {
+        self.items.clear();
+    }
+
     pub fn get(&self, id: EntityId) -> Option<&ItemEntity> {
         let i = self.items.binary_search_by_key(&id, |e| e.id).ok()?;
         Some(&self.items[i])

@@ -461,6 +461,43 @@ fn spawn(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String>
     Ok(vec![format!("spawned {count} {name}")])
 }
 
+/// `clear belt|hands|items|animals`: each target removes what it names and
+/// nothing else (docs/design/debug-console.md section 3).
+pub fn clear_command() -> Command<Walker> {
+    Command {
+        name: "clear",
+        aliases: &[],
+        args: &[ArgSpec {
+            name: "target",
+            kind: ArgKind::Word,
+            optional: false,
+        }],
+        help: "clear belt (restore v0 belt), hands, items (loose) or animals",
+        states: &[GameState::Walking],
+        cheat: true,
+        handler: clear,
+    }
+}
+
+fn clear(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    let Some(Arg::Word(target)) = args.first() else {
+        return Err("missing target".into());
+    };
+    let walker = &mut *ctx.world;
+    match target.as_str() {
+        "belt" => walker.reset_belt().map_err(|e| e.to_string())?,
+        "hands" => walker.clear_hands(),
+        "items" => walker.clear_items(),
+        "animals" => walker.clear_animals(),
+        _ => {
+            return Err(format!(
+                "unknown target '{target}' (belt, hands, items, animals)"
+            ))
+        }
+    }
+    Ok(vec![format!("cleared {target}")])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -743,5 +780,87 @@ mod spawn_tests {
         assert!(!w.cheated());
         assert_eq!(run(&mut w, &["spawn seeds 64"]), vec!["spawned 64 seeds"]);
         assert_eq!(w.items().len(), 64);
+    }
+}
+
+#[cfg(test)]
+mod clear_tests {
+    use super::*;
+    use crate::input::TickInput;
+    use crate::items::{PlayerState, ToolInstance};
+
+    fn walker() -> Walker {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(Registry::new(vec![spawn_command(), clear_command()]).unwrap());
+        w
+    }
+
+    fn run(w: &mut Walker, lines: &[&str]) -> Vec<String> {
+        for l in lines {
+            w.submit_command(l);
+        }
+        w.tick(&TickInput::default());
+        w.drain_command_output()
+    }
+
+    fn v0() -> PlayerState {
+        PlayerState::new(&crate::items::Items::default_items()).unwrap()
+    }
+
+    #[test]
+    fn clear_belt_restores_v0_belt_and_selection() {
+        let mut w = walker();
+        let s = w.player_state_mut();
+        s.tool_belt[0] = Some(ToolInstance { tool: "hoe".into() });
+        s.tool_belt[1] = None;
+        s.selected = 3;
+        s.hands = Some(ItemInstance {
+            item: "seeds".into(),
+        });
+        assert_eq!(run(&mut w, &["clear belt"]), vec!["cleared belt"]);
+        let s = w.player_state();
+        assert_eq!(s.tool_belt, v0().tool_belt);
+        assert_eq!(s.selected, 0);
+        assert!(s.hands.is_some(), "belt leaves the hands alone");
+        assert!(w.cheated());
+    }
+
+    #[test]
+    fn each_target_clears_only_what_it_names() {
+        let mut w = walker();
+        let fill = |w: &mut Walker| {
+            run(w, &["spawn seeds 3", "spawn cow 2"]);
+            w.player_state_mut().hands = Some(ItemInstance {
+                item: "seeds".into(),
+            });
+        };
+        fill(&mut w);
+        let (items, animals) = (w.items().len(), w.animals().len());
+        run(&mut w, &["clear hands"]);
+        assert!(w.hands().is_none());
+        assert_eq!((w.items().len(), w.animals().len()), (items, animals));
+        assert_eq!(w.player_state().tool_belt, v0().tool_belt);
+        run(&mut w, &["clear items"]);
+        assert_eq!((w.items().len(), w.animals().len()), (0, animals));
+        fill(&mut w);
+        run(&mut w, &["clear animals"]);
+        assert_eq!(w.animals().len(), 0);
+        assert!(w.items().len() >= 3);
+        assert!(w.hands().is_some());
+    }
+
+    #[test]
+    fn unknown_target_errors_and_changes_nothing() {
+        let mut w = walker();
+        run(&mut w, &["spawn seeds 2"]);
+        w.player_state_mut().selected = 2;
+        let out = run(&mut w, &["clear everything"]);
+        assert!(out[0].contains("unknown target 'everything'"));
+        assert_eq!(w.items().len(), 2);
+        assert_eq!(w.player_state().selected, 2);
+        assert!(w.cheated(), "the spawn cheated, not the failed clear");
+        let mut w2 = walker();
+        run(&mut w2, &["clear everything"]);
+        assert!(!w2.cheated());
     }
 }
