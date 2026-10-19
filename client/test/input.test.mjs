@@ -15,16 +15,22 @@ function target(extra = {}) {
   return Object.assign(t, extra);
 }
 
-function setup() {
+function setup(debug = true) {
   const canvas = target({
     locks: 0,
     requestPointerLock() {
       this.locks++;
     },
   });
-  const document = target({ pointerLockElement: null });
+  const document = target({
+    pointerLockElement: null,
+    exits: 0,
+    exitPointerLock() {
+      this.exits++;
+    },
+  });
   const window = target();
-  const input = attachInput({ sampler: new InputSampler(), canvas, document, window });
+  const input = attachInput({ sampler: new InputSampler(), canvas, document, window, debug });
   const fire = (t, type, props = {}) => {
     const e = Object.assign(new Event(type, { cancelable: true }), props);
     t.dispatchEvent(e);
@@ -124,4 +130,57 @@ test('detach removes the listeners', () => {
   s.input.detach();
   s.fire(s.document, 'keydown', { code: 'KeyW', repeat: false });
   assert.equal(s.input.tick().move_forward, 0);
+});
+
+const key = (s, code) => s.fire(s.document, 'keydown', { code, repeat: false });
+
+test('Backquote with debug on opens the console, releasing held W and the pointer', () => {
+  const s = setup();
+  s.lock();
+  key(s, 'KeyW');
+  key(s, 'Backquote');
+  assert.equal(s.input.console, true);
+  assert.equal(s.document.exits, 1);
+  assert.equal(s.input.tick().move_forward, 0);
+});
+
+test('Backquote with debug off does nothing', () => {
+  const s = setup(false);
+  s.lock();
+  key(s, 'KeyW');
+  key(s, 'Backquote');
+  assert.equal(s.input.console, false);
+  assert.equal(s.input.tick().move_forward, 1);
+});
+
+test('Backquote needs a locked pointer', () => {
+  const s = setup();
+  key(s, 'Backquote');
+  assert.equal(s.input.console, false);
+});
+
+test('key, mouse and wheel events are not sampled in console mode', () => {
+  const s = setup();
+  s.lock();
+  key(s, 'Backquote');
+  s.unlock();
+  key(s, 'KeyW');
+  s.fire(s.document, 'mousedown', { button: 0 });
+  s.fire(s.document, 'mousemove', { movementX: 50, movementY: 0 });
+  s.fire(s.document, 'wheel', { deltaY: 100 });
+  const t = s.input.tick();
+  assert.deepEqual([t.move_forward, t.primary, t.yaw, t.tool_slot], [0, false, 0, null]);
+});
+
+test('closing after submit relocks the pointer; plain close does not', () => {
+  const s = setup();
+  s.lock();
+  key(s, 'Backquote');
+  s.input.closeConsole();
+  assert.equal(s.input.console, false);
+  assert.equal(s.canvas.locks, 1); // only the first click
+  s.lock();
+  key(s, 'Backquote');
+  s.input.closeConsole({ submitted: true });
+  assert.equal(s.canvas.locks, 2);
 });
