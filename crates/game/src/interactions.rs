@@ -480,6 +480,7 @@ impl Dispatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_error::test_support::*;
 
     fn ctx(held: HeldThing, button: Button, block: &str, face: Face) -> ResolveCtx {
         ResolveCtx {
@@ -707,7 +708,12 @@ mod tests {
                 value: "dance".into()
             }
         );
-        assert!(err.to_string().contains("unknown action `dance`"));
+        assert_bad_entry(
+            err,
+            DataFile::Interactions,
+            "rule 1",
+            "unknown action `dance`",
+        );
     }
 
     #[test]
@@ -717,6 +723,12 @@ mod tests {
             err,
             InteractionsError::UnknownButton { rule: 1, .. }
         ));
+        assert_bad_entry(
+            err,
+            DataFile::Interactions,
+            "rule 1",
+            "unknown button `middle`",
+        );
     }
 
     #[test]
@@ -771,14 +783,12 @@ mod tests {
 
     #[test]
     fn syntax_errors_and_stray_keys_are_rejected() {
-        assert!(matches!(
-            Interactions::from_toml("[[rule"),
-            Err(InteractionsError::Parse(_))
-        ));
-        assert!(matches!(
-            Interactions::from_toml("version = 1"),
-            Err(InteractionsError::UnknownField { .. })
-        ));
+        let err = Interactions::from_toml("[[rule").unwrap_err();
+        assert!(matches!(err, InteractionsError::Parse(_)));
+        assert_parse_error(err, DataFile::Interactions);
+        let err = Interactions::from_toml("version = 1").unwrap_err();
+        assert!(matches!(err, InteractionsError::UnknownField { .. }));
+        assert_err_contains::<(), _>(Err(err), "unknown field `version`");
     }
 
     #[test]
@@ -789,6 +799,7 @@ mod tests {
             err,
             InteractionsError::UnknownAction { rule: 2, .. }
         ));
+        assert_bad_entry(err, DataFile::Interactions, "rule 2", "unknown action");
     }
 
     #[test]
