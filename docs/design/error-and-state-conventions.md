@@ -191,10 +191,10 @@ can't express invalid transitions.
 > pointer-lock handling (`client/controller.js`, `client/input.js`), tested
 > through the DSL. (Decided in #383.)
 
+> **Decision:** Phase E does not stop at conventions and tests. It also
+> converts code that Phase A finds to be a de facto state machine into an
+> explicit enum, one ticket each. (Decided in #382.)
+
 ## Open questions
 
-2. **Naming and errors only, or restructure?** Should Phase E stop at
-   conventions and tests, or also restructure existing code?
-   - A: conventions and tests only.
-   - B: also convert code that Phase A finds to be a de facto state machine
-     into an explicit enum, one ticket each.
+None.
