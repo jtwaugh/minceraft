@@ -9,7 +9,7 @@ phases:
   B: done
   C: done
   D: done
-  E: todo
+  E: done
 ---
 
 ## Current state
@@ -44,7 +44,7 @@ Verified against the code on `master`:
 - **Phase B done:** `crates/game/src/data_error.rs` holds the shared `DataError` and `DataFile` type (plan #328, PRs #341, #351, #352, #353, #354, #355, #358). The physics, targeting, item entity, forage, animals, crops, items, bindings and interactions loaders use it.
 - **Phase C done:** `StructureError` has a readable `Display` (plan #360, ticket #361, PR #363); every error type now derives `Clone, Debug, PartialEq, Eq`, and `CropsError`'s `seeds_item` handling is pinned by tests (ticket #362, PR #364).
 - **Phase D done:** `crates/game/src/data_error.rs` has the `#[cfg(test)]` `test_support` helpers (`assert_err_contains`, `assert_bad_entry`, `assert_unknown_item`, `assert_parse_error`, `assert_missing_key`), used by the error tests in `game` (plan #367, PRs #372, #373, #374, #375). `crates/layout` tests are not converted: it does not depend on `game`.
-- Phase E is not built yet.
+- **Phase E done:** DSL scripts pin the invalid fly/walk and pointer-lock transitions in `client/test/scripts/transitions.input` (plan #381, ticket #384, PR #396); the convention is written in `docs/state-machines.md` (ticket #385, PR #399). Per the #382 decision, no Rust conversion was needed: the Phase A audit found no de facto Rust state machine (`docs/errors-and-states.md`).
 
 ## Reconciliation notes
 
