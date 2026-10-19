@@ -32,6 +32,8 @@ pub struct CropDef {
 /// The crops, sorted by name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Crops {
+    /// Mean game ticks between random ticks of one crop.
+    pub random_tick_interval: u32,
     pub seeds_item: String,
     pub crops: Vec<CropDef>,
 }
@@ -159,6 +161,14 @@ impl Crops {
     pub fn from_toml(text: &str) -> Result<Crops, CropsError> {
         let mut table: toml::value::Table =
             toml::from_str(text).map_err(|e| CropsError::Parse(e.to_string()))?;
+        let random_tick_interval = match table.remove("random_tick_interval") {
+            Some(toml::Value::Integer(n)) if (1..=i64::from(u32::MAX)).contains(&n) => n as u32,
+            _ => {
+                return Err(CropsError::Parse(
+                    "`random_tick_interval` must be a positive integer".into(),
+                ))
+            }
+        };
         let seeds_item = match table.remove("seeds_item") {
             Some(toml::Value::String(s)) if !s.is_empty() => s,
             _ => return Err(CropsError::Parse("`seeds_item` must be a string".into())),
@@ -167,7 +177,11 @@ impl Crops {
             .iter()
             .map(|(name, value)| parse_crop(name, value))
             .collect::<Result<_, _>>()?;
-        Ok(Crops { seeds_item, crops })
+        Ok(Crops {
+            random_tick_interval,
+            seeds_item,
+            crops,
+        })
     }
 
     pub fn get(&self, name: &str) -> Option<&CropDef> {
@@ -197,7 +211,7 @@ mod tests {
         assert_bad_entry, assert_err_contains, assert_parse_error,
     };
 
-    const HEAD: &str = "seeds_item = 'seeds'\n";
+    const HEAD: &str = "random_tick_interval = 10\nseeds_item = 'seeds'\n";
     const YIELD: &str = "yield = { item = 'wheat', min = 1, max = 1 }\n";
     const SEEDS: &str = "seeds = { min = 0, max = 2 }\n";
 
@@ -222,7 +236,7 @@ mod tests {
             c.check_items(&Items::default_items()),
             Err(CropsError::UnknownItem { .. })
         ));
-        let c = Crops::from_toml("seeds_item = 'nope'\n").unwrap();
+        let c = Crops::from_toml("random_tick_interval = 1\nseeds_item = 'nope'\n").unwrap();
         assert!(matches!(
             c.check_items(&Items::default_items()),
             Err(CropsError::UnknownItem { .. })
@@ -231,7 +245,7 @@ mod tests {
 
     #[test]
     fn unknown_seeds_item_reports_variant_and_message() {
-        let c = Crops::from_toml("seeds_item = 'nope'\n").unwrap();
+        let c = Crops::from_toml("random_tick_interval = 1\nseeds_item = 'nope'\n").unwrap();
         let e = c.check_items(&Items::default_items()).unwrap_err();
         assert_eq!(
             e,
@@ -249,9 +263,9 @@ mod tests {
     #[test]
     fn non_string_seeds_item_is_parse_error() {
         for text in [
-            "seeds_item = 3\n",
-            "seeds_item = ''\n",
-            "seeds_item = ['a']\n",
+            "random_tick_interval = 1\nseeds_item = 3\n",
+            "random_tick_interval = 1\nseeds_item = ''\n",
+            "random_tick_interval = 1\nseeds_item = ['a']\n",
         ] {
             let e = Crops::from_toml(text).unwrap_err();
             assert_eq!(e, CropsError::Parse("`seeds_item` must be a string".into()));
