@@ -1,0 +1,174 @@
+# The debug console (docs/design/debug-console.md sections 2, 6 and 9). Backquote
+# opens it from a locked pointer; `type` fills its text box; Enter submits.
+# The raft scene implies debug mode; three seeds lie on its islet.
+
+case Backquote opens the console and releases held W
+start walk raft
+click
+lock
+frame 50 x2
+down KeyW
+frame 50 x4
+press Backquote
+expect mode = console
+expect locked = false
+frame 50 x60
+mark
+frame 50 x10
+expect moved.x ~ 0
+expect moved.z ~ 0
+up KeyW
+
+case typing f in the console does not toggle fly
+start walk raft
+click
+lock
+press Backquote
+type f
+expect mode = console
+expect console.text = f
+press Escape
+expect mode = walk
+
+case Enter returns to walk mode and asks for the pointer again
+start walk raft
+click
+lock
+expect lock_requests = 1
+press Backquote
+type help
+press Enter
+expect mode = walk
+expect lock_requests = 2
+expect console.text =
+
+case Enter returns to fly mode when the console opened from fly
+start fly raft
+click
+lock
+press Backquote
+expect mode = console
+press Enter
+expect mode = fly
+
+case Escape closes without submitting and leaves the pointer unlocked
+start walk raft
+click
+lock
+press Backquote
+type give item seeds
+press Escape
+expect mode = walk
+expect locked = false
+expect lock_requests = 1
+frame 50 x2
+expect hands = none
+expect console.lines = 0
+
+case Backspace edits the text box
+start walk raft
+click
+lock
+press Backquote
+type give tool swordx
+press Backspace
+expect console.text = give tool sword
+press Escape
+
+case the console key does nothing without debug mode
+start walk
+click
+lock
+press Backquote
+expect mode = walk
+expect locked = true
+type f
+expect mode = fly
+
+case the console key does nothing while the pointer is unlocked
+start walk raft
+press Backquote
+expect mode = walk
+
+case the console key opens it when debug is started on outside the raft scene
+start walk debug
+click
+lock
+press Backquote
+expect mode = console
+
+case give tool hoe uses the first empty slot and selects it
+start walk raft
+click
+lock
+expect belt.slot.4 = none
+expect belt.selected = 0
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+expect belt.slot.4 = hoe
+expect belt.selected = 3
+expect held = tool:hoe
+expect cheated = true
+
+case give item seeds puts seeds in the hands
+start walk raft
+click
+lock
+expect hands = none
+expect cheated = false
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+expect hands = seeds
+expect held = item:seeds
+expect cheated = true
+
+case spawn seeds 5 adds five loose items
+start walk raft
+click
+lock
+expect items = 3
+press Backquote
+type spawn seeds 5
+press Enter
+frame 50 x2
+expect items = 8
+expect console.last = spawned 5 seeds
+
+case clear belt restores the v0 belt
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+expect belt.slot.4 = hoe
+lock
+press Backquote
+type clear belt
+press Enter
+frame 50 x2
+expect belt.slot.4 = none
+expect belt.slot.2 = sword
+expect belt.slot.3 = hoe
+expect console.last = cleared belt
+
+case clear hands empties the hands
+start walk raft
+click
+lock
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+expect hands = seeds
+lock
+press Backquote
+type clear hands
+press Enter
+frame 50 x2
+expect hands = none
