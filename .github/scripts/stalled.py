@@ -16,6 +16,11 @@ skipped: the PR is the next step):
   doc's Reconciliation notes) and nothing will plan it. File a ticket as a
   sub-issue of that plan and reopen the plan.
 
+With --issue it first adopts orphaned follow-up tickets: an open `planned`
+ticket with no plan whose "Depends on:" ticket belongs to a plan (the
+implementer's split-off second halves) becomes a sub-issue of that plan,
+and the plan is reopened, so the phase is marked done when it closes.
+
 It also lists leftover `docs/*` branches the docs updater will want to
 create again (an open plan's phase-done branch, any `-sync` branch): the
 updater can't force-push, so its run would fail.
@@ -23,6 +28,7 @@ updater can't force-push, so its run would fail.
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -50,6 +56,32 @@ def open_prs():
         for f in gh(f"repos/{REPO}/pulls/{pr['number']}/files?per_page=100"):
             touched.add(f["filename"])
     return touched, heads
+
+
+def adopt_orphans(tickets):
+    """Attach orphaned follow-ups to their predecessor's plan; one line each."""
+    out = []
+    for t in tickets:
+        if t["state"] != "open" or t["title"].startswith("Plan:") or "pull_request" in t:
+            continue
+        t = gh(f"repos/{REPO}/issues/{t['number']}")
+        if t.get("parent_issue_url"):
+            continue
+        line = next((x for x in (t.get("body") or "").splitlines() if "Depends on:" in x), "")
+        for dep in re.findall(r"#(\d+)", line):
+            parent = gh(f"repos/{REPO}/issues/{dep}").get("parent_issue_url")
+            plan = gh("repos/" + parent.split("/repos/", 1)[1]) if parent else None
+            if not plan or not plan["title"].startswith("Plan:"):
+                continue
+            n = plan["number"]
+            subprocess.run(["gh", "api", "-X", "POST", f"repos/{REPO}/issues/{n}/sub_issues",
+                            "-F", f"sub_issue_id={t['id']}"], check=True, capture_output=True)
+            if plan["state"] == "closed":
+                subprocess.run(["gh", "api", "-X", "PATCH", f"repos/{REPO}/issues/{n}",
+                                "-f", "state=open"], check=True, capture_output=True)
+            out.append(f"Adopted #{t['number']} into plan #{n} (it follows #{dep}).")
+            break
+    return out
 
 
 def findings():
@@ -120,6 +152,8 @@ def sync_issue(items):
 
 
 def main():
+    adopted = adopt_orphans(plan_issues()) if "--issue" in sys.argv else []
+    print("\n".join(adopted))
     items = findings()
     print("\n".join(items) if items else "Nothing stalled.")
     if "--issue" in sys.argv:

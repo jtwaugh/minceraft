@@ -76,15 +76,23 @@ def deps(body):
     return found
 
 
-def state(n, cache={}):
+def fetch(n, cache={}):
     if n not in cache:
-        cache[n] = gh(f"repos/{REPO}/issues/{n}")["state"]
+        cache[n] = gh(f"repos/{REPO}/issues/{n}")
     return cache[n]
 
 
+def state(n):
+    return fetch(n)["state"]
+
+
 def open_deps(issue):
+    """Open issues this ticket waits on. A "Plan:" issue named as a
+    dependency is ignored: the plan closes only after its tickets do, so
+    waiting on it would never end."""
     all_deps = deps(issue.get("body")) | {b for b, _ in comment_blockers(issue["number"])}
-    return sorted(d for d in all_deps if d != issue["number"] and state(d) != "closed")
+    return sorted(d for d in all_deps if d != issue["number"] and state(d) != "closed"
+                  and not fetch(d)["title"].startswith("Plan:"))
 
 
 FILE = re.compile(r"`([\w./-]+\.(?:rs|js|mjs|toml|py|html|css|json|sh|yml|input))`")
