@@ -54,6 +54,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Debounce. Every issue, PR, comment and workflow event starts a run,
+      # and each run makes dozens of REST calls with the workflow token,
+      # which shares a 1,000-requests-an-hour budget with every other
+      # workflow here. On a busy night (592 runs in an hour) that ran out
+      # and the review gate, reviewer and implementer failed with it. A
+      # newer run cancels this one while it waits (cancel-in-progress), so
+      # a burst of events makes one run's worth of calls.
+      - name: Let a burst of events settle
+        if: github.event_name != 'workflow_dispatch'
+        run: sleep 90
       - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
