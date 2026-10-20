@@ -29,24 +29,11 @@ pub struct Recording {
     pub cheated: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ReplayError {
-    /// A line of text that isn't a valid recording.
-    Parse(String),
-}
+/// Why a recording failed to parse.
+pub type ParseError = String;
 
-impl std::fmt::Display for ReplayError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReplayError::Parse(m) => write!(f, "bad recording: {m}"),
-        }
-    }
-}
-
-impl std::error::Error for ReplayError {}
-
-fn bad<T>(msg: impl Into<String>) -> Result<T, ReplayError> {
-    Err(ReplayError::Parse(msg.into()))
+fn bad<T>(msg: impl Into<String>) -> Result<T, ParseError> {
+    Err(msg.into())
 }
 
 const FLAGS: usize = 7;
@@ -82,7 +69,7 @@ fn quote(s: &str) -> String {
 }
 
 /// Parse `["a", "b"]` as written by `quote`.
-fn parse_commands(s: &str) -> Result<Vec<String>, ReplayError> {
+fn parse_commands(s: &str) -> Result<Vec<String>, ParseError> {
     let inner = s
         .trim()
         .strip_prefix('[')
@@ -117,13 +104,13 @@ fn parse_commands(s: &str) -> Result<Vec<String>, ReplayError> {
     }
 }
 
-fn hex32(s: &str) -> Result<f32, ReplayError> {
+fn hex32(s: &str) -> Result<f32, ParseError> {
     u32::from_str_radix(s, 16)
         .map(f32::from_bits)
         .or_else(|_| bad(format!("bad float bits {s:?}")))
 }
 
-fn parse_input(body: &str) -> Result<TickInput, ReplayError> {
+fn parse_input(body: &str) -> Result<TickInput, ParseError> {
     let mut input = TickInput::default();
     let mut seen = 0;
     for field in body.split_whitespace() {
@@ -193,7 +180,7 @@ impl Recording {
         out
     }
 
-    pub fn parse(text: &str) -> Result<Recording, ReplayError> {
+    pub fn parse(text: &str) -> Result<Recording, ParseError> {
         let mut lines = text.lines();
         let cheated = match lines.next() {
             Some("cheated true") => true,
