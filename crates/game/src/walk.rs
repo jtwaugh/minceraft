@@ -12,7 +12,7 @@ use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
 use crate::forage::{ForageConfig, Forager};
 use crate::growth::grow_crops;
-use crate::harvest::{harvest, tile_crop_state};
+use crate::harvest::{crop_name, harvest, tile_crop_state};
 use crate::input::TickInput;
 use crate::interactions::{
     resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
@@ -712,7 +712,17 @@ impl Walker {
             }
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Till), ctx.target) {
-            if let Some(Some(item)) = self.tiller.till(&mut self.world, pos, self.sim_tick) {
+            let [x, y, z] = pos;
+            let from = self.world.block_at(x, y, z);
+            let tilled = self.tiller.till(&mut self.world, pos, self.sim_tick);
+            if tilled.is_some() {
+                self.events.push(GameEvent::BlockTilled {
+                    position: pos,
+                    from: from.info().name.to_string(),
+                    to: self.world.block_at(x, y, z).info().name.to_string(),
+                });
+            }
+            if let Some(Some(item)) = tilled {
                 let at = [
                     pos[0] as f64 + 0.5,
                     pos[1] as f64 + 1.0,
@@ -736,14 +746,29 @@ impl Walker {
                 .hands
                 .as_ref()
                 .and_then(|h| crop_for_item(&h.item));
-            if kind.is_some_and(|kind| plant(&mut self.world, pos, face, kind)) {
+            if let Some(kind) = kind.filter(|&kind| plant(&mut self.world, pos, face, kind)) {
                 self.state.hands = None;
+                self.events.push(GameEvent::CropPlanted {
+                    position: pos,
+                    crop: crop_name(kind).to_string(),
+                });
             }
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Harvest), ctx.target)
         {
+            let kind = match self.world.get(pos[0], pos[1], pos[2]) {
+                Some(FarmTile::Crop { kind, .. }) => Some(kind),
+                _ => None,
+            };
             let drops = harvest(&mut self.world, &self.crops, &mut self.harvest_rng, pos);
             let at = pos.map(|c| f64::from(c) + 0.5);
+            if let (Some(kind), Some(yields)) = (kind, &drops) {
+                self.events.push(GameEvent::CropHarvested {
+                    position: pos,
+                    crop: crop_name(kind).to_string(),
+                    yields: yields.clone(),
+                });
+            }
             for item in drops.into_iter().flatten() {
                 Self::drop_loose(
                     &mut self.items,
@@ -2247,11 +2272,15 @@ mod tests {
     }
 
     fn grass_floor_walker(chance: u32) -> Walker {
+        floor_walker(chance, Block::Grass)
+    }
+
+    fn floor_walker(chance: u32, floor: Block) -> Walker {
         let mut region = flat(-8, -8, 16, 3);
         for z in 0..16 {
             for x in 0..16 {
                 let i = region.index(x, 3, z);
-                region.blocks[i] = Block::Grass as u8;
+                region.blocks[i] = floor as u8;
             }
         }
         let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
@@ -2428,6 +2457,120 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(run(), run());
+    }
+
+    fn farm_events(events: Vec<GameEvent>) -> Vec<GameEvent> {
+        events
+            .into_iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    GameEvent::BlockTilled { .. }
+                        | GameEvent::CropPlanted { .. }
+                        | GameEvent::CropHarvested { .. }
+                )
+            })
+            .collect()
+    }
+
+    fn seed_hands() -> Option<ItemInstance> {
+        Some(ItemInstance {
+            item: "seeds".into(),
+        })
+    }
+
+    #[test]
+    fn till_plant_harvest_emit_events_only_on_success() {
+        let run = || {
+            let mut w = grass_floor_walker(8);
+            let mut seen = Vec::new();
+            // Planting on untilled grass: refused.
+            w.clear_held_override();
+            w.state.hands = seed_hands();
+            w.tick(&down(true, false));
+            seen.push(farm_events(w.drain_events()));
+            assert!(seen[0].is_empty());
+            // Till.
+            w.state.hands = None;
+            w.set_held(HeldThing::Tool("hoe".into()));
+            w.tick(&down(true, true));
+            seen.push(farm_events(w.drain_events()));
+            // Tilling the tilled block again: refused.
+            w.tick(&down(true, false));
+            seen.push(farm_events(w.drain_events()));
+            // Plant, then plant on the planted tile: refused.
+            w.clear_held_override();
+            w.state.hands = seed_hands();
+            w.tick(&down(true, false));
+            seen.push(farm_events(w.drain_events()));
+            w.state.hands = seed_hands();
+            w.tick(&down(true, false));
+            seen.push(farm_events(w.drain_events()));
+            // Immature harvest: nothing; mature: event.
+            w.state.hands = None;
+            w.tick(&down(true, false));
+            seen.push(farm_events(w.drain_events()));
+            let kind = crate::farm::CropKind::Wheat;
+            w.world.set(
+                0,
+                4,
+                0,
+                FarmTile::Crop {
+                    kind,
+                    stage: mature(),
+                },
+            );
+            w.tick(&down(true, false));
+            seen.push(farm_events(w.drain_events()));
+            seen
+        };
+        let seen = run();
+        assert_eq!(
+            seen[1],
+            vec![GameEvent::BlockTilled {
+                position: [0, 3, 0],
+                from: "grass".into(),
+                to: "farmland_dry".into()
+            }]
+        );
+        assert!(seen[2].is_empty());
+        assert_eq!(
+            seen[3],
+            vec![GameEvent::CropPlanted {
+                position: [0, 3, 0],
+                crop: "wheat".into()
+            }]
+        );
+        assert!(seen[4].is_empty() && seen[5].is_empty());
+        let [GameEvent::CropHarvested {
+            position,
+            crop,
+            yields,
+        }] = &seen[6][..]
+        else {
+            panic!("{:?}", seen[6]);
+        };
+        assert_eq!((*position, crop.as_str()), ([0, 4, 0], "wheat"));
+        assert_eq!(yields[0], "wheat");
+        assert_eq!(seen, run(), "replays identically");
+    }
+
+    #[test]
+    fn tilling_a_planter_emits_planter_farmland() {
+        let mut w = floor_walker(8, Block::PlanterDirt);
+        w.tick(&down(true, true));
+        assert_eq!(
+            farm_events(w.drain_events()),
+            vec![GameEvent::BlockTilled {
+                position: [0, 3, 0],
+                from: "planter_dirt".into(),
+                to: "planter_farmland_dry".into()
+            }]
+        );
+        w.clear_held_override();
+        w.state.hands = seed_hands();
+        w.tick(&down(true, false));
+        assert_eq!(farm_events(w.drain_events()).len(), 1);
     }
 
     #[test]

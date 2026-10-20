@@ -36,4 +36,19 @@ pub enum GameEvent {
     /// The player moved a loose item into their hands. `player` is
     /// `"player"` (there is one player).
     ItemPickedUp { item: String, player: String },
+    /// The hoe tilled the block at `position`. `from` and `to` are block
+    /// names before and after.
+    BlockTilled {
+        position: [i32; 3],
+        from: String,
+        to: String,
+    },
+    /// A seed went in at the farmland `position`; `crop` is the crop kind.
+    CropPlanted { position: [i32; 3], crop: String },
+    /// A mature crop at `position` was harvested and dropped `yields`.
+    CropHarvested {
+        position: [i32; 3],
+        crop: String,
+        yields: Vec<String>,
+    },
 }
