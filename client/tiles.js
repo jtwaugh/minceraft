@@ -12,6 +12,7 @@
 // The shader rebuilds (colour.rgb + tint.r * vtint) / colour.a.
 
 import { faceLayers } from '../viewer/mesh.js';
+import { buildMips } from '../viewer/mips.js';
 
 const S = 16;
 const NAMES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel', 'water_0', 'water_1', 'water_2', 'water_3',
@@ -89,19 +90,48 @@ export async function loadTiles(gl, B, names, textureUrl) {
     }
   });
   // Tint on unit 1, colour on unit 0 (left bound and active for the scene).
+  const { colourLevels, tintLevels } = buildLevels(colour, grey, NAMES.length);
   gl.activeTexture(gl.TEXTURE1);
-  upload(gl, gl.R8, gl.RED, grey);
+  upload(gl, gl.R8, gl.RED, tintLevels);
   gl.activeTexture(gl.TEXTURE0);
-  upload(gl, gl.RGBA8, gl.RGBA, colour);
+  upload(gl, gl.RGBA8, gl.RGBA, colourLevels);
   return faceLayers((b, dy, fast) => tileFor(B, names, b, dy, fast));
 }
 
-/** Creates, fills and binds a mipmapped tile array on the active texture unit. */
-function upload(gl, internal, format, data) {
+/**
+ * Mip chains for the tile array, level 0 first; each level holds every layer
+ * back to back. Colour is premultiplied with the level's coverage alpha. The
+ * tint goes through the same chain as a grey texel with that alpha, so its
+ * levels are scaled by the same factor and tint / alpha stays the
+ * alpha-weighted mean at every level.
+ */
+export function buildLevels(colour, grey, layers) {
+  const n = Math.log2(S) + 1;
+  const colourLevels = Array.from({ length: n }, (_, l) => new Uint8Array(layers * (S >> l) ** 2 * 4));
+  const tintLevels = Array.from({ length: n }, (_, l) => new Uint8Array(layers * (S >> l) ** 2));
+  for (let k = 0; k < layers; k++) {
+    const c = colour.subarray(k * S * S * 4, (k + 1) * S * S * 4);
+    const t = new Uint8Array(S * S * 4);
+    for (let i = 0; i < S * S; i++) t.set([grey[k * S * S + i], 0, 0, c[i * 4 + 3]], i * 4);
+    const cm = buildMips(c, S, { premultiply: true });
+    const tm = buildMips(t, S, { premultiply: true });
+    for (let l = 0; l < n; l++) {
+      const px = (S >> l) ** 2;
+      colourLevels[l].set(cm[l], k * px * 4);
+      for (let i = 0; i < px; i++) tintLevels[l][k * px + i] = tm[l][i * 4];
+    }
+  }
+  return { colourLevels, tintLevels };
+}
+
+/** Creates, fills and binds a tile array with every mip level on the active texture unit. */
+function upload(gl, internal, format, levels) {
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, gl.createTexture());
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, internal, S, S, NAMES.length, 0, format, gl.UNSIGNED_BYTE, data);
-  gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+  levels.forEach((data, l) => {
+    const s = S >> l;
+    gl.texImage3D(gl.TEXTURE_2D_ARRAY, l, internal, s, s, NAMES.length, 0, format, gl.UNSIGNED_BYTE, data);
+  });
   // Filtering and wrap come from the per-pass samplers (samplers.js), bound
-  // by the scene; the texture only needs complete mips here.
+  // by the scene.
 }
