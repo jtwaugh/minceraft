@@ -166,9 +166,11 @@ Phase 3 adds `pause`, `resume`, `step [n]` and `tp <x> <z>`, valid in both walki
 
 - `tp <x> <z>`: places the player on the surface at that column. It is a cheat and sets `cheated`.
 - `pause` and `resume` are not cheats. Running `pause` when already paused, or `resume` when not paused, is a harmless no-op with a result line, not an error.
-- `step [n]` is not a cheat. `n` defaults to 1.
+- `step [n]` is not a cheat. `n` defaults to 1. `n` must satisfy `1 <= n <= 1000`; 0, negative numbers and anything above 1000 are errors that step nothing. Running `step` when the game is not paused is an error ("step needs the game paused") and changes nothing.
 
 (Decided in #423.)
+
+(Decided in #443.)
 
 ---
 
