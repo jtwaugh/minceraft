@@ -24,6 +24,7 @@ pub mod items;
 pub mod movement;
 pub mod phase;
 pub mod physics;
+pub mod pick;
 pub mod plant;
 pub mod player;
 pub mod raft;
