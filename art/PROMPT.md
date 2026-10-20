@@ -255,3 +255,17 @@ ears and snout, near-black eyes):
 chicken (0.4 x 0.7 blocks, box 4 wide, 7 tall, 4 deep; off-white with a
 red comb and yellow beak and red wattle on the front face):
   front 4×7, back 4×7, left 4×7, right 4×7, top 4×4, bottom 4×4
+
+BATCH 17: RAFT (models; see MODEL FACE CONVENTIONS; all opaque; file
+batches_16.json, labelled 17 because "Batch 16" is already the item icons)
+The raft is a deck of logs lashed together under a plank deck. The deck,
+edges and underside reuse the existing block tiles `raft_planks`,
+`raft_edge` and `raft_bottom` (batches 2 and 7); only the log is new.
+Colours stay with those tiles: rough browns (5, 6, 4) with sand (7) rope.
+
+raft_log (one log, 1 block long and a quarter block thick, so a row of 4
+logs fills one 1-block raft cell footprint; box 4 wide, 4 tall, 16 deep at
+16 pixels per block; bark in browns with a lighter top-left edge, two rope
+lashings of sand with dark brown shadow, the same on side and top faces):
+  front 4×4, back 4×4 (log end: rings), left 16×4, right 16×4 (mirror),
+  top 4×16, bottom 4×16 (no rope shown in sand, darker, no highlights)
