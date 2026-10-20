@@ -492,6 +492,8 @@ The sim emits these for the game layer (orders, scoring, sound, particles, tutor
 | `foraged` | position, yields |
 | `landed`, `entered_water`, `exited_water` | player, details |
 
+`swing` fires on every primary press that is not blocked by carrying, whatever it targets (nothing, a block or an entity). Secondary presses emit no `swing`; their success events (`block_tilled`, `crop_planted`, ...) are enough. (Decided in #472.)
+
 ---
 
 ## 12. HUD (minimum)
