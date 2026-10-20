@@ -3,7 +3,8 @@
 // Run: node --test client/test/view.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NEAR, nearPlaneCorners, basis, look, farPlane, FOG_END } from '../view.js';
+import { NEAR, nearPlaneCorners, basis, look, farPlane, FOG_END, fogAt } from '../view.js';
+import { fogAmount } from '../../viewer/fog.js';
 
 const FOV = 70 * Math.PI / 180; // data/input.toml look.fov_degrees
 const HALF_WIDTH = 0.3;         // data/player.toml width / 2
@@ -69,4 +70,17 @@ test('dry look is the sky fog, untinted; underwater is short blue fog and a tint
   assert.ok(wet.fogEnd < dry.fogEnd);
   assert.ok(wet.tint[2] === 1 && wet.tint[0] < 1 && wet.tint[1] < 1);
   assert.ok(wet.fogColor[2] > wet.fogColor[0]);
+});
+
+test('dry fog is the viewer curve, solid at FOG_END x fogFar; underwater stays linear', () => {
+  const sky = [0.6, 0.7, 0.9], water = [47, 95, 200];
+  const dry = look({ underwater: false, skyColor: sky, fogFar: 100, water });
+  for (const d of [0, 40, 60, 90, 115, 200]) {
+    assert.equal(fogAt(dry, d), fogAmount(d, 100 * FOG_END));
+  }
+  assert.equal(fogAt(dry, 100 * FOG_END), 1);
+  const wet = look({ underwater: true, skyColor: sky, fogFar: 100, water });
+  assert.equal(wet.fogFar, 0);
+  assert.equal(fogAt(wet, 9), 0.5);
+  assert.equal(fogAt(wet, 30), 1);
 });
