@@ -494,6 +494,8 @@ The sim emits these for the game layer (orders, scoring, sound, particles, tutor
 
 The `item_put_down` variant is added with the rest of this list, but nothing emits it until stations exist (see section 6); Phase 8's "every action produces its event" covers the actions that exist. (Decided in #471.)
 
+`swing` fires on every primary press that is not blocked by carrying, whatever it targets (nothing, a block or an entity). Secondary presses emit no `swing`; their success events (`block_tilled`, `crop_planted`, ...) are enough. (Decided in #472.)
+
 ---
 
 ## 12. HUD (minimum)
