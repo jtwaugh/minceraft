@@ -19,13 +19,24 @@
 // `underwater` is whether the drawn eye is in a water cell, in either mode;
 // scene.js switches the fog and tint on it.
 //
+// With `stream` ({ budget }) the walk is a Walk.streamed world: each frame the
+// controller feeds the sim's load and unload events to a stream (stream.js)
+// centred on the eye, and `state.regions` is { mesh, free, loaded, freed, pending,
+// centre }: regions to mesh and to free this frame, how many are meshed now, how
+// many have been freed so far, and how many wait for the budget. While flying the
+// sim is not ticked, so the walk's feet follow the fly camera whenever it enters
+// a new region; otherwise nothing would load ahead of it.
+//
 // client/test/scripts/*.input drive this through the DSL in client/test/dsl.mjs.
 
 import { stepWalk } from './walk.js';
 import { readAim, readBelt } from './overlay.js';
 import { hudModel } from './hud.js';
+import { createStream, regionOf } from './stream.js';
 
-export function createController({ input, walk, fly, clock, document, flying = false }) {
+export function createController({ input, walk, fly, clock, document, flying = false, stream = null }) {
+  const regions = stream && createStream(stream);
+  let followed = null;
   const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null, belt: null, hud: null, underwater: false, events: [] };
 
   const onKey = (e) => {
@@ -40,6 +51,18 @@ export function createController({ input, walk, fly, clock, document, flying = f
     state.flying = !state.flying;
   };
   document.addEventListener('keydown', onKey);
+
+  let freed = 0;
+  const streamRegions = (eye) => {
+    const centre = regionOf(eye[0], eye[2]);
+    if (state.flying && (followed?.rx !== centre.rx || followed?.rz !== centre.rz)) {
+      followed = centre;
+      walk.teleport(eye[0], eye[1] - 1.62, eye[2]); // streams around the fly eye
+    }
+    const { mesh, free } = regions.frame(walk.drain_stream(), centre);
+    freed += free.length;
+    return { mesh, free, loaded: regions.meshed, freed, pending: regions.pending, centre };
+  };
 
   return {
     state,
@@ -58,6 +81,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       } else {
         eye = stepWalk(walk, ticks, alpha, () => input.drain());
       }
+      if (regions) state.regions = streamRegions(eye);
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
       const belt = readBelt(walk);
       const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });

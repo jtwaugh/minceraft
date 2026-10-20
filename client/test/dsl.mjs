@@ -7,9 +7,11 @@
 // One statement per line; `#` starts a comment. A file holds one or more cases.
 //
 //   case <name>                 a fresh world: fake canvas/document/window, new sim
-//   start fly|walk [raft] [debug]  mode, and the raft test scene (default: walk, no terrain);
+//   start fly|walk [raft] [debug] [stream]  mode, and the raft test scene (default: walk, no terrain);
 //                               the raft scene has three loose seeds on its islet and
-//                               implies debug; `debug` turns the console keys on elsewhere
+//                               implies debug; `debug` turns the console keys on elsewhere;
+//                               `stream` is a streamed world (seed 12345) starting over region 0 0,
+//                               meshing one region per frame
 //   click                       click the canvas (requests pointer lock)
 //   lock | unlock | blur        pointer lock gained / lost; window loses focus
 //   down <code> | up <code>     KeyboardEvent.code, e.g. KeyW, Space, ShiftLeft
@@ -37,7 +39,8 @@
 //                               since the case began (`expect no event <name>` for the opposite)
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
-// Paths: mode (fly|walk|console), console.last (last command output line, or none),
+// Paths: regions.loaded|freed|pending|x|z (stream only: regions meshed now, regions freed so far,
+// regions waiting to be meshed, and the region under the eye), mode (fly|walk|console), console.last (last command output line, or none),
 // console.lines (output lines so far), console.text (the box), cheated, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
@@ -78,7 +81,7 @@ export function parse(src) {
   return cases;
 }
 
-function world({ mode = 'walk', raft = false, debug = raft }) {
+function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
   const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
@@ -93,11 +96,11 @@ function world({ mode = 'walk', raft = false, debug = raft }) {
   const sampler = new InputSampler();
   const input = attachInput({ sampler, canvas, document, window, debug });
   const scene = raft ? new Scene() : null;
-  const walk = raft ? Walk.in_scene(scene) : new Walk(32, 70.5, 32);
+  const walk = raft ? Walk.in_scene(scene) : stream ? Walk.streamed(12345, 50.5, 110, 40.5) : new Walk(32, 70.5, 32);
   if (raft) spawnTestItems(walk);
-  const fly = new FlyCamera(32, 94, 32);
+  const fly = stream ? new FlyCamera(50.5, 110, 40.5) : new FlyCamera(32, 94, 32);
   const controller = createController({
-    input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly',
+    input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly', stream: stream ? { budget: 1 } : null,
   });
   const seen = [];
   const frame = controller.frame;
@@ -142,6 +145,13 @@ function read(w, path) {
     if (path === 'console.last') return w.output.at(-1) ?? 'none';
     if (path === 'console.lines') return w.output.length;
     if (path === 'console.text') return w.text;
+  }
+  if (path.startsWith('regions.')) {
+    const r = s.regions;
+    if (!r) throw new Error('regions.* needs `start ... stream`');
+    const field = { loaded: r.loaded, freed: r.freed, pending: r.pending, x: r.centre.rx, z: r.centre.rz }[path.slice(8)];
+    if (field === undefined) throw new Error(`unknown path '${path}'`);
+    return field;
   }
   if (path === 'events') return w.events.length;
   if (path === 'sim_tick') return w.walk.sim_tick();
@@ -301,10 +311,10 @@ export function run(c) {
   const opts = {};
   if (c.steps[0]?.op === 'start') {
     const [mode, ...flags] = c.steps[0].args;
-    if (!['fly', 'walk'].includes(mode) || flags.some((f) => !['raft', 'debug'].includes(f))) {
-      throw new Error(`line ${c.steps[0].line}: start fly|walk [raft] [debug]`);
+    if (!['fly', 'walk'].includes(mode) || flags.some((f) => !['raft', 'debug', 'stream'].includes(f))) {
+      throw new Error(`line ${c.steps[0].line}: start fly|walk [raft] [debug] [stream]`);
     }
-    Object.assign(opts, { mode, raft: flags.includes('raft') });
+    Object.assign(opts, { mode, raft: flags.includes('raft'), stream: flags.includes('stream') });
     if (flags.includes('debug')) opts.debug = true;
     i = 1;
   }

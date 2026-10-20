@@ -298,6 +298,14 @@ impl Walk {
         with_default_commands(walker)
     }
 
+    /// How many regions each way from the player's are loaded
+    /// (`data/streaming.toml`); the renderer's fog distance follows it.
+    pub fn load_radius() -> Result<i32, JsError> {
+        let config =
+            game::stream::StreamConfig::default_from_data().map_err(|e| JsError::new(&e))?;
+        Ok(config.load)
+    }
+
     /// Regions loaded or unloaded since the last call, as `[kind, rx, rz]`
     /// triples: kind 1 loaded (unloads come first), 0 unloaded.
     pub fn drain_stream(&mut self) -> Vec<i32> {
