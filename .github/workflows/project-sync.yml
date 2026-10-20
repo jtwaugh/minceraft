@@ -69,7 +69,10 @@ jobs:
           sparse-checkout: .github/scripts
       - name: Update the board
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Reads (and tickets.py, imported for dependency rules) use the
+          # project token's own budget; only repo writes use the workflow token.
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          WRITE_TOKEN: ${{ github.token }}
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
           PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
