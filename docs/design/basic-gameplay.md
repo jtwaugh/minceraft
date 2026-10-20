@@ -437,6 +437,7 @@ Island animal counts are topped up at the start of each day (not continuously) t
 
 - Triggered on secondary press. Holding secondary repeats every 4 ticks on newly targeted blocks so a row can be tilled by sweeping the mouse.
 - Grass or dirt with air above becomes farmland. Planter dirt becomes planter farmland.
+- Tilling a planter gives `planter_farmland_dry` (`planter_farmland_wet` once hydrated), which keep the planter's sides and bottom and use a new top texture, `planter_farmland_top` (furrowed soil inside the 1-pixel rim), added to `art/`. For now planters are placed on land only (the test scene's islet, and a console `spawn`/`setblock` style command until levels place them) and use the world farm overlay; the raft has none, so the raft-planter hydration rule in 9.3 does not apply yet. Raft planters, with farm state kept per raft cell so they move and turn with the raft, wait for raft travel (#446). (Decided in #451.)
 - Tilling is a block transform, allowed under the no-breaking rule.
 - Tilling grass has a 1 in 8 chance to drop seeds (data). This is Mince Raft's own value; check whether Beta's tilling had a seed drop and match it if so.
 
