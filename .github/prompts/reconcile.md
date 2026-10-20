@@ -18,6 +18,7 @@ Inside the doc you may:
 - add `> **Reconciler:** ...` notes beside the author's text;
 - tag items `[external]` or `[manual check]`;
 - set phase status to `done` when the code shows the phase is done;
+- add phases to a doc that has none (see step 9 below);
 - add questions to **Open questions**.
 
 You may not delete, reword or reorder the author's text. If you think
@@ -48,6 +49,15 @@ something the author wrote is wrong, say so in a note beside it.
    proposing a measurable version if there is one.
 8. Turn the doc's own open questions, and any conflict you can't resolve
    from the code, into entries under **Open questions**, with options.
+9. Make sure the doc can be planned. The planner only plans phases, so a
+   doc with none is never built. If the author's text has no phases, add
+   `phases:` to the header (`A`, `B`, ...) and, after the author's text,
+   a `## Phases (reconciler)` section with one `**Phase A.** ...`
+   paragraph per phase: which of the author's items it covers and when
+   it's done. Order them smallest and most independent first, each ending
+   with something testable in this repo, and put items that wait on an
+   open question after the ones that don't. Keep the author's text as it
+   is.
 
 Write **Current state** as a short list a reader can verify: what exists,
 where, and which parts of the doc it already satisfies. Write
