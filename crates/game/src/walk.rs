@@ -491,6 +491,7 @@ impl Walker {
         self.sim_tick += 1;
         grow_crops(&mut self.world, &self.crops, GROWTH_SEED, self.sim_tick);
         let entities = self.all_entities();
+        let before = self.movement_state();
         if let Some(slot) = input.tool_slot {
             self.state.select(slot);
         }
@@ -543,8 +544,38 @@ impl Walker {
                 self.take_aim(aim, input);
             }
         }
+        let after = self.movement_state();
+        Self::emit_movement(&mut self.events, before, after);
         if let Some(s) = &mut self.streamer {
             s.update(self.player.pos, self.world.base_mut());
+        }
+    }
+
+    /// Whether the player's body is in water and whether they stand on the
+    /// raft deck (the test the raft uses to carry riders).
+    fn movement_state(&self) -> (bool, bool) {
+        let bb = self.player.aabb(&self.physics);
+        match &self.floating {
+            Some(f) => (
+                RaftWorld::new(&self.world, &f.raft).body_in_water(&bb),
+                f.raft.supports(&bb),
+            ),
+            None => (self.world.body_in_water(&bb), false),
+        }
+    }
+
+    /// Section 4.8: emit an event for each edge between two movement states.
+    fn emit_movement(events: &mut Vec<GameEvent>, before: (bool, bool), after: (bool, bool)) {
+        let player = || "player".to_string();
+        match (before.0, after.0) {
+            (false, true) => events.push(GameEvent::EnteredWater { player: player() }),
+            (true, false) => events.push(GameEvent::ExitedWater { player: player() }),
+            _ => {}
+        }
+        match (before.1, after.1) {
+            (false, true) => events.push(GameEvent::SteppedOntoRaft { player: player() }),
+            (true, false) => events.push(GameEvent::SteppedOffRaft { player: player() }),
+            _ => {}
         }
     }
 
@@ -2692,5 +2723,71 @@ mod tests {
         let seen = run();
         assert!(!seen.is_empty());
         assert_eq!(seen, run());
+    }
+
+    /// Board the raft, idle, then walk back off into the sea. Returns the
+    /// events from each stage, with the edges expected from sampling the
+    /// movement state either side of every tick.
+    fn movement_events() -> [(Vec<GameEvent>, Vec<GameEvent>); 3] {
+        let mut w = scene_walker();
+        let stage = |w: &mut Walker, input: &TickInput, ticks: usize, stop_grounded: bool| {
+            let (mut got, mut want) = (Vec::new(), Vec::new());
+            for _ in 0..ticks {
+                let before = w.movement_state();
+                w.tick(input);
+                Walker::emit_movement(&mut want, before, w.movement_state());
+                got.extend(w.drain_events());
+                if stop_grounded && w.player().on_ground {
+                    break;
+                }
+            }
+            (got, want)
+        };
+        let swim = TickInput {
+            move_forward: 1.0,
+            jump: true,
+            ..TickInput::default()
+        };
+        let board = stage(&mut w, &swim, 300, true);
+        assert!(w.player().on_ground);
+        // Sneaking holds the rider against the swell's drift.
+        let still = TickInput {
+            sneak: true,
+            ..TickInput::default()
+        };
+        let idle = stage(&mut w, &still, 100, false);
+        let back = TickInput {
+            move_forward: -1.0,
+            ..TickInput::default()
+        };
+        let leave = stage(&mut w, &back, 200, false);
+        [board, idle, leave]
+    }
+
+    #[test]
+    fn water_and_raft_edges_match_sampled_state() {
+        let p = || "player".to_string();
+        let [board, idle, leave] = movement_events();
+        // Every edge in the sampled state yields exactly one event, none
+        // dropped or doubled.
+        for (got, want) in [&board, &idle, &leave] {
+            assert_eq!(got, want);
+        }
+        assert!(!board.0.is_empty());
+        assert_eq!(
+            board.0.last(),
+            Some(&GameEvent::SteppedOntoRaft { player: p() })
+        );
+        assert!(idle.0.is_empty(), "{:?}", idle.0);
+        assert!(leave.0.contains(&GameEvent::SteppedOffRaft { player: p() }));
+        assert_eq!(
+            leave.0.last(),
+            Some(&GameEvent::EnteredWater { player: p() })
+        );
+    }
+
+    #[test]
+    fn movement_events_replay_identically() {
+        assert_eq!(movement_events(), movement_events());
     }
 }
