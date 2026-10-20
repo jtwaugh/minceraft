@@ -51,4 +51,12 @@ pub enum GameEvent {
         crop: String,
         yields: Vec<String>,
     },
+    /// The player's body went into water. `player` is `"player"`.
+    EnteredWater { player: String },
+    /// The player's body left the water.
+    ExitedWater { player: String },
+    /// The player came to stand on the raft deck.
+    SteppedOntoRaft { player: String },
+    /// The player stopped standing on the raft deck.
+    SteppedOffRaft { player: String },
 }

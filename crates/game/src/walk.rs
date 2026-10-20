@@ -491,6 +491,7 @@ impl Walker {
         self.sim_tick += 1;
         grow_crops(&mut self.world, &self.crops, GROWTH_SEED, self.sim_tick);
         let entities = self.all_entities();
+        let before = self.movement_state();
         if let Some(slot) = input.tool_slot {
             self.state.select(slot);
         }
@@ -543,8 +544,38 @@ impl Walker {
                 self.take_aim(aim, input);
             }
         }
+        let after = self.movement_state();
+        Self::emit_movement(&mut self.events, before, after);
         if let Some(s) = &mut self.streamer {
             s.update(self.player.pos, self.world.base_mut());
+        }
+    }
+
+    /// Whether the player's body is in water and whether they stand on the
+    /// raft deck (the test the raft uses to carry riders).
+    fn movement_state(&self) -> (bool, bool) {
+        let bb = self.player.aabb(&self.physics);
+        match &self.floating {
+            Some(f) => (
+                RaftWorld::new(&self.world, &f.raft).body_in_water(&bb),
+                f.raft.supports(&bb),
+            ),
+            None => (self.world.body_in_water(&bb), false),
+        }
+    }
+
+    /// Section 4.8: emit an event for each edge between two movement states.
+    fn emit_movement(events: &mut Vec<GameEvent>, before: (bool, bool), after: (bool, bool)) {
+        let player = || "player".to_string();
+        match (before.0, after.0) {
+            (false, true) => events.push(GameEvent::EnteredWater { player: player() }),
+            (true, false) => events.push(GameEvent::ExitedWater { player: player() }),
+            _ => {}
+        }
+        match (before.1, after.1) {
+            (false, true) => events.push(GameEvent::SteppedOntoRaft { player: player() }),
+            (true, false) => events.push(GameEvent::SteppedOffRaft { player: player() }),
+            _ => {}
         }
     }
 
@@ -2692,5 +2723,97 @@ mod tests {
         let seen = run();
         assert!(!seen.is_empty());
         assert_eq!(seen, run());
+    }
+
+    /// Board the raft, idle, then walk back off into the sea; the events
+    /// from each stage.
+    fn movement_events() -> [Vec<GameEvent>; 3] {
+        let mut w = scene_walker();
+        let swim = TickInput {
+            move_forward: 1.0,
+            jump: true,
+            ..TickInput::default()
+        };
+        let mut board = Vec::new();
+        for _ in 0..300 {
+            w.tick(&swim);
+            board.extend(w.drain_events());
+            if w.player().on_ground {
+                break;
+            }
+        }
+        assert!(w.player().on_ground);
+        let mut idle = Vec::new();
+        // Sneaking holds the rider against the swell's drift.
+        let still = TickInput {
+            sneak: true,
+            ..TickInput::default()
+        };
+        for _ in 0..100 {
+            w.tick(&still);
+            idle.extend(w.drain_events());
+        }
+        let back = TickInput {
+            move_forward: -1.0,
+            ..TickInput::default()
+        };
+        let mut leave = Vec::new();
+        for _ in 0..200 {
+            w.tick(&back);
+            leave.extend(w.drain_events());
+        }
+        [board, idle, leave]
+    }
+
+    #[test]
+    fn water_and_raft_transitions_emit_once_each() {
+        let p = || "player".to_string();
+        let [board, idle, leave] = movement_events();
+        // Holding jump bobs at the surface, so water edges alternate; each
+        // one is a real transition. The raft is boarded exactly once, last.
+        let water: Vec<_> = board
+            .iter()
+            .filter(|e| !matches!(e, GameEvent::SteppedOntoRaft { .. }))
+            .collect();
+        for (i, e) in water.iter().enumerate() {
+            let want = if i % 2 == 0 {
+                GameEvent::ExitedWater { player: p() }
+            } else {
+                GameEvent::EnteredWater { player: p() }
+            };
+            assert_eq!(**e, want);
+        }
+        assert_eq!(
+            board.last(),
+            Some(&GameEvent::SteppedOntoRaft { player: p() })
+        );
+        assert_eq!(board.len(), water.len() + 1);
+        assert!(idle.is_empty(), "{idle:?}");
+        // The swell can rock the rider across the edge more than once, so
+        // each kind of edge alternates, starting with leaving the raft.
+        let kind = |on: bool| -> Vec<bool> {
+            leave
+                .iter()
+                .filter_map(|e| match e {
+                    GameEvent::SteppedOffRaft { .. } if on => Some(false),
+                    GameEvent::SteppedOntoRaft { .. } if on => Some(true),
+                    GameEvent::EnteredWater { .. } if !on => Some(true),
+                    GameEvent::ExitedWater { .. } if !on => Some(false),
+                    _ => None,
+                })
+                .collect()
+        };
+        for (edges, first) in [(kind(true), false), (kind(false), true)] {
+            assert!(!edges.is_empty());
+            for (i, e) in edges.iter().enumerate() {
+                assert_eq!(*e, first == (i % 2 == 0), "{leave:?}");
+            }
+        }
+        assert_eq!(leave.last(), Some(&GameEvent::EnteredWater { player: p() }));
+    }
+
+    #[test]
+    fn movement_events_replay_identically() {
+        assert_eq!(movement_events(), movement_events());
     }
 }
