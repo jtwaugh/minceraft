@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 game = { path = "../game" }
+layout = { path = "../layout", default-features = false }
 terrain = { path = "../terrain" }
 wasm-bindgen = "0.2"
 
