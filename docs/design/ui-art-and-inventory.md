@@ -5,7 +5,7 @@ scope: game
 source: "#502"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
 ---
@@ -23,6 +23,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Tileset in the client.** `client/tiles.js` builds a 16×16 texture array from `viewer/textures.json` for blocks only (`NAMES`); the HUD and menu are DOM and never read `textures.json`. Whether `textures.json` includes non-8×8 and item textures was not verified here; the export is `art/tools/export_textures.py`.
 - **Pixel scaling.** `viewer/index.html` uses `image-rendering: pixelated` for its map only; the client has no pixel-art DOM rendering yet.
 - **Pointer release and modes.** `client/input.js` already has a console mode on `Backquote` (debug only) that releases pointer lock and closes with Enter or Escape (`debug-console.md` section 2), and `client/test/dsl.mjs` has the input-script DSL with `mode = ...` expectations.
+- **Phase A done** (#513): PRs #549 (sword, leather, feather icons), #568 (raw_beef, raw_pork, raw_chicken icons) and #569 (every `data/items.toml` name has a texture, export carries UI tiles) added the six icons to `art/PROMPT.md` and `art/tools/draw_7_12.py` and the coverage check in `art/tools/test_art.py`. This supersedes the "Art that is missing" item above.
 - **Belt and hands data.** `PlayerState` in `crates/game/src/player.rs` holds the belt (5 slots) and one hands item; the client reads them via `belt` and `walk.health()` in `client/controller.js`.
 
 ## Reconciliation notes
