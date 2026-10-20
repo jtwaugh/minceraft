@@ -15,6 +15,7 @@ pub enum DataFile {
     Interactions,
     Crops,
     Commands,
+    Phases,
 }
 
 impl DataFile {
@@ -28,6 +29,7 @@ impl DataFile {
             DataFile::Interactions => "interactions.toml",
             DataFile::Crops => "crops.toml",
             DataFile::Commands => "commands.toml",
+            DataFile::Phases => "phases.toml",
         }
     }
 }

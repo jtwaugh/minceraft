@@ -46,7 +46,7 @@
 // item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // planter.ground and planter.crop (the same for the first planter),
-// health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands,
+// health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -156,6 +156,8 @@ function read(w, path) {
   if (path === 'held') return s.belt.held;
   if (path === 'health') return s.hud.hearts.full * 2 + s.hud.hearts.half;
   if (path.startsWith('hearts.')) return s.hud.hearts[path.slice(7)];
+  if (path === 'phase') return s.hud.timer.phase;
+  if (path === 'phase.left') return s.hud.timer.secondsLeft;
   if (path === 'hud.selected') return s.hud.selected;
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
   if (path === 'items') return w.walk.loose_items();

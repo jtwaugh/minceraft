@@ -1,0 +1,9 @@
+# The day phase clock. See docs/design/basic-gameplay.md section 12.
+# Phases alternate from sim tick 0, starting with gathering. Lengths are in
+# seconds (20 ticks each) and must be positive.
+
+[gathering]
+seconds = 120
+
+[service]
+seconds = 120

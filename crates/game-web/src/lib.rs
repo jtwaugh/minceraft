@@ -361,6 +361,16 @@ impl Walk {
         self.0.drain_events().iter().map(describe_event).collect()
     }
 
+    /// The day phase name, `gathering` or `service`.
+    pub fn phase(&self) -> String {
+        self.0.phase().0.name().to_string()
+    }
+
+    /// Whole seconds left in the day phase.
+    pub fn phase_seconds_left(&self) -> u32 {
+        self.0.phase().1
+    }
+
     /// The player's health in half-hearts.
     pub fn health(&self) -> u32 {
         self.0.health()

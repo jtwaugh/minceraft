@@ -22,6 +22,7 @@ pub mod interactions;
 pub mod item_entities;
 pub mod items;
 pub mod movement;
+pub mod phase;
 pub mod physics;
 pub mod plant;
 pub mod player;

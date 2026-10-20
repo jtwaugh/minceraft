@@ -24,3 +24,9 @@ test('belt slots, selection and carried item', () => {
   assert.deepEqual(m.slots.map((s) => s.selected), [false, true, false, false, false]);
   assert.equal(m.hands, 'seeds');
 });
+
+test('timer reports the phase and seconds left', () => {
+  const t = (phase, secondsLeft) => hudModel({ belt, health: 20, maxHealth: 20, phase, secondsLeft }).timer;
+  assert.deepEqual(t('gathering', 120), { phase: 'gathering', secondsLeft: 120 });
+  assert.deepEqual(t('service', 1), { phase: 'service', secondsLeft: 1 });
+});
