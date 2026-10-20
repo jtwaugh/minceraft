@@ -11,7 +11,7 @@ phases:
   4: done
   5: done
   6: done
-  7: todo
+  7: done
   8: todo
 ---
 
@@ -25,6 +25,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Phase 4 done (plan #173).** `crates/game` has the `Target` type, ray-vs-box test and `data/targeting.toml` (#187), block selection boxes and the block raycast (#190, shapes decided in #174), entity targets with the nearest-hit rule (#193), the per-tick eye ray on the walking player (#196), `data/interactions.toml` and its loader (#186), first-match rule resolution with stub actions (#197), and the selection outline and rule overlay in `client/` (#200, `client/overlay.js`). Held tool and hands state are Phase 5.
 - **Phase 5 done (plan #213).** `crates/game` has `data/items.toml` and the belt and hands in `PlayerState` (#228, `items.rs`, `player.rs`), tool selection and the derived held thing (#229), item entities with the world store and targeting (#230, `item_entities.rs`), item gravity and settling (#232), pickup with tools stowed while carrying (#233), Drop throwing the item (#239), interact-while-carrying pinned as a no-op per #215 (#238), the headless test `crates/game/tests/hands.rs` (#244) and the belt in the browser test scene with input scripts, e.g. `client/test/scripts/belt.input` (#249). Put-down arrives with stations.
 - **Phase 6 done (plan #253).** `crates/game` has `data/animals.toml` and the animal loader and drop items (#269, `animals.rs`), the deterministic sim RNG (#270, `rng.rs`), the animal store and targeting (#273, #274, `animal_entities.rs`), wander (#275), sword damage and the hit rule (#276), primary press attacking the target (#277), knockback and hurt state (#278), flee (#279), death, tip-over and drops (#280), the headless test `crates/game/tests/animals.rs` (#283) and animals in the browser test scene (#285). Section 8.4 (daily top-up) and carrying drops to a crate are left to later phases, as decided in #255.
+- **Phase 7 done (plan #287).** `crates/game` has the crop data file and loader (#300, `crops.rs`), foraging tall grass (#301, `forage.rs`), the farmland and crop overlay (#321, `farm.rs`), tilling (#337, `till.rs`), planting (#342, `plant.rs`), harvest (#346, `harvest.rs`), growth on random ticks (#395, #419, `growth.rs`), the headless test `crates/game/tests/farming.rs` (#435), farming in the browser test scene (#438) and the planter block with tilling planters (#459, `data/blocks.toml`, `client/test/scripts/planter.input`).
 - **No gameplay code beyond Phase 6.** There is no crop, event or HUD code in this repo. `crates/terrain` is the
   generator; `crates/web/src/lib.rs` exports only generation, height, climate
   and biome functions.
@@ -107,7 +108,7 @@ Not present: `MECHANICS_SPEC.md`, animals, crops, the event system and the HUD.
     with the sim at 20 Hz for Phase 1; a scripted path crossing the island in
     a headless sim for Phase 2. The Section 14 tests are automatable.
 11. **Phase status.** Phases 1 to 5 are done; the rest are not.
-12. **Phase 7 still incomplete (plan #287).** Tickets #290 to #298 are closed
+12. **Phase 7 now done (plan #287); the gap below was closed by #459 (planter block and tilling planters).** Earlier note: Tickets #290 to #298 are closed
     (crop data #300, forage #301, farmland overlay #321, till #337, plant #342,
     harvest #346, growth #395 and #419, headless test #435, browser scene #438).
     Phase 7 says "grass and planters can be tilled", but `crates/game/src/till.rs`
