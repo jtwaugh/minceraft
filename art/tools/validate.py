@@ -6,7 +6,9 @@ Rules:
 - textures are 8x8 unless the batch lists them in "sizes" as [w, h];
 - model faces match the batch's "face_sizes" when it has one, and a model
   must have exactly the faces listed there;
-- no texture or model name appears in two batches.
+- no texture or model name appears in two batches;
+- every tool and item `name` in data/items.toml has a texture of that name
+  (pass another items.toml path as the first argument to check that instead).
 
 Run from the art/ directory: python3 tools/validate.py
 Exits non-zero and lists every problem if anything fails.
@@ -14,6 +16,7 @@ Exits non-zero and lists every problem if anything fails.
 import glob
 import json
 import sys
+import tomllib
 
 PAL = set("0123456789abcdef.")
 errors = []
@@ -57,6 +60,14 @@ for path in sorted(glob.glob("batches_*.json")):
                     errors.append(f"{label} {model}: unexpected faces {sorted(extra)}")
             for face, rows in faces.items():
                 check(f"{label} {model}.{face}", rows, (want or {}).get(face))
+
+items_path = sys.argv[1] if len(sys.argv) > 1 else "../data/items.toml"
+with open(items_path, "rb") as f:
+    items = tomllib.load(f)
+for kind in ("tool", "item"):
+    for entry in items.get(kind, []):
+        if entry["name"] not in seen:
+            errors.append(f"{items_path}: {kind} {entry['name']!r} has no texture in any batches_*.json")
 
 if errors:
     print("\n".join(errors))
