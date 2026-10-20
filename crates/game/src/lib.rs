@@ -26,6 +26,7 @@ pub mod physics;
 pub mod plant;
 pub mod player;
 pub mod raft;
+pub mod replay;
 pub mod rng;
 pub mod sampler;
 pub mod scene;
