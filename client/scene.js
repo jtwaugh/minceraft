@@ -277,7 +277,7 @@ const walk = scene ? Walk.in_scene(scene) : Walk.streamed(seed, CHUNK / 2, 127, 
 if (!scene) { // stand on the highest block of the spawn column
   let top = 127;
   while (top > 0 && !walk.block_at(CHUNK / 2, top, CHUNK / 2)) top--;
-  walk.teleport(CHUNK / 2, top + 1.5, CHUNK / 2);
+  if (top > 0) walk.teleport(CHUNK / 2, top + 1.5, CHUNK / 2); // 0: region not loaded yet, keep the start
 }
 const surfaceY = walk.feet()[1];
 const loadRadius = Walk.load_radius();
