@@ -1,6 +1,6 @@
 ---
 title: Root menu
-status: accepted
+status: done
 scope: game
 source: "#447"
 superseded_by: ""
