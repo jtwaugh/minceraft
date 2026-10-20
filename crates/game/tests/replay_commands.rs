@@ -90,7 +90,8 @@ fn replays_match_the_live_run() {
     assert_eq!(a.world_hash(), live);
     assert_eq!(b.world_hash(), live);
     assert!(a.cheated() && b.cheated());
-    assert!(!a.animals().is_empty() || !a.items().is_empty());
+    assert!(!a.animals().is_empty(), "spawn chicken had no effect");
+    assert!(!a.items().is_empty(), "spawn seeds had no effect");
 }
 
 #[test]
