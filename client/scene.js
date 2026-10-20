@@ -18,6 +18,7 @@ import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, * as game from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
+import { createModelDrawer } from './modelgl.js';
 import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
@@ -283,6 +284,10 @@ const legendJson = terrain.legend();
 for (const b of JSON.parse(legendJson).blocks) names[b.id] = b.name;
 const faceLayer = await loadTiles(gl, B, names, '../viewer/textures.json');
 const ctx = legendContext(legendJson, faceLayer);
+// Textured-model drawer (modelgl.js); nothing is drawn with it yet. Without the
+// export it still builds, with every face grey.
+const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
+const models = createModelDrawer(gl, tileset);
 
 // With MSAA, cutout edges use alpha-to-coverage on a sharpened alpha so distant
 // leaves fade to partial coverage instead of popping in and out; without it the
