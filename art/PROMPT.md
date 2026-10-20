@@ -231,6 +231,13 @@ on a green stem), rose (red bloom on a green stem), sugar_cane (two
 green stalks with dark nodes; tiles vertically), brown_mushroom,
 red_mushroom (red cap with off-white spots)
 
+BATCH 16: ITEM ICONS (8x8, transparent background, 2 to 5 colors)
+sword (a straight blade running from the top right to the bottom
+left in light gray with a near-black outline, a brown cross-guard and
+a brown handle), leather (a flat hide patch in browns with a
+near-black outline), feather (a slanted off-white feather with a gray
+quill running to the bottom left)
+
 BATCH 15: ANIMALS (models; see MODEL FACE CONVENTIONS; all opaque)
 Each animal is one box at 10 pixels per block, matching its `box` in
 data/animals.toml (the footprint is square, so width = depth). Faces are
