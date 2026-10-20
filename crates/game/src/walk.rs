@@ -12,7 +12,7 @@ use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
 use crate::forage::{ForageConfig, Forager};
 use crate::growth::grow_crops;
-use crate::harvest::{crop_name, harvest, tile_crop_state};
+use crate::harvest::{crop_name, tile_crop_state};
 use crate::input::TickInput;
 use crate::interactions::{
     resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
@@ -22,6 +22,7 @@ use crate::item_entities::{Deck, ItemEntityConfig, ItemStore};
 use crate::items::{ItemInstance, Items, PlayerState};
 use crate::phase::{Phase, PhaseClock};
 use crate::physics::{PhysicsError, PlayerPhysics};
+use crate::pick::pick_crop;
 use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
@@ -754,7 +755,18 @@ impl Walker {
         if let (true, HeldThing::Tool(tool), Target::Block { pos, .. }) =
             (input.secondary_held, &ctx.held, ctx.target)
         {
-            pressed.secondary |= tool == "hoe" && self.tiller.repeat_due(pos, self.sim_tick);
+            let tills = resolve(
+                &self.rules.rules,
+                &ResolveCtx {
+                    button: Button::Secondary,
+                    held: ctx.held.clone(),
+                    target: ctx.target,
+                    facts: ctx.facts.clone(),
+                },
+            )
+            .is_some_and(|r| r.action == ActionKind::Till);
+            pressed.secondary |=
+                tool == "hoe" && tills && self.tiller.repeat_due(pos, self.sim_tick);
         }
         let damage = match &ctx.held {
             HeldThing::Tool(name) => self.item_table.damage(Some(name)),
@@ -824,15 +836,16 @@ impl Walker {
                 });
             }
         }
-        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Harvest), ctx.target)
-        {
-            let kind = match self.world.get(pos[0], pos[1], pos[2]) {
+        if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Pick), ctx.target) {
+            let tile = self.world.get(pos[0], pos[1], pos[2]);
+            let kind = match tile {
                 Some(FarmTile::Crop { kind, .. }) => Some(kind),
                 _ => None,
             };
-            let drops = harvest(&mut self.world, &self.crops, &mut self.harvest_rng, pos);
+            let mature = tile.and_then(tile_crop_state) == Some("mature");
+            let drops = pick_crop(&mut self.world, &self.crops, &mut self.harvest_rng, pos);
             let at = pos.map(|c| f64::from(c) + 0.5);
-            if let (Some(kind), Some(yields)) = (kind, &drops) {
+            if let (true, Some(kind), Some(yields)) = (mature, kind, &drops) {
                 self.events.push(GameEvent::CropHarvested {
                     position: pos,
                     crop: crop_name(kind).to_string(),
@@ -2494,7 +2507,7 @@ mod tests {
     }
 
     #[test]
-    fn mature_crop_drops_yields_and_resets_with_any_tool_or_empty_hands() {
+    fn mature_crop_drops_yields_and_is_removed_with_any_tool_or_empty_hands() {
         for held in [
             HeldThing::Empty,
             HeldThing::Tool("hoe".into()),
@@ -2503,7 +2516,7 @@ mod tests {
             let mut w = crop_walker(mature());
             w.held_override = Some(held);
             w.tick(&down(true, false));
-            assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat0);
+            assert_eq!(w.world.block_at(0, 4, 0), Block::Air);
             let names: Vec<_> = w.items().iter().map(|e| e.item.item.clone()).collect();
             assert_eq!(names[0], "wheat");
             assert!(names.len() <= 3 && names[1..].iter().all(|n| n == "seeds"));
@@ -2511,15 +2524,15 @@ mod tests {
     }
 
     #[test]
-    fn immature_crop_is_left_alone() {
+    fn immature_crop_is_picked_with_no_drops() {
         let mut w = crop_walker(mature() - 1);
         w.tick(&down(true, false));
-        assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat6);
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Air);
         assert_eq!(w.items().len(), 0);
     }
 
     #[test]
-    fn carrying_an_item_blocks_harvest() {
+    fn carrying_an_item_blocks_pick() {
         let mut w = crop_walker(mature());
         w.clear_held_override();
         w.state.hands = Some(ItemInstance {

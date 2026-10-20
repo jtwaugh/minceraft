@@ -1,4 +1,4 @@
-# Till a planter on the raft scene's islet, plant and harvest on it
+# Till a planter on the raft scene's islet, plant on it
 # (docs/design/basic-gameplay.md section 9.1, decided in #451). Tilling a
 # planter never drops seeds; the tilled planter takes seeds like farmland.
 

@@ -152,7 +152,7 @@ fn overlay_hash(w: &Walker) -> u64 {
 }
 
 #[test]
-fn till_plant_grow_harvest_and_the_crop_is_back_at_stage_zero() {
+fn till_plant_grow_pick_and_the_crop_is_gone() {
     let mut w = start();
     select(&mut w, HOE_SLOT);
     stand(&mut w, FIELD);
@@ -186,19 +186,23 @@ fn till_plant_grow_harvest_and_the_crop_is_back_at_stage_zero() {
     }
     assert!(ticks > DAY, "not instant: took {ticks}");
 
-    // Harvest with empty hands: produce drops and the crop resets.
+    // Pick with empty hands: produce drops and the crop is gone.
     select(&mut w, EMPTY_SLOT);
     w.clear_items();
     w.tick(&press());
-    assert_eq!(at(&w, FIELD, 1), Block::Wheat0);
+    assert_eq!(at(&w, FIELD, 1), Block::Air);
+    assert!(matches!(
+        at(&w, FIELD, 0),
+        Block::FarmlandDry | Block::FarmlandWet
+    ));
     assert_eq!(count(&w, "wheat"), 1);
     assert!(count(&w, "seeds") <= 2);
     assert_eq!(w.items().len(), 1 + count(&w, "seeds"));
 
-    // Harvesting the reset crop does nothing.
+    // Nothing left to pick.
     w.clear_items();
     w.tick(&press());
-    assert_eq!(at(&w, FIELD, 1), Block::Wheat0);
+    assert_eq!(at(&w, FIELD, 1), Block::Air);
     assert_eq!(w.items().len(), 0);
 }
 

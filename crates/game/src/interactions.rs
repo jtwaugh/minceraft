@@ -55,7 +55,7 @@ pub enum ActionKind {
     Attack,
     Till,
     Plant,
-    Harvest,
+    Pick,
     Forage,
 }
 
@@ -196,7 +196,7 @@ fn parse_action(value: &str) -> Option<ActionKind> {
         "attack" => Some(ActionKind::Attack),
         "till" => Some(ActionKind::Till),
         "plant" => Some(ActionKind::Plant),
-        "harvest" => Some(ActionKind::Harvest),
+        "pick" => Some(ActionKind::Pick),
         "forage" => Some(ActionKind::Forage),
         _ => None,
     }
@@ -410,8 +410,8 @@ pub fn attack(target: &targeting::Target, damage: u32) -> Option<Hit> {
 }
 
 // Stub action: real behaviour comes in Phase 7. It reports that it ran.
-// Till, plant and harvest run in `walk.rs` through `till::Tiller`,
-// `plant::plant` and `harvest::harvest`.
+// Till, plant and pick run in `walk.rs` through `till::Tiller`,
+// `plant::plant` and `pick::pick_crop`.
 pub fn forage() -> ActionKind {
     ActionKind::Forage
 }
@@ -424,7 +424,7 @@ fn run_action(
 ) -> ActionKind {
     match action {
         ActionKind::Attack => hits.extend(attack(&ctx.target, damage)),
-        ActionKind::Till | ActionKind::Plant | ActionKind::Harvest => {}
+        ActionKind::Till | ActionKind::Plant | ActionKind::Pick => {}
         ActionKind::Forage => {
             forage();
         }
@@ -559,17 +559,29 @@ mod tests {
     }
 
     #[test]
-    fn harvest_needs_mature_crop() {
+    fn pick_works_at_any_stage() {
         let mut c = ctx(HeldThing::Empty, Button::Secondary, "crop", Face::Top);
-        assert_eq!(action(&c), None);
         c.facts.crop_state = Some("growing".into());
-        assert_eq!(action(&c), None);
+        assert_eq!(action(&c), Some(ActionKind::Pick));
         c.facts.crop_state = Some("mature".into());
-        assert_eq!(action(&c), Some(ActionKind::Harvest));
+        assert_eq!(action(&c), Some(ActionKind::Pick));
         c.held = tool("sword");
-        assert_eq!(action(&c), Some(ActionKind::Harvest));
+        assert_eq!(action(&c), Some(ActionKind::Pick));
         c.held = HeldThing::Item("seeds".into());
         assert_eq!(action(&c), None);
+    }
+
+    #[test]
+    fn pick_only_targets_crops() {
+        let rules = Interactions::default_rules().rules;
+        let picks: Vec<_> = rules
+            .iter()
+            .filter(|r| r.action == ActionKind::Pick)
+            .collect();
+        assert!(!picks.is_empty());
+        assert!(picks
+            .iter()
+            .all(|r| r.target == Target::Block("crop".to_string())));
     }
 
     #[test]
@@ -659,13 +671,13 @@ mod tests {
                 Held::Empty,
                 Button::Secondary,
                 block("crop"),
-                ActionKind::Harvest,
+                ActionKind::Pick,
             ),
             rule(
                 Held::AnyTool,
                 Button::Secondary,
                 block("crop"),
-                ActionKind::Harvest,
+                ActionKind::Pick,
             ),
             rule(
                 Held::Empty,
@@ -679,8 +691,6 @@ mod tests {
         expected[2].require_air_above = true;
         expected[4].require_air_above = true;
         expected[4].target_face = Some("top".into());
-        expected[5].require_state = Some("mature".into());
-        expected[6].require_state = Some("mature".into());
         assert_eq!(Interactions::default_rules().rules, expected);
     }
 
