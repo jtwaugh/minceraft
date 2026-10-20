@@ -20,6 +20,7 @@ use crate::interactions::{
 };
 use crate::item_entities::{Deck, ItemEntityConfig, ItemStore};
 use crate::items::{ItemInstance, Items, PlayerState};
+use crate::phase::{Phase, PhaseClock};
 use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
@@ -189,6 +190,7 @@ pub struct Walker {
     events: Vec<GameEvent>,
     /// Ticks stepped so far, for cooldowns.
     sim_tick: u64,
+    phases: PhaseClock,
     item_table: Items,
     state: PlayerState,
     /// Test override of the derived held thing.
@@ -245,6 +247,8 @@ impl Walker {
             look_yaw: 0.0,
             events: Vec::new(),
             sim_tick: 0,
+            phases: PhaseClock::default_phases()
+                .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             item_table: Items::default_items(),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
@@ -303,6 +307,11 @@ impl Walker {
     /// Ticks run so far.
     pub fn sim_tick(&self) -> u64 {
         self.sim_tick
+    }
+
+    /// The day phase and the whole seconds left in it (section 12).
+    pub fn phase(&self) -> (Phase, u32) {
+        self.phases.at(self.sim_tick)
     }
 
     /// FNV-1a 64 of the replay-relevant state; the set is listed in the

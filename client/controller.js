@@ -60,7 +60,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       }
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
       const belt = readBelt(walk);
-      const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health() });
+      const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
       Object.assign(state, { ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha), belt, hud, underwater, events: Array.from(walk.drain_events()) });
       return state;
     },

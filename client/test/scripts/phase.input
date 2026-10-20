@@ -1,0 +1,10 @@
+# The day phase timer counts down with the sim (docs/design/basic-gameplay.md section 12).
+
+case the timer starts in gathering and counts down
+start walk raft
+frame 50 x2
+expect phase = gathering
+expect phase.left = 120
+frame 1000 x10
+expect phase = gathering
+expect phase.left = 110
