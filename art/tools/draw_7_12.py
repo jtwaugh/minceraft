@@ -377,6 +377,16 @@ villager = {
 }
 batch12 = {"player": player, "villager": villager}
 
+# ---------------------------------------------------------------- batch 15
+batch15 = {
+    "sword": ["......00", ".....030", "....0330", "...0330.",
+              "0.0330..", ".05560..", "0540....", "00......"],
+    "leather": ["..0000..", ".066650.", "06655550", "05565550",
+                "05555450", "05554440", ".055440.", "..0000.."],
+    "feather": ["......00", ".....0e0", "....0ee0", "...0eee0",
+                "..0eee0.", ".0e30...", "030.....", "0......."],
+}
+
 # ---------------------------------------------------------------- sizes
 EXPECT = {
     # batch 9-12 explicit sizes (w, h); everything else defaults to 8x8
@@ -428,7 +438,7 @@ def check(name, rs, w, h):
 
 
 errs = []
-for b in (batch7, batch8, batch9, batch10):
+for b in (batch7, batch8, batch9, batch10, batch15):
     for k, v in b.items():
         errs += check(k, v, *EXPECT.get(k, (8, 8)))
 for b in (batch11, batch12):
@@ -455,6 +465,7 @@ out = {
                  "face_sizes": {k: MODEL_EXPECT[k] for k in batch11}},
     "Batch 12": {"title": "People", "tiles": False, "models": batch12,
                  "face_sizes": {k: MODEL_EXPECT[k] for k in batch12}},
+    "Batch 15": {"title": "Item icons", "tiles": False, "textures": batch15},
 }
 json.dump(out, open("batches_7_12.json", "w"), indent=1)
 print("ok", {k: len(v.get("textures", v.get("models"))) for k, v in out.items()})
