@@ -128,6 +128,17 @@ impl<W: CollisionWorld> FarmWorld<W> {
             })
     }
 
+    /// Every overlay block with its position, sorted by position.
+    pub fn tiles(&self) -> Vec<([i32; 3], Block)> {
+        let mut v: Vec<_> = self
+            .edits
+            .iter()
+            .map(|(&(x, y, z), &b)| ([x, y, z], b))
+            .collect();
+        v.sort_by_key(|t| t.0);
+        v
+    }
+
     /// Remove the tile at `(x, y, z)`, restoring the generated block. Returns
     /// the tile that was there.
     pub fn clear(&mut self, x: i32, y: i32, z: i32) -> Option<FarmTile> {

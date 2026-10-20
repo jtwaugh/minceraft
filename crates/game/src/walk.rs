@@ -704,6 +704,11 @@ impl Walker {
         self.world.block_at(x, y, z)
     }
 
+    /// The farm overlay's blocks and positions, sorted by position.
+    pub fn farm_tiles(&self) -> Vec<([i32; 3], Block)> {
+        self.world.tiles()
+    }
+
     /// Whether the block cell containing `pos` is a liquid. The client asks
     /// this of the drawn eye to switch to the underwater view. Water blocks
     /// fill their whole cell, so the cell alone decides; the raft is never

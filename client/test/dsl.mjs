@@ -28,6 +28,8 @@
 //   face animal                 turn to look at the first animal (a mousemove)
 //   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
+//   stand field                 teleport onto the raft scene's field and look straight down
+//   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye, for `moved`
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
@@ -38,10 +40,12 @@
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
 // belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
 // item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
+// field.ground and field.crop (block names at the field's middle tile, or air),
 // animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
+import { B } from '../../viewer/mesh.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
 import { spawnTestItems, readAnimals, faceAnimal, spawnTestAnimals } from '../overlay.js';
@@ -82,7 +86,8 @@ function world({ mode = 'walk', raft = false, debug = raft }) {
   const window = target();
   const sampler = new InputSampler();
   const input = attachInput({ sampler, canvas, document, window, debug });
-  const walk = raft ? Walk.in_scene(new Scene()) : new Walk(32, 70.5, 32);
+  const scene = raft ? new Scene() : null;
+  const walk = raft ? Walk.in_scene(scene) : new Walk(32, 70.5, 32);
   if (raft) spawnTestItems(walk);
   const fly = new FlyCamera(32, 94, 32);
   const controller = createController({
@@ -90,7 +95,7 @@ function world({ mode = 'walk', raft = false, debug = raft }) {
   });
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, text: '', output: [] };
+  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, text: '', output: [] };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
@@ -137,6 +142,11 @@ function read(w, path) {
   if (path === 'animals') return readAnimals(w.walk).length;
   if (path === 'animals.dying') return readAnimals(w.walk).filter((a) => a.dying).length;
   if (path === 'animals.hurt') return readAnimals(w.walk).filter((a) => a.hurt).length;
+  if (path === 'field.ground' || path === 'field.crop') {
+    const [fx, fz] = w.scene.field, m = Math.floor(w.scene.field_size / 2);
+    const id = w.walk.block_at(fx + m, w.scene.field_y + (path === 'field.crop'), fz + m);
+    return Object.keys(B).find((k) => B[k] === id) ?? `block ${id}`;
+  }
   const aim = s.aim;
   if (path === 'target.kind') return aim.kind;
   if (path === 'target.id') return aim.id ?? -1;
@@ -210,6 +220,21 @@ function step(w, { op, args }) {
         key('keyup', keyCode(ch));
       }
       return;
+    }
+    case 'stand': {
+      if (args[0] !== 'field' || !w.scene) throw new Error('stand field (raft scene only)');
+      const [fx, fz] = w.scene.field, m = Math.floor(w.scene.field_size / 2);
+      w.walk.teleport(fx + m + 0.5, w.scene.field_y + 1, fz + m + 0.5);
+      // far more than a quarter turn, so the pitch clamps at straight down
+      fire(document, 'mousemove', { movementX: 0, movementY: 2000 });
+      w.controller.frame(0.05);
+      return;
+    }
+    case 'until': {
+      for (let i = 0; i < 20000; i++) {
+        try { step(w, { op: 'expect', args }); return; } catch { w.controller.frame(0.1); }
+      }
+      return step(w, { op: 'expect', args });
     }
     case 'held': w.walk.set_held(args[0]); return;
     case 'mark': w.mark = w.controller.state.eye.slice(); return;

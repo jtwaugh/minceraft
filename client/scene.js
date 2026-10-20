@@ -230,7 +230,8 @@ function upload({ verts, faces }, offset) {
   const ib = quadIndexBuffer(faces);
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
-  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
   const attr = (loc, size, type, normalized, off) => {
@@ -241,7 +242,7 @@ function upload({ verts, faces }, offset) {
   attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10);
   attr(5, 1, gl.UNSIGNED_BYTE, true, 14);
   gl.bindVertexArray(null);
-  return { vao, n: faces * 6, offset };
+  return { vao, buf, n: faces * 6, offset };
 }
 
 // ---------------------------------------------------------------- matrices (column-major)
@@ -308,20 +309,38 @@ function meshNextChunk() {
 
 // The test scene is one sea region plus the raft's blocks meshed apart, so the
 // raft can move over the water. Biome tints come from the terrain under it.
+let remeshFarm = () => {};
 if (scene) {
   const { min, size } = scene;
   const tints = columnTints(terrain, ctx, seed, min, min, size);
   skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
   const offset = [min, 0, min];
-  for (const [blocks, into] of [[scene.sea_blocks(), true], [scene.raft_blocks(), false]]) {
+  const seaBlocks = scene.sea_blocks();
+  // The sea with the farm overlay applied; meshed again whenever a tile changes.
+  const meshSea = () => {
+    const blocks = seaBlocks.slice();
+    const t = walk.farm_tiles();
+    for (let i = 0; i < t.length; i += 4) blocks[((t[i + 2] - min) * size + t[i] - min) * 128 + t[i + 1]] = t[i + 3];
     const m = meshBlocks(ctx, blocks, tints, size, 0);
     for (const k of Object.keys(meshes)) {
-      const part = upload(m[k], offset);
-      if (!part) continue;
-      if (into) meshes[k].push(part);
-      else if (raftMeshes[k]) raftMeshes[k].push(part);
+      for (const old of seaParts[k]) { gl.deleteVertexArray(old.vao); gl.deleteBuffer(old.buf); }
+      meshes[k] = seaParts[k] = [upload(m[k], offset)].filter(Boolean);
     }
+  };
+  const seaParts = { opaque: [], cutout: [], water: [], ice: [] };
+  let farmSig = null;
+  remeshFarm = () => {
+    const sig = walk.farm_tiles().join();
+    if (sig === farmSig) return;
+    farmSig = sig;
+    meshSea();
+  };
+  const m = meshBlocks(ctx, scene.raft_blocks(), tints, size, 0);
+  for (const k of Object.keys(raftMeshes)) {
+    const part = upload(m[k], offset);
+    if (part) raftMeshes[k].push(part);
   }
+  remeshFarm();
 }
 
 // ---------------------------------------------------------------- loop
@@ -364,6 +383,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 function render(now) {
   if (queue.length) meshNextChunk();
+  remeshFarm();
 
   const { alpha, eye, yaw, pitch, flying, aim, underwater } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
 
