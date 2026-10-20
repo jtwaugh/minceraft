@@ -492,6 +492,8 @@ The sim emits these for the game layer (orders, scoring, sound, particles, tutor
 | `foraged` | position, yields |
 | `landed`, `entered_water`, `exited_water` | player, details |
 
+The `item_put_down` variant is added with the rest of this list, but nothing emits it until stations exist (see section 6); Phase 8's "every action produces its event" covers the actions that exist. (Decided in #471.)
+
 ---
 
 ## 12. HUD (minimum)
