@@ -189,6 +189,7 @@ import { hydrate, VIEW, BIOME, SNOWY } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
 import { FOG_GLSL } from './fog.js';
+import { buildMips, buildMips1 } from './mips.js';
 const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend, habitat_names } = wasm;
 
 const $ = (id) => document.getElementById(id);
@@ -598,7 +599,6 @@ const cam = { yaw: 0.8, pitch: 0.55, dist: 95, ty: 68 };
 let sky = [0.61, 0.76, 0.9];
 
 const TEX_SIZE = 16; // side of every layer in the tile array
-const TINT_A = 200; // alpha marking a greyscale, climate-tinted texel
 
 function shader(type, src) {
   const s = gl.createShader(type);
@@ -613,7 +613,7 @@ function initGL() {
 }
 
 // With MSAA the cutout program outputs a sharpened alpha for alpha-to-coverage
-// (the tint weight above still uses the raw alpha); without it, a hard discard.
+// (alpha is coverage only; the tint weight is its own array); without it, a hard discard.
 const msaa = gl.getParameter(gl.SAMPLES) > 0;
 function coverage(drawIt) {
   if (msaa) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
@@ -654,6 +654,7 @@ function program(cut) {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
     uniform sampler2DArray tex;
+    uniform sampler2DArray tintTex; // R8 tint weight, same layers and UVs as tex
     uniform float alpha; uniform float fogFar; uniform float fogMax; uniform vec3 fogColor;
     out vec4 o;
     ${FOG_GLSL}
@@ -663,16 +664,17 @@ function program(cut) {
       vec2 fw = max(fwidth(px), vec2(1e-4));
       vec2 snapped = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / ${TEX_SIZE}.0;
       vec4 t = textureGrad(tex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy));
+      float tw = textureGrad(tintTex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy)).r;
       ${cut && !msaa ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
-      // alpha 1 is untinted and alpha TINT_A/255 fully tinted; filtered texels fall between
-      float tw = clamp((1.0 - t.a) / (1.0 - ${TINT_A}.0 / 255.0), 0.0, 1.0);
       vec3 c = t.rgb * mix(vec3(1.0), vtint, tw) * vshade;
       float f = fogAmount(vdist, fogFar) * fogMax;
       o = vec4(mix(c, fogColor, f), ${cut && msaa ? 'ca * alpha' : 'alpha'});
     }`));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  gl.uniform1i(gl.getUniformLocation(prog, 'tintTex'), 1);
   prog.locs = new Map();
   return prog;
 }
@@ -741,7 +743,8 @@ async function loadTextures() {
   const S = TEX_SIZE;
   const col = (b) => COLORS[B[b]];
   const dark = (c, k = 0.72) => c.map((v) => v * k);
-  const solid = (c, a = 255) => () => [...c, a];
+  // Each texel is [r, g, b, a, tinted]; `tinted` marks it for the climate tint.
+  const solid = (c, a = 255, tinted = false) => () => [...c, a, tinted];
   // Each layer is a function (x, y) -> [r, g, b, a] over the 16x16 layer.
   const make = {};
   let textured = false, all = {}, models = {}, pal = {};
@@ -766,10 +769,10 @@ async function loadTextures() {
     const maxL = Math.max(1, ...[...tint].map((ch) => lum(pal[ch])));
     return (x, y) => {
       const ch = rows[Math.floor(y / k)][Math.floor(x / k)];
-      if (ch === '.') return [0, 0, 0, 0];
-      if (recolor) return [...recolor(pal[ch]), 255];
-      if (tint.includes(ch)) { const v = 255 * lum(pal[ch]) / maxL; return [v, v, v, TINT_A]; }
-      return [...pal[ch], 255];
+      if (ch === '.') return [0, 0, 0, 0, false];
+      if (recolor) return [...recolor(pal[ch]), 255, false];
+      if (tint.includes(ch)) { const v = 255 * lum(pal[ch]) / maxL; return [v, v, v, 255, true]; }
+      return [...pal[ch], 255, false];
     };
   };
   if (textured) {
@@ -783,10 +786,10 @@ async function loadTextures() {
   } else {
     // flat colours; tinted tiles are white so the tint gives the ramp colour
     Object.assign(make, {
-      stone: solid(col('stone')), dirt: solid(col('dirt')), grass_top: solid([255, 255, 255], TINT_A),
+      stone: solid(col('stone')), dirt: solid(col('dirt')), grass_top: solid([255, 255, 255], 255, true),
       grass_side: solid([118, 128, 60]), sand: solid(col('sand')), gravel: solid(col('gravel')),
       sun_sky: solid([232, 195, 58]), log_side: solid(col('oak_log')), log_top: solid(dark(col('oak_log'), 1.25)),
-      leaves: solid([255, 255, 255], TINT_A),
+      leaves: solid([255, 255, 255], 255, true),
       birch_log_side: solid(col('birch_log')), spruce_log_side: solid(col('spruce_log')),
       birch_log_top: solid(dark(col('birch_log'), 0.9)), spruce_log_top: solid(dark(col('spruce_log'), 1.25)),
     });
@@ -807,8 +810,8 @@ async function loadTextures() {
     make[name] = (x, y) => {
       const ch = rows[y >> 1][x >> 1];
       if (ch === '.') return [0, 0, 0, 0];
-      if (ch === 'g') return [235, 235, 235, TINT_A];
-      if (ch === 'G') return [170, 170, 170, TINT_A];
+      if (ch === 'g') return [235, 235, 235, 255, true];
+      if (ch === 'G') return [170, 170, 170, 255, true];
       return [...map[ch], 255];
     };
   }
@@ -817,7 +820,7 @@ async function loadTextures() {
   // Fast leaves: holes filled with a dark tinted grey, so the tile is solid
   // (no discard) and its mipmaps keep the tint marker alpha throughout.
   const leaf = make.leaves;
-  make.leaves_fast = (x, y) => { const p = leaf(x, y); return p[3] ? p : [96, 96, 96, TINT_A]; };
+  make.leaves_fast = (x, y) => { const p = leaf(x, y); return p[3] ? p : [96, 96, 96, 255, true]; };
   const layers = LAYER_NAMES.map((n) => make[n]);
   // Fish model faces: one layer each, drawn at native size in the top-left
   // corner. The rest of the layer repeats the edge pixels so mipmaps
@@ -841,23 +844,47 @@ async function loadTextures() {
       };
     }
   }
-  const data = new Uint8Array(S * S * 4 * layers.length);
-  layers.forEach((f, L) => {
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) data.set(f(x, y), ((L * S + y) * S + x) * 4);
+  // Per layer: RGBA (alpha is coverage only) and an R8 tint weight. Holes in a
+  // layer that has tinted texels get full weight, so averaging the weight
+  // across holes doesn't dilute the tint of the leaves around them.
+  const rgbaLv = [], tintLv = [];
+  layers.forEach((f) => {
+    const rgba = new Uint8Array(S * S * 4), tw = new Uint8Array(S * S);
+    const px = [];
+    for (let i = 0; i < S * S; i++) px.push(f(i % S, Math.floor(i / S)));
+    const any = px.some((p) => p[4]);
+    px.forEach((p, i) => {
+      rgba.set(p.slice(0, 4), i * 4);
+      tw[i] = p[4] || (any && p[3] === 0) ? 255 : 0;
+    });
+    rgbaLv.push(buildMips(rgba, S));
+    tintLv.push(buildMips1(tw, S));
   });
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
-  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, S, S, layers.length, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-  gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
-  if (aniso) {
-    gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT,
-      Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
-  }
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  const upload = (levels, fmt, format, unit) => {
+    const tex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+    for (let l = 0; l < levels[0].length; l++) {
+      const n = Math.max(1, S >> l);
+      const data = new Uint8Array(levels.reduce((t, lv) => t + lv[l].length, 0));
+      let o = 0;
+      for (const lv of levels) { data.set(lv[l], o); o += lv[l].length; }
+      gl.texImage3D(gl.TEXTURE_2D_ARRAY, l, fmt, n, n, levels.length, 0, format, gl.UNSIGNED_BYTE, data);
+    }
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    if (aniso) {
+      gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT,
+        Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+    }
+  };
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  upload(tintLv, gl.R8, gl.RED, 1);
+  upload(rgbaLv, gl.RGBA8, gl.RGBA, 0);
+  gl.activeTexture(gl.TEXTURE0);
   return textured;
 }
 
