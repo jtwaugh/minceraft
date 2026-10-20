@@ -19,7 +19,7 @@ const NAMES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel', 'wa
   'log_side', 'log_top', 'leaves', 'birch_log_side', 'birch_log_top', 'spruce_log_side', 'spruce_log_top',
   'ice', 'snow', 'cactus_side', 'cactus_top', 'pumpkin_side', 'pumpkin_top',
   'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose', 'sugar_cane', 'brown_mushroom', 'red_mushroom',
-  'leaves_fast'];
+  'leaves_fast', 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3'];
 const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89' };
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
 /** Layers [ANIM_FIRST, ANIM_END) are the water runs; the shader offsets them by the frame. */
@@ -37,6 +37,10 @@ function tileFor(B, names, b, dy, fast) {
     case B.cactus: return dy ? L.cactus_top : L.cactus_side;
     case B.pumpkin: return dy ? L.pumpkin_top : L.pumpkin_side;
     case B.snow_layer: return L.snow;
+    case B.farmland_dry: case B.farmland_wet: return dy > 0 ? L[names[b]] : L.dirt;
+    // eight growth stages share the four wheat textures, two stages each
+    case B.wheat_0: case B.wheat_1: case B.wheat_2: case B.wheat_3:
+    case B.wheat_4: case B.wheat_5: case B.wheat_6: case B.wheat_7: return L[`wheat_${(b - B.wheat_0) >> 1}`];
     default: return L[names[b]] ?? L.stone; // stone, dirt, sand, gravel, ice, cross plants
   }
 }

@@ -40,7 +40,8 @@ export const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // With fast leaves, leaves count as solid too.
 const OPAQUE_FAST = flags([...SOLID, B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // Drawn as two crossed quads.
-export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom]);
+export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
+  B.wheat_0, B.wheat_1, B.wheat_2, B.wheat_3, B.wheat_4, B.wheat_5, B.wheat_6, B.wheat_7]);
 
 /**
  * Meshing context: names, colours and biomes from the legend() JSON, plus

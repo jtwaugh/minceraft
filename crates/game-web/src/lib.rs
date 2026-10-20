@@ -11,7 +11,7 @@ use game::input::TickInput;
 use game::interactions::{Button, HeldThing};
 use game::items::{ItemInstance, Items};
 use game::sampler::Sampler;
-use game::scene::{raft_scene, RaftScene, SEA_MIN, SEA_SIZE};
+use game::scene::{raft_scene, RaftScene, FIELD_SIZE, FIELD_Y, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
 use terrain::Region;
 use wasm_bindgen::prelude::*;
@@ -140,6 +140,24 @@ impl Scene {
     #[wasm_bindgen(getter)]
     pub fn size(&self) -> u32 {
         SEA_SIZE
+    }
+
+    /// World x and z of the first column of the hoe-able field.
+    #[wasm_bindgen(getter)]
+    pub fn field(&self) -> Vec<i32> {
+        self.0.field.to_vec()
+    }
+
+    /// Side of the field in columns.
+    #[wasm_bindgen(getter)]
+    pub fn field_size(&self) -> i32 {
+        FIELD_SIZE
+    }
+
+    /// World y of the field's grass.
+    #[wasm_bindgen(getter)]
+    pub fn field_y(&self) -> i32 {
+        FIELD_Y
     }
 
     /// Sea floor and water, in `generate_region_decorated` layout.
@@ -281,6 +299,20 @@ impl Walk {
             HeldThing::Item(n) => format!("item:{n}"),
             _ => "empty".into(),
         }
+    }
+
+    /// The block id at a world position, farm overlay included.
+    pub fn block_at(&self, x: i32, y: i32, z: i32) -> u32 {
+        self.0.block_at(x, y, z) as u32
+    }
+
+    /// The farm overlay as `x, y, z, block id` quadruples, sorted by position.
+    pub fn farm_tiles(&self) -> Vec<i32> {
+        self.0
+            .farm_tiles()
+            .iter()
+            .flat_map(|(p, b)| [p[0], p[1], p[2], *b as i32])
+            .collect()
     }
 
     /// Put a loose item called `name` at `(x, y, z)`; returns its entity id.
