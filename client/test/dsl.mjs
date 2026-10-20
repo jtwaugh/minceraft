@@ -28,6 +28,7 @@
 //   face animal                 turn to look at the first animal (a mousemove)
 //   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
+//   drop <n>                    teleport n blocks up, to fall back and take fall damage
 //   stand field                 teleport onto the raft scene's field and look straight down
 //   stand planter               the same, on the islet's first planter
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
@@ -45,6 +46,7 @@
 // item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // planter.ground and planter.crop (the same for the first planter),
+// health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands,
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -152,6 +154,10 @@ function read(w, path) {
   if (/^belt\.slot\.[1-9]$/.test(path)) return s.belt.slots[+path.slice(-1) - 1] ?? 'none';
   if (path === 'hands') return s.belt.hands ?? 'none';
   if (path === 'held') return s.belt.held;
+  if (path === 'health') return s.hud.hearts.full * 2 + s.hud.hearts.half;
+  if (path.startsWith('hearts.')) return s.hud.hearts[path.slice(7)];
+  if (path === 'hud.selected') return s.hud.selected;
+  if (path === 'hud.hands') return s.hud.hands ?? 'none';
   if (path === 'items') return w.walk.loose_items();
   if (path === 'animals') return readAnimals(w.walk).length;
   if (path === 'animals.dying') return readAnimals(w.walk).filter((a) => a.dying).length;
@@ -238,6 +244,11 @@ function step(w, { op, args }) {
         key('keydown', keyCode(ch));
         key('keyup', keyCode(ch));
       }
+      return;
+    }
+    case 'drop': { // fall from <n> blocks above the current feet
+      const [fx, fy, fz] = w.walk.feet();
+      w.walk.teleport(fx, fy + Number(args[0]), fz);
       return;
     }
     case 'stand': {
