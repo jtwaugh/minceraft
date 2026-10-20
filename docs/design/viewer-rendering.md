@@ -5,7 +5,7 @@ scope: both
 source: ""
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -14,7 +14,9 @@ phases:
 
 ## Current state
 
-Checked against `master` (ba3a7e9). No phase is built; all five stay `todo`.
+Checked against `master` (ba3a7e9). Phases B to E are not built and stay `todo`.
+
+- **Phase A is done:** the viewer (PRs #248, #250, #252) and the client (PR #520, ticket #505) both use radial fog with the shared curve in `viewer/fog.js`, trilinear and anisotropic filtering, texel snapping and the tint weight (plan #242).
 
 - **F1** holds: `viewer/index.html` sets `vdist = gl_Position.w` (~line 636)
   and fogs with a linear ramp from 0.55 to 1.15 × `fogFar` (~line 650).
@@ -38,7 +40,7 @@ Checked against `master` (ba3a7e9). No phase is built; all five stay `todo`.
 
 ## Reconciliation notes
 
-- **Phase A is incomplete: the viewer is done, the client is not**
+- **Phase A was incomplete (resolved by PR #520, now `done`): the viewer was done, the client was not**
   (checked after plan #242 closed; PRs #248, #250, #252). `viewer/index.html`
   now has radial fog (`camPos`, `distance(wp, camPos)`, `viewer/fog.js`),
   `LINEAR_MIPMAP_LINEAR` with anisotropy, `textureGrad` texel snapping and
