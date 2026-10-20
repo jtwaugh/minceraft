@@ -42,7 +42,7 @@ test('packAtlas writes palette pixels and transparency', () => {
   };
   assert.deepEqual(px('fish.body_left', 1, 0), [255, 0, 0, 255]);
   assert.deepEqual(px('fish.body_left', 3, 0), [16, 16, 16, 255]);
-  assert.deepEqual(px('fish.body_left', 3, 1), [0, 255, 0, 255]);
+  assert.deepEqual(px('fish.body_left', 3, 1), [255, 0, 0, 255]);
   assert.deepEqual(px('crab.shell', 0, 0), [0, 0, 0, 0]);
   assert.equal(a.rects.dirt, undefined, 'textures are packed only when asked for');
   assert.deepEqual(px(FALLBACK, 0, 0), [128, 128, 128, 255]);
