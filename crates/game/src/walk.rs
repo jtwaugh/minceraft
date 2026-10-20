@@ -544,6 +544,9 @@ impl Walker {
                 self.take_aim(aim, input);
             }
         }
+        if let Some(fall_distance) = self.player.last_landing {
+            self.events.push(GameEvent::Landed { fall_distance });
+        }
         let after = self.movement_state();
         Self::emit_movement(&mut self.events, before, after);
         if let Some(s) = &mut self.streamer {
@@ -1109,6 +1112,7 @@ mod tests {
         for _ in 0..40 {
             w.tick(&TickInput::default());
         }
+        w.drain_events();
         w
     }
 
@@ -1529,6 +1533,7 @@ mod tests {
         for _ in 0..40 {
             w.tick(&TickInput::default());
         }
+        w.drain_events();
         let cfg = ForageConfig {
             chance,
             cooldown_ticks: 100,
@@ -2736,7 +2741,11 @@ mod tests {
                 let before = w.movement_state();
                 w.tick(input);
                 Walker::emit_movement(&mut want, before, w.movement_state());
-                got.extend(w.drain_events());
+                got.extend(
+                    w.drain_events()
+                        .into_iter()
+                        .filter(|e| !matches!(e, GameEvent::Landed { .. })),
+                );
                 if stop_grounded && w.player().on_ground {
                     break;
                 }
@@ -2789,5 +2798,86 @@ mod tests {
     #[test]
     fn movement_events_replay_identically() {
         assert_eq!(movement_events(), movement_events());
+    }
+
+    fn landings(w: &mut Walker, input: &TickInput, ticks: usize) -> Vec<GameEvent> {
+        let mut seen = Vec::new();
+        for _ in 0..ticks {
+            w.tick(input);
+            seen.extend(
+                w.drain_events()
+                    .into_iter()
+                    .filter(|e| matches!(e, GameEvent::Landed { .. })),
+            );
+        }
+        seen
+    }
+
+    fn five_block_fall() -> (Vec<GameEvent>, f64) {
+        let mut w = settled();
+        w.drain_events();
+        w.player.pos[1] += 5.0;
+        w.player.on_ground = false;
+        let seen = landings(&mut w, &TickInput::default(), 60);
+        (seen, w.player().fall_distance)
+    }
+
+    #[test]
+    fn a_five_block_fall_emits_one_landed_with_the_damage_distance() {
+        let (seen, left) = five_block_fall();
+        assert_eq!(seen.len(), 1, "{seen:?}");
+        let GameEvent::Landed { fall_distance } = seen[0] else {
+            unreachable!()
+        };
+        assert!((fall_distance - 5.0).abs() < 1e-6, "{fall_distance}");
+        assert_eq!(left, 0.0);
+        let mut w = settled();
+        w.player.pos[1] += 5.0;
+        w.player.on_ground = false;
+        landings(&mut w, &TickInput::default(), 60);
+        let threshold = w.physics.fall_damage_threshold as f64;
+        assert_eq!(
+            w.player().health,
+            w.physics.max_health - (fall_distance - threshold).ceil() as u32
+        );
+    }
+
+    #[test]
+    fn a_jump_emits_one_landed_and_standing_or_walking_emit_none() {
+        let mut w = settled();
+        w.drain_events();
+        assert!(landings(&mut w, &TickInput::default(), 40).is_empty());
+        let walk = TickInput {
+            move_forward: 1.0,
+            ..TickInput::default()
+        };
+        assert!(landings(&mut w, &walk, 5).is_empty());
+        let jump = TickInput {
+            jump: true,
+            ..TickInput::default()
+        };
+        w.tick(&jump);
+        let mut seen: Vec<_> = w
+            .drain_events()
+            .into_iter()
+            .filter(|e| matches!(e, GameEvent::Landed { .. }))
+            .collect();
+        seen.extend(landings(&mut w, &TickInput::default(), 40));
+        assert_eq!(seen.len(), 1, "{seen:?}");
+    }
+
+    #[test]
+    fn falling_into_water_emits_no_landed() {
+        let mut w = scene_walker();
+        w.drain_events();
+        w.player.pos[1] += 8.0;
+        w.player.on_ground = false;
+        let seen = landings(&mut w, &TickInput::default(), 60);
+        assert!(seen.is_empty(), "{seen:?}");
+    }
+
+    #[test]
+    fn landed_events_replay_identically() {
+        assert_eq!(five_block_fall(), five_block_fall());
     }
 }
