@@ -5,6 +5,6 @@ start walk raft
 frame 50 x2
 expect phase = gathering
 expect phase.left = 120
-frame 1000 x10
+frame 500 x20
 expect phase = gathering
 expect phase.left = 110
