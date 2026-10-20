@@ -5,7 +5,7 @@
 //! mechanics.
 
 /// Something that happened in a tick.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GameEvent {
     /// A forage succeeded at the block `position` and dropped `yields`.
     Foraged {
@@ -26,4 +26,14 @@ pub enum GameEvent {
         kind: String,
         attacker: String,
     },
+    /// A loose item was created by an action. `source` is `"player"`
+    /// (Drop), `"animal"`, `"forage"`, `"till"` or `"harvest"`.
+    ItemDropped {
+        item: String,
+        position: [f64; 3],
+        source: String,
+    },
+    /// The player moved a loose item into their hands. `player` is
+    /// `"player"` (there is one player).
+    ItemPickedUp { item: String, player: String },
 }

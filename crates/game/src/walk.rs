@@ -528,7 +528,7 @@ impl Walker {
                         push: &f.push,
                     }),
                 );
-                Self::spawn_drops(&mut self.items, dropped);
+                Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -538,7 +538,7 @@ impl Walker {
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&self.world, None);
                 let dropped = self.animals.tick(&self.world, None);
-                Self::spawn_drops(&mut self.items, dropped);
+                Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
             }
@@ -626,10 +626,27 @@ impl Walker {
     }
 
     /// Loose items for what dying animals dropped.
-    fn spawn_drops(items: &mut ItemStore, dropped: Vec<DroppedItem>) {
+    fn spawn_drops(items: &mut ItemStore, events: &mut Vec<GameEvent>, dropped: Vec<DroppedItem>) {
         for d in dropped {
-            items.spawn(ItemInstance { item: d.item }, d.pos, d.velocity);
+            Self::drop_loose(items, events, d.item, d.pos, d.velocity, "animal");
         }
+    }
+
+    /// Create a loose item and emit `ItemDropped` naming the `source`.
+    fn drop_loose(
+        items: &mut ItemStore,
+        events: &mut Vec<GameEvent>,
+        item: String,
+        position: [f64; 3],
+        velocity: [f64; 3],
+        source: &str,
+    ) {
+        items.spawn(ItemInstance { item: item.clone() }, position, velocity);
+        events.push(GameEvent::ItemDropped {
+            item,
+            position,
+            source: source.to_string(),
+        });
     }
 
     /// Take the events emitted since the last call, oldest first.
@@ -680,8 +697,14 @@ impl Walker {
             if let Some(item) = self.forager.forage(pos, self.sim_tick) {
                 let item = item.to_string();
                 let at = pos.map(|c| f64::from(c) + 0.5);
-                self.items
-                    .spawn(ItemInstance { item: item.clone() }, at, [0.0; 3]);
+                Self::drop_loose(
+                    &mut self.items,
+                    &mut self.events,
+                    item.clone(),
+                    at,
+                    [0.0; 3],
+                    "forage",
+                );
                 self.events.push(GameEvent::Foraged {
                     position: pos,
                     yields: vec![item],
@@ -695,10 +718,14 @@ impl Walker {
                     pos[1] as f64 + 1.0,
                     pos[2] as f64 + 0.5,
                 ];
-                let item = ItemInstance {
-                    item: item.to_string(),
-                };
-                self.items.spawn(item, at, [0.0; 3]);
+                Self::drop_loose(
+                    &mut self.items,
+                    &mut self.events,
+                    item.to_string(),
+                    at,
+                    [0.0; 3],
+                    "till",
+                );
             }
         }
         if let (true, Target::Block { pos, face }) = (ran.contains(&ActionKind::Plant), ctx.target)
@@ -718,7 +745,14 @@ impl Walker {
             let drops = harvest(&mut self.world, &self.crops, &mut self.harvest_rng, pos);
             let at = pos.map(|c| f64::from(c) + 0.5);
             for item in drops.into_iter().flatten() {
-                self.items.spawn(ItemInstance { item }, at, [0.0; 3]);
+                Self::drop_loose(
+                    &mut self.items,
+                    &mut self.events,
+                    item,
+                    at,
+                    [0.0; 3],
+                    "harvest",
+                );
             }
         }
         for hit in &self.dispatcher.hits {
@@ -760,6 +794,11 @@ impl Walker {
         };
         let speed = self.items.config().throw_speed;
         let velocity = look_dir(input).map(|c| c * speed);
+        self.events.push(GameEvent::ItemDropped {
+            item: carried.item.clone(),
+            position: self.cur_eye,
+            source: "player".to_string(),
+        });
         self.items.spawn(carried, self.cur_eye, velocity);
     }
 
@@ -774,6 +813,10 @@ impl Walker {
             return;
         };
         if let Some(e) = self.items.remove(id) {
+            self.events.push(GameEvent::ItemPickedUp {
+                item: e.item.item.clone(),
+                player: "player".to_string(),
+            });
             self.state.hands = Some(e.item);
             self.target = Target::None;
             self.target_box = None;
@@ -1508,13 +1551,13 @@ mod tests {
         w.tick(&look(0.0, false));
         assert!(w.drain_events().is_empty());
         w.tick(&press_secondary());
-        assert_eq!(
-            w.drain_events(),
-            vec![GameEvent::Foraged {
-                position: [0, 5, -2],
-                yields: vec!["seeds".to_string()],
-            }]
-        );
+        let foraged = GameEvent::Foraged {
+            position: [0, 5, -2],
+            yields: vec!["seeds".to_string()],
+        };
+        let events = w.drain_events();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1], foraged);
         w.tick(&press_secondary());
         assert!(w.drain_events().is_empty(), "blocked by the cooldown");
 
@@ -1540,7 +1583,7 @@ mod tests {
         };
         let (a, n) = run();
         assert!(!a.is_empty());
-        assert_eq!(a.len(), n, "one event per drop");
+        assert_eq!(a.len(), 2 * n, "a drop and a foraged event per forage");
         assert_eq!((a, n), run());
     }
 
@@ -2398,5 +2441,113 @@ mod tests {
         w.tick(&down(true, false));
         assert_eq!(w.world.block_at(0, 4, 0), Block::Air);
         assert!(w.hands().is_some());
+    }
+
+    fn dropped_sources(events: &[GameEvent]) -> Vec<(String, String)> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                GameEvent::ItemDropped { item, source, .. } => Some((item.clone(), source.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn player_drop_emits_item_dropped_and_empty_drop_nothing() {
+        let mut w = settled();
+        w.tick(&drop_input(0.0, 0.0));
+        assert!(w.drain_events().is_empty());
+        w.state.hands = Some(seeds());
+        w.tick(&drop_input(0.0, 0.0));
+        let at = w.items().iter().next().unwrap().pos;
+        assert_eq!(
+            w.drain_events(),
+            vec![GameEvent::ItemDropped {
+                item: "seeds".into(),
+                position: at,
+                source: "player".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn pickup_emits_item_picked_up_unless_hands_are_full() {
+        let (mut w, _) = facing_seeds();
+        w.state.hands = Some(seeds());
+        w.tick(&interact());
+        assert!(w.drain_events().is_empty(), "full hands");
+        w.state.hands = None;
+        w.tick(&interact());
+        assert_eq!(
+            w.drain_events(),
+            vec![GameEvent::ItemPickedUp {
+                item: "seeds".into(),
+                player: "player".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn animal_drops_emit_item_dropped_per_item() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        w.spawn_animal("chicken", [0.5, 4.0, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        w.tick(&click());
+        let mut seen = w.drain_events();
+        for _ in 0..200 {
+            w.tick(&TickInput::default());
+            seen.extend(w.drain_events());
+        }
+        let dropped = dropped_sources(&seen);
+        assert!(!dropped.is_empty());
+        assert_eq!(dropped.len(), w.items().len());
+        assert!(dropped.iter().all(|(_, s)| s == "animal"));
+    }
+
+    #[test]
+    fn forage_till_and_harvest_drops_emit_item_dropped() {
+        let mut w = grass_walker(1);
+        w.tick(&look(0.0, false));
+        w.tick(&press_secondary());
+        assert_eq!(
+            dropped_sources(&w.drain_events()),
+            vec![("seeds".to_string(), "forage".to_string())]
+        );
+
+        let mut w = grass_floor_walker(1);
+        w.tick(&down(true, true));
+        assert_eq!(
+            dropped_sources(&w.drain_events()),
+            vec![("seeds".to_string(), "till".to_string())]
+        );
+
+        let mut w = crop_walker(mature());
+        w.drain_events();
+        w.tick(&down(true, false));
+        let dropped = dropped_sources(&w.drain_events());
+        assert_eq!(dropped.len(), w.items().len());
+        assert!(dropped.iter().all(|(_, s)| s == "harvest"));
+        assert_eq!(dropped[0].0, "wheat");
+    }
+
+    #[test]
+    fn drop_and_pickup_events_replay_identically() {
+        let run = || {
+            let mut w = settled();
+            w.state.hands = Some(seeds());
+            let mut seen = Vec::new();
+            for _ in 0..40 {
+                w.tick(&drop_input(0.3, -0.3));
+                seen.extend(w.drain_events());
+                w.tick(&interact());
+                seen.extend(w.drain_events());
+            }
+            seen
+        };
+        let seen = run();
+        assert!(!seen.is_empty());
+        assert_eq!(seen, run());
     }
 }
