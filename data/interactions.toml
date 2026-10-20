@@ -40,15 +40,13 @@ action = "plant"
 held = "empty"
 button = "secondary"
 target = "block:crop"
-require_state = "mature"
-action = "harvest"
+action = "pick"
 
 [[rule]]
 held = "any_tool"
 button = "secondary"
 target = "block:crop"
-require_state = "mature"
-action = "harvest"
+action = "pick"
 
 [[rule]]
 held = "empty"

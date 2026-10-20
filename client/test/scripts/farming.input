@@ -1,9 +1,9 @@
-# Till, plant, wait for the wheat to ripen, harvest, on the raft scene's field
+# Till, plant, wait for the wheat to ripen, pick, on the raft scene's field
 # (docs/design/basic-gameplay.md phase 7). The right button tills, plants and
-# harvests; `give` from the debug console stands in for finding the hoe and
+# picks; `give` from the debug console stands in for finding the hoe and
 # the seeds.
 
-case a hoe tills the field, seeds plant, ripe wheat is harvested and resets
+case a hoe tills the field, seeds plant, wheat is picked at any stage and is gone
 start walk raft
 click
 lock
@@ -40,7 +40,7 @@ frame 50 x2
 expect field.crop = wheat_0
 expect hands = none
 
-# empty hands: a young crop is left alone, a ripe one is picked
+# empty hands: a young crop is picked too and drops nothing; the farmland stays
 press Digit1
 frame 50
 expect held = empty
@@ -48,12 +48,29 @@ button down right
 frame 50 x2
 button up right
 frame 50
+expect field.crop = air
+expect field.ground != grass
+expect items = 3
+
+# replant with seeds, wait for ripeness, pick: the crop is gone
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+expect held = item:seeds
+lock
+button down right
+frame 50 x2
+button up right
+frame 50 x2
 expect field.crop = wheat_0
+press Digit1
+frame 50
 until field.crop = wheat_7
 expect items = 3
 button down right
 frame 50 x2
 button up right
 frame 50
-expect field.crop = wheat_0
+expect field.crop = air
 expect items > 3
