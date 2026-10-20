@@ -27,7 +27,10 @@ pub fn plant<W: CollisionWorld>(
 ) -> bool {
     let [x, y, z] = pos;
     if face != Face::Top
-        || !matches!(world.get(x, y, z), Some(FarmTile::Farmland { .. }))
+        || !matches!(
+            world.get(x, y, z),
+            Some(FarmTile::Farmland { .. } | FarmTile::PlanterFarmland { .. })
+        )
         || world.block_at(x, y + 1, z) != Block::Air
     {
         return false;
@@ -50,6 +53,19 @@ mod tests {
             w.set(0, 5, 0, t);
         }
         w
+    }
+
+    #[test]
+    fn planter_farmland_takes_seeds() {
+        let mut w = world(Some(FarmTile::PlanterFarmland { wet: false }), Block::Air);
+        assert!(plant(&mut w, [0, 5, 0], Face::Top, CropKind::Wheat));
+        assert_eq!(
+            w.get(0, 6, 0),
+            Some(FarmTile::Crop {
+                kind: CropKind::Wheat,
+                stage: 0
+            })
+        );
     }
 
     #[test]

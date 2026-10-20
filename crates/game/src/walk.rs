@@ -876,10 +876,12 @@ fn look_dir(input: &TickInput) -> [f64; 3] {
     [sy * cp, sp, -cy * cp]
 }
 
-/// The name rules use for a block: both farmland blocks are `farmland`.
+/// The name rules use for a block: all farmland blocks, planter or not, are `farmland`.
 fn rule_block_name(block: Block) -> String {
     match FarmTile::from_block(block) {
-        Some(FarmTile::Farmland { .. }) => "farmland".to_string(),
+        Some(FarmTile::Farmland { .. } | FarmTile::PlanterFarmland { .. }) => {
+            "farmland".to_string()
+        }
         Some(FarmTile::Crop { .. }) => "crop".to_string(),
         _ => block.info().name.to_string(),
     }

@@ -2,7 +2,7 @@
 //! See docs/design/basic-gameplay.md section 9.1.
 //!
 //! Tilling is a block transform in the farm overlay; generated blocks are
-//! untouched. Planter dirt is left out until a planter block exists.
+//! untouched. A planter becomes tilled planter farmland and never drops.
 
 use crate::collision::CollisionWorld;
 use crate::farm::{FarmTile, FarmWorld};
@@ -96,7 +96,7 @@ impl Tiller {
     }
 
     /// Till the block at `pos` on `tick`. Grass or dirt with air above becomes
-    /// dry farmland. Returns `None` if nothing changed, else the item to drop
+    /// dry farmland, a planter dry planter farmland. Returns `None` if nothing changed, else the item to drop
     /// (`Some(None)` for no drop). Anything else changes nothing and rolls
     /// nothing.
     pub fn till<W: CollisionWorld>(
@@ -107,11 +107,12 @@ impl Tiller {
     ) -> Option<Option<&str>> {
         let [x, y, z] = pos;
         let block = world.block_at(x, y, z);
-        if !matches!(block, Block::Grass | Block::Dirt) || world.block_at(x, y + 1, z) != Block::Air
-        {
-            return None;
-        }
-        if !world.set(x, y, z, FarmTile::Farmland { wet: false }) {
+        let tile = match block {
+            Block::Grass | Block::Dirt => FarmTile::Farmland { wet: false },
+            Block::PlanterDirt => FarmTile::PlanterFarmland { wet: false },
+            _ => return None,
+        };
+        if world.block_at(x, y + 1, z) != Block::Air || !world.set(x, y, z, tile) {
             return None;
         }
         self.last = Some((pos, tick));
@@ -168,6 +169,30 @@ mod tests {
             assert_eq!(w.block_at(1, 5, 0), Block::Stone, "neighbour unchanged");
             assert_eq!(w.block_at(0, 6, 0), Block::Air);
         }
+    }
+
+    #[test]
+    fn planter_with_air_above_becomes_planter_farmland_and_never_drops() {
+        let mut w = world(Block::PlanterDirt, Block::Air);
+        let mut t = Tiller::new(cfg(1), 1);
+        assert_eq!(t.till(&mut w, [0, 5, 0], 0), Some(None));
+        assert_eq!(w.block_at(0, 5, 0), Block::PlanterFarmlandDry);
+        assert_eq!(
+            w.get(0, 5, 0),
+            Some(FarmTile::PlanterFarmland { wet: false })
+        );
+        assert!(t.repeat_due([1, 5, 0], 4));
+        // Already tilled: nothing more to do.
+        assert_eq!(t.till(&mut w, [0, 5, 0], 9), None);
+    }
+
+    #[test]
+    fn planter_with_a_block_on_top_does_not_till() {
+        let mut w = world(Block::PlanterDirt, Block::Stone);
+        let mut t = Tiller::new(cfg(1), 1);
+        assert_eq!(t.till(&mut w, [0, 5, 0], 0), None);
+        assert_eq!(w.block_at(0, 5, 0), Block::PlanterDirt);
+        assert_eq!(w.get(0, 5, 0), None);
     }
 
     #[test]

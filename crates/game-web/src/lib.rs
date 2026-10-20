@@ -161,6 +161,12 @@ impl Scene {
         FIELD_Y
     }
 
+    /// World x and z of each planter, flattened; they sit at `field_y`.
+    #[wasm_bindgen(getter)]
+    pub fn planters(&self) -> Vec<i32> {
+        self.0.planters.iter().flatten().copied().collect()
+    }
+
     /// Sea floor and water, in `generate_region_decorated` layout.
     pub fn sea_blocks(&self) -> Vec<u8> {
         self.0.sea.blocks.clone()

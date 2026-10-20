@@ -17,6 +17,8 @@ const SURFACE: i32 = 64;
 /// Side of the square grass field to till, and the y of its grass.
 pub const FIELD_SIZE: i32 = 3;
 pub const FIELD_Y: i32 = SURFACE - 1;
+/// Islet columns (x offsets in its last row) that hold a planter.
+const ISLET_PLANTERS: [i32; 2] = [1, 2];
 /// Blocks between the raft's +z edge and the spawn.
 const SPAWN_GAP: f64 = 3.0;
 
@@ -33,6 +35,8 @@ pub struct RaftScene {
     /// First column `[x, z]` of the hoe-able field, `FIELD_SIZE` square; its
     /// grass is at `FIELD_Y`.
     pub field: [i32; 2],
+    /// Columns `[x, z]` of the planters on the islet; each planter is at `FIELD_Y`.
+    pub planters: Vec<[i32; 2]>,
     /// Stub targets for checking the selection outline: a bare entity box.
     pub entities: Vec<TargetableEntity>,
 }
@@ -81,7 +85,7 @@ pub fn raft_scene() -> RaftScene {
         (min_y - 1) as f64,
         max_z as f64 + 1.0 + SPAWN_GAP,
     ];
-    let entities = add_islet(&mut sea, spawn);
+    let (entities, planters) = add_islet(&mut sea, spawn);
     let field = add_field(&mut sea, spawn);
     RaftScene {
         sea,
@@ -89,6 +93,7 @@ pub fn raft_scene() -> RaftScene {
         raft,
         spawn,
         field,
+        planters,
         entities,
     }
 }
@@ -96,8 +101,10 @@ pub fn raft_scene() -> RaftScene {
 /// A grassy 3x3 islet beside the spawn with a few placed plants on it, and a
 /// stub animal-like box standing on it. Test scene only: it exists so the
 /// selection outline and the dispatch overlay have plants and an entity to
-/// point at. Returns the stub entities.
-fn add_islet(sea: &mut Region, spawn: [f64; 3]) -> Vec<TargetableEntity> {
+/// point at. Its last row holds `ISLET_PLANTERS` planters in place of grass,
+/// level with it (docs/design/basic-gameplay.md section 9.1, decided in
+/// #451). Returns the stub entities and the planter columns.
+fn add_islet(sea: &mut Region, spawn: [f64; 3]) -> (Vec<TargetableEntity>, Vec<[i32; 2]>) {
     let (x0, z0) = (spawn[0].floor() as i32 + 1, spawn[2].floor() as i32 - 1);
     // The grass layer replaces the top water layer, so the islet is level
     // with the surface and a swimmer's eye sees over it with no water between.
@@ -112,6 +119,13 @@ fn add_islet(sea: &mut Region, spawn: [f64; 3]) -> Vec<TargetableEntity> {
             let i = sea.index(lx, top, lz);
             sea.blocks[i] = Block::Grass as u8;
         }
+    }
+    let mut planters = Vec::new();
+    for dx in ISLET_PLANTERS {
+        let (x, z) = (x0 + dx, z0 + 2);
+        let i = sea.index((x - SEA_MIN) as u32, top, (z - SEA_MIN) as u32);
+        sea.blocks[i] = Block::PlanterDirt as u8;
+        planters.push([x, z]);
     }
     for (dx, dz, plant) in [
         (0, 0, Block::TallGrass),
@@ -130,11 +144,12 @@ fn add_islet(sea: &mut Region, spawn: [f64; 3]) -> Vec<TargetableEntity> {
         f64::from(top) + 1.0,
         f64::from(z0) + 1.3,
     ];
-    vec![TargetableEntity {
+    let entity = TargetableEntity {
         id: 1,
         kind: "animal".into(),
         aabb: Aabb::from_size(min, [0.9, 0.9, 0.9]),
-    }]
+    };
+    (vec![entity], planters)
 }
 
 /// A bare grass field level with the water, two blocks east of the islet
@@ -180,5 +195,30 @@ mod tests {
         assert_eq!(at(s.spawn), Block::Water);
         let solid = s.raft.blocks.iter().filter(|&&b| b != 0).count();
         assert_eq!(solid, s.cells.len());
+    }
+
+    #[test]
+    fn planters_sit_level_with_the_islet_grass() {
+        let s = raft_scene();
+        assert_eq!(s.planters.len(), ISLET_PLANTERS.len());
+        for &[x, z] in &s.planters {
+            let at = |dx: i32| {
+                s.sea.get(
+                    (x + dx - SEA_MIN) as u32,
+                    FIELD_Y as u32,
+                    (z - SEA_MIN) as u32,
+                )
+            };
+            assert_eq!(at(0), Block::PlanterDirt);
+            assert!(at(-1) == Block::Grass || at(-1) == Block::PlanterDirt);
+            assert_eq!(
+                s.sea.get(
+                    (x - SEA_MIN) as u32,
+                    FIELD_Y as u32 + 1,
+                    (z - SEA_MIN) as u32
+                ),
+                Block::Air
+            );
+        }
     }
 }

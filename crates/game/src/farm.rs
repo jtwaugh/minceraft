@@ -44,6 +44,10 @@ pub enum FarmTile {
     Farmland {
         wet: bool,
     },
+    /// Tilled planter: farmland that keeps the planter's sides and bottom.
+    PlanterFarmland {
+        wet: bool,
+    },
     /// `stage` counts from 0 (just planted) to `kind.stages() - 1` (mature).
     Crop {
         kind: CropKind,
@@ -57,6 +61,8 @@ impl FarmTile {
         match self {
             FarmTile::Farmland { wet: false } => Some(Block::FarmlandDry),
             FarmTile::Farmland { wet: true } => Some(Block::FarmlandWet),
+            FarmTile::PlanterFarmland { wet: false } => Some(Block::PlanterFarmlandDry),
+            FarmTile::PlanterFarmland { wet: true } => Some(Block::PlanterFarmlandWet),
             FarmTile::Crop {
                 kind: CropKind::Wheat,
                 stage,
@@ -69,6 +75,8 @@ impl FarmTile {
         match block {
             Block::FarmlandDry => Some(FarmTile::Farmland { wet: false }),
             Block::FarmlandWet => Some(FarmTile::Farmland { wet: true }),
+            Block::PlanterFarmlandDry => Some(FarmTile::PlanterFarmland { wet: false }),
+            Block::PlanterFarmlandWet => Some(FarmTile::PlanterFarmland { wet: true }),
             b => WHEAT.iter().position(|w| *w == b).map(|i| FarmTile::Crop {
                 kind: CropKind::Wheat,
                 stage: i as u32,

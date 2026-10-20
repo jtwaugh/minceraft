@@ -29,6 +29,7 @@
 //   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
 //   stand field                 teleport onto the raft scene's field and look straight down
+//   stand planter               the same, on the islet's first planter
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye, for `moved`
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
@@ -41,6 +42,7 @@
 // belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
 // item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
+// planter.ground and planter.crop (the same for the first planter),
 // sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -149,6 +151,11 @@ function read(w, path) {
     const id = w.walk.block_at(fx + m, w.scene.field_y + (path === 'field.crop'), fz + m);
     return Object.keys(B).find((k) => B[k] === id) ?? `block ${id}`;
   }
+  if (path === 'planter.ground' || path === 'planter.crop') {
+    const [px, pz] = w.scene.planters;
+    const id = w.walk.block_at(px, w.scene.field_y + (path === 'planter.crop'), pz);
+    return Object.keys(B).find((k) => B[k] === id) ?? `block ${id}`;
+  }
   const aim = s.aim;
   if (path === 'target.kind') return aim.kind;
   if (path === 'target.id') return aim.id ?? -1;
@@ -224,8 +231,9 @@ function step(w, { op, args }) {
       return;
     }
     case 'stand': {
-      if (args[0] !== 'field' || !w.scene) throw new Error('stand field (raft scene only)');
-      const [fx, fz] = w.scene.field, m = Math.floor(w.scene.field_size / 2);
+      if (!['field', 'planter'].includes(args[0]) || !w.scene) throw new Error('stand field|planter (raft scene only)');
+      const [fx, fz] = args[0] === 'field' ? w.scene.field : w.scene.planters;
+      const m = args[0] === 'field' ? Math.floor(w.scene.field_size / 2) : 0;
       w.walk.teleport(fx + m + 0.5, w.scene.field_y + 1, fz + m + 0.5);
       // far more than a quarter turn, so the pitch clamps at straight down
       fire(document, 'mousemove', { movementX: 0, movementY: 2000 });

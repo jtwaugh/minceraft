@@ -369,3 +369,30 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#d9b048"
+
+[[block]]
+id = 39
+name = "planter_dirt"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#6b4a2e"
+
+[[block]]
+id = 40
+name = "planter_farmland_dry"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#6b4a2e"
+
+[[block]]
+id = 41
+name = "planter_farmland_wet"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#4a3320"

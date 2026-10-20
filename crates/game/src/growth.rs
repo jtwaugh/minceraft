@@ -32,8 +32,12 @@ pub fn hydrated<W: CollisionWorld>(world: &FarmWorld<W>, x: i32, y: i32, z: i32)
 /// What the square at `(x, y, z)` adds to a neighbouring crop's odds.
 fn surround<W: CollisionWorld>(world: &FarmWorld<W>, x: i32, y: i32, z: i32) -> Surround {
     match world.get(x, y, z) {
-        Some(FarmTile::Farmland { .. }) if hydrated(world, x, y, z) => Surround::WetFarmland,
-        Some(FarmTile::Farmland { .. }) => Surround::DryFarmland,
+        Some(FarmTile::Farmland { .. } | FarmTile::PlanterFarmland { .. })
+            if hydrated(world, x, y, z) =>
+        {
+            Surround::WetFarmland
+        }
+        Some(FarmTile::Farmland { .. } | FarmTile::PlanterFarmland { .. }) => Surround::DryFarmland,
         _ => Surround::Other,
     }
 }
@@ -247,6 +251,42 @@ mod tests {
             grow_crops(&mut w, &one, 3, tick);
         }
         assert_eq!(stage(&w, 0, 0), 7);
+    }
+
+    #[test]
+    fn planter_farmland_hydrates_and_grows_like_farmland() {
+        let crops = Crops {
+            random_tick_interval: 3,
+            ..Crops::default_crops()
+        };
+        let build = |tile: FarmTile, water: bool| {
+            let mut w = field(&[], water.then_some((3, SOIL, 0)));
+            for x in 0..3 {
+                w.set(x, SOIL, 0, tile);
+                w.set(x, SOIL + 1, 0, crop(0));
+            }
+            w
+        };
+        for water in [false, true] {
+            assert_eq!(
+                hydrated(&build(FarmTile::Farmland { wet: false }, water), 1, SOIL, 0),
+                water
+            );
+            let mut plain = build(FarmTile::Farmland { wet: false }, water);
+            let mut planter = build(FarmTile::PlanterFarmland { wet: false }, water);
+            assert_eq!(
+                growth_input(&plain, [1, SOIL + 1, 0]),
+                growth_input(&planter, [1, SOIL + 1, 0])
+            );
+            for tick in 1..=400 {
+                grow_crops(&mut plain, &crops, 5, tick);
+                grow_crops(&mut planter, &crops, 5, tick);
+            }
+            for x in 0..3 {
+                assert_eq!(stage(&plain, x, 0), stage(&planter, x, 0), "water {water}");
+            }
+            assert!(stage(&planter, 1, 0) > 0);
+        }
     }
 
     #[test]
