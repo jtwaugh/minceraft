@@ -36,8 +36,6 @@ fn bad<T>(msg: impl Into<String>) -> Result<T, ParseError> {
     Err(msg.into())
 }
 
-const FLAGS: usize = 7;
-
 fn flags_of(i: &TickInput) -> u32 {
     [
         i.jump,
@@ -74,14 +72,11 @@ fn parse_commands(s: &str) -> Result<Vec<String>, ParseError> {
         .trim()
         .strip_prefix('[')
         .and_then(|r| r.strip_suffix(']'))
-        .map_or_else(|| bad("commands must be a [..] list"), Ok)?;
+        .ok_or("commands must be a [..] list")?;
     let mut out = Vec::new();
     let mut chars = inner.chars().peekable();
     loop {
-        while matches!(chars.peek(), Some(' ') | Some(',')) {
-            chars.next();
-        }
-        match chars.next() {
+        match chars.find(|c| !matches!(c, ' ' | ',')) {
             None => return Ok(out),
             Some('"') => {}
             Some(c) => return bad(format!("unexpected {c:?} in commands")),
@@ -112,7 +107,6 @@ fn hex32(s: &str) -> Result<f32, ParseError> {
 
 fn parse_input(body: &str) -> Result<TickInput, ParseError> {
     let mut input = TickInput::default();
-    let mut seen = 0;
     for field in body.split_whitespace() {
         let Some((k, v)) = field.split_once('=') else {
             return bad(format!("bad input field {field:?}"));
@@ -126,9 +120,6 @@ fn parse_input(body: &str) -> Result<TickInput, ParseError> {
                 let Ok(f) = v.parse::<u32>() else {
                     return bad(format!("bad flags {v:?}"));
                 };
-                if f >> FLAGS != 0 {
-                    return bad(format!("unknown flag bits in {v:?}"));
-                }
                 let bit = |n: usize| f >> n & 1 == 1;
                 input.jump = bit(0);
                 input.sneak = bit(1);
@@ -150,10 +141,6 @@ fn parse_input(body: &str) -> Result<TickInput, ParseError> {
             }
             _ => return bad(format!("unknown input field {k:?}")),
         }
-        seen += 1;
-    }
-    if seen != 6 {
-        return bad("input needs fwd, str, yaw, pitch, flags and slot");
     }
     Ok(input)
 }
