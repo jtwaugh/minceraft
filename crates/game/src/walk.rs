@@ -268,11 +268,6 @@ impl Walker {
         std::mem::take(&mut self.command_output)
     }
 
-    /// Ticks stepped so far.
-    pub fn sim_tick(&self) -> u64 {
-        self.sim_tick
-    }
-
     /// Whether a cheat command has run this session.
     pub fn cheated(&self) -> bool {
         self.cheated
