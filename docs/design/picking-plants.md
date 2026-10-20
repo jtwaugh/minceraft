@@ -32,9 +32,10 @@ Checked against the code:
 4. **Picking tall grass.** Section 3 keeps tall grass as a forage target (the grass stays). `pick` must apply to flowers and crops only, so the `forage` rule for tall grass is unchanged.
 5. **Held items.** Item pickup and hands rules are in `items.rs` and `player.rs` (Phase 5 of basic-gameplay). "Hands full, drop as an item entity" matches the existing item-entity code (`item_entities.rs`); no new mechanism is needed.
 6. **Art.** Each new item needs an icon in `art/` (one 16-colour palette, 8x8, `snake_case` names; `art/PROMPT.md` lists what should exist). Flower icons also need a `PROMPT.md` entry. That file is not in the design lane, so it is a ticket, not part of this doc.
-7. **Input scripts.** Section 3 and 4 say "if it doesn't work, add an input script". Per CLAUDE.md, a script comes first either way. Phase D is mostly tests; if the script passes, nothing else changes.
+7. **Input scripts.** Section 3 and 4 say "if it doesn't work, add an input script". Per CLAUDE.md, a script comes first either way. Phase D is section 4 only (the seed-planting script) and is mostly tests; if the script passes, nothing else changes. The foraging script of section 3 belongs to Phase C. (Decided in #510.)
 8. **[manual check]** "In play that feels like foraging does nothing" (section 3) is a feel judgment. A measurable version: with the shipped chance and cooldown, a player foraging distinct tall grass blocks gets seeds within N tries with probability at least P (for example, 1 in 6 gives 90% within 13 tries). The tests can assert the chance and cooldown values and the feedback event; whether it feels right is for the maintainer.
 9. **[manual check]** "I want the farming loop to feel natural" has no test; the loop script (forage, plant, grow, harvest) is the closest measurable check.
+10. **Phases.** One phase per section of the author's text: Phase A is section 1 (the `pick` action for crops, loosening rule 2), Phase B is section 2 (flowers: items, icons, overlay), Phase C is section 3 (foraging) and Phase D is section 4 (seed planting script). (Decided in #510.)
 
 ---
 
