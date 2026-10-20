@@ -172,3 +172,14 @@ type clear hands
 press Enter
 frame 50 x2
 expect hands = none
+
+case an alias runs its lines in one tick and sets cheated
+start walk raft
+click
+lock
+press Backquote
+expect cheated = false
+type kitchen
+press Enter
+frame 50
+expect cheated = true

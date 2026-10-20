@@ -2,6 +2,7 @@
 //! the debug fly camera. The DOM side is `client/input.js`; the render loop is
 //! `client/scene.js`.
 
+use game::aliases::Aliases;
 use game::animals::Animals;
 use game::bindings::Bindings;
 use game::camera::{Camera, Pose};
@@ -401,13 +402,22 @@ impl Walk {
 
 fn with_default_commands(mut walker: Walker) -> Result<Walk, JsError> {
     let registry = default_registry().map_err(|e| JsError::new(&e.to_string()))?;
+    let aliases = Aliases::default_aliases(&registry).map_err(|e| JsError::new(&e.to_string()))?;
     walker.set_commands(registry);
+    walker.set_aliases(aliases);
     Ok(Walk(walker))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_names_include_aliases() {
+        let names = command_names();
+        assert!(names.contains(&"help".to_string()));
+        assert!(names.contains(&"kitchen".to_string()));
+    }
 
     fn walk() -> Walk {
         with_default_commands(Walker::new([0.5, 5.0, 0.5]).unwrap()).unwrap_or_else(|_| panic!())
@@ -524,7 +534,12 @@ pub fn view_matrix(x: f32, y: f32, z: f32, yaw: f32, pitch: f32) -> Vec<f32> {
 #[wasm_bindgen]
 pub fn command_names() -> Vec<String> {
     let registry = default_registry().expect("built-in commands are valid");
-    registry.iter().map(|c| c.name.to_string()).collect()
+    let aliases = Aliases::default_aliases(&registry).expect("built-in aliases are valid");
+    registry
+        .iter()
+        .map(|c| c.name.to_string())
+        .chain(aliases.aliases.into_iter().map(|a| a.name))
+        .collect()
 }
 
 /// Tool names from `data/items.toml`, in file order.
