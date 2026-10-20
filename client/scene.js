@@ -306,8 +306,11 @@ const meshes = { opaque: [], cutout: [], water: [], ice: [] };
 const raftMeshes = { opaque: [], cutout: [] }; // moved each frame by the sim's raft offset
 // Meshes of each streamed region, by "rx,rz", so they can be freed when it unloads.
 const regionParts = new Map();
+// Loaded neighbours of a newly meshed region, remeshed one per spare frame: they were
+// padded with this region's edge as their own, which can leave a hole in a cliff wall.
+const stale = new Map();
 const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); };
-function meshRegion({ rx, rz }) {
+function meshRegion({ rx, rz }, remesh = false) {
   const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
   // one column of the neighbours' edges around the region, so no seams at its borders
   const blocks = padRegion((a, b) => walk.region_blocks(a, b), rx, rz, REGION_SIZE);
@@ -321,10 +324,16 @@ function meshRegion({ rx, rz }) {
     if (part) meshes[k].push(part);
   }
   regionParts.set(`${rx},${rz}`, parts);
+  if (!remesh) for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    const n = { rx: rx + dx, rz: rz + dz };
+    if (regionParts.has(`${n.rx},${n.rz}`)) stale.set(`${n.rx},${n.rz}`, n);
+  }
+  stale.delete(`${rx},${rz}`);
 }
 function freeRegion({ rx, rz }) {
   const parts = regionParts.get(`${rx},${rz}`);
   regionParts.delete(`${rx},${rz}`);
+  stale.delete(`${rx},${rz}`);
   for (const k of Object.keys(parts ?? {})) {
     for (const p of parts[k]) freeParts(p);
     meshes[k] = meshes[k].filter((m) => !parts[k].includes(m));
@@ -411,7 +420,13 @@ function render(now) {
   const { alpha, eye, yaw, pitch, flying, aim, underwater, regions } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
   if (regions) {
     regions.free.forEach(freeRegion);
-    regions.mesh.forEach(meshRegion);
+    regions.mesh.forEach((r) => meshRegion(r));
+    if (!regions.mesh.length && stale.size) {
+      const [key, n] = stale.entries().next().value;
+      stale.delete(key);
+      freeRegion(n);
+      meshRegion(n, true);
+    }
   }
 
   const dpr = window.devicePixelRatio || 1;
