@@ -166,6 +166,10 @@ jobs:
       - name: Build (./build.sh)
         run: ./build.sh
 
+      - run: python3 -I .github/scripts/test_published_files.py
+      - run: python3 -I .github/scripts/published_files.py
+        
+
       - name: Wasm size budget
         run: |
           wasm=viewer/pkg/terrain_web_bg.wasm
