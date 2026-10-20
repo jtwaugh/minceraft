@@ -129,3 +129,32 @@ button up left
 frame 50
 expect rule.last = none
 expect hands = seeds
+
+case the HUD follows the selection and the carried item
+start walk raft
+click
+lock
+frame 50 x2
+expect hud.selected = 0
+press Digit3
+frame 50 x2
+expect hud.selected = 2
+mouse 632 120
+frame 50 x2
+expect hud.hands = none
+press KeyE
+frame 50 x2
+expect hud.hands = seeds
+
+case the HUD hearts drop with fall damage
+start walk raft
+click
+lock
+frame 50 x2
+expect health = 20
+expect hearts.empty = 0
+stand field
+frame 50 x2
+drop 12
+until health < 20
+expect hearts.empty > 0

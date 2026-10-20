@@ -21,6 +21,7 @@ import { attachInput } from './input.js';
 import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
+import { mountHud } from './hud.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
@@ -46,6 +47,7 @@ window.debugMode = debug;
 
 const canvas = document.getElementById('gl');
 const overlay = document.getElementById('overlay');
+const hud = mountHud(document);
 const hint = document.getElementById('hint');
 const gl = canvas.getContext('webgl2', { antialias: true });
 if (!gl) throw new Error('WebGL2 is not available');
@@ -436,6 +438,7 @@ function render(now) {
   gl.bindVertexArray(null);
   if (scene) drawAnimals(mvp, readAnimals(walk));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
+  hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
 
   if (lastFrame !== null) frames.push(now - lastFrame);
   lastFrame = now;
