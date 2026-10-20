@@ -428,6 +428,16 @@ impl Walker {
         &self.player
     }
 
+    /// The player's health in half-hearts.
+    pub fn health(&self) -> u32 {
+        self.player.health
+    }
+
+    /// The most health the player can have, in half-hearts.
+    pub fn max_health(&self) -> u32 {
+        self.physics.max_health
+    }
+
     /// The yaw of the last ticked input.
     pub fn look_yaw(&self) -> f32 {
         self.look_yaw
@@ -2861,6 +2871,18 @@ mod tests {
             w.player().health,
             w.physics.max_health - (fall_distance - threshold).ceil() as u32
         );
+    }
+
+    #[test]
+    fn health_is_full_on_start_and_drops_after_a_fall() {
+        let mut w = settled();
+        assert_eq!(w.health(), 20);
+        assert_eq!(w.max_health(), 20);
+        w.player.pos[1] += 5.0;
+        w.player.on_ground = false;
+        landings(&mut w, &TickInput::default(), 60);
+        assert!(w.health() < w.max_health());
+        assert_eq!(w.max_health(), 20);
     }
 
     #[test]
