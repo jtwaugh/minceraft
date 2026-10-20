@@ -107,6 +107,15 @@ Not present: `MECHANICS_SPEC.md`, animals, crops, the event system and the HUD.
     with the sim at 20 Hz for Phase 1; a scripted path crossing the island in
     a headless sim for Phase 2. The Section 14 tests are automatable.
 11. **Phase status.** Phases 1 to 5 are done; the rest are not.
+12. **Phase 7 still incomplete (plan #287).** Tickets #290 to #298 are closed
+    (crop data #300, forage #301, farmland overlay #321, till #337, plant #342,
+    harvest #346, growth #395 and #419, headless test #435, browser scene #438).
+    Phase 7 says "grass and planters can be tilled", but `crates/game/src/till.rs`
+    leaves planter dirt out ("until a planter block exists") and `planter_dirt`
+    has no block or definition in `world-layout.md`. The rule for
+    `block:planter_dirt` in `data/interactions.toml` therefore has nothing to
+    act on. Suggest a follow-up once the planter block exists, then mark the
+    phase done.
 
 ## Mince Raft: Basic Gameplay Specification
 
