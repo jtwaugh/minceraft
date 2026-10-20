@@ -57,7 +57,7 @@ if (!gl) throw new Error('WebGL2 is not available');
 // The viewer's shader, including water animation (`waterFrame` offsets the
 // water layers; the frame comes from waterframe.js), reading the split colour/tint
 // textures from tiles.js. `cut` (leaves, plants) outputs coverage as alpha for
-// alpha-to-coverage and discards below `cutoff`; `solid` does neither. Fog
+// alpha-to-coverage and discards below 0.5 without MSAA; `solid` does neither. Fog
 // is the radial curve of viewer/fog.js when `fogFar` > 0, else a linear ramp from
 // `fogStart` to `fogEnd` (under water); both measure distance from the eye. `tint` multiplies the
 // lit colour, both set per frame by view.js `look`, so the same shader draws
@@ -101,7 +101,7 @@ function program(cut) {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform float cutoff;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint;
     out vec4 o;
     ${FOG_GLSL}
     void main() {
@@ -110,11 +110,12 @@ function program(cut) {
       vec2 fw = max(fwidth(px), vec2(1e-4));
       vec2 snapped = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / ${TEX_SIZE}.0;
       vec4 t = textureGrad(tex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy));
-      ${cut ? 'if (t.a < cutoff) discard;' : ''}
+      ${cut && !msaa ? 'if (t.a < 0.5) discard;' : ''}
+      ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
       float g = texture(tintTex, vuv).r;
       vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint;
       float f = fogFar > 0.0 ? fogAmount(vdist, fogFar) : clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
-      o = vec4(mix(c, fogColor, f), ${cut ? 't.a * alpha' : 'alpha'});
+      o = vec4(mix(c, fogColor, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'alpha'});
     }`));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
@@ -283,10 +284,11 @@ for (const b of JSON.parse(legendJson).blocks) names[b.id] = b.name;
 const faceLayer = await loadTiles(gl, B, names, '../viewer/textures.json');
 const ctx = legendContext(legendJson, faceLayer);
 
-const solidProg = program(false), cutProg = program(true);
-// With MSAA, cutout edges use alpha-to-coverage so distant leaves fade to
-// partial coverage instead of popping in and out at a hard alpha threshold.
+// With MSAA, cutout edges use alpha-to-coverage on a sharpened alpha so distant
+// leaves fade to partial coverage instead of popping in and out; without it the
+// cutout shader falls back to a hard discard.
 const msaa = gl.getParameter(gl.SAMPLES) > 0;
+const solidProg = program(false), cutProg = program(true);
 const cut = (draw) => {
   if (msaa) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
   draw();
@@ -478,6 +480,5 @@ const cutSampler = createSampler(gl, 'cutout');
 for (const p of [solidProg, cutProg]) {
   gl.useProgram(p);
   gl.uniform1i(p.u('tex'), 0); gl.uniform1i(p.u('tintTex'), 1);
-  gl.uniform1f(p.u('cutoff'), msaa ? 1 / 255 : 0.5);
 }
 requestAnimationFrame(render);

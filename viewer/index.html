@@ -612,7 +612,11 @@ function initGL() {
   useProg(progs.cut);
 }
 
+// With MSAA the cutout program outputs a sharpened alpha for alpha-to-coverage
+// (the tint weight above still uses the raw alpha); without it, a hard discard.
+const msaa = () => gl.getParameter(gl.SAMPLES) > 0;
 function program(cut) {
+  const msaa = msaaOn;
   const prog = gl.createProgram();
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, `#version 300 es
     layout(location=0) in vec3 pos;
@@ -655,12 +659,13 @@ function program(cut) {
       vec2 fw = max(fwidth(px), vec2(1e-4));
       vec2 snapped = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / ${TEX_SIZE}.0;
       vec4 t = textureGrad(tex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy));
-      ${cut ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
+      ${cut && !msaa ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
+      ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
       // alpha 1 is untinted and alpha TINT_A/255 fully tinted; filtered texels fall between
       float tw = clamp((1.0 - t.a) / (1.0 - ${TINT_A}.0 / 255.0), 0.0, 1.0);
       vec3 c = t.rgb * mix(vec3(1.0), vtint, tw) * vshade;
       float f = fogAmount(vdist, fogFar) * fogMax;
-      o = vec4(mix(c, fogColor, f), alpha);
+      o = vec4(mix(c, fogColor, f), ${cut && msaa ? 'ca * alpha' : 'alpha'});
     }`));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
