@@ -19,6 +19,9 @@ pub struct Player {
     pub health: u32,
     /// Blocks fallen since last on the ground or in water.
     pub fall_distance: f64,
+    /// The fall distance of a landing on the ground made this tick (before
+    /// it was reset); cleared at the start of the next tick.
+    pub last_landing: Option<f64>,
 }
 
 impl Player {
@@ -29,6 +32,7 @@ impl Player {
             on_ground: false,
             health: physics.max_health,
             fall_distance: 0.0,
+            last_landing: None,
         }
     }
 
@@ -53,6 +57,9 @@ impl Player {
             self.fall_distance -= dy;
         }
         if self.on_ground {
+            if self.fall_distance > 0.0 {
+                self.last_landing = Some(self.fall_distance);
+            }
             let damage = (self.fall_distance - physics.fall_damage_threshold as f64).ceil();
             if damage > 0.0 {
                 self.health = self.health.saturating_sub(damage as u32);
@@ -110,6 +117,7 @@ impl Player {
         physics: &PlayerPhysics,
         world: &impl CollisionWorld,
     ) {
+        self.last_landing = None;
         // 1. Read input and scale it. Over-long raw input (diagonals) is
         // normalised first so no direction is faster than straight ahead.
         let (mut fwd, mut strafe) = input.movement();

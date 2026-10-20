@@ -59,4 +59,7 @@ pub enum GameEvent {
     SteppedOntoRaft { player: String },
     /// The player stopped standing on the raft deck.
     SteppedOffRaft { player: String },
+    /// The player landed on the ground after `fall_distance` blocks of
+    /// falling (the distance fall damage used). Water landings emit nothing.
+    Landed { fall_distance: f64 },
 }
