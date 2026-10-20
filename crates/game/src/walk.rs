@@ -24,6 +24,7 @@ use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
+use crate::replay::Fnv;
 use crate::rng::Rng;
 use crate::scene::RaftScene;
 use crate::stream::{StreamConfig, Streamer};
@@ -291,6 +292,56 @@ impl Walker {
     /// The output lines of commands run since the last call.
     pub fn drain_command_output(&mut self) -> Vec<String> {
         std::mem::take(&mut self.command_output)
+    }
+
+    /// Ticks run so far.
+    pub fn sim_tick(&self) -> u64 {
+        self.sim_tick
+    }
+
+    /// FNV-1a 64 of the replay-relevant state; the set is listed in the
+    /// `replay` module docs.
+    pub fn world_hash(&self) -> u64 {
+        let mut h = Fnv::new();
+        h.u64(self.sim_tick);
+        h.u64(u64::from(self.cheated));
+        let p = &self.player;
+        h.f64s(&p.pos);
+        h.f64s(&p.vel);
+        h.u64(u64::from(p.on_ground));
+        h.u64(u64::from(p.health));
+        for slot in &self.state.tool_belt {
+            match slot {
+                Some(t) => {
+                    h.u64(1);
+                    h.str(&t.tool);
+                }
+                None => h.u64(0),
+            }
+        }
+        h.u64(u64::from(self.state.selected));
+        match &self.state.hands {
+            Some(i) => {
+                h.u64(1);
+                h.str(&i.item);
+            }
+            None => h.u64(0),
+        }
+        for e in self.items.iter() {
+            h.u64(u64::from(e.id));
+            h.str(&e.item.item);
+            h.f64s(&e.pos);
+            h.f64s(&e.velocity);
+        }
+        for a in self.animals.iter() {
+            h.u64(u64::from(a.id));
+            h.str(&a.species);
+            h.u64(u64::from(a.health));
+            h.f64s(&a.pos);
+            h.f64s(&a.velocity);
+            h.f64s(&[a.facing]);
+        }
+        h.finish()
     }
 
     /// Whether a cheat command has run this session.
@@ -878,6 +929,7 @@ fn eye_above(feet: [f64; 3], physics: &PlayerPhysics, sneak: bool) -> [f64; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::replay::{replay, Recorder, Recording};
 
     fn flat(x0: i32, z0: i32, n: u32, top: u32) -> Region {
         let mut blocks = vec![0u8; n as usize * n as usize * HEIGHT];
@@ -1504,6 +1556,72 @@ mod tests {
         w.submit_command("csel 2");
         w.tick(&TickInput::default());
         assert!(w.cheated());
+    }
+
+    fn run_session(w: &mut Walker) -> Recording {
+        let mut rec = Recorder::new();
+        let fwd = TickInput {
+            move_forward: 1.0,
+            ..TickInput::default()
+        };
+        rec.step(w, &fwd, &[]);
+        rec.step(w, &fwd, &["csel 3".to_string()]);
+        rec.step(w, &TickInput::default(), &["sel 1".to_string()]);
+        rec.finish(w)
+    }
+
+    #[test]
+    fn replay_reproduces_commands_and_hash() {
+        let mut a = with_cmds();
+        let rec = run_session(&mut a);
+        assert!(rec.cheated);
+        assert_eq!(rec.ticks[1].commands, ["csel 3"]);
+        let rec = Recording::parse(&rec.to_text()).unwrap();
+        let mut b = with_cmds();
+        replay(&rec, &mut b).unwrap();
+        assert_eq!(a.world_hash(), b.world_hash());
+        assert_eq!(b.player_state().selected, 1);
+        assert!(b.cheated());
+    }
+
+    #[test]
+    fn replay_checks_ticks_and_cheated_flag() {
+        let mut a = with_cmds();
+        let mut rec = run_session(&mut a);
+        let mut late = with_cmds();
+        late.tick(&TickInput::default());
+        assert!(replay(&rec, &mut late).is_err());
+        rec.cheated = false;
+        assert!(replay(&rec, &mut with_cmds()).is_err());
+    }
+
+    #[test]
+    fn world_hash_tracks_state() {
+        let base = with_cmds();
+        assert_eq!(base.world_hash(), with_cmds().world_hash());
+        let pos = base.player().pos;
+        let mut moved = with_cmds();
+        moved.teleport([pos[0] + 1.0, pos[1], pos[2]]);
+        assert_ne!(base.world_hash(), moved.world_hash());
+        let mut belt = with_cmds();
+        belt.player_state_mut().selected = 2;
+        assert_ne!(base.world_hash(), belt.world_hash());
+        let mut hands = with_cmds();
+        hands.player_state_mut().hands = Some(ItemInstance {
+            item: "wheat".into(),
+        });
+        assert_ne!(base.world_hash(), hands.world_hash());
+        let mut item = with_cmds();
+        item.spawn_item(
+            ItemInstance {
+                item: "wheat".into(),
+            },
+            pos,
+        );
+        assert_ne!(base.world_hash(), item.world_hash());
+        let mut animal = with_cmds();
+        animal.spawn_animal("cow", pos, 0.0);
+        assert_ne!(base.world_hash(), animal.world_hash());
     }
 
     fn alias_walker(toml: &str) -> Walker {

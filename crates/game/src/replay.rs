@@ -9,8 +9,16 @@
 //!
 //! after a leading `cheated true|false` line. Floats are written as the hex
 //! of their bits so they round-trip exactly.
+//!
+//! `Recorder` captures a session as it runs and `replay` feeds a recording
+//! to a fresh `Walker`. `Walker::world_hash` is FNV-1a 64 over: `sim_tick`,
+//! `cheated`; the player's position, velocity, ground flag and health; the
+//! belt, selection and hands; each item entity's id, item, position and
+//! velocity; each animal's id, species, health, position, velocity and
+//! facing. Floats are hashed by their bits.
 
 use crate::input::TickInput;
+use crate::walk::Walker;
 
 /// What happened at one tick.
 #[derive(Clone, Debug, PartialEq)]
@@ -27,6 +35,100 @@ pub struct Recording {
     pub ticks: Vec<TickRecord>,
     /// Whether a cheat had run by the end of the session.
     pub cheated: bool,
+}
+
+/// FNV-1a 64-bit hasher for `Walker::world_hash`.
+pub(crate) struct Fnv(u64);
+
+impl Fnv {
+    pub(crate) fn new() -> Fnv {
+        Fnv(0xcbf2_9ce4_8422_2325)
+    }
+
+    pub(crate) fn bytes(&mut self, b: &[u8]) {
+        for &x in b {
+            self.0 = (self.0 ^ u64::from(x)).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+
+    pub(crate) fn u64(&mut self, v: u64) {
+        self.bytes(&v.to_le_bytes());
+    }
+
+    pub(crate) fn f64s(&mut self, v: &[f64]) {
+        for x in v {
+            self.u64(x.to_bits());
+        }
+    }
+
+    /// Length-prefixed, so adjacent strings can't run together.
+    pub(crate) fn str(&mut self, s: &str) {
+        self.u64(s.len() as u64);
+        self.bytes(s.as_bytes());
+    }
+
+    pub(crate) fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+/// Captures a session tick by tick.
+#[derive(Default)]
+pub struct Recorder {
+    ticks: Vec<TickRecord>,
+}
+
+impl Recorder {
+    pub fn new() -> Recorder {
+        Recorder::default()
+    }
+
+    /// Submit `commands`, run one tick with `input`, and record it.
+    pub fn step(&mut self, walker: &mut Walker, input: &TickInput, commands: &[String]) {
+        let tick = walker.sim_tick() + 1;
+        for c in commands {
+            walker.submit_command(c);
+        }
+        walker.tick(input);
+        self.ticks.push(TickRecord {
+            tick,
+            input: *input,
+            commands: commands.to_vec(),
+        });
+    }
+
+    pub fn finish(self, walker: &Walker) -> Recording {
+        Recording {
+            ticks: self.ticks,
+            cheated: walker.cheated(),
+        }
+    }
+}
+
+/// Run `rec` on `walker`, which must be in the state the recording began
+/// from. Errors on a tick-number mismatch or a differing `cheated` flag.
+pub fn replay(rec: &Recording, walker: &mut Walker) -> Result<(), String> {
+    for r in &rec.ticks {
+        let expected = walker.sim_tick() + 1;
+        if r.tick != expected {
+            return bad(format!(
+                "tick mismatch: recording has {}, walker is at {}",
+                r.tick, expected
+            ));
+        }
+        for c in &r.commands {
+            walker.submit_command(c);
+        }
+        walker.tick(&r.input);
+    }
+    if walker.cheated() != rec.cheated {
+        return bad(format!(
+            "cheated mismatch: recorded {}, replayed {}",
+            rec.cheated,
+            walker.cheated()
+        ));
+    }
+    Ok(())
 }
 
 fn bad<T>(msg: impl Into<String>) -> Result<T, String> {
