@@ -59,8 +59,13 @@ jobs:
           path_to_bun_executable: ${{ steps.claude-deps.outputs.bun }}
           path_to_claude_code_executable: ${{ steps.claude-deps.outputs.claude }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          track_progress: true
-          use_sticky_comment: true
+          # No track_progress or use_sticky_comment: either one forces tag
+          # mode, whose built-in prompt tells Claude to act on the newest
+          # "@claude" comment. On a re-review after "@claude fix the nits"
+          # that made the reviewer redo the implementer's job instead of
+          # reviewing, and overwrite its previous verdict in the sticky
+          # comment. With only `prompt`, the action runs in agent mode and
+          # the prompt below is the whole task.
           # PRs opened or updated by the Claude app have it as the actor; the
           # if: above already limits runs to this repo's own PRs.
           allowed_bots: claude,github-actions
@@ -71,6 +76,11 @@ jobs:
 
             You are reviewing this pull request. You did not write it. Read
             CLAUDE.md first, then the linked issue, then the diff.
+
+            This may be a re-review after new commits. Earlier comments
+            (`gh pr view --comments`) are context only: requests addressed
+            to @claude are for the implementer, not you. Never edit code;
+            your only output is the review.
 
             Use `gh pr diff` for the diff. The checkout is shallow, so `git diff origin/master...HEAD` fails with "no merge base".
 
@@ -143,7 +153,8 @@ jobs:
             is really a blocker.
 
             Use inline comments for specific lines. Finish with one summary
-            comment that starts with exactly these two lines:
+            comment, posted with `gh pr comment --body-file <file>`, that
+            starts with exactly these two lines:
 
             Verdict: <Ready | Ready, with nits | Blocked>
             Reviewed commit: `${{ github.event.pull_request.head.sha }}`
