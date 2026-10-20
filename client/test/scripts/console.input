@@ -172,3 +172,49 @@ type clear hands
 press Enter
 frame 50 x2
 expect hands = none
+
+# pause stops the sim; the console still runs commands; step n ticks exactly n (section 9).
+case pause freezes ticks and step advances exactly n
+start walk raft
+click
+lock
+frame 50 x4
+press Backquote
+type pause
+press Enter
+lock
+frame 50 x2
+expect paused = true
+expect cheated = false
+frame 50 x20
+expect sim_tick = 5
+press Backquote
+type step 3
+press Enter
+lock
+frame 50 x20
+expect paused = true
+expect sim_tick = 8
+press Backquote
+type step 0
+press Enter
+lock
+frame 50 x4
+expect console.last = n must be between 1 and 1000
+press Backquote
+type resume
+press Enter
+lock
+frame 50 x4
+expect paused = false
+expect cheated = false
+
+case step needs the game paused
+start walk raft
+click
+lock
+press Backquote
+type step
+press Enter
+frame 50
+expect console.last = step needs the game paused

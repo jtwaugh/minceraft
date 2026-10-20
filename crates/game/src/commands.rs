@@ -403,6 +403,9 @@ pub fn default_registry() -> Result<Registry<Walker>, RegistryError> {
         spawn_command(),
         clear_command(),
         tp_command(),
+        pause_command(),
+        resume_command(),
+        step_command(),
     ])
 }
 
@@ -479,6 +482,81 @@ fn tp(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
         feet[1],
         feet[2].floor()
     )])
+}
+
+/// `pause`, `resume` and `step [n]` (docs/design/debug-console.md Phase 3,
+/// decided in #423, #421, #434 and #443). Not cheats.
+pub const STEP_MAX: i64 = 1000;
+
+pub fn pause_command() -> Command<Walker> {
+    Command {
+        name: "pause",
+        aliases: &[],
+        args: &[],
+        help: "stop the game ticking; resume or step to continue",
+        states: ALL_STATES,
+        cheat: false,
+        handler: pause,
+    }
+}
+
+fn pause(ctx: &mut Ctx<'_, Walker>, _args: &[Arg]) -> Result<Vec<String>, String> {
+    if ctx.world.paused() {
+        return Ok(vec!["already paused".into()]);
+    }
+    ctx.world.set_paused(true);
+    Ok(vec!["paused".into()])
+}
+
+pub fn resume_command() -> Command<Walker> {
+    Command {
+        name: "resume",
+        aliases: &[],
+        args: &[],
+        help: "let a paused game tick again",
+        states: ALL_STATES,
+        cheat: false,
+        handler: resume,
+    }
+}
+
+fn resume(ctx: &mut Ctx<'_, Walker>, _args: &[Arg]) -> Result<Vec<String>, String> {
+    if !ctx.world.paused() {
+        return Ok(vec!["not paused".into()]);
+    }
+    ctx.world.set_paused(false);
+    Ok(vec!["resumed".into()])
+}
+
+pub fn step_command() -> Command<Walker> {
+    Command {
+        name: "step",
+        aliases: &[],
+        args: &[ArgSpec {
+            name: "n",
+            kind: ArgKind::Int,
+            optional: true,
+        }],
+        help: "while paused, advance n ticks (1 to 1000, default 1)",
+        states: ALL_STATES,
+        cheat: false,
+        handler: step,
+    }
+}
+
+fn step(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    let n = match args.first() {
+        Some(Arg::Int(n)) => *n,
+        _ => 1,
+    };
+    if !(1..=STEP_MAX).contains(&n) {
+        return Err(format!("n must be between 1 and {STEP_MAX}"));
+    }
+    if !ctx.world.paused() {
+        return Err("step needs the game paused".into());
+    }
+    ctx.world.request_steps(n as u32);
+    Ok(vec![format!("stepping {n}")])
 }
 
 /// `give tool|item <name>`: one unit, following the belt and hands rules
@@ -871,10 +949,13 @@ mod default_registry_tests {
     use super::*;
 
     #[test]
-    fn default_registry_has_exactly_the_five_commands() {
+    fn default_registry_has_exactly_the_eight_commands() {
         let reg = default_registry().unwrap();
         let names: Vec<&str> = reg.iter().map(|c| c.name).collect();
-        assert_eq!(names, vec!["help", "give", "spawn", "clear", "tp"]);
+        assert_eq!(
+            names,
+            vec!["help", "give", "spawn", "clear", "tp", "pause", "resume", "step"]
+        );
         assert!(!reg.get("help").unwrap().cheat);
     }
 }
@@ -1203,5 +1284,86 @@ mod tp_tests {
         w.set_commands(default_registry().unwrap());
         run(&mut w, "tp 1000 1000");
         assert!(!w.cheated());
+    }
+}
+
+#[cfg(test)]
+mod pause_tests {
+    use super::*;
+    use crate::input::TickInput;
+
+    fn walker() -> Walker {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(default_registry().unwrap());
+        w
+    }
+
+    fn run(w: &mut Walker, lines: &[&str]) -> Vec<String> {
+        for l in lines {
+            w.submit_command(l);
+        }
+        w.run_commands();
+        w.drain_command_output()
+    }
+
+    #[test]
+    fn pause_resume_are_idempotent_and_not_cheats() {
+        let mut w = walker();
+        assert_eq!(run(&mut w, &["resume"]), vec!["not paused"]);
+        assert_eq!(
+            run(&mut w, &["pause", "pause"]),
+            vec!["paused", "already paused"]
+        );
+        assert!(w.paused());
+        assert_eq!(run(&mut w, &["resume"]), vec!["resumed"]);
+        assert!(!w.paused());
+        assert!(!w.cheated());
+    }
+
+    #[test]
+    fn step_requests_ticks_only_while_paused() {
+        let mut w = walker();
+        assert_eq!(run(&mut w, &["step"]), vec!["step needs the game paused"]);
+        assert_eq!(w.take_steps(), 0);
+        run(&mut w, &["pause", "step 3", "step"]);
+        assert_eq!(w.take_steps(), 4);
+        assert_eq!(w.take_steps(), 0);
+        assert!(w.paused(), "still paused");
+        assert!(!w.cheated());
+    }
+
+    #[test]
+    fn bad_step_counts_change_nothing() {
+        let mut w = walker();
+        run(&mut w, &["pause"]);
+        for l in ["step 0", "step -2", "step 1001", "step x"] {
+            let out = run(&mut w, &[l]);
+            assert_eq!(out.len(), 1, "{l}");
+            assert!(!out[0].starts_with("stepping"), "{l}: {out:?}");
+        }
+        assert_eq!(w.take_steps(), 0);
+        run(&mut w, &["step 1000"]);
+        assert_eq!(w.take_steps(), 1000);
+    }
+
+    #[test]
+    fn resume_before_step_in_one_batch_leaves_step_an_error() {
+        let mut w = walker();
+        run(&mut w, &["pause"]);
+        let out = run(&mut w, &["resume", "step 2"]);
+        assert_eq!(out[0], "resumed");
+        assert_eq!(out[1], "step needs the game paused");
+        assert_eq!(w.take_steps(), 0);
+    }
+
+    #[test]
+    fn commands_alone_do_not_tick() {
+        let mut w = walker();
+        run(&mut w, &["pause"]);
+        assert_eq!(w.sim_tick(), 0);
+        run(&mut w, &["step 2"]);
+        assert_eq!(w.sim_tick(), 0, "commands never advance the sim");
+        w.tick(&TickInput::default());
+        assert_eq!(w.sim_tick(), 1, "tick itself never checks the flag");
     }
 }

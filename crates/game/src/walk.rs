@@ -201,6 +201,10 @@ pub struct Walker {
     command_output: Vec<String>,
     commands: Arc<Registry<Walker>>,
     cheated: bool,
+    /// Set by `pause`/`resume`. `tick` ignores it; the client reads it.
+    paused: bool,
+    /// Ticks `step` has asked the client to run, until `take_steps`.
+    step_request: u32,
     aliases: Aliases,
 }
 
@@ -253,6 +257,8 @@ impl Walker {
                 Registry::new(Vec::new()).map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             ),
             cheated: false,
+            paused: false,
+            step_request: 0,
             aliases: Aliases {
                 aliases: Vec::new(),
             },
@@ -440,6 +446,31 @@ impl Walker {
     /// Whether `name` is a tool in the item table.
     pub fn knows_tool(&self, name: &str) -> bool {
         self.item_table.has_tool(name)
+    }
+
+    /// Whether a `pause` is in effect. `tick` does not consult this: the
+    /// client stops ticking while it is true and calls `run_commands`.
+    pub fn paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+    }
+
+    /// Ask the client for `n` more ticks while paused.
+    pub fn request_steps(&mut self, n: u32) {
+        self.step_request += n;
+    }
+
+    /// The ticks `step` has requested since the last call.
+    pub fn take_steps(&mut self) -> u32 {
+        std::mem::take(&mut self.step_request)
+    }
+
+    /// Run the queued commands without ticking.
+    pub fn run_commands(&mut self) {
+        self.run_queued_commands();
     }
 
     fn run_queued_commands(&mut self) {
