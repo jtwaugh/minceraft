@@ -29,10 +29,7 @@ pub struct Recording {
     pub cheated: bool,
 }
 
-/// Why a recording failed to parse.
-pub type ParseError = String;
-
-fn bad<T>(msg: impl Into<String>) -> Result<T, ParseError> {
+fn bad<T>(msg: impl Into<String>) -> Result<T, String> {
     Err(msg.into())
 }
 
@@ -67,7 +64,7 @@ fn quote(s: &str) -> String {
 }
 
 /// Parse `["a", "b"]` as written by `quote`.
-fn parse_commands(s: &str) -> Result<Vec<String>, ParseError> {
+fn parse_commands(s: &str) -> Result<Vec<String>, String> {
     let inner = s
         .trim()
         .strip_prefix('[')
@@ -99,13 +96,13 @@ fn parse_commands(s: &str) -> Result<Vec<String>, ParseError> {
     }
 }
 
-fn hex32(s: &str) -> Result<f32, ParseError> {
+fn hex32(s: &str) -> Result<f32, String> {
     u32::from_str_radix(s, 16)
         .map(f32::from_bits)
         .or_else(|_| bad(format!("bad float bits {s:?}")))
 }
 
-fn parse_input(body: &str) -> Result<TickInput, ParseError> {
+fn parse_input(body: &str) -> Result<TickInput, String> {
     let mut input = TickInput::default();
     for field in body.split_whitespace() {
         let Some((k, v)) = field.split_once('=') else {
@@ -167,7 +164,7 @@ impl Recording {
         out
     }
 
-    pub fn parse(text: &str) -> Result<Recording, ParseError> {
+    pub fn parse(text: &str) -> Result<Recording, String> {
         let mut lines = text.lines();
         let cheated = match lines.next() {
             Some("cheated true") => true,
@@ -239,6 +236,6 @@ mod tests {
         assert!(Recording::parse("").is_err());
         assert!(Recording::parse("cheated maybe\n").is_err());
         assert!(Recording::parse("cheated false\ntick x: input {}; commands []\n").is_err());
-        assert!(Recording::parse("cheated false\ntick 1: input {fwd=0}; commands []\n").is_err());
+        assert!(Recording::parse("cheated false\ntick 1: input {fwd=zz}; commands []\n").is_err());
     }
 }
