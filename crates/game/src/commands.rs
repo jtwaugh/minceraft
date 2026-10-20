@@ -409,12 +409,25 @@ pub fn default_registry() -> Result<Registry<Walker>, RegistryError> {
 /// `help` lists every command; `help <name>` describes one.
 fn help_handler(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
     match args.first() {
-        None => Ok(ctx
-            .registry
-            .iter()
-            .map(|c| format!("{}: {}", c.usage(), c.help))
-            .collect()),
+        None => {
+            let mut lines: Vec<String> = ctx
+                .registry
+                .iter()
+                .map(|c| format!("{}: {}", c.usage(), c.help))
+                .collect();
+            lines.extend(
+                ctx.world
+                    .aliases()
+                    .aliases
+                    .iter()
+                    .map(|a| format!("{}: runs {}", a.name, a.expands.join("; "))),
+            );
+            Ok(lines)
+        }
         Some(Arg::Word(name)) => {
+            if let Some(a) = ctx.world.aliases().get(name) {
+                return Ok(vec![format!("{name}: runs {}", a.expands.join("; "))]);
+            }
             let c = ctx
                 .registry
                 .get(name)

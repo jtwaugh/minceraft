@@ -2,6 +2,7 @@
 //! over loaded terrain regions, plus the eye pose between ticks.
 //! See docs/design/basic-gameplay.md sections 1 (rule 1) and 3.
 
+use crate::aliases::Aliases;
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
@@ -199,6 +200,7 @@ pub struct Walker {
     command_output: Vec<String>,
     commands: Arc<Registry<Walker>>,
     cheated: bool,
+    aliases: Aliases,
 }
 
 impl Walker {
@@ -250,6 +252,9 @@ impl Walker {
                 Registry::new(Vec::new()).map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             ),
             cheated: false,
+            aliases: Aliases {
+                aliases: Vec::new(),
+            },
         })
     }
 
@@ -258,9 +263,29 @@ impl Walker {
         self.commands = Arc::new(registry);
     }
 
-    /// Queue a command line; it runs at the start of the next `tick`.
+    /// The alias table typed names are expanded from (none until a host sets it).
+    pub fn set_aliases(&mut self, aliases: Aliases) {
+        self.aliases = aliases;
+    }
+
+    /// The alias table, for `help`.
+    pub fn aliases(&self) -> &Aliases {
+        &self.aliases
+    }
+
+    /// Queue a command line; it runs at the start of the next `tick`. An alias
+    /// name queues all its lines together, so they run in the same tick, in
+    /// order. Expanded lines are plain commands and are not expanded again.
     pub fn submit_command(&mut self, line: &str) {
-        self.command_queue.push(line.to_string());
+        let mut words = line.split_whitespace();
+        let alias = match (words.next(), words.next()) {
+            (Some(name), None) => self.aliases.get(name),
+            _ => None,
+        };
+        match alias {
+            Some(a) => self.command_queue.extend(a.expands.iter().cloned()),
+            None => self.command_queue.push(line.to_string()),
+        }
     }
 
     /// The output lines of commands run since the last call.
@@ -1477,6 +1502,59 @@ mod tests {
         assert_eq!(w.drain_command_output().len(), 2);
         assert!(!w.cheated());
         w.submit_command("csel 2");
+        w.tick(&TickInput::default());
+        assert!(w.cheated());
+    }
+
+    fn alias_walker(toml: &str) -> Walker {
+        let mut w = with_cmds();
+        let reg = Registry::new(vec![belt_cmd("sel", false), belt_cmd("csel", true)]).unwrap();
+        let aliases = Aliases::from_toml(toml, &reg).unwrap();
+        w.set_aliases(aliases);
+        w
+    }
+
+    const TWO: &str = "[[alias]]\nname = \"two\"\nexpands = [\"sel 1\", \"sel 2\"]\n\
+        [[alias]]\nname = \"cheaty\"\nexpands = [\"nope\", \"csel 3\", \"sel 1\"]\n\
+        [[alias]]\nname = \"plain\"\nexpands = [\"nope\", \"sel 4\"]\n";
+
+    #[test]
+    fn alias_runs_its_lines_in_order_before_input() {
+        let mut w = alias_walker(TWO);
+        w.submit_command("two");
+        assert!(w.drain_command_output().is_empty());
+        w.tick(&slot(4));
+        assert_eq!(w.drain_command_output(), vec!["selected 1", "selected 2"]);
+        assert_eq!(w.player_state().selected, 4);
+        assert!(!w.cheated());
+    }
+
+    #[test]
+    fn alias_matches_typing_its_lines() {
+        let mut a = alias_walker(TWO);
+        a.submit_command("cheaty");
+        a.tick(&TickInput::default());
+        let mut b = alias_walker(TWO);
+        for l in ["nope", "csel 3", "sel 1"] {
+            b.submit_command(l);
+        }
+        b.tick(&TickInput::default());
+        assert_eq!(a.drain_command_output(), b.drain_command_output());
+        assert_eq!(a.player_state().selected, b.player_state().selected);
+        assert_eq!(a.cheated(), b.cheated());
+    }
+
+    #[test]
+    fn alias_error_is_reported_and_later_lines_run() {
+        let mut w = alias_walker(TWO);
+        w.submit_command("plain");
+        w.tick(&TickInput::default());
+        let out = w.drain_command_output();
+        assert_eq!(out.len(), 2);
+        assert!(out[0].contains("unknown command"));
+        assert_eq!(out[1], "selected 4");
+        assert!(!w.cheated(), "no cheat line succeeded");
+        w.submit_command("cheaty");
         w.tick(&TickInput::default());
         assert!(w.cheated());
     }
