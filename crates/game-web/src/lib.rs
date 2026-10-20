@@ -600,6 +600,13 @@ mod tests {
         assert!(names.contains(&"kitchen".to_string()));
     }
 
+    #[test]
+    fn client_stream_region_size_matches_layout() {
+        let js = include_str!("../../../client/stream.js");
+        let line = format!("export const REGION_SIZE = {};", layout::REGION_SIZE);
+        assert!(js.contains(&line), "client/stream.js needs `{line}`");
+    }
+
     fn walk() -> Walk {
         with_default_commands(Walker::new([0.5, 5.0, 0.5]).unwrap()).unwrap_or_else(|_| panic!())
     }

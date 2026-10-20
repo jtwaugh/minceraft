@@ -72,7 +72,8 @@ impl Streamer {
 
     /// Regions loaded and unloaded since the last call, for a renderer that
     /// mirrors what is loaded. A region loaded and unloaded in between is in
-    /// neither list.
+    /// neither list. Changes accumulate until this is called, so a caller
+    /// that streams for long without a renderer should drain now and then.
     pub fn drain_changes(&mut self) -> CacheChange {
         std::mem::take(&mut self.pending)
     }
