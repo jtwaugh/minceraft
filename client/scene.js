@@ -27,6 +27,7 @@ import { createController } from './controller.js';
 import { NEAR, farPlane, look } from './view.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
+import { sceneById } from './scenes.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
 
@@ -37,7 +38,7 @@ const qs = new URLSearchParams(location.search);
 const seed = BigInt(qs.get('seed') ?? 12345);
 const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
 const flying = qs.get('mode') === 'fly';
-const raftScene = qs.get('scene') === 'raft';
+const raftScene = sceneById(qs.get('scene'))?.id === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
 const logEvery = +(qs.get('log') ?? 0);
 const debug = debugEnabled(location.search); // ?debug=1 or any ?scene=; console keys are gated on it
