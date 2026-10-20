@@ -1,0 +1,39 @@
+# Till a planter on the raft scene's islet, plant and harvest on it
+# (docs/design/basic-gameplay.md section 9.1, decided in #451). Tilling a
+# planter never drops seeds; the tilled planter takes seeds like farmland.
+
+case a hoe tills a planter and seeds plant on it
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+expect held = tool:hoe
+lock
+stand planter
+expect target.kind = block
+expect planter.ground = planter_dirt
+expect rule.secondary = till
+expect items = 3
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect planter.ground = planter_farmland_dry
+expect items = 3
+
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+expect held = item:seeds
+lock
+expect rule.secondary = plant
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect planter.crop = wheat_0
+expect planter.ground = planter_farmland_dry

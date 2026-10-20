@@ -19,7 +19,7 @@ pub fn tile_crop_state(tile: FarmTile) -> Option<&'static str> {
     match tile {
         FarmTile::Crop { kind, stage } if stage + 1 >= kind.stages() => Some("mature"),
         FarmTile::Crop { .. } => Some("growing"),
-        FarmTile::Farmland { .. } => None,
+        FarmTile::Farmland { .. } | FarmTile::PlanterFarmland { .. } => None,
     }
 }
 
