@@ -1,6 +1,7 @@
 //! The game built on top of the terrain generator.
 //! See docs/design/basic-gameplay.md.
 
+pub mod aliases;
 pub mod animal_entities;
 pub mod animals;
 pub mod bindings;
@@ -13,6 +14,7 @@ pub mod data_error;
 pub mod events;
 pub mod farm;
 pub mod forage;
+pub mod growth;
 pub mod growth_odds;
 pub mod harvest;
 pub mod input;

@@ -4,7 +4,13 @@
 # `seeds` the seeds dropped with it, both inclusive count ranges. The yield
 # item and `seeds_item` must be defined in items.toml. Growth odds are not
 # here.
+#
+# `random_tick_interval`: each crop gets a random tick on average once
+# per this many game ticks (20 Hz); each random tick then grows it with the
+# odds of SPEC "Crop growth". 140 puts a hydrated single row at stage 7 in
+# about two 4-minute days (9600 ticks).
 
+random_tick_interval = 140
 seeds_item = "seeds"
 
 [wheat]
