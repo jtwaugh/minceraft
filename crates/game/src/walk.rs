@@ -722,7 +722,27 @@ impl Walker {
             }
         }
         for hit in &self.dispatcher.hits {
-            self.animals.hit(hit.id, hit.damage, self.player.pos);
+            let was_dying = self
+                .animals
+                .get(hit.id)
+                .is_none_or(|a| a.death_ticks_left.is_some());
+            let taken = self.animals.hit(hit.id, hit.damage, self.player.pos);
+            if was_dying || taken.unwrap_or(0) == 0 {
+                continue;
+            }
+            self.events.push(GameEvent::EntityHurt {
+                entity: hit.id,
+                attacker: "player".to_string(),
+                damage: taken.unwrap_or(0),
+            });
+            let a = self.animals.get(hit.id).expect("just hit");
+            if a.death_ticks_left.is_some() {
+                self.events.push(GameEvent::EntityKilled {
+                    entity: hit.id,
+                    kind: a.species.clone(),
+                    attacker: "player".to_string(),
+                });
+            }
         }
         self.facts = ctx.facts;
         if input.interact {
@@ -1522,6 +1542,84 @@ mod tests {
         assert!(!a.is_empty());
         assert_eq!(a.len(), n, "one event per drop");
         assert_eq!((a, n), run());
+    }
+
+    /// Sword-click `id` once, after letting the invulnerability window close.
+    fn sword_hit_events(w: &mut Walker, id: u32) -> Vec<GameEvent> {
+        // The animal flees after a hit: follow it to keep the aim.
+        for _ in 0..13 {
+            let (cow, me) = (w.animals().get(id).unwrap().pos, w.player().pos);
+            w.teleport([cow[0], me[1], cow[2] + 2.0]);
+            w.tick(&look(-0.4, false));
+        }
+        w.tick(&click());
+        w.drain_events()
+    }
+
+    fn hurt(entity: u32, damage: u32) -> GameEvent {
+        GameEvent::EntityHurt {
+            entity,
+            attacker: "player".into(),
+            damage,
+        }
+    }
+
+    fn killed(entity: u32, kind: &str) -> GameEvent {
+        GameEvent::EntityKilled {
+            entity,
+            kind: kind.into(),
+            attacker: "player".into(),
+        }
+    }
+
+    fn cow_kill_run() -> (u32, Vec<GameEvent>) {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let id = w.spawn_animal("cow", [0.5, 4.0, -2.0], 0.0).unwrap();
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            seen.extend(sword_hit_events(&mut w, id));
+        }
+        // Dying: another hit emits nothing.
+        seen.extend(sword_hit_events(&mut w, id));
+        (id, seen)
+    }
+
+    #[test]
+    fn a_cow_dies_in_three_sword_hits_with_hurt_then_killed() {
+        let (id, seen) = cow_kill_run();
+        assert_eq!(
+            seen,
+            vec![hurt(id, 4), hurt(id, 4), hurt(id, 2), killed(id, "cow")]
+        );
+    }
+
+    #[test]
+    fn a_chicken_dies_in_one_hit_and_drain_clears() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let id = w.spawn_animal("chicken", [0.5, 4.0, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        w.tick(&click());
+        assert_eq!(w.drain_events(), vec![hurt(id, 4), killed(id, "chicken")]);
+        assert!(w.drain_events().is_empty());
+    }
+
+    #[test]
+    fn a_hit_inside_the_invulnerability_window_emits_nothing() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let id = w.spawn_animal("cow", [0.5, 4.0, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        w.tick(&click());
+        assert_eq!(w.drain_events(), vec![hurt(id, 4)]);
+        w.tick(&click());
+        assert!(w.drain_events().is_empty());
+    }
+
+    #[test]
+    fn hit_events_replay_identically() {
+        assert_eq!(cow_kill_run(), cow_kill_run());
     }
 
     fn slot(n: u8) -> TickInput {
