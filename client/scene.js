@@ -26,6 +26,7 @@ import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } 
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { NEAR, farPlane, look } from './view.js';
+import { FOG_GLSL } from '../viewer/fog.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
 import { sceneById } from './scenes.js';
@@ -57,9 +58,11 @@ if (!gl) throw new Error('WebGL2 is not available');
 // water layers; the frame comes from waterframe.js), reading the split colour/tint
 // textures from tiles.js. `cut` (leaves, plants) outputs coverage as alpha for
 // alpha-to-coverage and discards below `cutoff`; `solid` does neither. Fog
-// runs from `fogStart` to `fogEnd` (eye distance) and `tint` multiplies the
+// is the radial curve of viewer/fog.js when `fogFar` > 0, else a linear ramp from
+// `fogStart` to `fogEnd` (under water); both measure distance from the eye. `tint` multiplies the
 // lit colour, both set per frame by view.js `look`, so the same shader draws
 // above and under water.
+const TEX_SIZE = 16; // side of every layer in the tile array (tiles.js)
 function program(cut) {
   const sh = (type, src) => {
     const s = gl.createShader(type);
@@ -91,21 +94,26 @@ function program(cut) {
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
       vshade = shade * unpack.z;
       vtint = tint;
-      vdist = gl_Position.w;
+      vdist = distance(w, eye);
     }`));
   gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform vec3 fogColor; uniform vec3 tint; uniform float cutoff;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform float cutoff;
     out vec4 o;
+    ${FOG_GLSL}
     void main() {
-      vec4 t = texture(tex, vuv);
+      // snap UVs to texel centres; the unsnapped derivatives keep mip selection
+      vec2 px = vuv.xy * ${TEX_SIZE}.0;
+      vec2 fw = max(fwidth(px), vec2(1e-4));
+      vec2 snapped = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / ${TEX_SIZE}.0;
+      vec4 t = textureGrad(tex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy));
       ${cut ? 'if (t.a < cutoff) discard;' : ''}
       float g = texture(tintTex, vuv).r;
       vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint;
-      float f = clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
+      float f = fogFar > 0.0 ? fogAmount(vdist, fogFar) : clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
       o = vec4(mix(c, fogColor, f), ${cut ? 't.a * alpha' : 'alpha'});
     }`));
   gl.linkProgram(p);
@@ -413,10 +421,12 @@ function render(now) {
     gl.uniform3fv(prog.u('fogColor'), view.fogColor);
     gl.uniform1f(prog.u('fogStart'), view.fogStart);
     gl.uniform1f(prog.u('fogEnd'), view.fogEnd);
+    gl.uniform1f(prog.u('fogFar'), view.fogFar);
+    gl.uniform3fv(prog.u('eye'), eye);
     gl.uniform3fv(prog.u('tint'), view.tint);
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
-    if (prog === cutProg) { gl.uniform3fv(prog.u('eye'), eye); gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); }
+    if (prog === cutProg) { gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); }
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));

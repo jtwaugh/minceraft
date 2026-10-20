@@ -4,6 +4,11 @@ status: accepted
 scope: game
 source: "#446"
 superseded_by: ""
+phases:
+  A: todo
+  B: todo
+  C: todo
+  D: todo
 ---
 
 ## Current state
@@ -112,6 +117,16 @@ The selection outline shows up on water blocks. It shouldn't.
 > **Reconciler:** Confirmed. See note 10.
 
 ---
+
+## Phases (reconciler)
+
+**Phase A.** Items 3 and 5: the shared textured box-model drawer in `client/` (open question 10, default A), new cow, pig and chicken tiles plus raft log and lashing tiles in `art/`, and a raft model replacing the block mesh from `scene.raft_blocks()`. Done when `validate.py` (run from `art/`) prints `ok`, every new texture is used by the client, a client test covers the model drawer's UVs, and hurt-red and death-tip still work for animals. Final look is `[manual check]`.
+
+**Phase B.** Items 1 and 6: remove the rider's swell push, then keep or drop the item and animal push per open questions 1 and 2; and stop drawing the outline on water per open question 9. Done when `swell_without_sneak_drifts` is replaced by a test that the rider's offset from its start relative to the raft stays under 1e-6 after 1000 ticks of swell, and a test shows water yields no outline (in `walk.rs` if question 9 is B).
+
+**Phase C.** Item 2: animals swim, steer towards land or the raft, and drown, per open questions 3 to 5. Done when tests show an animal placed in water stays at the surface, reaches a nearby support cell, and drowns after the configured ticks from `data/animals.toml`, deterministically from the tick counter and seeded `Rng`.
+
+**Phase D.** Item 4: driving the raft, per open questions 6 to 8; largest, so last. Done when a `client/test/scripts/*.input` script drives the raft with the chosen control, a test covers turning and the raft-vs-terrain stop, and replays of the same `TickInput` stream stay identical.
 
 ## Open questions
 

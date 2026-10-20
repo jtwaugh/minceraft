@@ -12,6 +12,8 @@
 // Far plane. Depth precision goes with far / near, so far follows the fog
 // (solid at FOG_END x fogFar) instead of a fixed 1000.
 
+import { fogAmount } from '../viewer/fog.js';
+
 export const NEAR = 0.05;
 
 /** Fog starts and is solid at these multiples of `fogFar` above water. */
@@ -30,7 +32,7 @@ export const UNDERWATER_FOG_END = 18;
  */
 export function look({ underwater, skyColor, fogFar, water }) {
   if (!underwater) {
-    return { fogColor: skyColor, fogStart: fogFar * FOG_START, fogEnd: fogFar * FOG_END, tint: [1, 1, 1] };
+    return { fogColor: skyColor, fogStart: fogFar * FOG_START, fogEnd: fogFar * FOG_END, fogFar: fogFar * FOG_END, tint: [1, 1, 1] };
   }
   const w = water.map((v) => v / 255);
   const peak = Math.max(...w, 1e-6);
@@ -38,10 +40,17 @@ export function look({ underwater, skyColor, fogFar, water }) {
     // the water colour, darker, for what fades out in the distance
     fogColor: w.map((v) => v * 0.55),
     fogStart: 0,
+    fogFar: 0, // 0: linear ramp, not the viewer's curve
     fogEnd: UNDERWATER_FOG_END,
     // half way from white to the water's hue at full brightness
     tint: w.map((v) => 0.5 + 0.5 * (v / peak)),
   };
+}
+
+/** Fog amount 0..1 at eye distance `dist`: mirrors the fragment shader. */
+export function fogAt(v, dist) {
+  if (v.fogFar > 0) return fogAmount(dist, v.fogFar);
+  return Math.min(Math.max((dist - v.fogStart) / (v.fogEnd - v.fogStart), 0), 1);
 }
 
 /**
