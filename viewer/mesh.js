@@ -133,9 +133,30 @@ const FACES = [
 
 // Texture coords for a face corner: top/bottom map x,z; sides map the
 // horizontal axis to u and put the tile's top row at the top of the block.
-function faceUV(f, [a, b, c]) {
-  if (f.d[1] !== 0) return [a, c];
-  return [f.d[0] !== 0 ? c : a, 1 - b];
+// `v` is the block's variant (0-7; 0 leaves the tile as drawn). Tops use all eight
+// rotations and mirrors (bit 0 swaps u and v, bit 1 flips u, bit 2 flips v);
+// sides only mirror horizontally (bit 1), so they never turn or flip upside
+// down. Bottoms stay as they are.
+function faceUV(f, [a, b, c], v) {
+  if (f.d[1] > 0) {
+    let u = a, w = c;
+    if (v & 1) { u = c; w = a; }
+    return [v & 2 ? 1 - u : u, v & 4 ? 1 - w : w];
+  }
+  if (f.d[1] < 0) return [a, c];
+  const u = f.d[0] !== 0 ? c : a;
+  return [v & 2 ? 1 - u : u, 1 - b];
+}
+
+// Blocks whose tiles vary from block to block.
+const VARIES = flags([B.grass, B.sand, B.gravel, B.stone, B.snow_layer]);
+// Variant 0-7 from the world coordinate alone (an integer hash), so it
+// doesn't depend on the chunk, pad or area being meshed.
+function variantAt(x, y, z) {
+  let h = Math.imul(x, 0x27d4eb2d) ^ Math.imul(y, 0x165667b1) ^ Math.imul(z, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) & 7;
 }
 
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
@@ -177,12 +198,16 @@ class Quads {
  * lowest surface heights. `opaque` has no transparent texels, so it can be
  * drawn without discard; `cutout` is leaves and plants.
  *
+ * `origin` is the world (x, z) of the area's first column; it seeds the
+ * per-block texture variants of ground blocks (grass, sand, gravel, stone,
+ * snow layer), which depend only on the world coordinate.
+ *
  * `fast`: fast leaves, for terrain seen from afar. Leaves hide each other
  * and the faces next to them like solid blocks, and use the hole-free
  * leaves_fast tile, so they move to `opaque`. In a forest that's about half
  * the faces.
  */
-export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false } = {}) {
+export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, origin = [0, 0] } = {}) {
   const SOLID_N = fast ? OPAQUE_FAST : OPAQUE;
   const w = size + 2 * pad;
   const col = (x, z) => ((z + pad) * w + x + pad) * H;
@@ -198,9 +223,9 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false } =
     ? 0 : blocks[col(x, z) + y];
   const out = [new Quads(), new Quads(), new Quads(), new Quads()]; // opaque, water, ice, cutout
   // One face of the box lo..hi (block-local) for face f.
-  const boxFace = (L, x, y, z, f, lo, hi, layer, tint) => {
+  const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0) => {
     const p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
-    out[L].quad(x, y, z, p, p.map((q) => faceUV(f, q)), layer, f.s * (0.75 + y / 256), tint);
+    out[L].quad(x, y, z, p, p.map((q) => faceUV(f, q, vr)), layer, f.s * (0.75 + y / 256), tint);
   };
   const FULL_LO = [0, 0, 0], FULL_HI = [1, 1, 1];
   const CACTUS_LO = [CACTUS_INSET, 0, CACTUS_INSET], CACTUS_HI = [1 - CACTUS_INSET, 1, 1 - CACTUS_INSET];
@@ -215,6 +240,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false } =
       const b = blocks[base + y];
       if (b === B.air) continue;
       const tint = tintFor(ctx, b, tints, c);
+      const vr = VARIES[b] ? variantAt(origin[0] + x, y, origin[1] + z) : 0;
       if (CROSS[b]) {
         // two crossed quads, wound both ways so they show from either side
         const layer = layerOf(ctx, b, 0), k = 0.9 * (0.75 + y / 256);
@@ -243,13 +269,13 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false } =
         } else if (b === B.snow_layer) {
           if (f.d[1] < 0 && SOLID_N[n]) continue;
           if (f.d[1] === 0 && (SOLID_N[n] || n === B.snow_layer)) continue;
-          boxFace(0, x, y, z, f, FULL_LO, SNOW_HI, layer, tint);
+          boxFace(0, x, y, z, f, FULL_LO, SNOW_HI, layer, tint, vr);
         } else {
           // full cubes and leaves: hidden only by opaque cubes, so (unless
           // fast) leaves never hide their neighbours and leaf-leaf faces are
           // drawn, as cut-outs
           if (SOLID_N[n]) continue;
-          boxFace(LEAVES[b] && !fast ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
+          boxFace(LEAVES[b] && !fast ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr);
         }
       }
     }
