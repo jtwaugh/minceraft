@@ -698,6 +698,12 @@ impl Walker {
         between_ticks(self.prev_eye, self.cur_eye, alpha)
     }
 
+    /// The block at a world position as the game sees it: generated terrain
+    /// with the farm overlay on top.
+    pub fn block_at(&self, x: i32, y: i32, z: i32) -> Block {
+        self.world.block_at(x, y, z)
+    }
+
     /// Whether the block cell containing `pos` is a liquid. The client asks
     /// this of the drawn eye to switch to the underwater view. Water blocks
     /// fill their whole cell, so the cell alone decides; the raft is never
