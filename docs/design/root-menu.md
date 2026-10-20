@@ -5,12 +5,13 @@ scope: game
 source: "#447"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
 ---
 
 ## Current state
 
+- Phase A is done (plan #453, PRs #457 and #460): `client/scenes.js` holds the scene list, alpha flag and `menuEntries`, `client/scene.js` resolves `?scene=` through it, and the root `index.html` with `client/menu.js` links to `viewer/` and `client/`, tested by `client/test/scenes.test.mjs` and `client/test/menu.test.mjs`. The bullets below predate it. Phase B (deploy) is still `todo`.
 - No menu exists. `vercel.json` sets `outputDirectory` to `viewer`, and
   `.vercelignore` uploads only `/viewer` and `/vercel.json`, so the deployed
   root page is `viewer/index.html` (the world generator viewer and flyover).
