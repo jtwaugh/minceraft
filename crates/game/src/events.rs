@@ -12,4 +12,18 @@ pub enum GameEvent {
         position: [i32; 3],
         yields: Vec<String>,
     },
+    /// An entity lost `damage` health. `attacker` is `"player"` (there is
+    /// one player).
+    EntityHurt {
+        entity: u32,
+        attacker: String,
+        damage: u32,
+    },
+    /// The hit that took an entity's health to 0; follows its `EntityHurt`.
+    /// `kind` is the species name.
+    EntityKilled {
+        entity: u32,
+        kind: String,
+        attacker: String,
+    },
 }
