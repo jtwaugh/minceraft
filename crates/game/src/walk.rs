@@ -380,6 +380,14 @@ impl Walker {
         Ok(w)
     }
 
+    /// Regions the stream loaded and unloaded since the last call.
+    pub fn drain_stream_changes(&mut self) -> layout::CacheChange {
+        self.streamer
+            .as_mut()
+            .map(|s| s.drain_changes())
+            .unwrap_or_default()
+    }
+
     /// Number of regions currently loaded for collision.
     pub fn loaded_region_count(&self) -> usize {
         self.world.base().len()

@@ -1,0 +1,240 @@
+{
+ "Batch 15": {
+  "title": "Animals",
+  "tiles": false,
+  "models": {
+   "cow": {
+    "front": [
+     "ee55555ee",
+     "ee55555ee",
+     "550e5e055",
+     "555555555",
+     "55ddddd55",
+     "55d4d4d55",
+     "55ddddd55",
+     "eeee55555",
+     "eeee55555",
+     "eeee55555",
+     "555555445",
+     "555555545",
+     "555555555",
+     "544555445"
+    ],
+    "back": [
+     "5555eeeee",
+     "5555eeeee",
+     "5555eeeee",
+     "5555eeeee",
+     "5555eeeee",
+     "555555555",
+     "eeee55555",
+     "eeee55555",
+     "eeee55455",
+     "eeee54555",
+     "555555555",
+     "555444555",
+     "555444555",
+     "544555445"
+    ],
+    "left": [
+     "555555555",
+     "55eeee555",
+     "55e4ee555",
+     "55ee4e555",
+     "55eeee555",
+     "555555555",
+     "55554eeee",
+     "55555eeee",
+     "44455eeee",
+     "44455eeee",
+     "44455eeee",
+     "444555555",
+     "445545544",
+     "445554544"
+    ],
+    "right": [
+     "555555555",
+     "555eeee55",
+     "555ee4e55",
+     "555e4ee55",
+     "555eeee55",
+     "555555555",
+     "eeee45555",
+     "eeee55555",
+     "eeee55444",
+     "eeee55444",
+     "eeee55444",
+     "555555444",
+     "445545544",
+     "445455544"
+    ],
+    "top": [
+     "55555eeee",
+     "54555eeee",
+     "55555eeee",
+     "eeee55555",
+     "eeee45555",
+     "eeee55555",
+     "555555455",
+     "555555555",
+     "55ddddd55"
+    ],
+    "bottom": [
+     "444444444",
+     "444444444",
+     "445444444",
+     "444444454",
+     "444444444",
+     "444445444",
+     "444444444",
+     "444444444",
+     "444444444"
+    ]
+   },
+   "pig": {
+    "front": [
+     "ccdddddcc",
+     "ccdddddcc",
+     "dd0ede0dd",
+     "ddddddddd",
+     "dddcccddd",
+     "ddd4d4ddd",
+     "dddcccddd",
+     "ddcdddddd",
+     "dddddddcd"
+    ],
+    "back": [
+     "ddddddddd",
+     "ddddddddd",
+     "ddcdddddd",
+     "ddddccddd",
+     "dddddcddd",
+     "ddddddddd",
+     "dcddddddd",
+     "dddddddcd",
+     "ddddddddd"
+    ],
+    "left": [
+     "ddccddddd",
+     "ddccddddd",
+     "d0ddddddd",
+     "d0dddcddd",
+     "ccddddcdd",
+     "ccddddddc",
+     "ddddcdddd",
+     "dccdddccd",
+     "dccdddccd"
+    ],
+    "right": [
+     "dddddccdd",
+     "dddddccdd",
+     "ddddddd0d",
+     "dddcddd0d",
+     "ddcddddcc",
+     "cddddddcc",
+     "ddddcdddd",
+     "dccdddccd",
+     "dccdddccd"
+    ],
+    "top": [
+     "cdddddddc",
+     "ddddddddd",
+     "ddddddcdd",
+     "ddcdddddd",
+     "ddddcdddd",
+     "ddddddddd",
+     "ddddddddd",
+     "dddcccddd",
+     "dddcccddd"
+    ],
+    "bottom": [
+     "ccccccccc",
+     "ccccccccc",
+     "ccdcccccc",
+     "ccccccccc",
+     "ccccdcccc",
+     "ccccccccc",
+     "ccccccdcc",
+     "ccccccccc",
+     "ccccccccc"
+    ]
+   },
+   "chicken": {
+    "front": [
+     "ecce",
+     "ecce",
+     "0ee0",
+     "effe",
+     "effe",
+     "ecce",
+     "effe"
+    ],
+    "back": [
+     "ecce",
+     "e3ee",
+     "ee3e",
+     "eeee",
+     "3eee",
+     "eee3",
+     "effe"
+    ],
+    "left": [
+     "ceee",
+     "ceee",
+     "0eee",
+     "fee3",
+     "e3e3",
+     "e333",
+     "effe"
+    ],
+    "right": [
+     "eeec",
+     "eeec",
+     "eee0",
+     "3eef",
+     "3e3e",
+     "333e",
+     "effe"
+    ],
+    "top": [
+     "ee3e",
+     "e3ee",
+     "eeee",
+     "ecce"
+    ],
+    "bottom": [
+     "3333",
+     "3e33",
+     "33e3",
+     "3333"
+    ]
+   }
+  },
+  "face_sizes": {
+   "cow": {
+    "front": [9, 14],
+    "back": [9, 14],
+    "left": [9, 14],
+    "right": [9, 14],
+    "top": [9, 9],
+    "bottom": [9, 9]
+   },
+   "pig": {
+    "front": [9, 9],
+    "back": [9, 9],
+    "left": [9, 9],
+    "right": [9, 9],
+    "top": [9, 9],
+    "bottom": [9, 9]
+   },
+   "chicken": {
+    "front": [4, 7],
+    "back": [4, 7],
+    "left": [4, 7],
+    "right": [4, 7],
+    "top": [4, 4],
+    "bottom": [4, 4]
+   }
+  }
+ }
+}

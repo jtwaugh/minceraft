@@ -231,9 +231,27 @@ on a green stem), rose (red bloom on a green stem), sugar_cane (two
 green stalks with dark nodes; tiles vertically), brown_mushroom,
 red_mushroom (red cap with off-white spots)
 
-BATCH 15: ITEM ICONS (8x8, transparent background, 2 to 5 colors)
+BATCH 16: ITEM ICONS (8x8, transparent background, 2 to 5 colors)
 sword (a straight blade running from the top right to the bottom
 left in light gray with a near-black outline, a brown cross-guard and
 a brown handle), leather (a flat hide patch in browns with a
 near-black outline), feather (a slanted off-white feather with a gray
 quill running to the bottom left)
+
+BATCH 15: ANIMALS (models; see MODEL FACE CONVENTIONS; all opaque)
+Each animal is one box at 10 pixels per block, matching its `box` in
+data/animals.toml (the footprint is square, so width = depth). Faces are
+front, back, left, right, top, bottom. Left and right are mirror images
+(front at the left edge on left, the right edge on right). Palette only.
+
+cow (0.9 x 1.4 blocks, box 9 wide, 14 tall, 9 deep; brown with off-white
+patches, dark brown hooves, pink muzzle on the front):
+  front 9×14, back 9×14, left 9×14, right 9×14, top 9×9, bottom 9×9
+
+pig (0.9 x 0.9 blocks, box 9 wide, 9 tall, 9 deep; pink with red-pink
+ears and snout, near-black eyes):
+  front 9×9, back 9×9, left 9×9, right 9×9, top 9×9, bottom 9×9
+
+chicken (0.4 x 0.7 blocks, box 4 wide, 7 tall, 4 deep; off-white with a
+red comb and yellow beak and red wattle on the front face):
+  front 4×7, back 4×7, left 4×7, right 4×7, top 4×4, bottom 4×4
