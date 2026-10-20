@@ -236,7 +236,10 @@ sword (a straight blade running from the top right to the bottom
 left in light gray with a near-black outline, a brown cross-guard and
 a brown handle), leather (a flat hide patch in browns with a
 near-black outline), feather (a slanted off-white feather with a gray
-quill running to the bottom left)
+quill running to the bottom left), raw_beef (a round red steak with
+off-white marbling), raw_pork (a flat pink slab with an off-white fat
+band along the top and bottom edges), raw_chicken (a pink drumstick
+with an off-white bone running to the bottom right)
 
 BATCH 15: ANIMALS (models; see MODEL FACE CONVENTIONS; all opaque)
 Each animal is one box at 10 pixels per block, matching its `box` in
