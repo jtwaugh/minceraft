@@ -1,0 +1,9 @@
+# Console cheat codes: typing an alias runs each line of `expands` in order.
+# See docs/design/debug-console.md section 6.
+#
+# `name` is unique, snake_case, and must not equal a command name or command
+# alias (checked at load). Each line uses the console syntax.
+
+[[alias]]
+name = "kitchen"
+expands = ["give tool hoe", "spawn seeds 8"]

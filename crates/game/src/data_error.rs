@@ -14,6 +14,7 @@ pub enum DataFile {
     Input,
     Interactions,
     Crops,
+    Commands,
 }
 
 impl DataFile {
@@ -26,6 +27,7 @@ impl DataFile {
             DataFile::Input => "input.toml",
             DataFile::Interactions => "interactions.toml",
             DataFile::Crops => "crops.toml",
+            DataFile::Commands => "commands.toml",
         }
     }
 }
@@ -379,7 +381,7 @@ pub(crate) mod test_support {
 mod tests {
     use super::*;
 
-    const ALL: [(DataFile, &str); 7] = [
+    const ALL: [(DataFile, &str); 8] = [
         (DataFile::Player, "player.toml"),
         (DataFile::Animals, "animals.toml"),
         (DataFile::Items, "items.toml"),
@@ -387,6 +389,7 @@ mod tests {
         (DataFile::Input, "input.toml"),
         (DataFile::Interactions, "interactions.toml"),
         (DataFile::Crops, "crops.toml"),
+        (DataFile::Commands, "commands.toml"),
     ];
 
     fn show(file: DataFile, kind: DataErrorKind) -> String {
