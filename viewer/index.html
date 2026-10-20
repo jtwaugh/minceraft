@@ -614,15 +614,13 @@ function initGL() {
 
 // With MSAA the cutout program outputs a sharpened alpha for alpha-to-coverage
 // (the tint weight above still uses the raw alpha); without it, a hard discard.
-const hasMsaa = () => gl.getParameter(gl.SAMPLES) > 0;
+const msaa = gl.getParameter(gl.SAMPLES) > 0;
 function coverage(drawIt) {
-  const on = hasMsaa();
-  if (on) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  if (msaa) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
   drawIt();
-  if (on) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  if (msaa) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
 }
 function program(cut) {
-  const msaa = hasMsaa();
   const prog = gl.createProgram();
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, `#version 300 es
     layout(location=0) in vec3 pos;
