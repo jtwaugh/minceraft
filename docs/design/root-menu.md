@@ -6,11 +6,12 @@ source: "#447"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
 ---
 
 ## Current state
 
+- Phase B is done (plan #464, PRs #468 and #490): `.vercelignore` publishes the root `index.html`, `viewer/` and `client/` (with `vercel.json`), and `.github/scripts/published_files.py` (run in CI, tested by `test_published_files.py`) fails if any file the three pages load is not published. Applying the host's project settings stays `[external]`. The bullets below predate Phase A and B.
 - Phase A is done (plan #453, PRs #457 and #460): `client/scenes.js` holds the scene list, alpha flag and `menuEntries`, `client/scene.js` resolves `?scene=` through it, and the root `index.html` with `client/menu.js` links to `viewer/` and `client/`, tested by `client/test/scenes.test.mjs` and `client/test/menu.test.mjs`. The bullets below predate it. Phase B (deploy) is still `todo`.
 - No menu exists. `vercel.json` sets `outputDirectory` to `viewer`, and
   `.vercelignore` uploads only `/viewer` and `/vercel.json`, so the deployed
