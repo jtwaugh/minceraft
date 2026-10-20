@@ -7,6 +7,13 @@
 /// Something that happened in a tick.
 #[derive(Clone, Debug, PartialEq)]
 pub enum GameEvent {
+    /// A primary press that was not blocked by carrying, whatever it
+    /// targets. `player` is `"player"`; `tool` is the held tool's name, or
+    /// `None` for the bare hand.
+    Swing {
+        player: String,
+        tool: Option<String>,
+    },
     /// A forage succeeded at the block `position` and dropped `yields`.
     Foraged {
         position: [i32; 3],

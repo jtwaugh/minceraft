@@ -714,6 +714,15 @@ impl Walker {
         // Tools are stowed while carrying: primary does nothing.
         let mut pressed = *input;
         pressed.primary &= self.state.hands.is_none();
+        if pressed.primary {
+            self.events.push(GameEvent::Swing {
+                player: "player".to_string(),
+                tool: match &ctx.held {
+                    HeldThing::Tool(name) => Some(name.clone()),
+                    _ => None,
+                },
+            });
+        }
         // Holding secondary with the hoe tills again on a newly targeted block.
         if let (true, HeldThing::Tool(tool), Target::Block { pos, .. }) =
             (input.secondary_held, &ctx.held, ctx.target)
@@ -1694,7 +1703,16 @@ mod tests {
         let (id, seen) = cow_kill_run();
         assert_eq!(
             seen,
-            vec![hurt(id, 4), hurt(id, 4), hurt(id, 2), killed(id, "cow")]
+            vec![
+                swing(Some("sword")),
+                hurt(id, 4),
+                swing(Some("sword")),
+                hurt(id, 4),
+                swing(Some("sword")),
+                hurt(id, 2),
+                killed(id, "cow"),
+                swing(Some("sword")),
+            ]
         );
     }
 
@@ -1705,20 +1723,23 @@ mod tests {
         let id = w.spawn_animal("chicken", [0.5, 4.0, -2.0], 0.0).unwrap();
         w.tick(&look(-0.4, false));
         w.tick(&click());
-        assert_eq!(w.drain_events(), vec![hurt(id, 4), killed(id, "chicken")]);
+        assert_eq!(
+            w.drain_events(),
+            vec![swing(Some("sword")), hurt(id, 4), killed(id, "chicken")]
+        );
         assert!(w.drain_events().is_empty());
     }
 
     #[test]
-    fn a_hit_inside_the_invulnerability_window_emits_nothing() {
+    fn a_hit_inside_the_invulnerability_window_emits_only_the_swing() {
         let mut w = settled();
         w.player_state_mut().select(1);
         let id = w.spawn_animal("cow", [0.5, 4.0, -2.0], 0.0).unwrap();
         w.tick(&look(-0.4, false));
         w.tick(&click());
-        assert_eq!(w.drain_events(), vec![hurt(id, 4)]);
+        assert_eq!(w.drain_events(), vec![swing(Some("sword")), hurt(id, 4)]);
         w.tick(&click());
-        assert!(w.drain_events().is_empty());
+        assert_eq!(w.drain_events(), vec![swing(Some("sword"))]);
     }
 
     #[test]
@@ -2879,5 +2900,68 @@ mod tests {
     #[test]
     fn landed_events_replay_identically() {
         assert_eq!(five_block_fall(), five_block_fall());
+    }
+
+    fn swings(w: &mut Walker, input: &TickInput) -> Vec<GameEvent> {
+        w.tick(input);
+        w.drain_events()
+            .into_iter()
+            .filter(|e| matches!(e, GameEvent::Swing { .. }))
+            .collect()
+    }
+
+    fn level_click() -> TickInput {
+        TickInput {
+            primary: true,
+            ..look(0.0, false)
+        }
+    }
+
+    fn swing(tool: Option<&str>) -> GameEvent {
+        GameEvent::Swing {
+            player: "player".into(),
+            tool: tool.map(String::from),
+        }
+    }
+
+    #[test]
+    fn a_bare_hand_click_swings_once_at_nothing_or_a_block() {
+        let mut w = settled();
+        w.drain_events();
+        let sky = TickInput {
+            primary: true,
+            ..look(1.2, false)
+        };
+        assert_eq!(swings(&mut w, &sky), vec![swing(None)]);
+        let ground = TickInput {
+            primary: true,
+            ..look(-1.5, false)
+        };
+        assert_eq!(swings(&mut w, &ground), vec![swing(None)]);
+        // No press, no swing.
+        assert!(swings(&mut w, &look(0.0, false)).is_empty());
+    }
+
+    #[test]
+    fn a_sword_swing_names_the_tool_and_fires_at_an_entity() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.player_state_mut().select(1);
+        assert_eq!(swings(&mut w, &level_click()), vec![swing(Some("sword"))]);
+    }
+
+    #[test]
+    fn carrying_emits_no_swing_and_secondary_never_does() {
+        let mut w = settled();
+        w.player_state_mut().select(1);
+        let secondary = TickInput {
+            secondary: true,
+            ..look(0.0, false)
+        };
+        assert!(swings(&mut w, &secondary).is_empty());
+        w.state.hands = Some(crate::items::ItemInstance {
+            item: "seeds".into(),
+        });
+        assert!(swings(&mut w, &level_click()).is_empty());
     }
 }
