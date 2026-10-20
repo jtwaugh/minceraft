@@ -1,0 +1,35 @@
+# Stalled-work check: keeps one issue, "Factory: stalled work", listing
+# design docs the factory has stopped moving on (no phases, a phase with no
+# plan, a plan closed with its phase still todo) and leftover docs/* branches
+# that would make the docs updater fail. Closes the issue when nothing is
+# stalled. The rules are in .github/scripts/stalled.py.
+name: Stalled check
+
+on:
+  schedule:
+    - cron: "23 12 * * *"
+  # The docs updater is what leaves a phase "still incomplete".
+  workflow_run:
+    workflows: ["Claude docs updater"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: stalled
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .github/scripts/stalled.py --issue
