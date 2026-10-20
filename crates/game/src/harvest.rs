@@ -7,7 +7,8 @@ use crate::crops::{Crops, Range};
 use crate::farm::{CropKind, FarmTile, FarmWorld};
 use crate::rng::Rng;
 
-fn crop_name(kind: CropKind) -> &'static str {
+/// The name of a crop kind, as in `data/crops.toml`.
+pub fn crop_name(kind: CropKind) -> &'static str {
     match kind {
         CropKind::Wheat => "wheat",
     }
