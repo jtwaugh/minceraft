@@ -15,6 +15,7 @@ use game::items::{ItemInstance, Items};
 use game::sampler::Sampler;
 use game::scene::{raft_scene, RaftScene, FIELD_SIZE, FIELD_Y, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
+use layout::{Layout, RegionCoord};
 use terrain::Region;
 use wasm_bindgen::prelude::*;
 
@@ -284,6 +285,37 @@ impl Walk {
             x0,
             z0,
         });
+    }
+
+    /// A player over a streamed world of the given seed: regions around the
+    /// player load and unload as they move (`data/streaming.toml`).
+    pub fn streamed(seed: f64, x: f64, y: f64, z: f64) -> Result<Walk, JsError> {
+        let layout = Layout {
+            seed: seed as u64,
+            ..Layout::default()
+        };
+        let walker = Walker::with_layout(layout, [x, y, z]).map_err(|e| JsError::new(&e))?;
+        with_default_commands(walker)
+    }
+
+    /// Regions loaded or unloaded since the last call, as `[kind, rx, rz]`
+    /// triples: kind 1 loaded (unloads come first), 0 unloaded.
+    pub fn drain_stream(&mut self) -> Vec<i32> {
+        let change = self.0.drain_stream_changes();
+        let triple = |kind: i32| move |c: &RegionCoord| [kind, c.rx, c.rz];
+        let unloaded = change.unloaded.iter().map(triple(0));
+        let loaded = change.loaded.iter().map(triple(1));
+        unloaded.chain(loaded).flatten().collect()
+    }
+
+    /// The blocks of the loaded region `(rx, rz)` (`REGION_SIZE` columns a
+    /// side from its origin, x then z then y), or empty if it isn't loaded.
+    pub fn region_blocks(&self, rx: i32, rz: i32) -> Vec<u8> {
+        self.0
+            .streamer_cache()
+            .and_then(|c| c.get(RegionCoord::new(rx, rz)))
+            .map(|r| r.region.blocks.clone())
+            .unwrap_or_default()
     }
 
     /// A player in the water in front of the scene's raft, which moves under

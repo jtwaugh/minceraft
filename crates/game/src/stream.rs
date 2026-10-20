@@ -2,7 +2,7 @@
 //! See docs/design/world-layout.md Phase D (Multi-region world).
 
 use crate::walk::RegionSet;
-use layout::{Layout, RegionCache, RegionCoord};
+use layout::{CacheChange, Layout, RegionCache, RegionCoord};
 
 const DEFAULT_STREAMING: &str = include_str!("../../../data/streaming.toml");
 
@@ -57,6 +57,7 @@ pub struct Streamer {
     cache: RegionCache,
     config: StreamConfig,
     centre: Option<RegionCoord>,
+    pending: CacheChange,
 }
 
 impl Streamer {
@@ -65,7 +66,15 @@ impl Streamer {
             cache: RegionCache::new(layout, config.decorate),
             config,
             centre: None,
+            pending: CacheChange::default(),
         }
+    }
+
+    /// Regions loaded and unloaded since the last call, for a renderer that
+    /// mirrors what is loaded. A region loaded and unloaded in between is in
+    /// neither list.
+    pub fn drain_changes(&mut self) -> CacheChange {
+        std::mem::take(&mut self.pending)
     }
 
     pub fn cache(&self) -> &RegionCache {
@@ -90,7 +99,14 @@ impl Streamer {
         for c in &change.unloaded {
             let (x0, z0) = c.origin();
             world.remove(x0, z0);
+            match self.pending.loaded.iter().position(|l| l == c) {
+                Some(i) => {
+                    self.pending.loaded.remove(i);
+                }
+                None => self.pending.unloaded.push(*c),
+            }
         }
+        self.pending.loaded.extend(&change.loaded);
         for c in &change.loaded {
             if let Some(r) = self.cache.get(*c) {
                 world.push(r.region.clone());
@@ -195,6 +211,33 @@ mod tests {
         assert!(cache.generations() > 9, "new regions loaded ahead");
         assert_eq!(cache.len(), w.loaded_region_count());
         assert!(!cache.contains(RegionCoord::new(centre.rx - 3, centre.rz)));
+    }
+
+    #[test]
+    fn drained_changes_mirror_the_loaded_regions() {
+        let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
+        let first = w.drain_stream_changes();
+        assert_eq!((first.loaded.len(), first.unloaded.len()), (9, 0));
+        assert_eq!(w.drain_stream_changes(), Default::default());
+        let mut mirror: std::collections::BTreeSet<_> = first.loaded.into_iter().collect();
+        let input = east();
+        for _ in 0..1000 {
+            w.tick(&input);
+            let change = w.drain_stream_changes();
+            for c in change.unloaded {
+                assert!(mirror.remove(&c), "{c:?} was not loaded");
+            }
+            for c in change.loaded {
+                assert!(mirror.insert(c), "{c:?} loaded twice");
+            }
+        }
+        let loaded = w.loaded_regions().into_iter().collect::<Vec<_>>();
+        let origins = mirror.iter().map(|c| c.origin());
+        assert_eq!(
+            origins.collect::<std::collections::BTreeSet<_>>().len(),
+            loaded.len()
+        );
+        assert!(mirror.iter().all(|c| loaded.contains(&c.origin())));
     }
 
     #[test]
