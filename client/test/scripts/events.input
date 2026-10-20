@@ -1,0 +1,40 @@
+# Sim events reach the client: controller.state.events lists each frame's
+# events once, and `expect event` asserts on those seen since the case began
+# (docs/design/basic-gameplay.md section 11).
+
+case no events are seen on a quiet frame
+start walk raft
+frame 50 x2
+expect no event block_tilled
+expect no event crop_planted
+
+case a tilled block is reported with its names
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+lock
+stand field
+expect no event block_tilled
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect event block_tilled from=grass
+expect no event crop_planted
+
+# The player spawns in the water, so no edge is seen until they leave and return.
+case walking off the islet into the sea reports entered_water
+start walk raft
+click
+lock
+stand field
+frame 50 x2
+expect no event entered_water
+down KeyW
+until events > 0
+up KeyW
+expect event entered_water player=player
