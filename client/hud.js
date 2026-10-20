@@ -2,17 +2,18 @@
 // belt with the selected slot, the carried item, and health hearts. The model
 // is plain data that Node tests check; the DOM renderer is a thin mirror.
 //
-//   hudModel({ belt, health, maxHealth }) ->
-//     { crosshair, slots: [{ name, selected }], selected, hands, hearts: { full, half, empty } }
+//   hudModel({ belt, health, maxHealth, phase, secondsLeft }) ->
+//     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected }], selected, hands, hearts: { full, half, empty } }
 //   mountHud(document, parent) -> { update(model) }
 //
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
-export function hudModel({ belt, health, maxHealth }) {
+export function hudModel({ belt, health, maxHealth, phase = 'gathering', secondsLeft = 0 }) {
   const hp = Math.max(0, Math.min(health, maxHealth));
   const full = Math.floor(hp / 2), half = hp % 2;
   return {
     crosshair: true,
+    timer: { phase, secondsLeft },
     slots: belt.slots.map((name, i) => ({ name, selected: i === belt.selected })),
     selected: belt.selected,
     hands: belt.hands,
@@ -25,6 +26,7 @@ const CSS = `
 #hud-cross { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%);
   background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; mix-blend-mode: difference; }
 #hud-bottom { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+#hud-timer { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); padding: 2px 8px; background: rgba(0, 0, 0, .55); }
 #hud-hearts { display: flex; gap: 2px; }
 .heart { width: 14px; height: 14px; background: #3a0a0a; }
 .heart.full { background: #d22; }
@@ -40,9 +42,9 @@ export function mountHud(document, parent = document.body) {
   style.textContent = CSS;
   const root = document.createElement('div');
   root.id = 'hud';
-  root.innerHTML = '<div id="hud-cross"></div><div id="hud-bottom"><div id="hud-hands"></div><div id="hud-hearts"></div><div id="hud-belt"></div></div>';
+  root.innerHTML = '<div id="hud-cross"></div><div id="hud-timer"></div><div id="hud-bottom"><div id="hud-hands"></div><div id="hud-hearts"></div><div id="hud-belt"></div></div>';
   parent.append(style, root);
-  const cross = root.querySelector('#hud-cross'), hands = root.querySelector('#hud-hands');
+  const cross = root.querySelector('#hud-cross'), timer = root.querySelector('#hud-timer'), hands = root.querySelector('#hud-hands');
   const hearts = root.querySelector('#hud-hearts'), belt = root.querySelector('#hud-belt');
   let last = '';
   return {
@@ -51,6 +53,7 @@ export function mountHud(document, parent = document.body) {
       if (key === last) return;
       last = key;
       cross.hidden = !m.crosshair;
+      timer.textContent = `${m.timer.phase} ${m.timer.secondsLeft}s`;
       hands.textContent = m.hands ? `carrying ${m.hands}` : '';
       const kinds = [...Array(m.hearts.full).fill('full'), ...Array(m.hearts.half).fill('half'), ...Array(m.hearts.empty).fill('empty')];
       hearts.replaceChildren(...kinds.map((k) => Object.assign(document.createElement('div'), { className: `heart ${k}` })));

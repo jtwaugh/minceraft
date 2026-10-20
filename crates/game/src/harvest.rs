@@ -24,7 +24,7 @@ pub fn tile_crop_state(tile: FarmTile) -> Option<&'static str> {
     }
 }
 
-fn count(rng: &mut Rng, r: Range) -> u32 {
+pub(crate) fn count(rng: &mut Rng, r: Range) -> u32 {
     rng.range(r.min as i32, r.max as i32) as u32
 }
 
