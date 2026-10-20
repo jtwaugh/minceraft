@@ -206,6 +206,8 @@ Replaying the recording runs the commands at the same ticks, so a cheated sessio
 
 Test: a recorded session that uses `give`, `spawn`, `tp` and `pause/step` produces the same world hash on two runs.
 
+Phase 3 builds the minimal recorder and world hash in `crates/game`, and basic-gameplay's replay test reuses them. The implementer picks a small set of state for the hash to cover and documents it. (Decided in #422.)
+
 > **Reconciler:** no recording format or world hash exists yet (note 6).
 
 ---
@@ -261,7 +263,3 @@ Each later gameplay phase adds its own commands in its own tickets.
    - A: paste them into this file so the planner can read them.
    - B: let the Phase 1 plan define each command's syntax, with the
      maintainer answering in the plan's `decision` issues.
-8. **Replay infrastructure.**
-   - A: Phase 3 builds the minimal recorder and world hash in `crates/game`
-     and basic-gameplay's replay test reuses them (suggested).
-   - B: Phase 3 waits for basic-gameplay's replay test to land.
