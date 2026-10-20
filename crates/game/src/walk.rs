@@ -716,6 +716,27 @@ impl Walker {
             .liquid
     }
 
+    /// Put the player standing on the highest non-air block of column
+    /// `(x, z)`, streaming that column's region in first. Errors, changing
+    /// nothing, if the column is not in a loaded region.
+    pub fn teleport_to_surface(&mut self, x: i32, z: i32) -> Result<[f64; 3], String> {
+        let (cx, cz) = (x as f64 + 0.5, z as f64 + 0.5);
+        if let Some(s) = &mut self.streamer {
+            // Load the destination without moving the player yet.
+            s.update([cx, 0.0, cz], self.world.base_mut());
+        }
+        if self.world.base().region_at(x, z).is_none() {
+            return Err(format!("no world loaded at {x} {z}"));
+        }
+        let top = (0..HEIGHT as i32)
+            .rev()
+            .find(|&y| self.world.block_at(x, y, z) != Block::Air)
+            .ok_or_else(|| format!("nothing to stand on at {x} {z}"))?;
+        let feet = [cx, top as f64 + 1.0, cz];
+        self.teleport(feet);
+        Ok(feet)
+    }
+
     /// Put the player at `feet` with no velocity, e.g. when leaving fly mode.
     pub fn teleport(&mut self, feet: [f64; 3]) {
         self.player = Player::new(feet, &self.physics);

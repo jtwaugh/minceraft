@@ -397,7 +397,13 @@ impl<W> Console<W> {
 pub fn default_registry() -> Result<Registry<Walker>, RegistryError> {
     let mut help = help_command();
     help.handler = help_handler;
-    Registry::new(vec![help, give_command(), spawn_command(), clear_command()])
+    Registry::new(vec![
+        help,
+        give_command(),
+        spawn_command(),
+        clear_command(),
+        tp_command(),
+    ])
 }
 
 /// `help` lists every command; `help <name>` describes one.
@@ -421,6 +427,45 @@ fn help_handler(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, 
         }
         Some(_) => Err("bad command name".into()),
     }
+}
+
+/// `tp <x> <z>`: stand on the surface of that column (docs/design/debug-console.md
+/// Phase 3, decided in #423).
+pub fn tp_command() -> Command<Walker> {
+    Command {
+        name: "tp",
+        aliases: &[],
+        args: &[
+            ArgSpec {
+                name: "x",
+                kind: ArgKind::Int,
+                optional: false,
+            },
+            ArgSpec {
+                name: "z",
+                kind: ArgKind::Int,
+                optional: false,
+            },
+        ],
+        help: "teleport onto the surface at column x z",
+        states: ALL_STATES,
+        cheat: true,
+        handler: tp,
+    }
+}
+
+fn tp(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    let (Some(Arg::Int(x)), Some(Arg::Int(z))) = (args.first(), args.get(1)) else {
+        return Err("missing x or z".into());
+    };
+    let coord = |v: i64| i32::try_from(v).map_err(|_| format!("{v} is out of range"));
+    let feet = ctx.world.teleport_to_surface(coord(*x)?, coord(*z)?)?;
+    Ok(vec![format!(
+        "teleported to {} {} {}",
+        feet[0].floor(),
+        feet[1],
+        feet[2].floor()
+    )])
 }
 
 /// `give tool|item <name>`: one unit, following the belt and hands rules
@@ -813,10 +858,10 @@ mod default_registry_tests {
     use super::*;
 
     #[test]
-    fn default_registry_has_exactly_the_four_commands() {
+    fn default_registry_has_exactly_the_five_commands() {
         let reg = default_registry().unwrap();
         let names: Vec<&str> = reg.iter().map(|c| c.name).collect();
-        assert_eq!(names, vec!["help", "give", "spawn", "clear"]);
+        assert_eq!(names, vec!["help", "give", "spawn", "clear", "tp"]);
         assert!(!reg.get("help").unwrap().cheat);
     }
 }
@@ -1064,6 +1109,86 @@ mod give_tests {
         }
         assert_eq!(*w.player_state(), before);
         assert_eq!(w.items().len(), 0);
+        assert!(!w.cheated());
+    }
+}
+
+#[cfg(test)]
+mod tp_tests {
+    use super::*;
+    use crate::input::TickInput;
+    use layout::Layout;
+
+    fn walker() -> Walker {
+        let layout = Layout {
+            seed: 25,
+            ..Layout::default()
+        };
+        let mut w = Walker::with_layout(layout, [64.5, 120.0, 64.5]).unwrap();
+        w.set_commands(default_registry().unwrap());
+        w
+    }
+
+    fn run(w: &mut Walker, line: &str) -> Vec<String> {
+        w.submit_command(line);
+        w.tick(&TickInput::default());
+        w.drain_command_output()
+    }
+
+    #[test]
+    fn tp_stands_on_the_surface_with_no_velocity_and_the_eye_follows() {
+        let mut w = walker();
+        // Several regions away, so the destination must be streamed in.
+        let out = run(&mut w, "tp 700 -300");
+        assert!(out[0].starts_with("teleported to 700 "), "{out:?}");
+        assert!(w.cheated());
+        let p = w.player();
+        assert_eq!((p.pos[0], p.pos[2]), (700.5, -299.5));
+        let top = (0..terrain::HEIGHT as i32)
+            .rev()
+            .find(|&y| w.block_at(700, y, -300) != terrain::Block::Air)
+            .unwrap();
+        // One tick of gravity at most separates it from the surface.
+        assert!((p.pos[1] - (top as f64 + 1.0)).abs() < 0.5, "{p:?} {top}");
+        assert_eq!(p.vel[0], 0.0);
+        assert_eq!(p.vel[2], 0.0);
+        let eye = w.eye(1.0);
+        assert!(
+            (eye[0] - 700.5).abs() < 1e-9 && eye[1] > p.pos[1],
+            "{eye:?}"
+        );
+    }
+
+    #[test]
+    fn bad_arguments_error_and_change_nothing() {
+        let mut w = walker();
+        let before = w.player().pos;
+        for line in [
+            "tp",
+            "tp 5",
+            "tp 1 2 3",
+            "tp a b",
+            "tp 1.5 2",
+            "tp 99999999999 0",
+        ] {
+            let out = run(&mut w, line);
+            assert!(
+                out[0].contains("usage")
+                    || out[0].contains("bad value")
+                    || out[0].contains("range"),
+                "{line}: {out:?}"
+            );
+            assert!(!w.cheated(), "{line}");
+        }
+        assert_eq!(w.player().pos[0], before[0]);
+        assert_eq!(w.player().pos[2], before[2]);
+    }
+
+    #[test]
+    fn tp_outside_any_loaded_world_fails_without_cheating() {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(default_registry().unwrap());
+        run(&mut w, "tp 1000 1000");
         assert!(!w.cheated());
     }
 }
