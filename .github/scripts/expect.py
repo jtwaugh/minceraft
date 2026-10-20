@@ -55,7 +55,8 @@ def ticket(n, started):
 
 
 def phase_done(plan, started):
-    branch = re.compile(rf"^docs/.*phase-done-{plan}$")
+    # The updater adds a suffix (-v2, -r2) when an old branch has the name.
+    branch = re.compile(rf"^docs/.*phase-done-{plan}(-[a-z0-9]+)?$")
     pulls = gh(f"repos/{REPO}/pulls?state=all&sort=created&direction=desc&per_page=50")
     return any(branch.match(p["head"]["ref"]) and p["created_at"] >= started for p in pulls)
 

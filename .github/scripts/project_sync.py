@@ -42,9 +42,13 @@ Dependencies are shown two ways, so the board says what each ticket waits on:
   same files (see tickets.py). Empty once nothing blocks it.
 
 Every run recomputes everything, so a missed event is fixed by the next one.
-Uses the REST API (GH_TOKEN) to read the repo and GraphQL (PROJECT_TOKEN, a
-classic token with the `project` scope) for the project, which belongs to the
-user, not the repo, so the workflow's own token can't change it.
+Uses the REST API to read the repo and GraphQL for the project, both with
+PROJECT_TOKEN (a classic token with the `project` scope; the project belongs
+to the user, so the workflow's own token can't change it). Reading with it
+keeps this sync, which runs on nearly every event, off the workflow token's
+1,000-requests-an-hour budget that the other workflows share. Writes to the
+repo (labels, blocked-by links) use WRITE_TOKEN, the workflow token, since
+the project token has no repo scope; GH_TOKEN is the fallback for both.
 """
 import argparse
 import json
@@ -68,9 +72,19 @@ AGENT_JOBS = {"implement", "find-ready", "start-ready", "edit-spec", "reconcile"
 NITS = re.compile(r"Verdict:\s*\**\s*ready,? with nits", re.I)
 
 
+READ_ENV = dict(os.environ, GH_TOKEN=os.environ.get("PROJECT_TOKEN") or os.environ.get("GH_TOKEN", ""))
+WRITE_ENV = dict(os.environ, GH_TOKEN=os.environ.get("WRITE_TOKEN") or os.environ.get("GH_TOKEN", ""))
+
+
+def write(*args, check=True):
+    """A REST write to the repo, with the workflow token."""
+    return subprocess.run(["gh", "api", *args], check=check, capture_output=True, text=True,
+                          env=WRITE_ENV)
+
+
 def rest(path):
     out = subprocess.run(["gh", "api", "--paginate", "--slurp", path],
-                         check=True, capture_output=True, text=True).stdout
+                         check=True, capture_output=True, text=True, env=READ_ENV).stdout
     pages = json.loads(out)
     if pages and isinstance(pages[0], list):
         return [item for page in pages for item in page]
@@ -95,10 +109,8 @@ def graphql(query, **variables):
 
 def demote_to_idea(n):
     """Label issue #n `idea` and take `factory` off (it was dragged to Idea)."""
-    subprocess.run(["gh", "api", "-X", "POST", f"repos/{REPO}/issues/{n}/labels",
-                    "-f", "labels[]=idea"], check=True, capture_output=True)
-    subprocess.run(["gh", "api", "-X", "DELETE", f"repos/{REPO}/issues/{n}/labels/factory"],
-                   capture_output=True)  # fine if it wasn't there
+    write("-X", "POST", f"repos/{REPO}/issues/{n}/labels", "-f", "labels[]=idea")
+    write("-X", "DELETE", f"repos/{REPO}/issues/{n}/labels/factory", check=False)  # fine if it wasn't there
 
 
 def unlabelled_idea_at(n):
@@ -122,7 +134,7 @@ def checks_state(sha):
     """'failed', 'running' or 'passed' over the code checks on a commit."""
     out = subprocess.run(["gh", "api", "--paginate", "--slurp",
                           f"repos/{REPO}/commits/{sha}/check-runs?per_page=100"],
-                         check=True, capture_output=True, text=True).stdout
+                         check=True, capture_output=True, text=True, env=READ_ENV).stdout
     runs = [r for page in json.loads(out) for r in page.get("check_runs", [])]
     state = "passed"
     for r in runs:
@@ -237,10 +249,8 @@ def sync_dependencies():
                 dep = rest(f"repos/{REPO}/issues/{d}")
                 if "pull_request" in dep:
                     continue  # PRs can't be dependencies
-                subprocess.run(["gh", "api", "-X", "POST",
-                                f"repos/{REPO}/issues/{n}/dependencies/blocked_by",
-                                "-F", f"issue_id={dep['id']}"],
-                               check=True, capture_output=True, text=True)
+                write("-X", "POST", f"repos/{REPO}/issues/{n}/dependencies/blocked_by",
+                      "-F", f"issue_id={dep['id']}")
                 print(f"Issue #{n}: marked blocked by #{d}")
                 added += 1
         except subprocess.CalledProcessError as e:
