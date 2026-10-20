@@ -504,7 +504,7 @@ The `item_put_down` variant is added with the rest of this list, but nothing emi
 - Tool belt with selected slot.
 - Hands indicator showing the carried item.
 - Health hearts.
-- Day phase timer (gathering or service, seconds left).
+- Day phase timer (gathering or service, seconds left). Phase 8 adds a minimal phase clock to the sim to drive it: a data file gives the length of each phase, 120 seconds for gathering and 120 seconds for service, alternating from tick 0 starting with gathering, and the HUD shows the current phase and the seconds left. (Decided in #470.)
 
 ---
 
