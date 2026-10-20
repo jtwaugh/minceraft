@@ -225,8 +225,11 @@ Fix F4 and F5.
    - average colour weighted by alpha, so transparent texels add no black;
    - **coverage-preserving alpha:** scale each level's alpha so the share
      of texels at or above 0.5 matches level 0 for that layer;
-   - average the tint weight separately from coverage (see Open question
-     1).
+   - average the tint weight separately from coverage. The viewer moves
+     the tint to a separate R8 tint-mask texture array sampled with the
+     same UVs, as the client already does, so alpha carries coverage only
+     and `viewer/mips.js` serves both renderers the same way. (Decided in
+     #538.)
 2. **Alpha to coverage** for the cutout pass: enable
    `SAMPLE_ALPHA_TO_COVERAGE` and sharpen alpha in the shader,
    `a = (a - 0.5) / max(fwidth(a), 1e-4) + 0.5`, in place of the hard
@@ -339,12 +342,6 @@ Show terrain beyond the fog instead of empty sky.
 
 ## Open questions
 
-1. **Where should the tint marker live?**
-   A. Keep it in alpha as a continuous weight (Phase A). Simple, but
-   foliage coverage and tint share one channel, which constrains Phase B's
-   mipmaps.
-   B. A separate R8 tint-mask texture array sampled with the same UVs. One
-   extra texture fetch; frees alpha for coverage only.
 2. **Supersampling for recordings.** Render at 1.5× or 2× when recording
    and downsample, to clean up block silhouettes against the sky?
    A. Yes, recording only.
