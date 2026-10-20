@@ -614,9 +614,15 @@ function initGL() {
 
 // With MSAA the cutout program outputs a sharpened alpha for alpha-to-coverage
 // (the tint weight above still uses the raw alpha); without it, a hard discard.
-const msaa = () => gl.getParameter(gl.SAMPLES) > 0;
+const hasMsaa = () => gl.getParameter(gl.SAMPLES) > 0;
+function coverage(drawIt) {
+  const on = hasMsaa();
+  if (on) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+  drawIt();
+  if (on) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+}
 function program(cut) {
-  const msaa = msaaOn;
+  const msaa = hasMsaa();
   const prog = gl.createProgram();
   gl.attachShader(prog, shader(gl.VERTEX_SHADER, `#version 300 es
     layout(location=0) in vec3 pos;
@@ -1031,7 +1037,7 @@ function draw() {
   // sun first, unfogged and behind everything
   setU('fogFar', 1e9);
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
-  drawSun(view, target);
+  coverage(() => drawSun(view, target));
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   setU('fogFar', cam.dist + 90);
   // solid geometry without discard, then cut-outs (leaves, plants)
@@ -1039,11 +1045,11 @@ function draw() {
   useProg(progs.solid);
   drawMesh(opaque, AT);
   useProg(progs.cut);
-  drawMesh(cutout, AT);
+  coverage(() => drawMesh(cutout, AT));
   // fish under the water surface; fins are flat, so draw both sides
   if (fish.length) {
     gl.disable(gl.CULL_FACE);
-    drawDynamic('fish', fishVerts());
+    coverage(() => drawDynamic('fish', fishVerts()));
     gl.enable(gl.CULL_FACE);
   }
   // translucent water, then ice, without depth writes
@@ -1507,7 +1513,7 @@ function renderFly(f) {
   setU('fogMax', 1);
   setU('fogFar', 1e9);
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
-  drawSun(view, eye);
+  coverage(() => drawSun(view, eye));
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   setU('fogFar', FLY_FOG);
   // Chunks whose box is in the view frustum and nearer than solid fog,
@@ -1528,7 +1534,7 @@ function renderFly(f) {
   useProg(progs.solid);
   for (const { c, off } of vis) drawMesh(c.parts.opaque, off);
   useProg(progs.cut);
-  for (const { c, off } of vis) drawMesh(c.parts.cutout, off);
+  coverage(() => { for (const { c, off } of vis) drawMesh(c.parts.cutout, off); });
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   setU('alpha', 0.45);
