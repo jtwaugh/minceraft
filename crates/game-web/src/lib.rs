@@ -217,6 +217,26 @@ impl Walk {
         self.0.submit_command(line);
     }
 
+    /// Run queued commands without ticking (for a paused game).
+    pub fn run_commands(&mut self) {
+        self.0.run_commands();
+    }
+
+    /// Whether `pause` is in effect; the client then stops calling `tick`.
+    pub fn paused(&self) -> bool {
+        self.0.paused()
+    }
+
+    /// Ticks `step` asked for since the last call.
+    pub fn take_steps(&mut self) -> u32 {
+        self.0.take_steps()
+    }
+
+    /// Ticks run so far.
+    pub fn sim_tick(&self) -> f64 {
+        self.0.sim_tick() as f64
+    }
+
     /// Output lines of commands run since the last call, oldest first.
     pub fn drain_command_output(&mut self) -> Vec<String> {
         self.0.drain_command_output()

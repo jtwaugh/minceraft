@@ -41,7 +41,7 @@
 // belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
 // item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
-// animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
+// sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
@@ -130,6 +130,8 @@ function read(w, path) {
     if (path === 'console.lines') return w.output.length;
     if (path === 'console.text') return w.text;
   }
+  if (path === 'sim_tick') return w.walk.sim_tick();
+  if (path === 'paused') return w.walk.paused();
   if (path === 'locked') return w.input.locked;
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);

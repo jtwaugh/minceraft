@@ -11,10 +11,19 @@
  */
 export function stepWalk(walk, ticks, alpha, nextInput) {
   if (walk.has_world()) {
-    for (let i = 0; i < ticks; i++) {
+    const tick = () => {
       const t = nextInput();
       walk.tick(t);
       t.free?.(); // a wasm Tick; test fakes are plain objects
+    };
+    // `pause` (a console command, in the sim) stops the ticking; the sim still
+    // runs queued commands, and `step n` asks for n ticks (debug-console.md 9).
+    for (let i = 0; i < ticks && !walk.paused?.(); i++) tick();
+    if (walk.paused?.()) {
+      walk.run_commands();
+      for (let n = walk.take_steps(); n > 0; n = walk.take_steps()) {
+        for (let i = 0; i < n; i++) tick();
+      }
     }
   }
   return Array.from(walk.eye(alpha));
