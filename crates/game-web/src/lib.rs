@@ -8,6 +8,7 @@ use game::bindings::Bindings;
 use game::camera::{Camera, Pose};
 use game::clock::Clock;
 use game::commands::default_registry;
+use game::events::GameEvent;
 use game::input::TickInput;
 use game::interactions::{Button, HeldThing};
 use game::items::{ItemInstance, Items};
@@ -186,6 +187,80 @@ impl Default for Scene {
 
 /// The walking player: stepped from sampled ticks, collides with the terrain
 /// regions the scene hands over, and reports the interpolated eye.
+/// One event as `name key=value ...`; lists are comma-joined, positions `x,y,z`.
+fn describe_event(e: &GameEvent) -> String {
+    fn pos<T: std::fmt::Display>(p: &[T; 3]) -> String {
+        format!("{},{},{}", p[0], p[1], p[2])
+    }
+    match e {
+        GameEvent::Swing { player, tool } => {
+            format!(
+                "swing player={player} tool={}",
+                tool.as_deref().unwrap_or("")
+            )
+        }
+        GameEvent::Foraged { position, yields } => {
+            format!(
+                "foraged position={} yields={}",
+                pos(position),
+                yields.join(",")
+            )
+        }
+        GameEvent::EntityHurt {
+            entity,
+            attacker,
+            damage,
+        } => {
+            format!("entity_hurt entity={entity} attacker={attacker} damage={damage}")
+        }
+        GameEvent::EntityKilled {
+            entity,
+            kind,
+            attacker,
+        } => {
+            format!("entity_killed entity={entity} kind={kind} attacker={attacker}")
+        }
+        GameEvent::ItemDropped {
+            item,
+            position,
+            source,
+        } => {
+            format!(
+                "item_dropped item={item} position={} source={source}",
+                pos(position)
+            )
+        }
+        GameEvent::ItemPickedUp { item, player } => {
+            format!("item_picked_up item={item} player={player}")
+        }
+        GameEvent::BlockTilled { position, from, to } => {
+            format!(
+                "block_tilled position={} from={from} to={to}",
+                pos(position)
+            )
+        }
+        GameEvent::CropPlanted { position, crop } => {
+            format!("crop_planted position={} crop={crop}", pos(position))
+        }
+        GameEvent::CropHarvested {
+            position,
+            crop,
+            yields,
+        } => {
+            format!(
+                "crop_harvested position={} crop={crop} yields={}",
+                pos(position),
+                yields.join(",")
+            )
+        }
+        GameEvent::EnteredWater { player } => format!("entered_water player={player}"),
+        GameEvent::ExitedWater { player } => format!("exited_water player={player}"),
+        GameEvent::SteppedOntoRaft { player } => format!("stepped_onto_raft player={player}"),
+        GameEvent::SteppedOffRaft { player } => format!("stepped_off_raft player={player}"),
+        GameEvent::Landed { fall_distance } => format!("landed fall_distance={fall_distance}"),
+    }
+}
+
 #[wasm_bindgen]
 pub struct Walk(Walker);
 
@@ -246,6 +321,22 @@ impl Walk {
     /// Output lines of commands run since the last call, oldest first.
     pub fn drain_command_output(&mut self) -> Vec<String> {
         self.0.drain_command_output()
+    }
+
+    /// Events emitted since the last call, oldest first, one string each:
+    /// `name key=value ...` (docs/design/basic-gameplay.md section 11).
+    pub fn drain_events(&mut self) -> Vec<String> {
+        self.0.drain_events().iter().map(describe_event).collect()
+    }
+
+    /// The player's health in half-hearts.
+    pub fn health(&self) -> u32 {
+        self.0.health()
+    }
+
+    /// The player's maximum health in half-hearts.
+    pub fn max_health(&self) -> u32 {
+        self.0.max_health()
     }
 
     /// Whether a cheat command has run this session.

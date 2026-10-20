@@ -32,6 +32,8 @@
 //   stand planter               the same, on the islet's first planter
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye, for `moved`
+//   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
+//                               since the case began (`expect no event <name>` for the opposite)
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
 // Paths: mode (fly|walk|console), console.last (last command output line, or none),
@@ -43,7 +45,7 @@
 // item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // planter.ground and planter.crop (the same for the first planter),
-// sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
+// events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
@@ -95,9 +97,16 @@ function world({ mode = 'walk', raft = false, debug = raft }) {
   const controller = createController({
     input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly',
   });
+  const seen = [];
+  const frame = controller.frame;
+  controller.frame = (dt) => {
+    const state = frame(dt);
+    seen.push(...state.events);
+    return state;
+  };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, text: '', output: [] };
+  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, events: seen, text: '', output: [] };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
@@ -132,6 +141,7 @@ function read(w, path) {
     if (path === 'console.lines') return w.output.length;
     if (path === 'console.text') return w.text;
   }
+  if (path === 'events') return w.events.length;
   if (path === 'sim_tick') return w.walk.sim_tick();
   if (path === 'paused') return w.walk.paused();
   if (path === 'locked') return w.input.locked;
@@ -249,6 +259,17 @@ function step(w, { op, args }) {
     case 'held': w.walk.set_held(args[0]); return;
     case 'mark': w.mark = w.controller.state.eye.slice(); return;
     case 'expect': {
+      const negated = args[0] === 'no' && args[1] === 'event';
+      if (negated || args[0] === 'event') {
+        const [name, ...fields] = args.slice(negated ? 2 : 1);
+        if (!name) throw new Error('expect [no] event <name> [key=value ...]');
+        const hit = w.events.some((e) => {
+          const [n, ...kv] = e.split(' ');
+          return n === name && fields.every((f) => kv.includes(f));
+        });
+        if (hit === negated) throw new Error(`${negated ? 'unexpected' : 'no'} event ${name}; seen: ${w.events.join(' | ') || 'none'}`);
+        return;
+      }
       const [path, cmp, ...rest] = args;
       const raw = rest.join(' ');
       if (!OPS[cmp]) throw new Error(`unknown operator '${cmp}'`);

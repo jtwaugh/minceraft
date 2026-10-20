@@ -5,11 +5,14 @@
 // F swaps walking and flying while the pointer is locked, keeping the position.
 //
 //   const c = createController({ input, walk, fly, clock, document, flying });
-//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying, aim, belt, underwater }
+//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying, aim, belt, underwater, events }
 //                          (aim and belt as in overlay.js; the walking player's, stale while flying)
 //   c.submitConsole(line)  queue the line on the walk, close the console, relock the pointer
 //   c.closeConsole()       close the console without submitting; the pointer stays unlocked
 //   c.detach()          remove the F listener
+//
+// `events` is the sim's events since the previous frame (every tick of this one),
+// oldest first, as `name key=value ...` strings; each is delivered once.
 //
 // `underwater` is whether the drawn eye is in a water cell, in either mode;
 // scene.js switches the fog and tint on it.
@@ -20,7 +23,7 @@ import { stepWalk } from './walk.js';
 import { readAim, readBelt } from './overlay.js';
 
 export function createController({ input, walk, fly, clock, document, flying = false }) {
-  const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null, belt: null, underwater: false };
+  const state = { flying, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null, belt: null, underwater: false, events: [] };
 
   const onKey = (e) => {
     if (e.code !== 'KeyF' || e.repeat || !input.locked || input.console) return;
@@ -53,7 +56,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
         eye = stepWalk(walk, ticks, alpha, () => input.drain());
       }
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
-      Object.assign(state, { ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha), belt: readBelt(walk), underwater });
+      Object.assign(state, { ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha), belt: readBelt(walk), underwater, events: Array.from(walk.drain_events()) });
       return state;
     },
     submitConsole(line) {
