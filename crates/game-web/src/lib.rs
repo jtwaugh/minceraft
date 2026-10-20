@@ -193,6 +193,12 @@ fn describe_event(e: &GameEvent) -> String {
         format!("{},{},{}", p[0], p[1], p[2])
     }
     match e {
+        GameEvent::Swing { player, tool } => {
+            format!(
+                "swing player={player} tool={}",
+                tool.as_deref().unwrap_or("")
+            )
+        }
         GameEvent::Foraged { position, yields } => {
             format!(
                 "foraged position={} yields={}",
@@ -321,6 +327,16 @@ impl Walk {
     /// `name key=value ...` (docs/design/basic-gameplay.md section 11).
     pub fn drain_events(&mut self) -> Vec<String> {
         self.0.drain_events().iter().map(describe_event).collect()
+    }
+
+    /// The player's health in half-hearts.
+    pub fn health(&self) -> u32 {
+        self.0.health()
+    }
+
+    /// The player's maximum health in half-hearts.
+    pub fn max_health(&self) -> u32 {
+        self.0.max_health()
     }
 
     /// Whether a cheat command has run this session.
