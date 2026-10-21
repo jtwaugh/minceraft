@@ -302,6 +302,8 @@ mod retry;
 pub use retry::{find_level, find_v0_level, LevelFound, RetryError};
 mod route;
 pub use route::{build_route, build_route_with, Route, RouteParams};
+mod route_validation;
+pub use route_validation::{validate_route, CHECK_ANCHORAGE_REACHABLE, CHECK_CHANNEL_CLEAR};
 mod route_layout;
 pub use route_layout::build_route_layout;
 mod structure;
@@ -354,6 +356,8 @@ mod retry_tests;
 mod route_layout_tests;
 #[cfg(test)]
 mod route_tests;
+#[cfg(test)]
+mod route_validation_tests;
 #[cfg(test)]
 mod structure_tests;
 #[cfg(test)]
