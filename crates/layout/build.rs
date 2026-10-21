@@ -70,6 +70,8 @@ struct ScoringConfig {
     cap_area_factor: f64,
     cap_flat_factor: f64,
     cap_ratio: f64,
+    cap_extra_islands: f64,
+    eye_height: f64,
 }
 
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {
@@ -226,7 +228,7 @@ fn main() {
          weight_spacing_regularity: {:?}, weight_path_directness: {:?}, \
          weight_island_quality: {:?}, weight_coastline_interest: {:?}, \
          weight_extra_islands: {:?}, cap_area_factor: {:?}, cap_flat_factor: {:?}, \
-         cap_ratio: {:?} }};\n",
+         cap_ratio: {:?}, cap_extra_islands: {:?}, eye_height: {:?} }};\n",
         c.weight_spacing_regularity,
         c.weight_path_directness,
         c.weight_island_quality,
@@ -234,7 +236,9 @@ fn main() {
         c.weight_extra_islands,
         c.cap_area_factor,
         c.cap_flat_factor,
-        c.cap_ratio
+        c.cap_ratio,
+        c.cap_extra_islands,
+        c.eye_height
     );
     std::fs::write(out_dir.join("scoring.rs"), out).unwrap();
 
