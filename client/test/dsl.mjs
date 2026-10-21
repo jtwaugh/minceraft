@@ -33,6 +33,8 @@
 //   drop <n>                    teleport n blocks up, to fall back and take fall damage
 //   stand field                 teleport onto the raft scene's field and look straight down
 //   stand planter               the same, on the islet's first planter
+//   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
+//                               looks at after `stand field`; `place tall_grass` puts tall grass there
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye, for `moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
@@ -48,6 +50,7 @@
 // belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
 // item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
+// flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
 // health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
@@ -134,6 +137,12 @@ const OPS = {
   '~': (a, b) => Math.abs(a - b) < 1e-3,
 };
 
+/** The field's middle tile, one above the ground: where `place` puts plants. */
+function flowerCell(w) {
+  const [fx, fz] = w.scene.field, m = Math.floor(w.scene.field_size / 2);
+  return [fx + m, w.scene.field_y + 1, fz + m];
+}
+
 function read(w, path) {
   const s = w.controller.state;
   const d = s.eye.map((v, i) => v - w.mark[i]);
@@ -177,6 +186,10 @@ function read(w, path) {
   if (path === 'field.ground' || path === 'field.crop') {
     const [fx, fz] = w.scene.field, m = Math.floor(w.scene.field_size / 2);
     const id = w.walk.block_at(fx + m, w.scene.field_y + (path === 'field.crop'), fz + m);
+    return Object.keys(B).find((k) => B[k] === id) ?? `block ${id}`;
+  }
+  if (path === 'flower.block') {
+    const id = w.walk.block_at(...flowerCell(w));
     return Object.keys(B).find((k) => B[k] === id) ?? `block ${id}`;
   }
   if (path === 'planter.ground' || path === 'planter.crop') {
@@ -271,6 +284,15 @@ function step(w, { op, args }) {
       // far more than a quarter turn, so the pitch clamps at straight down
       fire(document, 'mousemove', { movementX: 0, movementY: 2000 });
       w.controller.frame(0.05);
+      return;
+    }
+    case 'place': {
+      const name = args[0] === 'flower' ? args[1] : args[0];
+      if (!w.scene || !['dandelion', 'rose', 'tall_grass'].includes(name)) {
+        throw new Error('place flower dandelion|rose, or place tall_grass (raft scene only)');
+      }
+      const [x, y, z] = flowerCell(w);
+      if (!w.walk.place_block(x, y, z, B[name])) throw new Error('cannot place there');
       return;
     }
     case 'until': {

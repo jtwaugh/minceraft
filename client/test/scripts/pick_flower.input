@@ -1,0 +1,54 @@
+# Picking flowers by hand on the raft scene's field (docs/design/picking-plants.md
+# phase B): secondary with empty hands removes the flower block and puts the
+# flower item in the hands; tall grass still forages; an empty cell does nothing.
+
+case a dandelion is picked into the empty hands
+start walk raft
+click
+lock
+stand field
+place flower dandelion
+frame 50 x2
+expect flower.block = dandelion
+expect hands = none
+expect held = empty
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect flower.block = air
+expect hands = dandelion_flower
+
+# the second pick of the now-empty cell does nothing
+expect rule.secondary = none
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect flower.block = air
+expect hands = dandelion_flower
+
+case a rose is picked into the empty hands
+start walk raft
+click
+lock
+stand field
+place flower rose
+frame 50 x2
+expect flower.block = rose
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect flower.block = air
+expect hands = rose_flower
+
+case tall grass still forages rather than picks
+start walk raft
+click
+lock
+stand field
+place tall_grass
+frame 50 x2
+expect flower.block = tall_grass
+expect rule.secondary = forage

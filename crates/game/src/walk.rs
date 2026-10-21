@@ -993,6 +993,12 @@ impl Walker {
         self.world.block_at(x, y, z)
     }
 
+    /// Put `block` at a world position as an edit over the generated world
+    /// (tests and scripted scenes). Returns false outside the world's height.
+    pub fn set_block(&mut self, x: i32, y: i32, z: i32, block: Block) -> bool {
+        self.world.set_block(x, y, z, block)
+    }
+
     /// The farm overlay's blocks and positions, sorted by position.
     pub fn farm_tiles(&self) -> Vec<([i32; 3], Block)> {
         self.world.tiles()
