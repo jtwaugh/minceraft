@@ -38,6 +38,8 @@ struct Thresholds {
     min_raft_water_depth: u32,
     raft_clearance: i32,
     min_flat_grass_tiles: u32,
+    min_navigable_depth: u32,
+    navigable_clearance: i32,
     max_attempts: u32,
 }
 
@@ -51,6 +53,7 @@ struct RouteParams {
     channel_falloff: f64,
     channel_depth_below_sea: f64,
     channel_clear_above: i32,
+    corridor_margin: u32,
 }
 
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {
@@ -160,12 +163,14 @@ fn main() {
     let out = format!(
         "static SHIPPED_THRESHOLDS: Thresholds = Thresholds {{ min_island_columns: {}, \
          window_margin: {}, min_raft_water_depth: {}, raft_clearance: {}, \
-         min_flat_grass_tiles: {}, max_attempts: {} }};\n",
+         min_flat_grass_tiles: {}, min_navigable_depth: {}, navigable_clearance: {}, max_attempts: {} }};\n",
         t.min_island_columns,
         t.window_margin,
         t.min_raft_water_depth,
         t.raft_clearance,
         t.min_flat_grass_tiles,
+        t.min_navigable_depth,
+        t.navigable_clearance,
         t.max_attempts
     );
     std::fs::write(out_dir.join("validation.rs"), out).unwrap();
@@ -176,14 +181,16 @@ fn main() {
     let out = format!(
         "static SHIPPED_ROUTE: RouteParams = RouteParams {{ spacing: {:?}, \
          spacing_spread: {:?}, max_turn_degrees: {:?}, channel_half_width: {:?}, \
-         channel_falloff: {:?}, channel_depth_below_sea: {:?}, channel_clear_above: {:?} }};\n",
+         channel_falloff: {:?}, channel_depth_below_sea: {:?}, channel_clear_above: {:?}, \
+         corridor_margin: {:?} }};\n",
         r.spacing,
         r.spacing_spread,
         r.max_turn_degrees,
         r.channel_half_width,
         r.channel_falloff,
         r.channel_depth_below_sea,
-        r.channel_clear_above
+        r.channel_clear_above,
+        r.corridor_margin
     );
     std::fs::write(out_dir.join("route.rs"), out).unwrap();
 

@@ -1,7 +1,7 @@
 //! Loose items in the world: the item entity type and the store that holds
 //! them. See docs/design/basic-gameplay.md section 6.
 //!
-//! [`ItemStore::tick`] moves them (gravity, drag, landing, the deck push).
+//! [`ItemStore::tick`] moves them (gravity, drag, landing).
 //! Pickup and throwing are separate tickets.
 
 use crate::collision::{Aabb, CollisionWorld};
@@ -253,24 +253,16 @@ impl ItemStore {
     /// Advance every item one tick, in id order, against `world` (which
     /// should include the raft's boxes where there is one).
     ///
-    /// Per item: the swell push if `deck` holds it up, gravity, a swept move
-    /// that stops flush against blocks, then drag, and ground friction while
-    /// resting. An item that starts inside a block is lifted out first.
-    pub fn tick(&mut self, world: &impl CollisionWorld, deck: Option<Deck<'_>>) {
+    /// Per item: gravity, a swept move that stops flush against blocks, then
+    /// drag, and ground friction while resting. Deck swell does not push
+    /// items (#634). An item that starts inside a block is lifted out first.
+    pub fn tick(&mut self, world: &impl CollisionWorld) {
         let cfg = self.cfg;
         let dt = 1.0 / TICKS_PER_SECOND;
         let mut scratch = Vec::new();
         for e in &mut self.items {
             let mut bb = e.aabb(&cfg);
             lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
-            if let Some(d) = &deck {
-                if d.raft.supports(&bb) {
-                    // The push is blocks per tick; velocities are per second.
-                    let [px, pz] = d.push.item_push(d.tilt);
-                    e.velocity[0] += px * TICKS_PER_SECOND;
-                    e.velocity[2] += pz * TICKS_PER_SECOND;
-                }
-            }
             e.velocity[1] -= cfg.gravity * dt;
             let v = e.velocity.map(|c| c * dt);
             let m = move_box(world, &bb, v);
@@ -356,7 +348,7 @@ mod tests {
 
     fn run(s: &mut ItemStore, w: &impl CollisionWorld, n: usize) {
         for _ in 0..n {
-            s.tick(w, None);
+            s.tick(w);
         }
     }
 
@@ -365,7 +357,7 @@ mod tests {
         let w = floor();
         let mut s = store();
         let id = s.spawn(seeds(), [0.5, 4.0, 0.5], [0.0; 3]);
-        s.tick(&w, None);
+        s.tick(&w);
         assert!(s.get(id).unwrap().pos[1] < 4.0, "falls");
         run(&mut s, &w, 100);
         let e = s.get(id).unwrap();
@@ -449,69 +441,16 @@ mod tests {
     }
 
     #[test]
-    fn deck_push_is_scaled_by_item_multiplier() {
+    fn items_on_a_tilting_deck_do_not_slide() {
         let (base, raft) = deck();
         let world = RaftWorld::new(&base, &raft);
-        let push = SwellPush::default_from_data().unwrap();
         let mut s = store();
         let id = s.spawn(seeds(), [2.0, 65.0 + 0.125, 2.0], [0.0; 3]);
-        run(&mut s, &world, 1);
-        // Settled on the deck, no push yet.
-        let tilt = [0.0, 3.0];
-        s.tick(
-            &world,
-            Some(Deck {
-                raft: &raft,
-                tilt,
-                push: &push,
-            }),
-        );
-        let v = s.get(id).unwrap().velocity;
-        let per_tick = push.per_degree * 3.0 * push.item_multiplier;
-        let want = per_tick * TICKS_PER_SECOND * s.config().drag * s.config().ground_friction;
-        assert!((v[0] - want).abs() < 1e-9, "{} vs {want}", v[0]);
-        assert_eq!(v[2], 0.0);
-        // A player-strength push would be a smaller, different number.
-        assert!(push.item_multiplier > 1.0 && (v[0] - want / push.item_multiplier).abs() > 1e-6);
-        // The item slides along the deck.
-        for _ in 0..10 {
-            s.tick(
-                &world,
-                Some(Deck {
-                    raft: &raft,
-                    tilt,
-                    push: &push,
-                }),
-            );
-        }
-        assert!(s.get(id).unwrap().pos[0] > 2.0);
-        assert_eq!(s.get(id).unwrap().pos[1], 65.125);
-    }
-
-    #[test]
-    fn items_off_the_deck_get_no_push() {
-        let (mut base, raft) = deck();
-        for x in 10..14 {
-            for z in 0..4 {
-                base.set(x, 64, z, Block::Stone);
-            }
-        }
-        let world = RaftWorld::new(&base, &raft);
-        let push = SwellPush::default_from_data().unwrap();
-        let mut s = store();
-        let id = s.spawn(seeds(), [11.0, 65.125, 2.0], [0.0; 3]);
-        for _ in 0..10 {
-            s.tick(
-                &world,
-                Some(Deck {
-                    raft: &raft,
-                    tilt: [0.0, 3.0],
-                    push: &push,
-                }),
-            );
-        }
-        assert_eq!(s.get(id).unwrap().velocity, [0.0; 3]);
-        assert_eq!(s.get(id).unwrap().pos[0], 11.0);
+        run(&mut s, &world, 1000);
+        let e = s.get(id).unwrap();
+        assert_eq!(e.velocity, [0.0; 3]);
+        assert_eq!((e.pos[0], e.pos[2]), (2.0, 2.0));
+        assert_eq!(e.pos[1], 65.125);
     }
 
     #[test]

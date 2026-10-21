@@ -21,5 +21,12 @@ raft_clearance = 4
 # height, counted on undecorated terrain (design Decision 4).
 min_flat_grass_tiles = 6
 
+# Navigability (docs/design/world-layout.md 6.2, decorated terrain): water
+# depth from SEA_LEVEL - 1 must be at least this.
+min_navigable_depth = 2
+
+# Cells from SEA_LEVEL to SEA_LEVEL + navigable_clearance - 1 must be air.
+navigable_clearance = 4
+
 # Retry loop: seeds tried (start, start + 1, ...) before giving up.
 max_attempts = 64

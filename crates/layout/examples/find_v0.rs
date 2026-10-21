@@ -15,6 +15,7 @@ fn main() {
         let file = LevelFile {
             world: WorldConfig { seed: f.seed },
             levels: vec![f.level],
+            route: None,
         };
         print!("{}", file.to_toml().unwrap());
         return;

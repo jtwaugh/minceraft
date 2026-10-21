@@ -29,9 +29,25 @@ pub struct Thresholds {
     pub min_raft_water_depth: u32,
     pub raft_clearance: i32,
     pub min_flat_grass_tiles: u32,
+    /// Navigability (design 6.2): least water depth of a navigable column.
+    #[cfg_attr(feature = "toml-io", serde(default = "default_min_navigable_depth"))]
+    pub min_navigable_depth: u32,
+    /// Navigability: cells from `SEA_LEVEL` up that must be air.
+    #[cfg_attr(feature = "toml-io", serde(default = "default_navigable_clearance"))]
+    pub navigable_clearance: i32,
     /// Retry loop cap (`find_level`).
     #[cfg_attr(feature = "toml-io", serde(default = "default_max_attempts"))]
     pub max_attempts: u32,
+}
+
+#[cfg(feature = "toml-io")]
+fn default_min_navigable_depth() -> u32 {
+    2
+}
+
+#[cfg(feature = "toml-io")]
+fn default_navigable_clearance() -> i32 {
+    4
 }
 
 #[cfg(feature = "toml-io")]

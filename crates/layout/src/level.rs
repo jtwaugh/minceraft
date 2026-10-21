@@ -1,6 +1,6 @@
 //! Level file (docs/design/world-layout.md 4.2, 4.3): `Level`, `WorldConfig`
-//! and a TOML loader and writer. `[route]` and `[climate]` belong to later
-//! phases and are ignored.
+//! and a TOML loader and writer. `[route]` is optional; `[climate]` belongs to
+//! a later phase and is ignored.
 
 #[cfg(feature = "toml-io")]
 use std::collections::HashSet;
@@ -29,11 +29,20 @@ pub struct WorldConfig {
     pub seed: u64,
 }
 
+/// The `[route] points` table: one (x, z) per level, the first being level 1's
+/// anchorage.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "toml-io", derive(serde::Serialize, serde::Deserialize))]
+pub struct Route {
+    pub points: Vec<[i32; 2]>,
+}
+
 /// A loaded level file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LevelFile {
     pub world: WorldConfig,
     pub levels: Vec<Level>,
+    pub route: Option<Route>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,6 +54,16 @@ pub enum LevelFileError {
         found: i64,
     },
     DuplicateLevelId(String),
+    /// `[route]` has a different number of points than there are levels.
+    RoutePointCount {
+        points: usize,
+        levels: usize,
+    },
+    /// The first `[route]` point is not level 1's anchorage.
+    RouteStartMismatch {
+        found: [i32; 2],
+        anchorage: [i32; 2],
+    },
     /// Writing failed (e.g. a seed above `i64::MAX` is not a TOML integer).
     Write(String),
 }
@@ -57,6 +76,16 @@ impl fmt::Display for LevelFileError {
                 write!(f, "sea_level is {found} but must be {SEA_LEVEL}")
             }
             Self::DuplicateLevelId(id) => write!(f, "duplicate level id `{id}`"),
+            Self::RoutePointCount { points, levels } => {
+                write!(
+                    f,
+                    "route has {points} points but the file has {levels} levels"
+                )
+            }
+            Self::RouteStartMismatch { found, anchorage } => write!(
+                f,
+                "route starts at {found:?} but level 1's anchorage is {anchorage:?}"
+            ),
             Self::Write(m) => write!(f, "cannot write level file: {m}"),
         }
     }
@@ -71,13 +100,34 @@ struct RawWorld {
     sea_level: i64,
 }
 
-// Unknown top-level tables (`[route]`, `[climate]`) are ignored by serde.
+// Unknown top-level tables (`[climate]`) are ignored by serde.
 #[cfg(feature = "toml-io")]
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Raw {
     world: RawWorld,
     #[serde(default, rename = "level")]
     levels: Vec<Level>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    route: Option<Route>,
+}
+
+#[cfg(feature = "toml-io")]
+fn check_route(r: &Route, levels: &[Level]) -> Result<(), LevelFileError> {
+    if r.points.len() != levels.len() {
+        return Err(LevelFileError::RoutePointCount {
+            points: r.points.len(),
+            levels: levels.len(),
+        });
+    }
+    if let (Some(&found), Some(l)) = (r.points.first(), levels.first()) {
+        if found != l.anchorage {
+            return Err(LevelFileError::RouteStartMismatch {
+                found,
+                anchorage: l.anchorage,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Reading and writing level files needs the `toml-io` feature.
@@ -96,21 +146,29 @@ impl LevelFile {
                 return Err(LevelFileError::DuplicateLevelId(l.id.clone()));
             }
         }
+        if let Some(r) = &raw.route {
+            check_route(r, &raw.levels)?;
+        }
         Ok(Self {
             world: WorldConfig {
                 seed: raw.world.seed,
             },
             levels: raw.levels,
+            route: raw.route,
         })
     }
 
     pub fn to_toml(&self) -> Result<String, LevelFileError> {
+        if let Some(r) = &self.route {
+            check_route(r, &self.levels)?;
+        }
         let raw = Raw {
             world: RawWorld {
                 seed: self.world.seed,
                 sea_level: SEA_LEVEL as i64,
             },
             levels: self.levels.clone(),
+            route: self.route.clone(),
         };
         toml::to_string(&raw).map_err(|e| LevelFileError::Write(e.to_string()))
     }

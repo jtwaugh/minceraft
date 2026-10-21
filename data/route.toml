@@ -14,3 +14,7 @@ channel_half_width = 6.0
 channel_falloff = 6.0
 channel_depth_below_sea = 4.0
 channel_clear_above = 4
+
+# The corridor is every region within this many regions (Chebyshev) of a
+# region the route passes through (design: world-layout Decision 5).
+corridor_margin = 2

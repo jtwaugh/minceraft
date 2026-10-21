@@ -20,6 +20,8 @@ pub struct RouteParams {
     pub channel_falloff: f64,
     pub channel_depth_below_sea: f64,
     pub channel_clear_above: i32,
+    /// Corridor width in regions (Chebyshev) around the route's regions.
+    pub corridor_margin: u32,
 }
 
 include!(concat!(env!("OUT_DIR"), "/route.rs"));

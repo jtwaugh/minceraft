@@ -65,3 +65,8 @@ mode = "edge"
 [actions.select_tool]
 keys = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "WheelUp", "WheelDown"]
 mode = "edge"
+
+# Opens the inventory view (docs/design/ui-art-and-inventory.md, decided in #666).
+[actions.inventory]
+keys = ["Tab"]
+mode = "edge"

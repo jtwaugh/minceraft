@@ -271,6 +271,8 @@ mod cache;
 pub use cache::{CacheChange, RegionCache};
 mod channel;
 pub use channel::ChannelEval;
+mod corridor;
+pub use corridor::Corridor;
 mod derived;
 pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
 mod fish;
@@ -286,6 +288,8 @@ mod habitat_map;
 pub use habitat_map::{HabitatMap, NO_HABITAT};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
+mod navigability;
+pub use navigability::NavMap;
 mod region;
 #[cfg(feature = "toml-io")]
 mod rule_check;
@@ -319,6 +323,8 @@ mod channel_tests;
 #[cfg(test)]
 mod climate_tests;
 #[cfg(test)]
+mod corridor_tests;
+#[cfg(test)]
 mod derived_tests;
 #[cfg(test)]
 mod exclusion_tests;
@@ -330,6 +336,8 @@ mod habitat_map_tests;
 mod habitat_tests;
 #[cfg(all(test, feature = "toml-io"))]
 mod level_tests;
+#[cfg(test)]
+mod navigability_tests;
 #[cfg(test)]
 mod raft_tests;
 #[cfg(test)]

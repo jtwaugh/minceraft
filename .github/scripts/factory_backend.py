@@ -10,12 +10,14 @@ second tick over the same state writes nothing.
 `run(args, project=False)` runs `gh` and returns stdout; tests inject one.
 (docs/design/factory-orchestrator.md Phase A, design rules 2 and 6)
 """
+import json
 import os
 import subprocess
 import sys
 
 os.environ.setdefault("GITHUB_REPOSITORY", "")  # project_sync and tickets read it on import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_sync  # noqa: E402
 import tickets  # noqa: E402
 from factory_tick import Backend, FakeBackend  # noqa: E402
 
@@ -52,13 +54,18 @@ class GhBackend(Backend):
             return
         if self._satisfied(snapshot, action):
             return
-        self._write(snapshot, action)
-        self.mirror.apply(snapshot, action)
+        if self._write(snapshot, action) is None:
+            self.mirror.apply(snapshot, action)
 
     # -- what the snapshot already shows
 
     def _issue(self, snapshot, action):
         return next((i for i in snapshot.issues if f"issue#{i['number']}" == action.target), None)
+
+    def _card(self, snapshot, action):
+        kind, n = ("Issue", action.target[6:]) if action.target.startswith("issue#") \
+            else ("PullRequest", action.target[3:])
+        return next((c for c in snapshot.board if (c["kind"], c["number"]) == (kind, int(n))), None)
 
     def _satisfied(self, snapshot, action):
         k, p = action.kind, action.payload
@@ -77,6 +84,14 @@ class GhBackend(Backend):
             return issue is not None and issue.get("body") == p["body"]
         if k == "create_issue":
             return any(i["title"] == p["title"] and i["state"] == "open" for i in snapshot.issues)
+        if k in ("set_status", "set_waiting", "add_card"):
+            card = self._card(snapshot, action)
+            if k == "add_card":
+                return card is not None
+            if card is None:
+                return False
+            return card.get("status") == p["status"] if k == "set_status" \
+                else (card.get("waiting") or "") == p["text"]
         if k in ("report", "request_phase_done"):
             return (action.target, action.reason if k == "report" else k) in snapshot.reported
         return False
@@ -86,10 +101,46 @@ class GhBackend(Backend):
     def _id(self, n):
         return self._gh("api", f"repos/{self.repo}/issues/{n}", "--jq", ".id").strip()
 
+    def _graphql(self, query, **variables):
+        args = ["api", "graphql", "-f", f"query={query}"]
+        for key, v in variables.items():
+            args += ["-F" if isinstance(v, int) else "-f", f"{key}={v}"]
+        return json.loads(self._gh(*args, project=True))["data"]
+
+    def _write_board(self, snapshot, action):
+        k, p, meta = action.kind, action.payload, snapshot.board_meta
+        project, n = meta["project"], action.target.split("#")[-1]
+        if k == "add_card":
+            node = self._gh("api", f"repos/{self.repo}/issues/{n}", "--jq", ".node_id").strip()
+            item = self._graphql(project_sync.ADD_ITEM, project=project,
+                                 content=node)["addProjectV2ItemById"]["item"]["id"]
+            self._graphql(project_sync.SET_STATUS, project=project, item=item,
+                          field=meta["status_field"], option=meta["option_ids"][p["status"]])
+            if p["waiting"] and meta.get("waiting_field"):
+                self._graphql(project_sync.SET_TEXT, project=project, item=item,
+                              field=meta["waiting_field"], text=p["waiting"])
+            self.mirror.apply(snapshot, action)
+            self._card(snapshot, action)["item"] = item
+            return
+        card = self._card(snapshot, action)
+        if k == "set_status":
+            self._graphql(project_sync.SET_STATUS, project=project, item=card["item"],
+                          field=meta["status_field"], option=meta["option_ids"][p["status"]])
+        elif p["text"]:
+            self._graphql(project_sync.SET_TEXT, project=project, item=card["item"],
+                          field=meta["waiting_field"], text=p["text"])
+        else:
+            self._graphql(project_sync.CLEAR, project=project, item=card["item"],
+                          field=meta["waiting_field"])
+        self.mirror.apply(snapshot, action)
+
     def _write(self, snapshot, action):
         k, p, t = action.kind, action.payload, action.target
         n = t.split("#")[-1]
         r = self.repo
+        if k in ("set_status", "set_waiting", "add_card"):
+            self._write_board(snapshot, action)
+            return True  # already mirrored
         if k in ("add_label", "remove_label"):
             self._gh("issue", "edit", n, "--repo", r,
                      "--add-label" if k == "add_label" else "--remove-label", p["label"])
