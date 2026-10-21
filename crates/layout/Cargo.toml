@@ -15,6 +15,11 @@ terrain = { path = "../terrain" }
 serde = { version = "1", features = ["derive"], optional = true }
 toml = { version = "0.5", optional = true }
 
+[[bin]]
+name = "mince-seeds"
+path = "src/bin/mince-seeds.rs"
+required-features = ["toml-io"]
+
 [[example]]
 name = "find_v0"
 required-features = ["toml-io"]

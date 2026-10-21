@@ -287,7 +287,11 @@ pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod habitat_map;
 pub use habitat_map::{HabitatMap, NO_HABITAT};
 mod level;
-pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
+pub use level::{Level, LevelFile, LevelFileError, Route as LevelRoute, WorldConfig};
+#[cfg(feature = "toml-io")]
+mod seed_output;
+#[cfg(feature = "toml-io")]
+pub use seed_output::{level_file, render, Args, USAGE};
 mod navigability;
 pub use navigability::NavMap;
 mod pathfind;
@@ -382,6 +386,8 @@ mod scoring_island_tests;
 mod scoring_tests;
 #[cfg(test)]
 mod search_tests;
+#[cfg(all(test, feature = "toml-io"))]
+mod seed_output_tests;
 #[cfg(test)]
 mod structure_tests;
 #[cfg(test)]
