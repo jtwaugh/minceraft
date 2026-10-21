@@ -317,7 +317,7 @@ function meshNextChunk() {
   const tints = columnTints(terrain, ctx, seed, x, z, CHUNK);
   if (cx === 0 && cz === 0) skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
   walk.add_region(x - 1, z - 1, CHUNK + 2, CHUNK + 2, blocks);
-  const m = meshBlocks(ctx, blocks, tints, CHUNK, 1);
+  const m = meshBlocks(ctx, blocks, tints, CHUNK, 1, { origin: [x, z] });
   const offset = [x, 0, z];
   for (const k of Object.keys(meshes)) {
     const part = upload(m[k], offset);
@@ -339,7 +339,7 @@ if (scene) {
     const blocks = seaBlocks.slice();
     const t = walk.farm_tiles();
     for (let i = 0; i < t.length; i += 4) blocks[((t[i + 2] - min) * size + t[i] - min) * 128 + t[i + 1]] = t[i + 3];
-    const m = meshBlocks(ctx, blocks, tints, size, 0);
+    const m = meshBlocks(ctx, blocks, tints, size, 0, { origin: [min, min] });
     for (const k of Object.keys(meshes)) {
       for (const old of seaParts[k]) { gl.deleteVertexArray(old.vao); gl.deleteBuffer(old.buf); }
       meshes[k] = seaParts[k] = [upload(m[k], offset)].filter(Boolean);
@@ -353,7 +353,7 @@ if (scene) {
     farmSig = sig;
     meshSea();
   };
-  const m = meshBlocks(ctx, scene.raft_blocks(), tints, size, 0);
+  const m = meshBlocks(ctx, scene.raft_blocks(), tints, size, 0, { origin: [min, min] });
   for (const k of Object.keys(raftMeshes)) {
     const part = upload(m[k], offset);
     if (part) raftMeshes[k].push(part);
