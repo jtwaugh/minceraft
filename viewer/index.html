@@ -190,6 +190,7 @@ import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
 import { FOG_GLSL } from './fog.js';
 import { SKY_GLSL } from './sky.js';
+import { WATER_GLSL } from './water.js';
 import { buildMips, buildMips1 } from './mips.js';
 const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend, habitat_names } = wasm;
 
@@ -661,9 +662,11 @@ function program(cut) {
     uniform sampler2DArray tex;
     uniform sampler2DArray tintTex; // R8 tint weight, same layers and UVs as tex
     uniform float alpha; uniform float fogFar; uniform float fogMax; uniform vec3 fogColor; uniform vec3 sunDir;
+    uniform float waterFresnel; // 1 while drawing water from above the surface
     out vec4 o;
     ${FOG_GLSL}
     ${SKY_GLSL}
+    ${WATER_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
       vec2 px = vuv.xy * ${TEX_SIZE}.0;
@@ -674,8 +677,11 @@ function program(cut) {
       ${cut && !msaa ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
       vec3 c = t.rgb * mix(vec3(1.0), vtint, tw) * vshade;
+      vec3 vd = normalize(vdir);
+      // water reflects the sky: blend toward it at low view angles
+      c = mix(c, skyColor(fogColor, vec3(vd.x, -vd.y, vd.z), sunDir), waterFresnel * fresnel(vd));
       float f = fogAmount(vdist, fogFar) * fogMax;
-      o = vec4(mix(c, skyColor(fogColor, normalize(vdir), sunDir), f), ${cut && msaa ? 'ca * alpha' : 'alpha'});
+      o = vec4(mix(c, skyColor(fogColor, vd, sunDir), f), ${cut && msaa ? 'ca * alpha' : 'alpha'});
     }`));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
@@ -1105,6 +1111,7 @@ function draw() {
   setU('camPos', [eye[0], eye[1] + target[1], eye[2]]);
   setU('fogMax', 0.6);
   setU('alpha', 1);
+  setU('waterFresnel', 0);
   setU('waterFrame', waterFrame);
   // sun after the sky, unfogged and behind everything
   setU('fogFar', 1e9);
@@ -1128,7 +1135,9 @@ function draw() {
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   setU('alpha', 0.45);
+  setU('waterFresnel', eye[1] + target[1] > 64 ? 1 : 0); // not under water
   drawMesh(water, AT);
+  setU('waterFresnel', 0);
   setU('alpha', 0.72);
   drawMesh(ice, AT);
   gl.depthMask(true);
