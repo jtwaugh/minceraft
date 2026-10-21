@@ -7,7 +7,9 @@
 //   byte  8     texture layer     uint8
 //   byte  9     shade             uint8, shade * 128 (SHADE_SCALE)
 //   bytes 10-12 tint rgb          uint8, normalized
-//   byte  13    reserved (ambient occlusion, per viewer-rendering)
+//   byte  13    ambient occlusion level 0-3 (AO_SHADE): the opaque blocks among
+//               the corner's two side neighbours and diagonal on the open side
+//               of full-cube faces; 0 elsewhere. The viewer shader reads it.
 //   byte  14    plant top weight  uint8: 255 on the top vertices of cross
 //               plants, 0 at their base and on every other face (the client
 //               fades and sways with it; the viewer ignores it)
@@ -19,6 +21,8 @@
 export const H = 128;
 export const VERTEX_BYTES = 16;
 export const POS_SCALE = 1 / 16, UV_SCALE = 1 / 16, SHADE_SCALE = 1 / 128;
+// Shade multiplier per AO level (vertex byte 13).
+export const AO_SHADE = [1.0, 0.82, 0.68, 0.55];
 
 // Block ids (data/blocks.toml); names and colours come from legend().
 export const B = {
@@ -165,7 +169,7 @@ const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 class Quads {
   constructor() { this.buf = new ArrayBuffer(VERTEX_BYTES * 4 * 1024); this.n = 0; this.view(); }
   view() { this.i16 = new Int16Array(this.buf); this.u8 = new Uint8Array(this.buf); }
-  quad(x, y, z, p, uv, layer, k, tint, top = null) {
+  quad(x, y, z, p, uv, layer, k, tint, top = null, ao = null) {
     if ((this.n + 4) * VERTEX_BYTES > this.buf.byteLength) {
       const nb = new ArrayBuffer(this.buf.byteLength * 2);
       new Uint8Array(nb).set(this.u8); this.buf = nb; this.view();
@@ -179,6 +183,7 @@ class Quads {
       this.u8[o + 6] = Math.round(uv[j][0] * 16); this.u8[o + 7] = Math.round(uv[j][1] * 16);
       this.u8[o + 8] = layer; this.u8[o + 9] = sh;
       this.u8[o + 10] = r; this.u8[o + 11] = g; this.u8[o + 12] = b;
+      this.u8[o + 13] = ao ? ao[j] : 0;
       this.u8[o + 14] = top ? top[j] : 0;
     }
     this.n += 4;
@@ -223,9 +228,29 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
     ? 0 : blocks[col(x, z) + y];
   const out = [new Quads(), new Quads(), new Quads(), new Quads()]; // opaque, water, ice, cutout
   // One face of the box lo..hi (block-local) for face f.
-  const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0) => {
-    const p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
-    out[L].quad(x, y, z, p, p.map((q) => faceUV(f, q, vr)), layer, f.s * (0.75 + y / 256), tint);
+  const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0, ao = null) => {
+    let p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
+    let uv = p.map((q) => faceUV(f, q, vr));
+    if (ao && ao[0] + ao[2] < ao[1] + ao[3]) {
+      // flip the diagonal: rotate the vertices so the shared index pattern splits the other way
+      const rot = (a) => [a[1], a[2], a[3], a[0]];
+      p = rot(p); uv = rot(uv); ao = rot(ao);
+    }
+    out[L].quad(x, y, z, p, uv, layer, f.s * (0.75 + y / 256), tint, null, ao);
+  };
+  // AO level 0-3 of each corner of face f of the block at (x, y, z): the
+  // opaque blocks among the two side neighbours and the diagonal, on the
+  // face's open side.
+  const faceAO = (x, y, z, f) => {
+    const ax = f.d[0] !== 0 ? 1 : 0, ay = f.d[1] !== 0 ? 1 : 0;
+    // the two tangent axes of the face
+    const [a, b] = ax ? [1, 2] : ay ? [0, 2] : [0, 1];
+    const o = [x + f.d[0], y + f.d[1], z + f.d[2]];
+    return f.c.map((c) => {
+      const sa = c[a] ? 1 : -1, sb = c[b] ? 1 : -1;
+      const q = (da, db) => { const r = o.slice(); r[a] += da; r[b] += db; return SOLID_N[at(r[0], r[1], r[2])]; };
+      return q(sa, 0) + q(0, sb) + q(sa, sb);
+    });
   };
   const FULL_LO = [0, 0, 0], FULL_HI = [1, 1, 1];
   const CACTUS_LO = [CACTUS_INSET, 0, CACTUS_INSET], CACTUS_HI = [1 - CACTUS_INSET, 1, 1 - CACTUS_INSET];
@@ -275,7 +300,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           // fast) leaves never hide their neighbours and leaf-leaf faces are
           // drawn, as cut-outs
           if (SOLID_N[n]) continue;
-          boxFace(LEAVES[b] && !fast ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr);
+          boxFace(LEAVES[b] && !fast ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr, faceAO(x, y, z, f));
         }
       }
     }

@@ -8,7 +8,7 @@ use game::collision::{CollisionWorld, MemoryWorld};
 use game::input::TickInput;
 use game::physics::PlayerPhysics;
 use game::player::Player;
-use game::raft::{Raft, RaftFrame, RaftWorld, SwellPush};
+use game::raft::{Raft, RaftFrame, RaftWorld};
 use layout::{Layout, StructurePlacement};
 use terrain::Block;
 
@@ -82,7 +82,7 @@ const SETTLE: u32 = 40;
 /// held it up at the end.
 fn ride(ticks: u32, tilt: [f64; 2], sneak: bool) -> (Player, [f64; 2], bool) {
     let (base, mut raft) = sea();
-    let (phys, sp) = (physics(), SwellPush::default_from_data().unwrap());
+    let phys = physics();
     let mut pl = centre_player(&raft, &phys);
     let input = TickInput {
         sneak,
@@ -101,7 +101,6 @@ fn ride(ticks: u32, tilt: [f64; 2], sneak: bool) -> (Player, [f64; 2], bool) {
             yaw_delta: 0.0,
             tilt,
         };
-        raft.push_rider(&mut pl, tilt, sneak, &sp, &phys);
         raft.advance(&frame, &mut [&mut pl], &phys);
         let world = RaftWorld::new(&base, &raft);
         pl.tick(&input, &phys, &world);
@@ -120,16 +119,12 @@ fn stays_on_a_moving_raft_for_1000_ticks_without_swell() {
 }
 
 #[test]
-fn swell_without_sneak_drifts() {
-    let (_, rel, _) = ride(60, [3.0, 3.0], false);
-    assert!(rel[0] > 0.1 && rel[1] > 0.1, "{rel:?}");
-}
-
-#[test]
-fn swell_with_sneak_does_not_drift() {
-    let (pl, rel, held) = ride(TICKS, [3.0, 3.0], true);
-    assert!(held && pl.on_ground, "{pl:?}");
-    assert!(rel[0].abs() < 1e-6 && rel[1].abs() < 1e-6, "{rel:?}");
+fn swell_does_not_push_the_rider_sneaking_or_not() {
+    for sneak in [false, true] {
+        let (pl, rel, held) = ride(TICKS, [3.0, 3.0], sneak);
+        assert!(held && pl.on_ground, "{pl:?}");
+        assert!(rel[0].abs() < 1e-6 && rel[1].abs() < 1e-6, "{rel:?}");
+    }
 }
 
 #[test]

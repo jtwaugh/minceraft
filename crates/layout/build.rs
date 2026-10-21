@@ -4,6 +4,7 @@
 //! - `habitats.rs` from `data/habitats.toml` (included by `src/habitat.rs`)
 //! - `fish.rs` from `data/fish.toml` (`src/fish.rs`)
 //! - `validation.rs` from `data/validation.toml` (`src/validation.rs`)
+//! - `route.rs` from `data/route.toml` (`src/route.rs`)
 //! - `structure.rs` from `data/structures/raft_start.toml` (`src/structure.rs`)
 //!
 //! A bad file fails the build. The shipped data reaches the crate as static
@@ -40,6 +41,14 @@ struct Thresholds {
     max_attempts: u32,
 }
 
+/// Mirrors `RouteParams` in `src/route.rs`.
+#[derive(Deserialize)]
+struct RouteParams {
+    spacing: f64,
+    spacing_spread: f64,
+    max_turn_degrees: f64,
+}
+
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {
     match v {
         Some(x) => format!("Some({x:?})"),
@@ -65,8 +74,9 @@ fn main() {
     }
     let fish_path = root.join("fish.toml");
     let validation_path = root.join("validation.toml");
+    let route_path = root.join("route.toml");
     let raft_path = root.join("structures/raft_start.toml");
-    for p in [&fish_path, &validation_path, &raft_path] {
+    for p in [&fish_path, &validation_path, &route_path, &raft_path] {
         println!("cargo:rerun-if-changed={}", p.display());
     }
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
@@ -155,6 +165,16 @@ fn main() {
         t.max_attempts
     );
     std::fs::write(out_dir.join("validation.rs"), out).unwrap();
+
+    // Route defaults.
+    let r: RouteParams = toml::from_str(&read(&route_path))
+        .unwrap_or_else(|e| panic!("{}: {e}", route_path.display()));
+    let out = format!(
+        "static SHIPPED_ROUTE: RouteParams = RouteParams {{ spacing: {:?}, \
+         spacing_spread: {:?}, max_turn_degrees: {:?} }};\n",
+        r.spacing, r.spacing_spread, r.max_turn_degrees
+    );
+    std::fs::write(out_dir.join("route.rs"), out).unwrap();
 
     // Built-in structure templates.
     let raft = structure_rules::parse_structure(&read(&raft_path), &|n| block_id(n))

@@ -584,7 +584,7 @@ Depends on: B and D.
 Adds:
 - Route builder: from the first anchorage, place K further anchorages. Default spacing 150 plus or minus 30 blocks, heading changing by at most 30 degrees per step, so the route bends but never doubles back.
 - For each route segment, a `Channel` bias (default `half_width = 6`, `falloff = 6`, `depth_below_sea = 4`, `clear_above = 4`).
-- For each anchorage, the Phase B level biases (island, spawn water, exclusion), with the island placed beside the channel, not in it.
+- For each anchorage, the Phase B level biases (island, spawn water, exclusion), with the island placed beside the channel, not in it. Every island sits on the same side of the route, the left of the heading, at a distance from the channel centre line in a range chosen by the builder. (Decided in #631.)
 - Navigability map (section 6.2) and pathfinding between consecutive anchorages to confirm the channel works.
 - Corridor generation: only regions within a margin of the route are generated. Regions outside the corridor render as open ocean at sea level, or not at all if the camera never sees them.
 - Raft travel: between levels, the raft entity follows the pathfound route. This plays during the weekend screen.
@@ -688,6 +688,9 @@ A column is navigable if:
 - Every cell from `SEA_LEVEL` to `SEA_LEVEL + 3` is air (Beta overhangs make this check necessary), and
 - It is not frozen, unless the level explicitly allows ice.
 
+Navigability is measured on decorated terrain, and any non-air block in the
+band blocks, leaves, plants and `snow_layer` included. (Decided in #630.)
+
 To account for raft size, erode the navigable set by the raft's half-width (default 2) before pathfinding. Use 8-connected A* with diagonal cost of sqrt 2.
 
 > **Reconciler:** "every cell is air" will fail on trees whose leaves hang
@@ -756,7 +759,6 @@ A checklist for adapting this spec to the current code:
 
 ## 9. Open questions
 
-- Should islands be able to sit on both sides of a channel, or always on one side? One side is simpler for validation; both sides looks more natural.
 - Do levels later than week 1 need their own starting structures (a dock, a second raft, a wreck), or does the raft always arrive as-is from the previous week?
 - How much of the corridor should be generated ahead of time versus on demand during raft travel? Ahead of time is simpler and the corridor is small.
 - Should frozen water ever block the route, forcing a detour or an ice-breaking mechanic? Interesting, but it conflicts with the no-breaking rule unless fire melts ice.
@@ -801,8 +803,9 @@ Plan and build against these.
 4. **Validation timing: B, keep the split as written.** Phase B validates
    flat tiles on undecorated terrain; Phase G adds the decorated checks.
 5. **Outside the corridor (Phase E): A, render nothing.** Regions outside
-   the corridor are not generated or drawn. Revisit when Phase E is
-   planned.
+   the corridor are not generated or drawn. The corridor is every region
+   within 2 regions (Chebyshev distance) of a region the route passes
+   through. (Decided in #632.)
 6. **Phase D decoration: keep the shipped scheme.** The 16 x 16 cell scheme
    from SPEC 15 (decided in #3) stays; the doc's per-candidate hash and
    8-block margin are not built. The decoration part of Phase D counts as

@@ -3,15 +3,15 @@
 # This game's own values; no claim of Beta parity.
 
 [swell_push]
-# Horizontal push added to a rider's velocity each tick, per degree of deck
-# tilt, in blocks per tick. Sneaking cancels it.
+# Horizontal push added to loose items and animals each tick, per degree of
+# deck tilt, in blocks per tick. The rider is not pushed.
 per_degree = 0.004
 # Loose item entities on the deck get the push times this.
 item_multiplier = 2.0
 
 # The scripted swell that drives the raft each tick (section 4.7): the raft
 # sways back and forth along `direction_degrees` and its deck tilts, which
-# is what pushes riders.
+# is what pushes items and animals.
 [swell]
 # Peak sway from the rest pose, in blocks.
 sway_amplitude = 0.4

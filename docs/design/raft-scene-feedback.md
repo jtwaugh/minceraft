@@ -26,7 +26,7 @@ Phase A (items 3 and 5) is done: animal box models and raft model art (#545, #55
 
 ## Reconciliation notes
 
-1. **Item 1 reverses decisions #158 and the Phase 3 "done when" line.** basic-gameplay 4.7 says standing still on a rocking raft drifts unless you sneak, and Phase 3 says "feel the deck push during swells". Both are stated by the maintainer as decided, and this idea overrides them. A doc change belongs in basic-gameplay 4.7, the Phase 3 text and the items bullet; the reconciler does not edit that doc. Suggest a follow-up that updates it after this one is accepted. Smallest change: set the rider's push to zero in code and in `data/raft.toml`, keep the swell sway and tilt. Items, and animals if the open question keeps them, keep a push.
+1. **Item 1 reverses decisions #158 and the Phase 3 "done when" line.** basic-gameplay 4.7 says standing still on a rocking raft drifts unless you sneak, and Phase 3 says "feel the deck push during swells". Both are stated by the maintainer as decided, and this idea overrides them. A doc change belongs in basic-gameplay 4.7, the Phase 3 text and the items bullet; the reconciler does not edit that doc. Suggest a follow-up that updates it after this one is accepted. Smallest change: set the rider's push to zero in code and in `data/raft.toml`, keep the swell sway and tilt. Items stop sliding too: the whole `[swell_push]` section is removed, `item_multiplier` included. Whether animals keep a push is open question 2. (Decided in #634.)
 2. **Tests that rely on the push** (answers question 1): `swell_without_sneak_drifts` in `crates/game/tests/raft_stability.rs` must flip to "does not drift"; `swell_with_sneak_does_not_drift` becomes redundant; `ride_is_deterministic` is unaffected. `SwellPush`'s data validation and the `[swell_push]` keys also change. Sneak's role on the deck is edge protection only (4.5).
 3. **Item 2 vs 4.3.** "No drowning in v0" in 4.3 is about the player. Animals drowning does not conflict with it, but the doc should say so. Animal swimming should reuse `body_in_water` and the 4.3 numbers by default so one water model exists (see open question 2). Animals have no navigation, only a wander state machine (`advance_wander`), so "head for land or the raft" needs a new steering step: smallest version is to pick the nearest solid, non-water support cell within a radius and wander towards it.
 4. **Drowning and determinism.** Drowning ticks must come from the tick counter and the seeded `Rng` in `crates/game/src/rng.rs`, so replays stay identical (`crates/game/src/replay.rs`). Death and drops reuse the existing death path in `animal_entities.rs` unless the open question says otherwise.
@@ -112,7 +112,7 @@ The raft is meshed from ordinary blocks (`scene.raft_blocks()`).
 The selection outline shows up on water blocks. It shouldn't.
 
 - Today: basic-gameplay section 5 (decided in #174) says every non-air block, liquids included, has a selection box, so the ray stops on the water surface and can target water.
-- Want: water never shows the outline. Open: whether the ray should pass through water entirely (so you can target things under it) or still stop there for rules that need water (filling a bucket later) but just not draw the outline.
+- Want: water never shows the outline. The ray still stops at water and `Target::Block` can be water (for rules that need it, such as filling a bucket later), but no outline is drawn for it. (Decided in #636.)
 
 > **Reconciler:** Confirmed. See note 10.
 
@@ -139,12 +139,10 @@ The selection outline shows up on water blocks. It shouldn't.
 
 ## Open questions (reconciler)
 
-1. **Loose items on the deck (item 1).** Options: A. Items keep sliding (`item_multiplier` stays, rider push goes to zero). B. Items stop sliding too (the whole `[swell_push]` section is removed). C. Items keep sliding at the default 2x of a smaller push. Suggest B for consistency, since a raft that tilts and only pushes things reads as odd.
 3. **Animal swimming numbers (item 2).** Options: A. Reuse the player's 4.3 water numbers. B. Own numbers in `data/animals.toml` (buoyancy, swim speed). Suggest A with one `swim_speed` in `data/animals.toml`.
 4. **Drowning (item 2).** Options: A. Drown after N ticks under water, normal death and drops. B. Drown with no drops. C. Animals never drown but surface and swim (drop the drowning half). Also: does the player's breath get tracked later (4.3 mentions an air meter)? Suggest A.
 5. **Animals heading for land (item 2).** Options: A. Nearest solid support within a radius. B. The raft first, then land. C. Random swim only.
 6. **Driving control scheme (item 4).** Options: A. Keys while standing on a helm cell. B. Interact with a tiller block to take the helm, then movement keys steer, interact again to leave. C. Keys anywhere on the deck. Suggest B.
 7. **Turning (item 4).** Options: A. Quarter turns only (a key press turns 90 degrees over N ticks, visual yaw eased, collision snaps at the end). B. Continuous yaw, with collision using the nearest quarter turn. B can disagree with where the player appears to stand; suggest A.
 8. **What stops the raft (item 4).** Options: A. Any solid block in the raft's footprint. B. A: plus water shallower than a draught. C. Soft stop: speed drops to zero without moving into the cell.
-9. **Water targeting (item 6).** Options: A. Ray passes through water; water is never a target. B. Ray stops at water, `Target::Block` can be water, no outline is drawn. Suggest B if a bucket is planned (basic-gameplay lists buckets in art batch 6), else A.
 10. **Model rendering (items 3 and 5).** Options: A. Box models with per-face UVs from the existing tile sheet (smallest). B. A new mesh format. Suggest A.

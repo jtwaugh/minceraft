@@ -108,6 +108,14 @@ class Snapshot:
                 "body": i.get("body") or "",
                 "body_excerpt": (i.get("body") or "")[:500]})
         snap.plans = [i for i in snap.issues if i["kind"] == "plan"]
+        os.environ.setdefault("GITHUB_REPOSITORY", repo)
+        import tickets  # here: tickets reads the environment on import
+        for i in snap.issues:
+            if i["state"].lower() == "open" and i["kind"] == "ticket" and "factory" in i["labels"]:
+                i["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
+                                  "created_at": c["created_at"]}
+                                 for c in paged(f"repos/{repo}/issues/{i['number']}/comments")
+                                 if c["user"]["login"] in tickets.TRUSTED]
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"],
                      "sha": p["head"]["sha"], "body": p.get("body") or ""}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
