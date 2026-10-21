@@ -16,7 +16,7 @@ use game::sampler::Sampler;
 use game::scene::{raft_scene, RaftScene, FIELD_SIZE, FIELD_Y, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
 use layout::{Layout, RegionCoord};
-use terrain::Region;
+use terrain::{Block, Region};
 use wasm_bindgen::prelude::*;
 
 /// One sim tick's input, as plain getters (see `TickInput`).
@@ -477,6 +477,12 @@ impl Walk {
     /// The block id at a world position, farm overlay included.
     pub fn block_at(&self, x: i32, y: i32, z: i32) -> u32 {
         self.0.block_at(x, y, z) as u32
+    }
+
+    /// Put the block with id `id` at a world position (tests); false when
+    /// the position is outside the world's height.
+    pub fn place_block(&mut self, x: i32, y: i32, z: i32, id: u8) -> bool {
+        self.0.set_block(x, y, z, Block::from_u8(id))
     }
 
     /// The farm overlay as `x, y, z, block id` quadruples, sorted by position.
