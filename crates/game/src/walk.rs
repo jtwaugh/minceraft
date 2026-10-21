@@ -22,7 +22,7 @@ use crate::item_entities::{ItemEntityConfig, ItemStore};
 use crate::items::{ItemInstance, Items, PlayerState};
 use crate::phase::{Phase, PhaseClock};
 use crate::physics::{PhysicsError, PlayerPhysics};
-use crate::pick::pick_crop;
+use crate::pick::{pick_crop, pick_flower};
 use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
 use crate::raft::{Raft, RaftWorld, Swell};
@@ -537,7 +537,14 @@ impl Walker {
                 self.items.tick(&world);
                 let dropped = self.animals.tick(&world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
-                let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
+                let aim = aim(
+                    &world,
+                    &entities,
+                    &self.targeting,
+                    &self.item_table,
+                    self.cur_eye,
+                    input,
+                );
                 self.take_aim(aim, input);
             }
             None => {
@@ -547,7 +554,14 @@ impl Walker {
                 self.items.tick(&self.world);
                 let dropped = self.animals.tick(&self.world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
-                let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
+                let aim = aim(
+                    &self.world,
+                    &entities,
+                    &self.targeting,
+                    &self.item_table,
+                    self.cur_eye,
+                    input,
+                );
                 self.take_aim(aim, input);
             }
         }
@@ -824,6 +838,24 @@ impl Walker {
             let mature = tile.and_then(tile_crop_state) == Some("mature");
             let drops = pick_crop(&mut self.world, &self.crops, &mut self.harvest_rng, pos);
             let at = pos.map(|c| f64::from(c) + 0.5);
+            if let Some(item) = pick_flower(&mut self.world, &self.item_table, pos) {
+                if self.state.hands.is_none() {
+                    self.events.push(GameEvent::ItemPickedUp {
+                        item: item.clone(),
+                        player: "player".to_string(),
+                    });
+                    self.state.hands = Some(ItemInstance { item });
+                } else {
+                    Self::drop_loose(
+                        &mut self.items,
+                        &mut self.events,
+                        item,
+                        at,
+                        [0.0; 3],
+                        "pick",
+                    );
+                }
+            }
             if let (true, Some(kind), Some(yields)) = (mature, kind, &drops) {
                 self.events.push(GameEvent::CropHarvested {
                     position: pos,
@@ -1027,7 +1059,10 @@ fn look_dir(input: &TickInput) -> [f64; 3] {
 }
 
 /// The name rules use for a block: all farmland blocks, planter or not, are `farmland`.
-fn rule_block_name(block: Block) -> String {
+fn rule_block_name(block: Block, items: &Items) -> String {
+    if items.pick_item(block.info().name).is_some() {
+        return "flower".to_string();
+    }
     match FarmTile::from_block(block) {
         Some(FarmTile::Farmland { .. } | FarmTile::PlanterFarmland { .. }) => {
             "farmland".to_string()
@@ -1043,6 +1078,7 @@ fn aim(
     world: &impl CollisionWorld,
     entities: &[TargetableEntity],
     cfg: &TargetingConfig,
+    items: &Items,
     eye: [f64; 3],
     input: &TickInput,
 ) -> Aim {
@@ -1071,7 +1107,10 @@ fn aim(
             Aim {
                 target,
                 facts: TargetFacts {
-                    block: Some(rule_block_name(world.block_at(pos[0], pos[1], pos[2]))),
+                    block: Some(rule_block_name(
+                        world.block_at(pos[0], pos[1], pos[2]),
+                        items,
+                    )),
                     air_above: world.block_at(pos[0], pos[1] + 1, pos[2]) == Block::Air,
                     crop_state: FarmTile::from_block(world.block_at(pos[0], pos[1], pos[2]))
                         .and_then(tile_crop_state)
@@ -1203,7 +1242,7 @@ mod tests {
         assert_eq!((hit.rule_index, hit.action), (0, ActionKind::Attack));
         assert!(w.preview(Button::Secondary).is_none());
         w.set_held(HeldThing::Empty);
-        assert_eq!(w.preview(Button::Primary).unwrap().rule_index, 8);
+        assert_eq!(w.preview(Button::Primary).unwrap().rule_index, 10);
     }
 
     #[test]
@@ -2043,7 +2082,14 @@ mod tests {
         world.set(0, 3, 0, block);
         let cfg = TargetingConfig::default_from_data().unwrap();
         let input = look(-std::f32::consts::FRAC_PI_2, false);
-        aim(&world, &[], &cfg, [0.5, 5.0, 0.5], &input)
+        aim(
+            &world,
+            &[],
+            &cfg,
+            &Items::default_items(),
+            [0.5, 5.0, 0.5],
+            &input,
+        )
     }
 
     #[test]
@@ -2540,6 +2586,66 @@ mod tests {
         w.tick(&down(true, false));
         assert_eq!(w.world.block_at(0, 4, 0), Block::Wheat7);
         assert_eq!(w.items().len(), 0);
+    }
+
+    fn flower_walker(flower: Block) -> Walker {
+        let mut w = grass_floor_walker(8);
+        w.world.set_block(0, 4, 0, flower);
+        w
+    }
+
+    #[test]
+    fn flowers_go_to_the_hands_with_empty_hands_or_any_tool() {
+        for (flower, item) in [
+            (Block::Dandelion, "dandelion_flower"),
+            (Block::Rose, "rose_flower"),
+        ] {
+            for held in [HeldThing::Empty, HeldThing::Tool("sword".into())] {
+                let mut w = flower_walker(flower);
+                w.held_override = Some(held);
+                w.tick(&down(true, false));
+                assert_eq!(w.world.block_at(0, 4, 0), Block::Air);
+                assert_eq!(w.hands().map(|h| h.item.as_str()), Some(item));
+                assert_eq!(w.items().len(), 0);
+                assert_eq!(
+                    w.drain_events()
+                        .into_iter()
+                        .filter(|e| matches!(e, GameEvent::ItemPickedUp { .. }))
+                        .collect::<Vec<_>>(),
+                    vec![GameEvent::ItemPickedUp {
+                        item: item.into(),
+                        player: "player".into()
+                    }]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn carrying_an_item_blocks_flower_pick() {
+        let mut w = flower_walker(Block::Rose);
+        w.clear_held_override();
+        w.state.hands = Some(ItemInstance {
+            item: "wheat".into(),
+        });
+        w.tick(&down(true, false));
+        assert_eq!(w.world.block_at(0, 4, 0), Block::Rose);
+        assert_eq!(w.hands().map(|h| h.item.as_str()), Some("wheat"));
+        assert_eq!(w.items().len(), 0);
+    }
+
+    #[test]
+    fn flower_pick_replays_identically() {
+        let run = || {
+            let mut w = flower_walker(Block::Dandelion);
+            w.tick(&down(true, false));
+            (
+                w.hands().cloned(),
+                w.drain_events(),
+                w.world.block_at(0, 4, 0),
+            )
+        };
+        assert_eq!(run(), run());
     }
 
     #[test]

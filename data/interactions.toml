@@ -51,6 +51,18 @@ action = "pick"
 [[rule]]
 held = "empty"
 button = "secondary"
+target = "block:flower"
+action = "pick"
+
+[[rule]]
+held = "any_tool"
+button = "secondary"
+target = "block:flower"
+action = "pick"
+
+[[rule]]
+held = "empty"
+button = "secondary"
 target = "block:tall_grass"
 action = "forage"
 
