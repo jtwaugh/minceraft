@@ -18,6 +18,7 @@ import initGame, * as game from './pkg/game_web.js';
 import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
+import { animalBoxes, animalPose } from './models.js';
 import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
@@ -171,33 +172,15 @@ const unitBox = (() => {
 
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
-// No animal art exists yet: each kind is a plain coloured box (own colours).
-const ANIMAL_COLORS = { cow: [0.42, 0.28, 0.18], pig: [0.9, 0.62, 0.62], chicken: [0.95, 0.95, 0.9] };
-
-// Animals as solid boxes: red while hurt, tipped onto their side while dying.
-// The model matrix turns the box about its bottom centre, then moves it there.
+// Animals as textured boxes (batch 15): red while hurt, tipped over while dying
+// (see animalPose). Unknown species draw grey.
+const animalModels = {};
 function drawAnimals(mvp, animals) {
-  gl.useProgram(boxProg);
-  gl.uniformMatrix4fv(boxProg.u('mvp'), false, mvp);
-  gl.bindVertexArray(unitBox.vao);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, unitBox.quadIB);
   for (const a of animals) {
-    const [w, h] = a.size, f = a.facing * Math.PI / 180;
-    // Facing 0 looks along -z, so local x is (cos f, 0, sin f) and local z
-    // (-sin f, 0, cos f). Tipping rolls the body 90 degrees about local z:
-    // x goes up and y goes to the -x side, so the lift is half the width.
-    const c = Math.cos(f), s = Math.sin(f);
-    const model = new Float32Array(a.dying
-      ? [0, 1, 0, 0, -c, 0, -s, 0, -s, 0, c, 0, a.pos[0], a.pos[1] + w / 2, a.pos[2], 1]
-      : [c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, a.pos[0], a.pos[1], a.pos[2], 1]);
-    gl.uniformMatrix4fv(boxProg.u('model'), false, model);
-    gl.uniform3f(boxProg.u('lo'), -w / 2, 0, -w / 2);
-    gl.uniform3f(boxProg.u('size'), w, h, w);
-    const [r, g, b] = a.hurt ? [0.85, 0.12, 0.1] : ANIMAL_COLORS[a.species] ?? [0.7, 0.7, 0.7];
-    gl.uniform4f(boxProg.u('color'), r, g, b, 1);
-    gl.drawElements(gl.TRIANGLES, unitBox.quads, gl.UNSIGNED_BYTE, 0);
+    const m = animalModels[a.species] ??= models.addModel(animalBoxes(a.species));
+    const { model, tint } = animalPose(a);
+    models.drawModel(mvp, model, m, tint);
   }
-  gl.bindVertexArray(null);
 }
 
 // `box` is [minx, miny, minz, maxx, maxy, maxz]; entities also get a faint fill.
