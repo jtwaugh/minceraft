@@ -12,13 +12,30 @@ The passes themselves live in later tickets.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 
 REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
+TRUSTED = {"jtwaugh", "claude[bot]", "github-actions[bot]"}  # same set as tickets.TRUSTED
+
+
+def trusted_comments(raw):
+    """Comments (as the passes read them) from the maintainer or the factory's own accounts."""
+    return [{"user": c["user"]["login"], "body": c.get("body") or "", "created_at": c["created_at"]}
+            for c in raw if c["user"]["login"] in TRUSTED]
+
+
+def blockers(comments):
+    """(number, created_at) for each "Blocked by #x" in the comments."""
+    return [(int(x), c["created_at"]) for c in comments
+            for m in re.finditer(r"[Bb]locked by ([^\n]*)", c["body"])
+            for x in re.findall(r"#(\d+)", m.group(1))]
 
 
 @dataclass(frozen=True)
@@ -46,7 +63,38 @@ class Snapshot:
         issues = d.get("issues", [])
         plans = d.get("plans") or [i for i in issues if i.get("kind") == "plan"]
         return cls(issues, d.get("prs", []), plans, d.get("docs", []),
-                   d.get("branches", []), d.get("board", []))
+                   d.get("branches", []), d.get("board", []), {"loaded": True})
+
+    def load_board(self, repo, raw_prs):
+        import project_sync
+        project, field, options, items, waiting = project_sync.load_project(
+            os.environ.get("PROJECT_OWNER") or repo.split("/")[0], int(os.environ["PROJECT_NUMBER"]))
+        self.board_meta = {"loaded": True, "options": list(options), "waiting": bool(waiting),
+                           "ids": (project, field, options, waiting)}
+        for p, r in zip(self.prs, raw_prs):  # same order
+            p["status"] = project_sync.pr_status(r)
+        for it in items:
+            c = it["content"]
+            if c and c.get("__typename") in ("Issue", "PullRequest") and c["repository"]["nameWithOwner"] == repo:
+                self.board.append({"kind": c["__typename"], "number": c["number"], "state": c["state"],
+                                   "item": it["id"], "status": (it.get("status") or {}).get("name"),
+                                   "status_updated": (it.get("status") or {}).get("updatedAt"),
+                                   "waiting": (it.get("waiting") or {}).get("text")})
+        for c in self.board:
+            if c["status"] == "Idea" and c["kind"] == "Issue":
+                issue = next((i for i in self.issues if i["number"] == c["number"]), None)
+                if issue:
+                    issue["idea_unlabelled_at"] = project_sync.unlabelled_idea_at(c["number"])
+
+    def mark_reported(self):
+        """Findings already in the open report issue count as reported."""
+        from factory_invariants import check
+        from factory_stalls import messages
+        body = next((i["body"] for i in self.issues
+                     if i["title"] == REPORT_TITLE and i["state"] == "open"), "")
+        self.reported |= {(v.subject, f"{v.key}: {v.detail}".rstrip(": ")) for v in check(self)
+                          if f"`{v.key}`" in body}
+        self.reported |= {(t, m) for t, m in messages(self) if f"- {m}" in body}
 
     @classmethod
     def from_fixture(cls, path):
@@ -95,14 +143,24 @@ class Snapshot:
                 "body": i.get("body") or "",
                 "body_excerpt": (i.get("body") or "")[:500]})
         snap.plans = [i for i in snap.issues if i["kind"] == "plan"]
-        snap.prs = [{"number": p["number"], "head": p["head"]["ref"]}
-                    for p in paged(f"repos/{repo}/pulls?state=open")]
+        raw = paged(f"repos/{repo}/pulls?state=open")
+        snap.prs = [{"number": p["number"], "head": p["head"]["ref"], "body": p.get("body"),
+                     "state": "open",
+                     "files": [f["filename"] for f in paged(f"repos/{repo}/pulls/{p['number']}/files")]}
+                    for p in raw]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
+        for i in snap.issues:  # human inputs: only trusted accounts' comments count
+            if i["state"] == "open" and "factory" in i["labels"]:
+                i["comments"] = trusted_comments(paged(f"repos/{repo}/issues/{i['number']}/comments"))
+                i["comment_blockers"] = [b for b, _ in blockers(i["comments"])]
+        if os.environ.get("PROJECT_NUMBER", "").strip().isdigit():
+            snap.load_board(repo, raw)
+        snap.mark_reported()
         return snap
 
 
 class Backend:
-    """Applies actions. Live implementations come with the wiring ticket."""
+    """Applies actions."""
 
     def apply(self, snapshot, action):
         raise NotImplementedError
@@ -155,24 +213,67 @@ class FakeBackend(Backend):
 
 
 def tick(snapshot, passes, backend):
-    """Run every pass on the snapshot, apply the actions, return them."""
-    applied = list(dict.fromkeys(a for p in passes for a in p(snapshot)))
-    for a in applied:
-        backend.apply(snapshot, a)
+    """Run the passes in order, applying each one's actions before the next
+    pass reads the snapshot; return every action applied."""
+    applied = []
+    for p in passes:
+        for a in dict.fromkeys(p(snapshot)):
+            backend.apply(snapshot, a)
+            applied.append(a)
     return applied
 
 
-PASSES = []  # filled in by later tickets
+def invariants(snap):
+    """Pass: report each violated invariant not yet reported, and adopt an
+    orphan ticket into the plan its first dependency belongs to."""
+    from factory_invariants import check
+    by = {i["number"]: i for i in snap.issues}
+    out = []
+    for v in check(snap):
+        reason = f"{v.key}: {v.detail}".rstrip(": ")
+        if (v.subject, reason) not in snap.reported:
+            out.append(Action("report", v.subject, {"kind": v.kind}, reason))
+        if v.kind == "orphan-ticket":
+            parents = [by[d]["parent"] for d in by[int(v.subject[6:])].get("depends_on", [])
+                       if d in by and by[d].get("parent") is not None]
+            if parents:
+                out.append(Action("set_parent", v.subject, {"parent": parents[0]},
+                                  f"orphan ticket follows #{parents[0]}'s plan"))
+    return out
+
+
+def passes():
+    """The fixed order: invariants, stalls, report, plans, ready, board."""
+    from factory_board import board_pass as board
+    from factory_plans import close_finished_plans
+    from factory_ready import ready
+    from factory_report import report
+    from factory_stalls import stalls
+    def board_pass(snap):
+        return board(snap) if snap.board_meta.get("loaded") else []
+
+    return [invariants, stalls, report, close_finished_plans, ready, board_pass]
+
 
 def main(argv):
-    if len(argv) == 3 and argv[1] == "--fixture":
-        snap = Snapshot.from_fixture(argv[2])
+    args = argv[1:]
+    dry = "--dry-run" in args
+    if "--fixture" in args:
+        snap = Snapshot.from_fixture(args[args.index("--fixture") + 1])
     else:
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} branches; {snap.requests} API requests")
-    for a in (a for p in PASSES for a in p(snap)):
+    if "--fixture" in args:
+        backend = FakeBackend()
+    else:
+        from factory_backend import GhBackend
+        backend = GhBackend(os.environ["GITHUB_REPOSITORY"], snap)
+    actions = tick(snap, passes(), FakeBackend() if dry else backend)
+    for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
+    print(f"{len(actions)} action(s){' (dry run, nothing written)' if dry else ''}; "
+          f"{snap.requests + getattr(backend, 'requests', 0)} API requests")
 
 
 if __name__ == "__main__":
