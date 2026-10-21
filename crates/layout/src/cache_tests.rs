@@ -115,3 +115,46 @@ fn reloaded_region_is_identical_after_eviction() {
         assert_eq!(cache.generations(), 3);
     }
 }
+
+fn corridor_along_x() -> Corridor {
+    let size = REGION_SIZE as f64;
+    Corridor::new(
+        &Route {
+            points: vec![[1.0, 1.0], [size * 3.0 - 1.0, 1.0]],
+        },
+        0,
+    )
+}
+
+#[test]
+fn corridor_limits_loading_and_matches_uncorridored_regions() {
+    let corridor = corridor_along_x();
+    let mut cache = RegionCache::new(layout(), false);
+    cache.set_corridor(Some(corridor.clone()));
+    let mut plain = RegionCache::new(layout(), false);
+    for rx in 0..3 {
+        let ch = cache.update(c(rx, 0), 1, 1);
+        assert!(ch.loaded.iter().all(|&k| corridor.contains(k)));
+        assert!(cache.get(c(rx, 1)).is_none());
+        for k in corridor.regions() {
+            if let Some(r) = cache.get(k) {
+                assert!(same(r, plain.get_or_generate(k)));
+            }
+        }
+    }
+    assert_eq!(cache.generations(), 3);
+    assert_eq!(cache.len(), 2);
+}
+
+#[test]
+fn setting_a_corridor_drops_outside_regions_and_none_restores_loading() {
+    let mut cache = RegionCache::new(layout(), false);
+    cache.update(c(0, 0), 1, 1);
+    assert_eq!(cache.len(), 9);
+    cache.set_corridor(Some(corridor_along_x()));
+    let ch = cache.update(c(0, 0), 1, 1);
+    assert_eq!(ch.unloaded.len(), 7);
+    assert_eq!(cache.len(), 2);
+    cache.set_corridor(None);
+    assert_eq!(cache.update(c(0, 0), 1, 1).loaded.len(), 7);
+}

@@ -28,5 +28,9 @@ min_navigable_depth = 2
 # Cells from SEA_LEVEL to SEA_LEVEL + navigable_clearance - 1 must be air.
 navigable_clearance = 4
 
+# Raft half-width in columns (design 6.2): before pathfinding, navigable
+# columns within this Chebyshev distance of a blocked column are removed.
+raft_half_width = 2
+
 # Retry loop: seeds tried (start, start + 1, ...) before giving up.
 max_attempts = 64

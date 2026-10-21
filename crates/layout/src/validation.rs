@@ -35,6 +35,10 @@ pub struct Thresholds {
     /// Navigability: cells from `SEA_LEVEL` up that must be air.
     #[cfg_attr(feature = "toml-io", serde(default = "default_navigable_clearance"))]
     pub navigable_clearance: i32,
+    /// Raft half-width in columns: navigable columns closer than this
+    /// (Chebyshev) to a blocked one are eroded before pathfinding.
+    #[cfg_attr(feature = "toml-io", serde(default = "default_raft_half_width"))]
+    pub raft_half_width: u32,
     /// Retry loop cap (`find_level`).
     #[cfg_attr(feature = "toml-io", serde(default = "default_max_attempts"))]
     pub max_attempts: u32,
@@ -48,6 +52,11 @@ fn default_min_navigable_depth() -> u32 {
 #[cfg(feature = "toml-io")]
 fn default_navigable_clearance() -> i32 {
     4
+}
+
+#[cfg(feature = "toml-io")]
+fn default_raft_half_width() -> u32 {
+    2
 }
 
 #[cfg(feature = "toml-io")]

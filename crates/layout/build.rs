@@ -40,6 +40,7 @@ struct Thresholds {
     min_flat_grass_tiles: u32,
     min_navigable_depth: u32,
     navigable_clearance: i32,
+    raft_half_width: u32,
     max_attempts: u32,
 }
 
@@ -163,7 +164,7 @@ fn main() {
     let out = format!(
         "static SHIPPED_THRESHOLDS: Thresholds = Thresholds {{ min_island_columns: {}, \
          window_margin: {}, min_raft_water_depth: {}, raft_clearance: {}, \
-         min_flat_grass_tiles: {}, min_navigable_depth: {}, navigable_clearance: {}, max_attempts: {} }};\n",
+         min_flat_grass_tiles: {}, min_navigable_depth: {}, navigable_clearance: {}, raft_half_width: {}, max_attempts: {} }};\n",
         t.min_island_columns,
         t.window_margin,
         t.min_raft_water_depth,
@@ -171,6 +172,7 @@ fn main() {
         t.min_flat_grass_tiles,
         t.min_navigable_depth,
         t.navigable_clearance,
+        t.raft_half_width,
         t.max_attempts
     );
     std::fs::write(out_dir.join("validation.rs"), out).unwrap();
