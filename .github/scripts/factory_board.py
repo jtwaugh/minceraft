@@ -77,11 +77,13 @@ def board_pass(snap):
     options = set(meta.get("options") or project_sync.STATUSES + list(project_sync.OPTIONAL))
     waiting_field = meta.get("waiting", True)
     want = _wanted(snap)
+    unlabelled = {i["number"]: i.get("idea_unlabelled_at", "") for i in snap.issues}
     actions, seen = [], set()
     for it in snap.board:
         key = (it["kind"], it["number"])
         target = _target(*key)
-        seen.add(key)        if it["state"] in ("CLOSED", "MERGED"):
+        seen.add(key)
+        if it["state"] in ("CLOSED", "MERGED"):
             status, why, text = "Done", "closed", ""
         elif key in want:
             status, why, text = want[key]
@@ -93,7 +95,7 @@ def board_pass(snap):
                                   f"waiting on {text or 'nothing'}"))
         current = it.get("status")
         if current == "Idea" and status != "Idea" and key[0] == "Issue" and it["state"] == "OPEN" \
-                and (it.get("status_updated") or "") > next((i for i in snap.issues if i["number"] == it["number"]), {}).get("idea_unlabelled_at", ""):
+                and (it.get("status_updated") or "") > unlabelled.get(it["number"], ""):
             actions += [Action("add_label", target, {"label": "idea"}, "moved to Idea on the board"),
                         Action("remove_label", target, {"label": "factory"}, "moved to Idea on the board")]
         elif current != status:

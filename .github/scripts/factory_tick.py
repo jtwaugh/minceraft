@@ -119,9 +119,9 @@ class FakeBackend(Backend):
         elif action.kind in ("set_status", "set_waiting", "add_card"):
             kind, n = ("Issue", action.target[6:]) if action.target.startswith("issue#") \
                 else ("PullRequest", action.target[3:])
-            card = next((c for c in snapshot.board if (c["kind"], c["number"]) == (kind, int(n))),
-                        None) or snapshot.board.append({"kind": kind, "number": int(n), "state": "OPEN"}) \
-                or snapshot.board[-1]
+            card = next((c for c in snapshot.board if (c["kind"], c["number"]) == (kind, int(n))), None)
+            if card is None:
+                snapshot.board.append(card := {"kind": kind, "number": int(n), "state": "OPEN"})
             if "status" in action.payload:
                 card["status"], card["status_updated"] = action.payload["status"], "9999"
             card["waiting"] = action.payload.get("text", action.payload.get("waiting", card.get("waiting")))
