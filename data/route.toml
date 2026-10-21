@@ -8,3 +8,7 @@ spacing_spread = 30.0
 # The heading changes by at most this many degrees per step, so the route
 # bends but never doubles back.
 max_turn_degrees = 30.0
+
+# The corridor is every region within this many regions (Chebyshev) of a
+# region the route passes through (design: world-layout Decision 5).
+corridor_margin = 2

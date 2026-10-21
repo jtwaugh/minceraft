@@ -16,6 +16,8 @@ pub struct RouteParams {
     pub spacing: f64,
     pub spacing_spread: f64,
     pub max_turn_degrees: f64,
+    /// Corridor width in regions (Chebyshev) around the route's regions.
+    pub corridor_margin: u32,
 }
 
 include!(concat!(env!("OUT_DIR"), "/route.rs"));
