@@ -177,6 +177,16 @@ def digit(n):
 batch10 = {
     "slot": ["0000000005"] + ["0444444446"] * 8 + ["5666666666"],
     "slot_selected": ["ffffffffff"] + ["f44444444f"] * 8 + ["ffffffffff"],
+    "heart_empty": [
+        ".00.00..",
+        "0440440.",
+        "0444440.",
+        "0444440.",
+        ".04440..",
+        "..040...",
+        "...0....",
+        "........",
+    ],
     "panel_tl": [".000", "0777", "0766", "0766"],
     "panel_t": ["0000", "7777", "6666", "6656"],
     "panel_tr": ["000.", "7750", "6650", "6650"],
@@ -397,7 +407,7 @@ batch16 = {
 EXPECT = {
     # batch 9-12 explicit sizes (w, h); everything else defaults to 8x8
     "sun_sky": (16, 16), **{f"moon_{i}": (16, 16) for i in range(8)},
-    "slot": (10, 10), "slot_selected": (10, 10),
+    "slot": (10, 10), "slot_selected": (10, 10), "heart_empty": (8, 8),
     **{f"panel_{s}": (4, 4) for s in ("tl", "t", "tr", "l", "c", "r", "bl", "b", "br")},
     **{f"digit_{i}": (4, 6) for i in range(10)},
 }
