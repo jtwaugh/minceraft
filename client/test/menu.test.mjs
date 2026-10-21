@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { menuModel, menuDebug } from '../menu.js';
+import { menuModel, menuDebug, PANEL, SEA_TILE } from '../menu.js';
 import { SCENES } from '../scenes.js';
 
 test('menu links are relative and cover every scene', () => {
@@ -22,4 +22,17 @@ test('alpha off hides Test play unless debug', () => {
 test('menuDebug reads ?debug=1', () => {
   assert.equal(menuDebug('?debug=1'), true);
   assert.equal(menuDebug(''), false);
+});
+
+test('model carries a label without the alpha suffix', () => {
+  for (const e of menuModel(true, false)) assert.doesNotMatch(e.label, /\(alpha\)/);
+  assert.equal(menuModel(true, false)[1].alpha, true);
+});
+
+test('panel and sea tiles exist in the tileset with the expected sizes', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { textureSize } = await import('../uipx.js');
+  const set = JSON.parse(await readFile(new URL('../../viewer/textures.json', import.meta.url)));
+  for (const name of PANEL.flat()) assert.deepEqual(textureSize(set, name), { w: 4, h: 4 }, name);
+  assert.deepEqual(textureSize(set, SEA_TILE), { w: 8, h: 8 });
 });

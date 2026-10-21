@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # "add_label", "set_parent", "report"
+    kind: str  # "add_label", "set_parent", "close_issue", "request_phase_done", "report"
     target: str  # "issue#12"
     payload: dict = field(default_factory=dict, hash=False, compare=False)
     reason: str = ""
@@ -125,6 +125,11 @@ class FakeBackend(Backend):
             if "status" in action.payload:
                 card["status"], card["status_updated"] = action.payload["status"], "9999"
             card["waiting"] = action.payload.get("text", action.payload.get("waiting", card.get("waiting")))
+        elif action.kind == "close_issue" and issue is not None:
+            issue["state"] = "closed"
+            issue["state_reason"] = action.payload["reason"]
+        elif action.kind == "request_phase_done":
+            snapshot.reported.add((action.target, action.kind))
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         else:

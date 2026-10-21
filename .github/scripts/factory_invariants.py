@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Check the design rule 3 invariants over a `Snapshot`.
+
+    factory_invariants.py [--fixture FILE]    print the violations
+
+`check(snapshot)` returns `Violation`s and changes nothing; reporting them is
+a later pass. Each has a stable key (kind plus issue or doc), the same for
+the same input in any order. (docs/design/factory-orchestrator.md Phase A,
+design rule 3)
+"""
+import os
+import re
+import sys
+from dataclasses import dataclass
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from factory_tick import Snapshot  # noqa: E402
+
+
+@dataclass(frozen=True)
+class Violation:
+    kind: str  # "orphan-ticket", "plan-as-dependency", ...
+    subject: str  # "issue#12" or a design-doc path
+    detail: str = ""
+
+    @property
+    def key(self):
+        return f"{self.kind}:{self.subject}"
+
+
+def decision_phase(issue):
+    """(doc file, phase) a decision issue is about, from its body excerpt."""
+    body = issue.get("body_excerpt", "")
+    f = re.search(r"\*\*File:\*\*\s*(\S+)", body)
+    p = re.search(r"^Phase ([A-Za-z0-9]+)", body, re.M)
+    return (f.group(1), p.group(1)) if f and p else None
+
+
+def check(snap):
+    by = {i["number"]: i for i in snap.issues}
+    plans = {p["number"] for p in snap.plans}
+    out = set()
+    for i in snap.issues:
+        if i.get("kind") != "ticket":
+            continue
+        n = f"issue#{i['number']}"
+        if i.get("parent") not in plans:
+            out.add(Violation("orphan-ticket", n, "belongs to no plan"))
+        for d in i.get("depends_on", []):
+            if d in plans:
+                out.add(Violation("plan-as-dependency", n, f"depends on plan #{d}"))
+    for doc in snap.docs:
+        if doc.get("status") == "accepted" and not doc.get("phases"):
+            out.add(Violation("accepted-doc-without-phases", doc["file"]))
+        for phase, state in (doc.get("phases") or {}).items():
+            if state != "done":
+                continue
+            for d in snap.issues:
+                if (d.get("kind") != "decision" or not d.get("answered")
+                        or decision_phase(d) != (doc["file"], str(phase))):
+                    continue
+                ts = [t for t in snap.issues if t.get("decision") == d["number"]]
+                if not ts:
+                    out.add(Violation("answered-decision-without-ticket",
+                                      f"issue#{d['number']}",
+                                      f"{doc['file']} phase {phase} is done"))
+                for t in ts:
+                    if t["state"] != "closed":
+                        out.add(Violation("done-phase-open-ticket", f"issue#{t['number']}",
+                                          f"{doc['file']} phase {phase} is done"))
+    return sorted(out, key=lambda v: v.key)
+
+
+def main(argv):
+    snap = Snapshot.from_fixture(argv[2]) if argv[1:2] == ["--fixture"] else \
+        Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
+    for v in check(snap):
+        print(f"{v.key}: {v.detail}")
+
+
+if __name__ == "__main__":
+    main(sys.argv)
