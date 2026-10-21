@@ -200,8 +200,10 @@ jobs:
             Where the spec is ambiguous, incomplete or contradicts itself,
             don't guess. Open an issue that quotes the sentence, says what's
             unclear and lists the options as A, B, ..., and leave that part
-            out of the tickets (or make the dependent ticket say
-            "Blocked by #n"). Label it `spec-question` plus exactly one of:
+            out of the tickets (or put #n on the dependent ticket's
+            Depends on line). Create it with
+            `python3 .github/scripts/planner_issue.py question --kind <kind> --title "<title>" --body-file <file>`,
+            which labels it `spec-question` plus the kind, one of:
 
             - `decision`: a choice about this project that can be made
               without knowing how the original game behaves (policy,
@@ -234,15 +236,20 @@ jobs:
             plan a small ticket that splits it first.
 
             Create each with
-            `gh issue create --label planned --title "<title>" --body-file <file>`,
-            writing the body to a file first. Use this body format:
+            `python3 .github/scripts/planner_issue.py ticket --title "<title>" --body-file <file>`,
+            writing the body to a file first. The script checks the header
+            below and refuses a ticket the factory couldn't schedule,
+            listing why; fix those and run it again. Use this body format:
 
             ```
             **Spec:** SPEC <number> (<heading>), or for a design doc
                       <FILE> <phase> (<heading>), plus any SPEC sections it relies on
-            **Depends on:** #<n>, or "none"
+            **Depends on:** #<n>, #<m>, ... or none (nothing else on this
+                            line: name sibling tickets by their numbers, and
+                            put any reasons in What)
             **Files:** <each file you expect it to change, as a backticked
-                       path from the repo root, e.g. `crates/game/src/walk.rs`>
+                       path from the repo root, e.g. `crates/game/src/walk.rs`,
+                       followed by (new) if this ticket creates it>
 
             ### What
             <2-6 sentences: the behaviour to implement or fix, in terms of the
@@ -273,7 +280,9 @@ jobs:
             twice. Then create the tickets and spec questions, then edit the
             Plan issue's body to list them, then attach them.
 
-            The Plan issue is labelled `planned` and titled
+            Create the Plan issue with
+            `python3 .github/scripts/planner_issue.py plan --title "<title>" --body-file <file>`.
+            It is labelled `planned` and titled
             "Plan: SPEC <section>" (or "Plan: <doc title> <phase>" for a
             design doc). Its body starts with this line, exactly, which the
             pick step and the docs updater read:
@@ -286,7 +295,7 @@ jobs:
             (plus, for a design doc, the `[external]` items not planned here).
             Don't use a `- [ ]` checklist; GitHub's sub-issue list tracks
             progress instead. Update the body with
-            `gh issue edit <plan number> --body-file <file>`.
+            `python3 .github/scripts/planner_issue.py edit-plan <plan number> --body-file <file>`.
 
             Don't attach sub-issues yourself: after you finish, a workflow
             step attaches every ticket and spec question the Plan body
@@ -308,7 +317,7 @@ jobs:
             that after reviewing.
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh issue close:*),Bash(git log:*),Bash(git diff:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(python3 .github/scripts/planner_issue.py:*),Bash(gh issue close:*),Bash(git log:*),Bash(git diff:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
             --append-system-prompt "Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message."
 
       # Attach the plan's tickets and questions as sub-issues, from the

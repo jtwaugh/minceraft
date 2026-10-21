@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_tick import Snapshot  # noqa: E402
+os.environ.setdefault("GITHUB_REPOSITORY", "unused/unused")  # tickets.py reads it at import
+from tickets import depends_error  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,9 @@ def check(snap):
         for d in i.get("depends_on", []):
             if d in plans:
                 out.add(Violation("plan-as-dependency", n, f"depends on plan #{d}"))
+        bad = i.get("state") == "open" and depends_error(i.get("body") or i.get("body_excerpt"))
+        if bad:
+            out.add(Violation("unreadable-depends", n, f"{bad}; not started until it is"))
     for doc in snap.docs:
         if doc.get("status") == "accepted" and not doc.get("phases"):
             out.add(Violation("accepted-doc-without-phases", doc["file"]))

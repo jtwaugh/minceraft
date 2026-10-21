@@ -55,6 +55,13 @@ class Test(unittest.TestCase):
         s = snap([issue(5, kind="plan", labels=()), issue(6, "**Depends on:** #5")])
         self.assertEqual(started(s), [])
 
+    def test_unreadable_depends_never_started(self):
+        # #719: every dependency closed, but the line named none of them
+        s = snap([issue(1, "**Depends on:** the swimming tickets in this plan"),
+                  issue(2, "**Depends on:** #3, and the steering ticket"),
+                  issue(3, state="closed", labels=())])
+        self.assertEqual(started(s), [])
+
     def test_fixture_519(self):
         s = Snapshot.from_fixture(os.path.join(HERE, "fixtures", "history.json"))
         self.assertNotIn("issue#519", started(s))
