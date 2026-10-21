@@ -652,10 +652,17 @@ Done when:
 - No two consecutive islands share the same biome in the top-scored worlds, unless the route is shorter than the climate noise scale.
 
 > **Reconciler:** the biome and vegetation work this depends on is done, so
-> Phase G's dependency on it is met. "Cold" and "warm" biome need a definition
-> (for example, a list of biomes in `data/biomes.toml` terms, or T thresholds).
+> Phase G's dependency on it is met. "Cold" and "warm" biome are defined in
+> the next paragraph.
 > "The climate noise scale" is a number from SPEC 7 (frequency 0.025 for T);
 > state it as a distance. Fish habitat following is a consequence, not work.
+>
+> **Cold, warm, and an anchorage's biome.** Cold and warm are temperature
+> thresholds on the biased T at the sample column: cold is T < 0.5 and warm is
+> T > 0.984 (62/63). An anchorage's island is cold or warm when most of its
+> land columns are cold or warm. Its biome, for the variety score and the
+> "no two consecutive islands share the same biome" rule, is the most common
+> biome among its land columns. (Decided in #844.)
 
 ---
 
