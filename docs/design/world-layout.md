@@ -713,6 +713,10 @@ Each term is normalized to 0..1 and weighted. Weights live in `data/scoring.toml
 | Climate gradient | Temperature change from first to last anchorage, and monotonicity | 1.0 (Phase G) |
 | Biome variety | Distinct biomes across anchorage islands | 1.0 (Phase G) |
 
+An island is "visible from the route" for the Extra islands term if a
+straight line from some point on the route to the island's highest column
+clears all terrain between them (line of sight). (Decided in #743.)
+
 > **Reconciler:** "visible from the route" has no definition (line of sight,
 > or distance). Suggest a distance from the route centre line. "Normalized to
 > 0..1" needs a cap for each surplus term. Scoring is judged by the
