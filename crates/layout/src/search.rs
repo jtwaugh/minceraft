@@ -3,19 +3,15 @@
 //! survivors at full resolution, score them and keep the top N.
 //!
 //! Choices made here:
-//! - Each candidate gets one attempt: its seed builds the route and the
-//!   world, as in `find_route`, with no retry loop.
-//! - The total score is the sum of each term times its weight in
-//!   `data/scoring.toml` (not divided by the weights). The island terms are
-//!   the mean over the levels. Phase G terms are not included.
-//! - Path directness uses the same per-pair window and eroded A* as
-//!   `validate_route`; a pair with no path (not possible after validation)
-//!   is left out of the mean.
-//! - Extra islands are counted on an undecorated region covering the route
-//!   points grown by `VIEW_MARGIN` blocks.
-//! - Workers take the next unclaimed seed from a shared counter and keep their
-//!   own top N; the merge sorts by score descending, then lower seed, so the
-//!   result does not depend on the worker count.
+//! - One attempt per seed (the seed builds route and world), no retry loop.
+//! - Score = sum of term * weight from `data/scoring.toml`; island terms are
+//!   the mean over levels; no Phase G terms.
+//! - Path directness reuses `validate_route`'s per-pair window and eroded A*.
+//! - Extra islands use an undecorated region around the route points plus
+//!   `VIEW_MARGIN` blocks.
+//! - Workers take seeds from a shared counter and keep their own top N; the
+//!   merge sorts by score descending, then lower seed, so the worker count
+//!   does not matter.
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::thread;
@@ -80,6 +76,14 @@ fn weighted(t: &TermScores, c: &ScoringConfig) -> f64 {
         + t.extra_islands * c.weight_extra_islands
 }
 
+/// Region `(x0, z0, w, d)` boxing `pts` grown by `margin`.
+fn bounds(pts: &[[i32; 2]], margin: i32) -> Option<(i32, i32, u32, u32)> {
+    let lo = |k: usize| pts.iter().map(|p| p[k]).min().map(|v| v - margin);
+    let hi = |k: usize| pts.iter().map(|p| p[k]).max().map(|v| v + margin);
+    let (x0, z0) = (lo(0)?, lo(1)?);
+    Some((x0, z0, (hi(0)? - x0 + 1) as u32, (hi(1)? - z0 + 1) as u32))
+}
+
 /// One A* path per consecutive anchorage pair, windowed as in `validate_route`.
 fn pair_paths(
     layout: &Layout,
@@ -93,17 +97,13 @@ fn pair_paths(
     };
     let half = RouteParams::shipped().channel_half_width.ceil() as i32;
     let margin = t.window_margin + t.raft_half_width as i32 + half;
+    let cell = |p: [f64; 2]| p.map(|v| v.floor() as i32);
     let pairs = levels.len().min(route.points.len()).saturating_sub(1);
     (0..pairs)
         .filter_map(|i| {
             let [a, b] = [levels[i].anchorage, levels[i + 1].anchorage];
-            let [pa, pb] = [route.points[i], route.points[i + 1]];
-            let xs = [a[0], b[0], pa[0].floor() as i32, pb[0].floor() as i32];
-            let zs = [a[1], b[1], pa[1].floor() as i32, pb[1].floor() as i32];
-            let x0 = xs.into_iter().min()? - margin;
-            let z0 = zs.into_iter().min()? - margin;
-            let w = (xs.into_iter().max()? + margin - x0 + 1) as u32;
-            let d = (zs.into_iter().max()? + margin - z0 + 1) as u32;
+            let pts = [a, b, cell(route.points[i]), cell(route.points[i + 1])];
+            let (x0, z0, w, d) = bounds(&pts, margin)?;
             let region = bare.generate_region(x0, z0, w, d, true);
             let nav = erode(&NavMap::from_region(&region, t), t.raft_half_width);
             find_path(&nav, [a[0] - x0, a[1] - z0], [b[0] - x0, b[1] - z0])
@@ -126,23 +126,16 @@ fn score_seed(
         coast += k;
     }
     let n = levels.len().max(1) as f64;
-    let xs = route.points.iter().map(|p| p[0].floor() as i32);
-    let zs = route.points.iter().map(|p| p[1].floor() as i32);
-    let extra = match (xs.clone().min(), xs.max(), zs.clone().min(), zs.max()) {
-        (Some(x0), Some(x1), Some(z0), Some(z1)) => {
-            let (x0, z0) = (x0 - VIEW_MARGIN, z0 - VIEW_MARGIN);
-            let region = layout.generate_region(
-                x0,
-                z0,
-                (x1 + VIEW_MARGIN - x0 + 1) as u32,
-                (z1 + VIEW_MARGIN - z0 + 1) as u32,
-                false,
-            );
-            let centres: Vec<[i32; 2]> = levels.iter().map(|l| l.island_center).collect();
-            extra_islands(&region, &centres, &route.points, c).term
-        }
-        _ => 0.0,
-    };
+    let cells: Vec<[i32; 2]> = route
+        .points
+        .iter()
+        .map(|p| p.map(|v| v.floor() as i32))
+        .collect();
+    let extra = bounds(&cells, VIEW_MARGIN).map_or(0.0, |(x0, z0, w, d)| {
+        let region = layout.generate_region(x0, z0, w, d, false);
+        let centres: Vec<[i32; 2]> = levels.iter().map(|l| l.island_center).collect();
+        extra_islands(&region, &centres, &route.points, c).term
+    });
     TermScores {
         spacing_regularity: spacing_regularity(&route.points, &RouteParams::shipped()),
         path_directness: path_directness(&pair_paths(layout, levels, route, t)),
