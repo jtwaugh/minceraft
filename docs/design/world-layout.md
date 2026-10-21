@@ -803,8 +803,9 @@ Plan and build against these.
 4. **Validation timing: B, keep the split as written.** Phase B validates
    flat tiles on undecorated terrain; Phase G adds the decorated checks.
 5. **Outside the corridor (Phase E): A, render nothing.** Regions outside
-   the corridor are not generated or drawn. Revisit when Phase E is
-   planned.
+   the corridor are not generated or drawn. The corridor is every region
+   within 2 regions (Chebyshev distance) of a region the route passes
+   through. (Decided in #632.)
 6. **Phase D decoration: keep the shipped scheme.** The 16 x 16 cell scheme
    from SPEC 15 (decided in #3) stays; the doc's per-candidate hash and
    8-block margin are not built. The decoration part of Phase D counts as

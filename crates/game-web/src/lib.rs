@@ -4,7 +4,7 @@
 
 use game::aliases::Aliases;
 use game::animals::Animals;
-use game::bindings::Bindings;
+use game::bindings::{Action, Bindings};
 use game::camera::{Camera, Pose};
 use game::clock::Clock;
 use game::commands::default_registry;
@@ -104,6 +104,11 @@ impl InputSampler {
     }
     pub fn clear_held(&mut self) {
         self.0.clear_held();
+    }
+    /// Whether a `KeyboardEvent.code` is the inventory key, usable while
+    /// events are not being forwarded to the sampler.
+    pub fn is_inventory_key(&self, code: &str) -> bool {
+        self.0.bindings().action_for_key(code) == Some(Action::Inventory)
     }
     #[wasm_bindgen(getter)]
     pub fn yaw(&self) -> f32 {

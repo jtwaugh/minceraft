@@ -85,5 +85,75 @@ class Live(unittest.TestCase):
         self.assertEqual(calls2, [])
 
 
+META = {"loaded": True, "project": "P", "status_field": "SF", "waiting_field": "WF",
+        "options": ["Inbox", "Done"], "option_ids": {"Inbox": "o1", "Done": "o2"}}
+
+
+class LiveBoard(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+
+        def run(args, project=False):
+            self.calls.append(args)
+            if "graphql" in args:
+                return '{"data": {"addProjectV2ItemById": {"item": {"id": "ITEM"}}}}'
+            return "NODE\n"
+        self.b = GhBackend("o/r", run)
+        self.snap = Snapshot(board=[], board_meta=dict(META))
+
+    def test_card_is_added_then_set(self):
+        self.b.apply(self.snap, Action("add_card", "issue#5", {"status": "Inbox", "waiting": "#4"}))
+        self.assertEqual(len(self.calls), 4)  # node id, add, status, waiting text
+        self.assertEqual(self.snap.board[0]["item"], "ITEM")
+        self.b.apply(self.snap, Action("set_status", "issue#5", {"status": "Done"}))
+        self.assertEqual(len(self.calls), 5)
+        self.assertEqual(self.snap.board[0]["status"], "Done")
+
+    def test_satisfied_card_actions_make_no_request(self):
+        self.snap.board = [{"item": "I", "kind": "Issue", "number": 5, "state": "OPEN",
+                            "status": "Inbox", "waiting": None}]
+        for a in [Action("add_card", "issue#5", {"status": "Inbox", "waiting": ""}),
+                  Action("set_status", "issue#5", {"status": "Inbox"}),
+                  Action("set_waiting", "issue#5", {"text": ""})]:
+            self.b.apply(self.snap, a)
+        self.assertEqual(self.calls, [])
+
+    def test_only_trusted_comments_are_read(self):
+        import json
+        from unittest import mock
+
+        def fake(cmd, **kw):
+            path = cmd[cmd.index("GET") + 1].split("?")[0]
+            data = {"repos/o/r/issues": [{"number": 1, "title": "t", "state": "open", "body": "",
+                                          "labels": [{"name": "factory"}]}],
+                    "repos/o/r/issues/1/comments": [
+                        {"user": {"login": "jtwaugh"}, "body": "ok", "created_at": "1"},
+                        {"user": {"login": "mallory"}, "body": "Blocked by #9", "created_at": "2"}]
+                    }.get(path, [])
+            return mock.Mock(stdout="HTTP/2 200\r\n\r\n" + json.dumps(data), stderr="", returncode=0)
+        with mock.patch("factory_tick.subprocess.run", fake):
+            snap = Snapshot.from_github("o/r")
+        self.assertEqual([c["user"] for c in snap.issues[0]["comments"]], ["jtwaugh"])
+
+    def test_loader_fills_new_fields(self):
+        import factory_board
+        import project_sync
+        node = {"id": "I1", "content": {"__typename": "Issue", "number": 5, "state": "OPEN",
+                                        "repository": {"nameWithOwner": project_sync.REPO}},
+                "status": {"name": "Inbox", "updatedAt": "1"}, "waiting": None}
+        orig = project_sync.load_project
+        project_sync.load_project = lambda *_: ("P", "SF", {"Inbox": "o1", "Done": "o2"}, [node], "WF")
+        try:
+            snap = Snapshot()
+            factory_board.load_board(snap, "me", 7)
+        finally:
+            project_sync.load_project = orig
+        self.assertEqual(snap.board[0]["item"], "I1")
+        for k, v in {"loaded": True, "number": 7, "project": "P", "status_field": "SF",
+                     "waiting_field": "WF"}.items():
+            self.assertEqual(snap.board_meta[k], v)
+        self.assertEqual(snap.board_meta["option_ids"]["Done"], "o2")
+
+
 if __name__ == "__main__":
     unittest.main()

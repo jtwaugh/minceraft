@@ -525,30 +525,18 @@ impl Walker {
         }
         match &mut self.floating {
             Some(f) => {
-                // Swell push, then the raft moves (carrying the player), then
-                // the player's own movement against the moved raft.
+                // The raft moves (carrying the player), then the player's own
+                // movement against the moved raft.
                 let frame = f.swell.frame(f.tick);
                 f.tick += 1;
                 f.prev_offset = f.raft.offset();
-                f.raft.push_rider(
-                    &mut self.player,
-                    frame.tilt,
-                    input.sneak,
-                    &f.push,
-                    &self.physics,
-                );
                 f.raft
                     .advance(&frame, &mut [&mut self.player], &self.physics);
                 let world = RaftWorld::new(&self.world, &f.raft);
                 self.player.tick(input, &self.physics, &world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                let deck = Deck {
-                    raft: &f.raft,
-                    tilt: frame.tilt,
-                    push: &f.push,
-                };
-                self.items.tick(&world, Some(deck));
+                self.items.tick(&world);
                 let dropped = self.animals.tick(
                     &world,
                     Some(Deck {
@@ -565,7 +553,7 @@ impl Walker {
                 self.player.tick(input, &self.physics, &self.world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                self.items.tick(&self.world, None);
+                self.items.tick(&self.world);
                 let dropped = self.animals.tick(&self.world, None);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
@@ -2295,8 +2283,8 @@ mod tests {
     }
 
     #[test]
-    fn scene_player_stays_on_the_raft_and_sneaking_stops_the_drift() {
-        let drift = |sneak: bool| {
+    fn scene_player_stays_put_on_the_raft_sneaking_or_not() {
+        for sneak in [false, true] {
             let mut w = boarded();
             let idle = TickInput {
                 sneak,
@@ -2316,12 +2304,8 @@ mod tests {
                 let r = rel(&w);
                 far = far.max((r[0] - start[0]).hypot(r[1] - start[1]));
             }
-            (far, w.player().on_ground)
-        };
-        let (moved, _) = drift(false);
-        assert!(moved > 0.05, "standing still should drift: {moved}");
-        let (still, on) = drift(true);
-        assert!(still < 1e-6 && on, "sneaking should hold: {still}");
+            assert!(far < 1e-6 && w.player().on_ground, "sneak {sneak}: {far}");
+        }
     }
 
     #[test]

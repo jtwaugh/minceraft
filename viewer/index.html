@@ -189,6 +189,7 @@ import { hydrate, VIEW, BIOME, SNOWY } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
 import { FOG_GLSL } from './fog.js';
+import { SKY_GLSL } from './sky.js';
 import { buildMips, buildMips1 } from './mips.js';
 const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend, habitat_names } = wasm;
 
@@ -608,7 +609,7 @@ function shader(type, src) {
 }
 
 function initGL() {
-  progs = { cut: program(true), solid: program(false) };
+  progs = { cut: program(true), solid: program(false), sky: skyProgram() };
   useProg(progs.cut);
 }
 
@@ -639,6 +640,7 @@ function program(cut) {
     out vec3 vuv;
     out float vshade;
     out float vdist;
+    out vec3 vdir; // eye to fragment, for the fog's sky colour
     out vec3 vtint;
     void main() {
       vec3 wp = pos * unpack.x + offset;
@@ -650,16 +652,18 @@ function program(cut) {
       vshade = shade * unpack.z * AO_SHADE[int(ao)];
       vtint = tint;
       vdist = distance(wp, camPos);
+      vdir = wp - camPos;
     }`));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
     precision mediump sampler2DArray;
-    in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
+    in vec3 vuv; in float vshade; in float vdist; in vec3 vdir; in vec3 vtint;
     uniform sampler2DArray tex;
     uniform sampler2DArray tintTex; // R8 tint weight, same layers and UVs as tex
-    uniform float alpha; uniform float fogFar; uniform float fogMax; uniform vec3 fogColor;
+    uniform float alpha; uniform float fogFar; uniform float fogMax; uniform vec3 fogColor; uniform vec3 sunDir;
     out vec4 o;
     ${FOG_GLSL}
+    ${SKY_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
       vec2 px = vuv.xy * ${TEX_SIZE}.0;
@@ -671,7 +675,7 @@ function program(cut) {
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
       vec3 c = t.rgb * mix(vec3(1.0), vtint, tw) * vshade;
       float f = fogAmount(vdist, fogFar) * fogMax;
-      o = vec4(mix(c, fogColor, f), ${cut && msaa ? 'ca * alpha' : 'alpha'});
+      o = vec4(mix(c, skyColor(fogColor, normalize(vdir), sunDir), f), ${cut && msaa ? 'ca * alpha' : 'alpha'});
     }`));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
@@ -679,6 +683,45 @@ function program(cut) {
   gl.uniform1i(gl.getUniformLocation(prog, 'tintTex'), 1);
   prog.locs = new Map();
   return prog;
+}
+
+// Full-screen sky pass: one triangle, each pixel's view direction rebuilt from
+// the camera basis, coloured by the same skyColor the fog mixes toward.
+function skyProgram() {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, `#version 300 es
+    uniform vec3 camRight; uniform vec3 camUp; uniform vec3 camFwd;
+    uniform vec3 skyScale; // tan(fovy / 2) * aspect, tan(fovy / 2)
+    out vec3 vdir;
+    void main() {
+      vec2 p = vec2((gl_VertexID & 1) * 4 - 1, (gl_VertexID >> 1) * 4 - 1);
+      vdir = camFwd + camRight * p.x * skyScale.x + camUp * p.y * skyScale.y;
+      gl_Position = vec4(p, 1.0, 1.0);
+    }`));
+  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, `#version 300 es
+    precision mediump float;
+    in vec3 vdir;
+    uniform vec3 fogColor; uniform vec3 sunDir;
+    out vec4 o;
+    ${SKY_GLSL}
+    void main() { o = vec4(skyColor(fogColor, normalize(vdir), sunDir), 1.0); }`));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  p.locs = new Map();
+  return p;
+}
+
+// Draw the sky behind everything: no depth test or write.
+function drawSky(view, fovy, aspect) {
+  const t = Math.tan(fovy / 2);
+  useProg(progs.sky);
+  setU('camRight', [view[0], view[4], view[8]]);
+  setU('camUp', [view[1], view[5], view[9]]);
+  setU('camFwd', [-view[2], -view[6], -view[10]]);
+  setU('skyScale', [t * aspect, t, 0]);
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.depthMask(true);
 }
 
 // Uniforms are set by name through setU, which remembers the values so that
@@ -1046,22 +1089,24 @@ function draw() {
   gl.viewport(0, 0, cv.width, cv.height);
   gl.clearColor(sky[0], sky[1], sky[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.enable(gl.DEPTH_TEST);
-  gl.enable(gl.CULL_FACE);
-  useProg(progs.cut);
+  gl.disable(gl.BLEND);
   const cp = Math.cos(cam.pitch);
   const eye = [cam.dist * cp * Math.cos(cam.yaw), cam.dist * Math.sin(cam.pitch), cam.dist * cp * Math.sin(cam.yaw)];
   const target = [0, cam.ty - 64, 0];
   const view = lookAt([eye[0], eye[1] + target[1], eye[2]], target, [0, 1, 0]);
   const mvp = mul(persp(0.9, cv.width / cv.height, 0.5, 2000), view);
+  setU('fogColor', sky);
+  setU('sunDir', SUN_DIR);
+  drawSky(view, 0.9, cv.width / cv.height);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  useProg(progs.cut);
   setU('mvp', new Float32Array(mvp));
   setU('camPos', [eye[0], eye[1] + target[1], eye[2]]);
   setU('fogMax', 0.6);
   setU('alpha', 1);
   setU('waterFrame', waterFrame);
-  setU('fogColor', sky);
-  gl.disable(gl.BLEND);
-  // sun first, unfogged and behind everything
+  // sun after the sky, unfogged and behind everything
   setU('fogFar', 1e9);
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
   coverage(() => drawSun(view, target));
@@ -1528,15 +1573,18 @@ function renderFly(f) {
   gl.viewport(0, 0, FLY_W, FLY_H);
   gl.clearColor(skyC[0], skyC[1], skyC[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
-  useProg(progs.cut);
+  gl.disable(gl.BLEND);
   const view = lookAt(eye, tgt, [0, 1, 0]);
   const mvp = mul(persp(1.0, FLY_W / FLY_H, 0.3, 1000), view);
+  setU('fogColor', skyC);
+  setU('sunDir', SUN_DIR);
+  drawSky(view, 1.0, FLY_W / FLY_H);
+  gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE);
+  useProg(progs.cut);
   setU('mvp', new Float32Array(mvp));
   setU('camPos', eye);
   setU('alpha', 1);
   setU('waterFrame', waterFrame);
-  setU('fogColor', skyC);
   setU('fogMax', 1);
   setU('fogFar', 1e9);
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
