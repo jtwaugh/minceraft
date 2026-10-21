@@ -17,3 +17,8 @@ cap_flat_factor = 2.0
 # Coastline interest reaches 1.0 at this ratio of island perimeter to
 # sqrt(area).
 cap_ratio = 6.0
+
+# Extra islands: this many visible non-anchorage islands reach 1.0, and the
+# viewpoint on the route is this many blocks above sea level.
+cap_extra_islands = 3.0
+eye_height = 2.0

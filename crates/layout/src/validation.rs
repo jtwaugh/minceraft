@@ -136,7 +136,7 @@ pub fn window(level: &Level, t: &Thresholds) -> (i32, i32, u32, u32) {
     (x0, z0, (x1 - x0 + 1) as u32, (z1 - z0 + 1) as u32)
 }
 
-fn is_land(region: &Region, x: u32, z: u32) -> bool {
+pub(crate) fn is_land(region: &Region, x: u32, z: u32) -> bool {
     let start = region.index(x, 0, z);
     let (top, top_y, _, _) = column_summary(&region.blocks[start..start + HEIGHT]);
     top != Block::Air as u8
@@ -147,7 +147,7 @@ fn is_land(region: &Region, x: u32, z: u32) -> bool {
 
 /// World columns `(x, z)` of the island: land 4-connected to the island
 /// centre inside `region`. Empty if the centre is not land (or outside).
-fn island_columns(region: &Region, centre: [i32; 2]) -> Vec<(i32, i32)> {
+pub(crate) fn island_columns(region: &Region, centre: [i32; 2]) -> Vec<(i32, i32)> {
     let (w, d) = (region.width as i64, region.depth as i64);
     let local = |x: i32, z: i32| (x as i64 - region.x0 as i64, z as i64 - region.z0 as i64);
     let (cx, cz) = local(centre[0], centre[1]);
