@@ -110,12 +110,14 @@ Everything else about sprinting should match the original game: how fast you go,
 `Player`, driven by a tick-counted double-tap of `move_forward` (note 3),
 a speed multiplier and window length in `data/player.toml` / `data/input.toml`,
 a replay key, and the DSL support to `expect` sprint state. The sprint ends
-when forward is released, when sneaking starts, and on a blocked-forward
-collision (the author's "walls"); other end conditions wait for research. Done
+when forward is released, when sneaking starts, on a blocked-forward
+collision (the author's "walls"), and, as a placeholder until open question 3
+is answered, while the player is in water; other end conditions wait for
+research. Done
 when input scripts show a double-tap starting a sprint with higher speed, a slow
 second tap not starting one, and each listed end condition ending it. Also
 files the `research` spec-questions of section 3 (what the original does, per
-the reference version in section 3).
+the reference version in section 3). (Decided in #822.)
 
 **Phase B.** Section 3 items that wait on open questions: camera FOV change
 (question 2), raft and water behaviour (question 3), and a configurable window
@@ -132,6 +134,3 @@ the reference version in section 3).
    (needs research).
 4. **Double-tap window.** A: fixed value in `data/input.toml` (not a user
    setting). B: a user setting in the menu.
-5. **Which sprint end conditions are placeholders in Phase A?** A: forward
-   release, sneak, wall hit only. B: also stopping in water, until question 3
-   is answered.
