@@ -3,7 +3,7 @@
 // Run: node --test client/test/view.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NEAR, nearPlaneCorners, basis, look, farPlane, FOG_END, fogAt } from '../view.js';
+import { NEAR, nearPlaneCorners, basis, look, farPlane, FOG_END, fogAt, skyInputs, SUN_DIR } from '../view.js';
 import { fogAmount } from '../../viewer/fog.js';
 
 const FOV = 70 * Math.PI / 180; // data/input.toml look.fov_degrees
@@ -83,4 +83,15 @@ test('dry fog is the viewer curve, solid at FOG_END x fogFar; underwater stays l
   assert.equal(wet.fogFar, 0);
   assert.equal(fogAt(wet, 9), 0.5);
   assert.equal(fogAt(wet, 30), 1);
+});
+
+test('the sky pass runs above water with the biome colour, and not under water', () => {
+  const base = { skyColor: [0.6, 0.7, 0.9], fogFar: 100, water: [40, 60, 200] };
+  const up = skyInputs(look({ ...base, underwater: false }), 0.3, 0.1, FOV, 16 / 9);
+  assert.deepEqual(up.base, base.skyColor);
+  assert.deepEqual(up.sunDir, SUN_DIR);
+  assert.ok(Math.abs(Math.hypot(...SUN_DIR) - 1) < 1e-12);
+  assert.ok(Math.abs(up.scale[0] / up.scale[1] - 16 / 9) < 1e-12);
+  assert.deepEqual(up.fwd, basis(0.3, 0.1).f);
+  assert.equal(skyInputs(look({ ...base, underwater: true }), 0.3, 0.1, FOV, 16 / 9), null);
 });
