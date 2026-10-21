@@ -5,7 +5,7 @@ scope: game
 source: "#446"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -22,7 +22,7 @@ Checked against the code on `master`:
 - **Raft model (item 5).** `scene.raft_blocks()` (`crates/game-web/src/lib.rs`) is meshed as ordinary blocks in `client/scene.js`. The art batches already have `raft_planks`, `raft_edge` and `raft_bottom` block faces (`art/PROMPT.md` batches 2 and 7; `data/blocks.toml`). There is no raft model, log or lashing art beyond those.
 - **Water outline (item 6).** `selection_box` in `crates/game/src/collision.rs` gives every non-air block, liquids included, a selection box. `crates/game/src/targeting.rs` has the test `casts_hit_solid_plant_and_water`. The client draws the box from the target (`client/overlay.js`, `client/scene.js` `drawBox`).
 
-None of the six items is done.
+Phase A (items 3 and 5) is done: animal box models and raft model art (#545, #559), the model atlas and UVs (#547, `client/models.js`), the GL model drawer (#564, `client/modelgl.js`), animals drawn as models with hurt-red and death-tip kept (#592) and the raft drawn as a model (#606, `client/raftmodel.js`). Items 1, 2, 4 and 6 are not done.
 
 ## Reconciliation notes
 
