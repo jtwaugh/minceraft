@@ -325,10 +325,14 @@ impl Walk {
     /// side from its origin, x then z then y), or empty if it isn't loaded.
     pub fn region_blocks(&self, rx: i32, rz: i32) -> Vec<u8> {
         self.0
-            .streamer_cache()
-            .and_then(|c| c.get(RegionCoord::new(rx, rz)))
-            .map(|r| r.region.blocks.clone())
+            .region_blocks(RegionCoord::new(rx, rz))
             .unwrap_or_default()
+    }
+
+    /// Regions an edit changed since the last call, as flat `rx, rz` pairs.
+    pub fn drain_edited_regions(&mut self) -> Vec<i32> {
+        let regions = self.0.drain_edited_regions();
+        regions.iter().flat_map(|c| [c.rx, c.rz]).collect()
     }
 
     /// A player in the water in front of the scene's raft, which moves under

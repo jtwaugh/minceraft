@@ -176,6 +176,45 @@ mod tests {
         }
     }
 
+    fn blocks_at(w: &Walker, x: i32, y: usize, z: i32) -> u8 {
+        let c = RegionCoord::containing(x, z);
+        let (x0, z0) = c.origin();
+        let size = REGION_SIZE as i32;
+        w.region_blocks(c).unwrap()[((z - z0) * size + (x - x0)) as usize * terrain::HEIGHT + y]
+    }
+
+    #[test]
+    fn region_blocks_show_edits_only_where_they_were_made() {
+        let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
+        let before = w.region_blocks(RegionCoord::new(0, 0)).unwrap();
+        let other = w.region_blocks(RegionCoord::new(1, 0)).unwrap();
+        assert_eq!(w.region_blocks(RegionCoord::new(9, 9)), None);
+        let held = blocks_at(&w, 10, 70, 20);
+        assert!(w.world.set_block(10, 70, 20, terrain::Block::Dandelion));
+        assert_eq!(blocks_at(&w, 10, 70, 20), terrain::Block::Dandelion as u8);
+        assert!(w.world.remove_block(10, 70, 20));
+        assert_eq!(blocks_at(&w, 10, 70, 20), 0);
+        let after = w.region_blocks(RegionCoord::new(0, 0)).unwrap();
+        let differing = before.iter().zip(&after).filter(|(a, b)| a != b).count();
+        assert_eq!(differing, usize::from(held != 0));
+        assert_eq!(w.region_blocks(RegionCoord::new(1, 0)).unwrap(), other);
+    }
+
+    #[test]
+    fn an_edit_on_a_border_is_seen_by_the_neighbours_padding() {
+        let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
+        w.drain_edited_regions();
+        w.world.remove_block(127, 70, 5);
+        assert_eq!(blocks_at(&w, 127, 70, 5), 0);
+        assert_eq!(
+            w.drain_edited_regions(),
+            vec![RegionCoord::new(0, 0), RegionCoord::new(1, 0)]
+        );
+        w.world.remove_block(50, 70, 50);
+        assert_eq!(w.drain_edited_regions(), vec![RegionCoord::new(0, 0)]);
+        assert!(w.drain_edited_regions().is_empty());
+    }
+
     #[test]
     fn construction_loads_the_neighbours_and_the_player_lands_on_terrain() {
         let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();

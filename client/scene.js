@@ -451,6 +451,11 @@ function render(now) {
   if (regions) {
     regions.free.forEach(freeRegion);
     regions.mesh.forEach((r) => meshRegion(r));
+    // A pick or other edit changed these regions' blocks: mesh them again.
+    for (const r of regions.remesh) if (!regions.mesh.some((m) => m.rx === r.rx && m.rz === r.rz)) {
+      freeRegion(r);
+      meshRegion(r, true);
+    }
     if (!regions.mesh.length && stale.size) {
       const [key, n] = stale.entries().next().value;
       stale.delete(key);
