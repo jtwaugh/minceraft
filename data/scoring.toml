@@ -1,0 +1,19 @@
+# Seed scoring weights and caps (docs/design/world-layout.md 6.3).
+# Read by crates/layout at compile time (defaults) or at run time.
+# Every term is normalized to 0..1 linearly against its cap, then weighted.
+
+# Term weights.
+weight_spacing_regularity = 1.0
+weight_path_directness = 1.0
+weight_island_quality = 1.0
+weight_coastline_interest = 0.5
+weight_extra_islands = 0.5
+
+# Island quality: area and flat tiles reach 1.0 at this multiple of the
+# validation minimums (min_island_columns, min_flat_grass_tiles).
+cap_area_factor = 2.0
+cap_flat_factor = 2.0
+
+# Coastline interest reaches 1.0 at this ratio of island perimeter to
+# sqrt(area).
+cap_ratio = 6.0
