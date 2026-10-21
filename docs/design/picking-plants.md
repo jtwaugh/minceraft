@@ -40,6 +40,7 @@ Checked against the code:
 8. **[manual check]** "In play that feels like foraging does nothing" (section 3) is a feel judgment. A measurable version: with the shipped chance and cooldown, a player foraging distinct tall grass blocks gets seeds within N tries with probability at least P (for example, 1 in 6 gives 90% within 13 tries). The tests can assert the chance and cooldown values and the feedback event; whether it feels right is for the maintainer.
 9. **[manual check]** "I want the farming loop to feel natural" has no test; the loop script (forage, plant, grow, harvest) is the closest measurable check.
 10. **Phases.** One phase per section of the author's text: Phase A is section 1 (the `pick` action for crops, loosening rule 2), Phase B is section 2 (flowers: items, icons, overlay), Phase C is section 3 (foraging) and Phase D is section 4 (seed planting script). (Decided in #510.)
+11. **Foraging odds and feedback.** Foraging keeps the cooldown and gets better odds than 1 in 6 (the option's example is 1 in 3), plus a `forage_missed` event so the client can show a cue when a forage drops nothing. The client cue is particle effects that make clear the forage happened. (Decided in #759.)
 
 ---
 
@@ -85,15 +86,10 @@ Holding seeds and using them on farmland plants a crop.
 
 ## Open questions
 
-2. Foraging: always drop seeds, or better odds plus feedback on a miss?
 3. Do picked flowers do anything yet (sell, decorate, cook), or are they just items for now?
 
 ## Open questions (reconciler)
 
-6. **Foraging (author's question 2).**
-   - A: always drop seeds, keep the cooldown.
-   - B: better odds (for example 1 in 3) plus a `forage_missed` event so the client can show a cue.
-   - C: both: a guaranteed drop on the first forage of a block, then the existing odds.
 8. **Flower items (author's question 3).**
    - A: items only for now, with icons; no use.
    - B: also a use in this doc (decoration or a sale at a station).
