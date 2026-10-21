@@ -2,13 +2,13 @@
 // Run: node --test client/test/session.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession } from './dsl.mjs';
+import { createSession, parse, run } from './dsl.mjs';
 
 test('steps lines one at a time and reads state', () => {
-  const s = createSession(['walk']);
+  const s = createSession(['walk', 'raft']);
   try {
     assert.equal(s.read('mode'), 'walk');
-    // like scripts/modes.input: keys only count once the pointer is locked and the player has settled
+    // like scripts/modes.input (W does not move the player in the plain walk world): keys only count once the pointer is locked and the player has settled
     for (const line of ['click', 'lock', 'frame 50 x10']) assert.deepEqual(s.exec(line), { ok: true });
     assert.deepEqual(s.exec('mark'), { ok: true });
     assert.deepEqual(s.exec('down KeyW'), { ok: true });
@@ -43,4 +43,9 @@ test('start after creation is an error result', () => {
 test('bad start flags are rejected with the usage message', () => {
   assert.throws(() => createSession(['swim']), /start fly\|walk \[raft\] \[debug\] \[stream\]/);
   assert.throws(() => createSession(['walk', 'bogus']), /start fly\|walk/);
+});
+
+test('a bare start line in a script is still a usage error', () => {
+  const [c] = parse('case bare\nstart\n');
+  assert.throws(() => run(c), /line 2: start fly\|walk/);
 });

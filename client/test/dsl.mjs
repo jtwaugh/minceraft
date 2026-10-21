@@ -343,24 +343,29 @@ function parseStart(args) {
 
 /**
  * A live world driven one DSL line at a time. `startArgs` are the words after `start`
- * (e.g. ['walk', 'raft']); none means the default world. `exec` never throws: it
- * returns `{ ok: true }` or `{ ok: false, error }`. Call `close()` when done.
+ * (e.g. ['walk', 'raft']); none means the default world. `exec` (a DSL line) and
+ * `execStep` (a parsed `{ op, args }`) never throw: they return `{ ok: true }` or
+ * `{ ok: false, error }`. Call `close()` when done.
  */
 export function createSession(startArgs = []) {
   const w = world(parseStart(startArgs));
   let open = true;
+  const execStep = ({ op, args }) => {
+    try {
+      if (!open) throw new Error('session is closed');
+      if (op === 'start') throw new Error('start is only allowed when the session is created');
+      if (op) step(w, { op, args });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
   return {
     exec(line) {
-      try {
-        if (!open) throw new Error('session is closed');
-        const [op, ...args] = line.replace(/#.*/, '').trim().split(/\s+/);
-        if (op === 'start') throw new Error('start is only allowed when the session is created');
-        if (op) step(w, { op, args });
-        return { ok: true };
-      } catch (e) {
-        return { ok: false, error: e.message };
-      }
+      const [op, ...args] = line.replace(/#.*/, '').trim().split(/\s+/);
+      return execStep({ op, args });
     },
+    execStep,
     read: (path) => read(w, path),
     close() {
       if (!open) return;
@@ -376,13 +381,14 @@ export function run(c) {
   const first = c.steps[0]?.op === 'start' ? c.steps[0] : null;
   let session;
   try {
+    if (first && !first.args.length) throw new Error(START_USAGE);
     session = createSession(first?.args);
   } catch (e) {
     throw new Error(`line ${first.line}: ${e.message}`);
   }
   try {
     for (const { line, op, args } of c.steps.slice(first ? 1 : 0)) {
-      const r = session.exec(`${op} ${args.join(' ')}`);
+      const r = session.execStep({ op, args });
       if (!r.ok) throw new Error(`line ${line} (${op} ${args.join(' ')}): ${r.error}`);
     }
   } finally {
