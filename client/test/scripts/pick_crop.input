@@ -1,0 +1,108 @@
+# Picking crops by hand on the raft scene's field (docs/design/picking-plants.md
+# phase A, section 1; reconciliation note 2): a pick removes a crop at any
+# stage and drops produce only when it is ripe; replanting needs seeds again.
+
+case a young crop is picked with empty hands, gives nothing; planting needs seeds
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+lock
+stand field
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.ground != grass
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+lock
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.crop = wheat_0
+expect hands = none
+press Digit1
+frame 50
+expect held = empty
+expect items = 3
+button down right
+frame 50 x2
+button up right
+frame 50
+expect field.crop = air
+expect field.ground != grass
+expect hands = none
+expect items = 3
+
+expect rule.secondary = none
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.crop = air
+
+# nothing was planted without seeds; with seeds the farmland takes a crop again
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+lock
+expect held = item:seeds
+expect rule.secondary = plant
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.crop = wheat_0
+
+case a ripe crop is picked, drops wheat and is gone; empty hands plant nothing
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+lock
+stand field
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+lock
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.crop = wheat_0
+press Digit1
+frame 50
+until field.crop = wheat_7
+expect items = 3
+button down right
+frame 50 x2
+button up right
+frame 50
+expect field.crop = air
+expect field.ground != grass
+expect items > 3
+
+# bare farmland, empty hands: secondary does nothing and nothing is planted
+expect held = empty
+expect rule.secondary = none
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.crop = air
