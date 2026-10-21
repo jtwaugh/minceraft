@@ -33,6 +33,7 @@ class Snapshot:
     docs: list = field(default_factory=list)
     branches: list = field(default_factory=list)
     board: list = field(default_factory=list)  # project board items
+    board_meta: dict = field(default_factory=dict)  # Status options, "Waiting on" field
     requests: int = 0  # API requests the loader made
     reported: set = field(default_factory=set)  # (target, reason) already reported
 
@@ -50,7 +51,7 @@ class Snapshot:
     @classmethod
     def from_github(cls, repo, etags=None):
         """Paginated reads; `etags` (path -> (etag, body)) is sent as
-        If-None-Match and a 304 reuses the body. Docs and board: later."""
+        If-None-Match and a 304 reuses the body. Docs: later."""
         snap = cls()
         etags = {} if etags is None else etags
 
@@ -91,6 +92,11 @@ class Snapshot:
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"]}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
+        number = os.environ.get("PROJECT_NUMBER", "").strip()
+        if os.environ.get("PROJECT_TOKEN") and number.isdigit():
+            import factory_board  # circular at module level
+            factory_board.load_board(snap, os.environ.get("PROJECT_OWNER") or repo.split("/")[0],
+                                     int(number))
         return snap
 
 
@@ -112,6 +118,21 @@ class FakeBackend(Backend):
                 issue["labels"].append(action.payload["label"])
         elif action.kind == "set_parent" and issue is not None:
             issue["parent"] = action.payload["parent"]
+        elif action.kind == "remove_label" and issue is not None:
+            if action.payload["label"] in issue["labels"]:
+                issue["labels"].remove(action.payload["label"])
+        elif action.kind == "add_blocked_by" and issue is not None:
+            issue.setdefault("blocked_by_links", []).append(action.payload["blocker"])
+        elif action.kind in ("set_status", "set_waiting", "add_card"):
+            kind, n = ("Issue", action.target[6:]) if action.target.startswith("issue#") \
+                else ("PullRequest", action.target[3:])
+            card = next((c for c in snapshot.board if (c["kind"], c["number"]) == (kind, int(n))), None)
+            if card is None:
+                card = {"kind": kind, "number": int(n), "state": "OPEN", "status": None}
+                snapshot.board.append(card)
+            if "status" in action.payload:
+                card["status"], card["status_updated"] = action.payload["status"], "9999"
+            card["waiting"] = action.payload.get("text", action.payload.get("waiting", card.get("waiting")))
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         else:
