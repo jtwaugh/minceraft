@@ -1,16 +1,15 @@
 // Sky gradient, shared by the shader (GLSL below) and the unit test (skyColor).
 // Given the biome's base sky colour (the per-biome ramp output, RGB 0..1), a unit
-// view direction and a unit sun direction: the base colour at the horizon, the
-// base colour * ZENITH_SCALE straight up, mixed toward SKY_WARM by up to
-// SUN_TINT_MAX within SUN_TINT_ANGLE degrees of the sun. (Decided in #620.)
-// The horizon is the base colour only away from the sun; toward the sun it is tinted.
+// view direction and a unit sun direction: the base colour at the horizon away
+// from the sun, the base colour * ZENITH_SCALE straight up, mixed toward SKY_WARM
+// by up to SUN_TINT_MAX within SUN_TINT_ANGLE degrees of the sun. (Decided in #620.)
 // Under water the sky pass is skipped, so nothing here handles that case.
 export const ZENITH_SCALE = 0.85;
 export const SUN_TINT_MAX = 0.25;
 export const SUN_TINT_ANGLE = 40; // degrees
 export const SKY_WARM = [1.0, 0.8, 0.55];
 
-const COS_TINT = Math.cos((SUN_TINT_ANGLE * Math.PI) / 180);
+export const COS_TINT = Math.cos((SUN_TINT_ANGLE * Math.PI) / 180);
 
 function smoothstep(a, b, x) {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);

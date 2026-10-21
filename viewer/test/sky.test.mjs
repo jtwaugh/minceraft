@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { skyColor, SKY_GLSL, ZENITH_SCALE, SUN_TINT_MAX, SKY_WARM } from '../sky.js';
+import { skyColor, SKY_GLSL, ZENITH_SCALE, SUN_TINT_MAX, SKY_WARM, COS_TINT } from '../sky.js';
 
 const BASE = [0.5, 0.7, 1.0];
 const SUN = (() => { const v = [-0.7, 0.16, -0.7], l = Math.hypot(...v); return v.map((c) => c / l); })();
@@ -36,7 +36,13 @@ test('GLSL snippet declares skyColor', () => {
 });
 
 test('GLSL snippet uses the same constants as the JS', () => {
-  assert.ok(SKY_GLSL.includes(ZENITH_SCALE.toFixed(2)));
-  assert.ok(SKY_GLSL.includes(SUN_TINT_MAX.toFixed(2)));
-  assert.ok(SKY_GLSL.includes(`vec3(${SKY_WARM.map((v) => v.toFixed(2)).join(', ')})`));
+  const warm = SKY_WARM.map((v) => v.toFixed(2)).join(', ');
+  const f = (n, d) => n.toFixed(d).replace('.', '\\.');
+  // Same structure as skyColor: zenith mix on dir.y, then a warm mix by the sun tint.
+  const shape = new RegExp(
+    `base \\* mix\\(1\\.0, ${f(ZENITH_SCALE, 2)}, clamp\\(dir\\.y, 0\\.0, 1\\.0\\)\\)` +
+      `[\\s\\S]*${f(SUN_TINT_MAX, 2)} \\* smoothstep\\(${f(COS_TINT, 6)}, 1\\.0, dot\\(dir, sunDir\\)\\)` +
+      `[\\s\\S]*mix\\(c, vec3\\(${warm}\\), tint\\)`,
+  );
+  assert.match(SKY_GLSL, shape);
 });
