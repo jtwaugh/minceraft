@@ -34,3 +34,9 @@ test('sun tint is capped at SUN_TINT_MAX', () => {
 test('GLSL snippet declares skyColor', () => {
   assert.match(SKY_GLSL, /vec3 skyColor\(vec3 base, vec3 dir, vec3 sunDir\)/);
 });
+
+test('GLSL snippet uses the same constants as the JS', () => {
+  assert.ok(SKY_GLSL.includes(ZENITH_SCALE.toFixed(2)));
+  assert.ok(SKY_GLSL.includes(SUN_TINT_MAX.toFixed(2)));
+  assert.ok(SKY_GLSL.includes(`vec3(${SKY_WARM.map((v) => v.toFixed(2)).join(', ')})`));
+});

@@ -3,6 +3,7 @@
 // view direction and a unit sun direction: the base colour at the horizon, the
 // base colour * ZENITH_SCALE straight up, mixed toward SKY_WARM by up to
 // SUN_TINT_MAX within SUN_TINT_ANGLE degrees of the sun. (Decided in #620.)
+// The horizon is the base colour only away from the sun; toward the sun it is tinted.
 // Under water the sky pass is skipped, so nothing here handles that case.
 export const ZENITH_SCALE = 0.85;
 export const SUN_TINT_MAX = 0.25;
