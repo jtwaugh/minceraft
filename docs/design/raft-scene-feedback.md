@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
 ---
 
@@ -25,6 +25,8 @@ Checked against the code on `master`:
 Phase A (items 3 and 5) is done: animal box models and raft model art (#545, #559), the model atlas and UVs (#547, `client/models.js`), the GL model drawer (#564, `client/modelgl.js`), animals drawn as models with hurt-red and death-tip kept (#592) and the raft drawn as a model (#606, `client/raftmodel.js`). Items 1, 2, 4 and 6 are not done.
 
 Phase B (items 1 and 6) is done: the rider's swell push removed (#686), no selection outline on water with the ray still stopping there (#703), loose items stop sliding on the deck (#698) and animals on the deck get no swell push (#707). `[swell_push]` and `SwellPush` no longer exist in the code. Items 2 and 4 are not done.
+
+Phase C (item 2) is done: animals swim at the surface (#726), drown after `drown_ticks` under water (#733), the nearest-support search is `crates/game/src/animal_steer.rs` (#727), swimming animals steer towards support (#767), and `crates/game/tests/animal_swim.rs` covers the end-to-end determinism (#795). Item 4 is not done.
 
 ## Reconciliation notes
 
