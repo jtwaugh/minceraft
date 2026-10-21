@@ -29,7 +29,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
 
 ## Reconciliation notes
 
-1. **Rule 4 conflict (open question 1).** `basic-gameplay.md` section 1 rule 4 says "There is no inventory grid", and section 15 asks whether the belt is fixed. A readout of belt, hands and later crates is consistent with it; a real multi-slot inventory reverses it and would also change pickup (section 6: hands carry one item), `give`/`clear` in `debug-console.md`, and the Overcooked design. Recommended: readout only (open question 1, option A).
+1. **Rule 4 conflict (open question 1).** `basic-gameplay.md` section 1 rule 4 says "There is no inventory grid", and section 15 asks whether the belt is fixed. A readout of belt, hands and later crates is consistent with it; a real multi-slot inventory reverses it and would also change pickup (section 6: hands carry one item), `give`/`clear` in `debug-console.md`, and the Overcooked design. Decision: a real multi-slot inventory (open question 1, option B). This reverses rule 4 and needs its own design doc first, so Phase C is not built here, as its last bullet says. (Decided in #664.)
 2. **Day phase timer has no source.** The idea lists the phase timer as art to restyle. It is blocked on basic-gameplay Phase 8 (clock and HUD timer, #470). Style it when it exists; do not build the clock here.
 3. **Missing item art.** Icons are wanted for every entry in `data/items.toml`, but `sword`, `raw_beef`, `leather`, `raw_pork`, `raw_chicken` and `feather` are not in `art/PROMPT.md`. They must be added to the brief and drawn in `art/tools/draw_7_12.py` (`batches_7_12.json` is generated; never hand-edit it, CLAUDE.md "Art"). The icon set should be checked by a test that every `name` in `data/items.toml` has a texture, so a new item cannot ship without an icon. Each of the six gets its own distinct 8×8 icon now, with no shared placeholder, and the coverage test has no exceptions. (Decided in #515.)
 4. **Sizes (open question 2).** Existing Batch 10 art (`slot` 10×10, `panel_*` 4×4, `digit_*` 4×6) is already a UI sheet at non-8×8 sizes, and the format supports it through `sizes` (`art/README.md`). Item icons at 8×8 scaled by an integer factor fit a 10×10 slot opening of 8×8. Hearts exist at 8×8. So option A (8×8 tiles scaled up, UI pieces at the sizes already drawn) needs no new format. Decision: option A; there is no separate larger UI sheet. (Decided in #514.)
@@ -112,6 +112,5 @@ Done when: the input scripts pass and the view's model test lists the belt and h
 
 ## Open questions
 
-1. **Inventory kind** (author's question 1). Options: A) readout of belt, hands and later crates, rule 4 unchanged (recommended, note 1); B) a real multi-slot inventory, which reverses rule 4 and needs its own design doc first.
 4. **Sim while open.** Options: A) keep ticking with neutral input, as the console does (recommended, matches #402); B) pause the sim, which puts a pause flag in the Rust command layer's territory (`debug-console.md` section 9).
 5. **Open key.** Options: A) `Tab`; B) `KeyI`; C) `KeyE`, which is already Interact (not advised). Stored in `data/input.toml` by code.
