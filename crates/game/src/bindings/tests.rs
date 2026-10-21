@@ -24,6 +24,8 @@ fn shipped_file_loads_every_action() {
     }
     assert_eq!(b.fov_degrees, 70.0);
     assert_eq!(b.double_tap_ticks, 7);
+    assert_eq!(b.sprint_fov_extra_degrees, 10.0);
+    assert_eq!(b.sprint_fov_ease_seconds, 0.15);
     assert!(b.sensitivity > 0.0);
     assert_eq!(b.get(Action::MoveForward).keys, ["KeyW"]);
     assert_eq!(b.get(Action::Jump).mode, Mode::Hold);
@@ -128,6 +130,23 @@ fn errors_convert_to_data_error_with_same_message() {
         assert_eq!(data.file, DataFile::Input);
         assert_eq!(data.to_string(), msg);
         assert_eq!(shown, msg);
+    }
+}
+
+#[test]
+fn rejects_missing_or_bad_sprint_fov_tunables() {
+    for (line, key) in [
+        ("fov_extra_degrees = 10.0", "fov_extra_degrees"),
+        ("fov_ease_seconds = 0.15", "fov_ease_seconds"),
+    ] {
+        let missing = shipped().replace(line, "");
+        assert_err_contains::<(), _>(Bindings::parse(&missing).map(|_| ()), key);
+        for bad in ["\"1\"", "0", "0.0", "-1", "-0.5", "true"] {
+            let text = shipped().replace(line, &format!("{key} = {bad}"));
+            assert_err_contains::<(), _>(Bindings::parse(&text).map(|_| ()), key);
+        }
+        let ok = shipped().replace(line, &format!("{key} = 2"));
+        assert!(Bindings::parse(&ok).is_ok());
     }
 }
 
