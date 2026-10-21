@@ -32,6 +32,7 @@ import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { SKY_GLSL } from '../viewer/sky.js';
+import { WATER_GLSL } from '../viewer/water.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
 import { sceneById } from './scenes.js';
@@ -108,9 +109,11 @@ function program(cut) {
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
     uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir;
+    uniform float waterFresnel; // 1 while drawing water from above the surface
     out vec4 o;
     ${FOG_GLSL}
     ${SKY_GLSL}
+    ${WATER_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
       vec2 px = vuv.xy * ${TEX_SIZE}.0;
@@ -121,9 +124,12 @@ function program(cut) {
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
       float g = texture(tintTex, vuv).r;
       vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint;
+      vec3 vd = normalize(vdir);
+      // water reflects the sky: blend toward it at low view angles (as in the viewer)
+      c = mix(c, skyColor(fogColor, vec3(vd.x, -vd.y, vd.z), sunDir), waterFresnel * fresnel(vd));
       float f = fogFar > 0.0 ? fogAmount(vdist, fogFar) : clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
       // above water fog fades toward the sky in the view direction; under water it is flat
-      vec3 fc = fogFar > 0.0 ? skyColor(fogColor, normalize(vdir), sunDir) : fogColor;
+      vec3 fc = fogFar > 0.0 ? skyColor(fogColor, vd, sunDir) : fogColor;
       o = vec4(mix(c, fc, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'alpha'});
     }`));
   gl.linkProgram(p);
@@ -495,6 +501,7 @@ function render(now) {
     gl.uniform3fv(prog.u('eye'), eye);
     gl.uniform3fv(prog.u('tint'), view.tint);
     gl.uniform1f(prog.u('alpha'), a);
+    gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
     if (prog === cutProg) { gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); }
   };
@@ -509,7 +516,9 @@ function render(now) {
   // Water faces point out of the water, so from below the surface they are
   // back faces: draw both sides while the eye is under water.
   if (underwater) gl.disable(gl.CULL_FACE);
-  bind(solidProg, 0.45); drawParts(solidProg, meshes.water);
+  bind(solidProg, 0.45);
+  gl.uniform1f(solidProg.u('waterFresnel'), underwater ? 0 : 1);
+  drawParts(solidProg, meshes.water);
   gl.enable(gl.CULL_FACE);
   bind(solidProg, 0.72); drawParts(solidProg, meshes.ice);
   gl.depthMask(true);
