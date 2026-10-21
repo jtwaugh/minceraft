@@ -23,6 +23,8 @@ import json
 import os
 import re
 import subprocess
+import sys
+import time
 
 REPO = os.environ["GITHUB_REPOSITORY"]
 MAINTAINER = "jtwaugh"
@@ -38,9 +40,21 @@ REVIEWED = re.compile(r"Reviewed commit:\s*`?([0-9a-f]{7,40})", re.I)
 OVERRIDE = re.compile(r"^\s*/override\b[ \t]*(.*)", re.S)
 
 
+def run_gh(args, tries=3):
+    """`gh <args>`, retried with backoff so a brief API failure doesn't leave a
+    PR without a status; the last failure exits with gh's own error."""
+    for attempt in range(tries):
+        p = subprocess.run(["gh", *args], capture_output=True, text=True)
+        if p.returncode == 0:
+            return p.stdout
+        print(f"gh {' '.join(args)}: {p.stderr.strip()}", file=sys.stderr)
+        if attempt + 1 < tries:
+            time.sleep(5 * 2 ** attempt)
+    sys.exit(f"gh {' '.join(args)} failed {tries} times")
+
+
 def gh(path):
-    out = subprocess.run(["gh", "api", "--paginate", "--slurp", path],
-                         check=True, capture_output=True, text=True).stdout
+    out = run_gh(["api", "--paginate", "--slurp", path])
     pages = json.loads(out)
     if pages and isinstance(pages[0], list):
         return [item for page in pages for item in page]
@@ -49,10 +63,9 @@ def gh(path):
 
 def set_status(sha, state, description, url):
     description = description if len(description) <= 140 else description[:137] + "..."
-    subprocess.run(["gh", "api", "-X", "POST", f"repos/{REPO}/statuses/{sha}",
-                    "-f", f"state={state}", "-f", f"context={CONTEXT}",
-                    "-f", f"description={description}", "-f", f"target_url={url}"],
-                   check=True, capture_output=True, text=True)
+    run_gh(["api", "-X", "POST", f"repos/{REPO}/statuses/{sha}",
+            "-f", f"state={state}", "-f", f"context={CONTEXT}",
+            "-f", f"description={description}", "-f", f"target_url={url}"])
     print(f"{sha[:7]}: {state}: {description}")
 
 
