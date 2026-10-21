@@ -6,7 +6,7 @@ source: "#503"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
 ---
@@ -16,6 +16,8 @@ phases:
 Checked against the code:
 
 - **Phase A done** (plan #551): `pick` for crops replaces harvest-and-reset in `data/interactions.toml` and `crates/game/src/pick.rs` (#557, #561), with the input script `client/test/scripts/pick_crop.input` (#598). The bullets below were written before Phase A and still describe the `harvest` rule and `harvest.rs` as they were; `harvest.rs` now holds only shared crop helpers.
+
+- **Phase B done** (plan #625): the block-edit layer (#682), flower items and the pickable block table (#689), the `pick_flower` function (#696), flower icons (#672), the `pick` rule for flowers with the item going to the hands (#728), picked flowers shown in streamed regions (#736), the input script `client/test/scripts/pick_flower.input` (#737), and edits kept for the session (#662). Bullets below about flowers, items and the missing `pick` rule predate Phase B.
 
 - **Interaction rules** are in `data/interactions.toml`: `till`, `plant` (`item:seeds` on `block:farmland`, top face, air above), `harvest` (empty hands or any tool, `block:crop`, `require_state = "mature"`), `forage` (empty hands, `block:tall_grass`) and `attack`. The first match wins. There is no `pick` action and no rule targeting `block:dandelion` or `block:rose`.
 - **Actions** live in `crates/game/src/`: `plant.rs`, `harvest.rs` (resets the crop to stage 0 and returns the yields from `data/crops.toml`), `forage.rs` (`Forager`, per-block cooldown), `till.rs`, `farm.rs`.
