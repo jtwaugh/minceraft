@@ -4,7 +4,6 @@
 // applied every frame, as docs/design/basic-gameplay.md section 2.2 asks.
 //
 //   ?seed=N      world seed (default 12345)
-//   ?radius=R    chunks of terrain each way from the spawn chunk (default 1)
 //   ?scene=raft  the Phase 3 test scene: a flat sea, a raft rocking on the scripted swell,
 //                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
@@ -26,6 +25,8 @@ import { mountHud } from './hud.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
+import { padRegion } from './regionpad.js';
+import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look } from './view.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
@@ -39,7 +40,6 @@ const { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } = game;
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
 const seed = BigInt(qs.get('seed') ?? 12345);
-const radius = Math.max(0, Math.min(3, +(qs.get('radius') ?? 1)));
 const flying = qs.get('mode') === 'fly';
 const raftScene = sceneById(qs.get('scene'))?.id === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
@@ -272,10 +272,16 @@ function mul(a, b) {
 // ---------------------------------------------------------------- setup
 await Promise.all([initTerrain(), initGame()]);
 const sampler = new InputSampler();
-// heightmap_decorated column: [top_block, top_y, ...]; spawn just above the top block.
-const surfaceY = terrain.heightmap_decorated(seed, CHUNK / 2, CHUNK / 2, 1, 1)[1] + 1;
 const scene = raftScene ? new Scene() : null;
-const walk = scene ? Walk.in_scene(scene) : new Walk(CHUNK / 2, surfaceY + 0.5, CHUNK / 2);
+// Terrain streams around the player (data/streaming.toml); the raft scene is one fixed sea.
+const walk = scene ? Walk.in_scene(scene) : Walk.streamed(seed, CHUNK / 2, 127, CHUNK / 2);
+if (!scene) { // stand on the highest block of the spawn column
+  let top = 127;
+  while (top > 0 && !walk.block_at(CHUNK / 2, top, CHUNK / 2)) top--;
+  if (top > 0) walk.teleport(CHUNK / 2, top + 1.5, CHUNK / 2); // 0: region not loaded yet, keep the start
+}
+const surfaceY = walk.feet()[1];
+const loadRadius = Walk.load_radius();
 if (scene) { spawnTestItems(walk); spawnTestAnimals(walk); }
 const input = attachInput({ sampler, canvas, document, window, debug });
 
@@ -302,26 +308,40 @@ const cut = (draw) => {
 let skyColor = [0.61, 0.76, 0.9];
 const meshes = { opaque: [], cutout: [], water: [], ice: [] };
 
-// One chunk per frame, spawn chunk outwards, so the page is flying at once.
-const queue = [];
 const raftMeshes = { opaque: [], cutout: [] }; // moved each frame by the sim's raft offset
-for (let r = 0; r <= radius && !scene; r++) {
-  for (let cz = -r; cz <= r; cz++) for (let cx = -r; cx <= r; cx++) {
-    if (Math.max(Math.abs(cx), Math.abs(cz)) === r) queue.push([cx, cz]);
-  }
-}
-function meshNextChunk() {
-  const [cx, cz] = queue.shift();
-  const x = cx * CHUNK, z = cz * CHUNK;
-  const blocks = terrain.generate_region_decorated(seed, x - 1, z - 1, CHUNK + 2, CHUNK + 2);
-  const tints = columnTints(terrain, ctx, seed, x, z, CHUNK);
-  if (cx === 0 && cz === 0) skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
-  walk.add_region(x - 1, z - 1, CHUNK + 2, CHUNK + 2, blocks);
-  const m = meshBlocks(ctx, blocks, tints, CHUNK, 1);
-  const offset = [x, 0, z];
+// Meshes of each streamed region, by "rx,rz", so they can be freed when it unloads.
+const regionParts = new Map();
+// Loaded neighbours of a newly meshed region, remeshed one per spare frame: they were
+// padded with this region's edge as their own, which can leave a hole in a cliff wall.
+const stale = new Map();
+const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); };
+function meshRegion({ rx, rz }, remesh = false) {
+  const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
+  // one column of the neighbours' edges around the region, so no seams at its borders
+  const blocks = padRegion((a, b) => walk.region_blocks(a, b), rx, rz, REGION_SIZE);
+  const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE);
+  if (rx === 0 && rz === 0) skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
+  const m = meshBlocks(ctx, blocks, tints, REGION_SIZE, 1);
+  const parts = {};
   for (const k of Object.keys(meshes)) {
-    const part = upload(m[k], offset);
+    const part = upload(m[k], [x, 0, z]);
+    parts[k] = part ? [part] : [];
     if (part) meshes[k].push(part);
+  }
+  regionParts.set(`${rx},${rz}`, parts);
+  if (!remesh) for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    const n = { rx: rx + dx, rz: rz + dz };
+    if (regionParts.has(`${n.rx},${n.rz}`)) stale.set(`${n.rx},${n.rz}`, n);
+  }
+  stale.delete(`${rx},${rz}`);
+}
+function freeRegion({ rx, rz }) {
+  const parts = regionParts.get(`${rx},${rz}`);
+  regionParts.delete(`${rx},${rz}`);
+  stale.delete(`${rx},${rz}`);
+  for (const k of Object.keys(parts ?? {})) {
+    for (const p of parts[k]) freeParts(p);
+    meshes[k] = meshes[k].filter((m) => !parts[k].includes(m));
   }
 }
 
@@ -368,7 +388,7 @@ if (scene) {
   const [x, y, z] = walk.eye(1);
   fly.teleport(x, y + 24, z);
 }
-const controller = createController({ input, walk, fly, clock, document, flying });
+const controller = createController({ input, walk, fly, clock, document, flying, stream: scene ? null : { budget: 1 } });
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 const outputBuffer = new OutputBuffer();
@@ -400,16 +420,25 @@ function drawParts(prog, parts) {
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 function render(now) {
-  if (queue.length) meshNextChunk();
   remeshFarm();
 
-  const { alpha, eye, yaw, pitch, flying, aim, underwater } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  const { alpha, eye, yaw, pitch, flying, aim, underwater, regions } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  if (regions) {
+    regions.free.forEach(freeRegion);
+    regions.mesh.forEach((r) => meshRegion(r));
+    if (!regions.mesh.length && stale.size) {
+      const [key, n] = stale.entries().next().value;
+      stale.delete(key);
+      freeRegion(n);
+      meshRegion(n, true);
+    }
+  }
 
   const dpr = window.devicePixelRatio || 1;
   const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   gl.viewport(0, 0, w, h);
-  const fogFar = (radius + 0.5) * CHUNK * 1.1;
+  const fogFar = (loadRadius + 0.5) * REGION_SIZE * 1.1;
   const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

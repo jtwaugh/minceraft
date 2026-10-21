@@ -1,0 +1,40 @@
+# Region streaming: the sim loads regions around the player and unloads those
+# left behind; the controller mirrors that as regions to mesh (one per frame)
+# and to free. Region borders fall every 128 blocks; yaw 0 faces -z.
+
+case the regions around the start are meshed one per frame
+start walk stream
+expect regions.x = 0
+expect regions.z = 0
+expect regions.loaded = 1
+frame 50 x8
+expect regions.loaded = 9
+expect regions.pending = 0
+expect regions.freed = 0
+
+case flying several regions on loads ahead and frees behind
+start fly stream
+click
+lock
+down KeyW
+down Space
+until regions.z = -3
+frame 50 x20
+expect regions.loaded <= 25
+expect regions.freed > 0
+expect regions.pending = 0
+
+case walking across a region border leaves no gap in the ground
+start walk stream
+click
+lock
+frame 100 x30
+mark
+down KeyW
+down Space
+until regions.z = -1
+frame 100 x10
+expect regions.z = -1
+expect eye.z < -1
+expect eye.y > 30
+expect moved.y > -10
