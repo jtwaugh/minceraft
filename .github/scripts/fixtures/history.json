@@ -1,0 +1,56 @@
+{
+  "captured": "2026-10-21",
+  "note": "Issue fields were read with gh issue view; bodies are excerpts (header lines, dependency line). parent and the stalled-moment state/depends_on fields are reconstructed from docs/design/factory-orchestrator.md section 1, because the API calls for sub-issue parents and edit history were not available. See README.md.",
+  "issues": [
+    {"number": 287, "title": "Plan: Basic gameplay Phase 7 (Hoe and crops)", "state": "closed", "labels": [], "kind": "plan", "parent": null, "depends_on": [], "plan_source": {"file": "docs/design/basic-gameplay.md", "section": "Phase 7"}, "created_at": "2026-10-17T14:07:46Z", "closed_at": "2026-10-20T01:55:29Z", "body_excerpt": "Plan for Phase 7 (Hoe and crops) of docs/design/basic-gameplay.md."},
+    {"number": 452, "title": "Game 7.10: planter block and tilling planters", "state": "closed", "labels": ["factory", "planned"], "kind": "ticket", "parent": null, "expected_parent": 287, "depends_on": [451], "created_at": "2026-10-20T01:36:17Z", "closed_at": "2026-10-20T01:48:25Z", "body_excerpt": "**Spec:** docs/design/basic-gameplay.md Phase 7 (section 9.1 Till, 9.3 Growth hydration, 7 Interaction dispatch; reconciliation note 12)\n**Depends on:** #451\nThe last missing piece of Phase 7: a planter block that the hoe can till."},
+    {"number": 469, "title": "Plan: Basic gameplay Phase 8 (HUD and events)", "state": "closed", "labels": [], "kind": "plan", "parent": null, "depends_on": [], "plan_source": {"file": "docs/design/basic-gameplay.md", "section": "Phase 8"}, "created_at": "2026-10-20T01:58:44Z", "closed_at": "2026-10-20T05:15:19Z", "body_excerpt": "Plan for Phase 8 (HUD and events) of docs/design/basic-gameplay.md."},
+    {"number": 470, "title": "Basic gameplay: how does the day phase timer work (or is it left out)?", "state": "closed", "labels": ["spec-question", "decision"], "kind": "decision", "parent": null, "depends_on": [], "answered": true, "created_at": "2026-10-20T01:59:00Z", "closed_at": "2026-10-20T04:05:54Z", "body_excerpt": "**File:** docs/design/basic-gameplay.md\nPhase 8 (HUD and events), section 12 lists \"Day phase timer (gathering or service, seconds left)\" as part of the minimum HUD. Options: A leave out, B minimal phase clock, C placeholder."},
+    {"number": 500, "title": "HUD 8.11: phase clock and day phase timer", "state": "closed", "labels": ["factory", "planned"], "kind": "ticket", "parent": null, "expected_parent": 469, "depends_on": [482], "decision": 470, "created_at": "2026-10-20T04:46:16Z", "closed_at": "2026-10-20T05:15:10Z", "body_excerpt": "**Spec:** docs/design/basic-gameplay.md Phase 8 (HUD and events), section 12 (HUD, day phase timer; decided in #470), reconciliation note 0\n**Depends on:** #482\nThe last piece of Phase 8: the minimal phase clock in the sim and its HUD readout."},
+    {"number": 169, "title": "Plan: World layout Phase D (Multi-region world)", "state": "open", "labels": [], "kind": "plan", "parent": null, "depends_on": [], "plan_source": {"file": "docs/design/world-layout.md", "section": "Phase D"}, "created_at": "2026-10-16T16:15:27Z", "closed_at": null, "stall_state_note": "closed 2026-10-21T03:03:45Z after #521 merged; open at the stall", "body_excerpt": "Plan for Phase D (Multi-region world) of docs/design/world-layout.md."},
+    {"number": 507, "title": "World layout D.7: stream regions in the browser client", "state": "closed", "labels": ["factory", "planned"], "kind": "ticket", "parent": 169, "depends_on": [], "created_at": "2026-10-20T04:51:25Z", "closed_at": "2026-10-20T05:08:04Z", "body_excerpt": "**Spec:** docs/design/world-layout.md Phase D (\"Streaming in the renderer and sim\"), reconciliation note 13\n**Depends on:** none\nIf this doesn't fit in 200 lines, do the game-web exports and client/stream.js first and open a planned follow-up for the scene.js meshing."},
+    {"number": 521, "title": "World layout D.7b: mesh and free streamed regions in scene.js", "state": "open", "labels": ["factory", "planned"], "kind": "ticket", "parent": null, "expected_parent": 169, "depends_on": [507], "split_from": 507, "created_at": "2026-10-20T04:56:08Z", "closed_at": null, "stall_state_note": "closed 2026-10-21T03:03:35Z; at the stall it was a split-off half with no parent plan", "body_excerpt": "**Spec:** docs/design/world-layout.md Phase D (\"Streaming in the renderer and sim\"), reconciliation note 13\n**Depends on:** #507\nPart 2 of #507."},
+    {"number": 513, "title": "Plan: UI art and inventory view Phase A", "state": "open", "labels": ["factory"], "kind": "plan", "parent": null, "depends_on": [], "plan_source": {"file": "docs/design/ui-art-and-inventory.md", "section": "Phase A"}, "created_at": "2026-10-20T04:53:05Z", "closed_at": "2026-10-20T15:44:50Z", "stall_state_note": "open until #519 was fixed by hand", "body_excerpt": "<!-- plan-source file=docs/design/ui-art-and-inventory.md section=Phase A -->\nPlan for Phase A (Item art and UI sheet).\n1. #517  2. #518  3. #519"},
+    {"number": 519, "title": "UI art A: every item in items.toml has a texture, and the export carries UI tiles", "state": "open", "labels": ["factory", "planned"], "kind": "ticket", "parent": 513, "depends_on": [513], "created_at": "2026-10-20T04:53:35Z", "closed_at": null, "stall_state_note": "master's copy lists #517, #518; at the stall it named its own plan #513", "body_excerpt": "**Spec:** docs/design/ui-art-and-inventory.md Phase A (Item art and UI sheet), Reconciliation note 3\n**Depends on:** #513\n**Files:** `art/tools/validate.py`, `art/tools/export_textures.py`"}
+  ],
+  "prs": [
+    {"number": 459, "head": "claude/issue-452-20261020-0200", "state": "merged", "closes": [452], "files": ["art/batches_7_12.json", "art/tools/draw_7_12.py", "client/test/dsl.mjs", "client/test/scripts/planter.input", "client/tiles.js", "crates/game-web/src/lib.rs", "crates/game/src/farm.rs", "crates/game/src/growth.rs", "crates/game/src/harvest.rs", "crates/game/src/plant.rs", "crates/game/src/scene.rs", "crates/game/src/till.rs", "crates/game/src/walk.rs", "data/blocks.toml", "viewer/mesh.js"]},
+    {"number": 516, "head": "claude/issue-500-20261020-0448", "state": "merged", "closes": [500], "files": ["client/controller.js", "client/hud.js", "client/test/dsl.mjs", "client/test/hud.test.mjs", "client/test/scripts/phase.input", "crates/game-web/src/lib.rs", "crates/game/src/data_error.rs", "crates/game/src/lib.rs", "crates/game/src/phase.rs", "crates/game/src/walk.rs", "data/phases.toml"]},
+    {"number": 522, "head": "claude/issue-507-20261020-0452", "state": "merged", "closes": [507], "files": ["Cargo.lock", "client/stream.js", "client/test/stream.test.mjs", "crates/game-web/Cargo.toml", "crates/game-web/src/lib.rs", "crates/game/src/stream.rs", "crates/game/src/walk.rs"]},
+    {"number": 563, "head": "claude/issue-521-20261020-0700", "state": "merged", "closes": [521], "files": ["client/controller.js", "client/regionpad.js", "client/scene.js", "client/test/dsl.mjs", "client/test/regionpad.test.mjs", "client/test/scripts/stream.input", "crates/game-web/src/lib.rs"]},
+    {"number": 569, "head": "claude/issue-519-20261020-1402", "state": "merged", "closes": [519], "files": ["art/tools/test_art.py", "art/tools/validate.py"]}
+  ],
+  "docs": [
+    {"file": "docs/design/basic-gameplay.md", "status": "accepted", "phases": {"7": "todo", "8": "todo"}, "note": "Phases 7 and 8 left todo with nothing planning them"},
+    {"file": "docs/design/world-layout.md", "status": "accepted", "phases": {"D": "todo"}},
+    {"file": "docs/design/ui-art-and-inventory.md", "status": "accepted", "phases": {"A": "todo"}},
+    {"file": "docs/design/raft-scene-feedback.md", "status": "accepted", "phases": {}, "note": "accepted with no phases; the planner skipped it silently"}
+  ],
+  "branches": [
+    "docs/basic-gameplay-phase-done-137",
+    "docs/basic-gameplay-phase-done-173",
+    "docs/basic-gameplay-phase-done-213",
+    "docs/basic-gameplay-phase-done-253",
+    "docs/basic-gameplay-phase-done-287",
+    "docs/basic-gameplay-phase-done-469",
+    "docs/basic-gameplay-phase-done-469-v2",
+    "docs/basic-gameplay-phase-done-59",
+    "docs/basic-gameplay-phase-done-87",
+    "docs/biome-flora-phase-done-203",
+    "docs/debug-console-phase-done-313",
+    "docs/debug-console-phase-done-401",
+    "docs/debug-console-phase-done-420",
+    "docs/error-and-state-conventions-phase-done-306",
+    "docs/root-menu-phase-done-453",
+    "docs/root-menu-phase-done-464",
+    "docs/ui-art-and-inventory-phase-done-513",
+    "docs/viewer-rendering-phase-done-242",
+    "docs/viewer-rendering-phase-done-242-v2",
+    "docs/world-layout-phase-done-169",
+    "docs/world-layout-phase-done-169-2",
+    "docs/world-layout-phase-done-169-r2",
+    "docs/world-layout-phase-done-17",
+    "docs/world-layout-phase-done-47",
+    "docs/world-layout-phase-done-89"
+  ]
+}
