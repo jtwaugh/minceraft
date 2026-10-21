@@ -119,6 +119,22 @@ impl<W: CollisionWorld> FarmWorld<W> {
         }
     }
 
+    /// Record `block` at `(x, y, z)` as an edit over the generated world; any
+    /// block, not only farm tiles. Returns false, changing nothing, when `y`
+    /// is outside the world's height.
+    pub fn set_block(&mut self, x: i32, y: i32, z: i32, block: Block) -> bool {
+        if !(0..HEIGHT as i32).contains(&y) {
+            return false;
+        }
+        self.edits.insert((x, y, z), block);
+        true
+    }
+
+    /// Record that `(x, y, z)` is now air. Same as `set_block` with air.
+    pub fn remove_block(&mut self, x: i32, y: i32, z: i32) -> bool {
+        self.set_block(x, y, z, Block::Air)
+    }
+
     /// The overlay tile at `(x, y, z)`, if any.
     pub fn get(&self, x: i32, y: i32, z: i32) -> Option<FarmTile> {
         self.edits
@@ -207,6 +223,50 @@ mod tests {
         assert_eq!(w.clear(1, 5, 1), Some(dry()));
         assert_eq!(w.block_at(1, 5, 1), Block::Grass);
         assert_eq!(w.clear(1, 5, 1), None);
+    }
+
+    #[test]
+    fn remove_block_edits_any_cell() {
+        let mut m = MemoryWorld::new();
+        m.set(2, 5, 2, Block::Grass);
+        let mut w = FarmWorld::new(m);
+        assert!(w.remove_block(2, 5, 2));
+        assert_eq!(w.block_at(2, 5, 2), Block::Air);
+        assert_eq!(w.get(2, 5, 2), None);
+        assert!(w.set_block(0, 3, 0, Block::Stone));
+        assert_eq!(w.block_at(0, 3, 0), Block::Stone);
+        assert_eq!(
+            w.tiles(),
+            vec![([0, 3, 0], Block::Stone), ([2, 5, 2], Block::Air)]
+        );
+        assert!(!w.remove_block(2, -1, 2));
+        assert!(!w.set_block(2, HEIGHT as i32, 2, Block::Air));
+        assert_eq!(w.tiles().len(), 2);
+        assert_eq!(w.clear(2, 5, 2), None);
+        assert_eq!(w.block_at(2, 5, 2), Block::Grass);
+    }
+
+    #[test]
+    fn removed_block_ignores_region_origin() {
+        let a = generate_decorated(777, 0, 0, 48, 48);
+        let b = generate_decorated(777, 16, 16, 48, 48);
+        let mut wa = FarmWorld::new(RegionWorld::new(&a));
+        let mut wb = FarmWorld::new(RegionWorld::new(&b));
+        let cells = [(20, 70, 20), (30, 64, 41), (16, 10, 16)];
+        for (x, y, z) in cells {
+            assert!(wa.remove_block(x, y, z));
+            assert!(wb.remove_block(x, y, z));
+        }
+        for x in 16..48 {
+            for z in 16..48 {
+                for y in (0..HEIGHT as i32).step_by(3).chain([70, 64, 10]) {
+                    assert_eq!(wa.block_at(x, y, z), wb.block_at(x, y, z));
+                }
+            }
+        }
+        for (x, y, z) in cells {
+            assert_eq!(wa.block_at(x, y, z), Block::Air);
+        }
     }
 
     #[test]
