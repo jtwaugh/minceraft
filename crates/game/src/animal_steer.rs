@@ -95,7 +95,8 @@ mod tests {
         let mut w = sea();
         w.set(4, 64, 0, Block::Stone);
         w.set(-4, 64, 0, Block::Stone);
-        let f = steer_to_support(&w, [0.5 + 0.0, 64.0, 0.5], SEARCH_RADIUS).unwrap();
+        // Cell centres 4.5 and -3.5 are both 4.0 from x = 0.5.
+        let f = steer_to_support(&w, P, SEARCH_RADIUS).unwrap();
         let again = steer_to_support(&w, P, SEARCH_RADIUS).unwrap();
         assert_eq!(f, again);
         assert!((f + 90.0).abs() < 1e-9, "{f}");
