@@ -466,6 +466,65 @@ pub fn generate_coarse_heightmap(
     out
 }
 
+/// Solid flags on the world-aligned 4-block grid, for the seed prefilter.
+///
+/// Sample `(i, j, k)` is world `(x0' + 4i, y0' + 4j, z0' + 4k)` where `x0'`
+/// and `z0'` are `x0`, `z0` rounded down to a multiple of 4 and `y0'` is
+/// `y_min` rounded up to one; `j` runs over every multiple of 4 in
+/// `y_min..=y_max` (the `(y_min, y_max)` pair), clamped to the world. Returns `(flags, ny)` with the flag
+/// at index `(j * nz + k) * nx + i`: `rho > 0` after the SPEC 3.5/3.6 Y
+/// interpolation, the density bias terms and the clamps (SPEC 6.3), i.e. the
+/// terrain pass before the surface pass. Climate, base-height, density and
+/// clamp biases are honoured.
+///
+/// Chunk boundaries (SPEC 15): samples sit on lattice columns at world-aligned
+/// positions, so the flag is a function of the seed and the sample coordinate
+/// only.
+pub fn generate_coarse_density(
+    seed: u64,
+    x0: i32,
+    z0: i32,
+    nx: u32,
+    nz: u32,
+    (y_min, y_max): (i32, i32),
+    biases: &Biases,
+) -> (Vec<bool>, u32) {
+    let (jlo, jhi) = (
+        (y_min.max(0) as i64 + 3).div_euclid(4),
+        (y_max.min(HEIGHT as i32 - 1) as i64).div_euclid(4),
+    );
+    let ny = (jhi - jlo + 1).max(0) as usize;
+    let (nx, nz) = (nx as usize, nz as usize);
+    if ny == 0 || nx == 0 || nz == 0 {
+        return (Vec::new(), 0);
+    }
+    let gen = Generator::new(seed);
+    let lx0 = (x0 as i64).div_euclid(4);
+    let lz0 = (z0 as i64).div_euclid(4);
+    let lat = gen.lattice_grid(lx0, lz0, nx, nz, 1, biases);
+    let mut out = vec![false; nx * nz * ny];
+    for ix in 0..nx {
+        let wx = ((lx0 + ix as i64) * 4) as i32;
+        for iz in 0..nz {
+            let wz = ((lz0 + iz as i64) * 4) as i32;
+            let lev = &lat.data[(ix * lat.nz + iz) * LEVELS..][..LEVELS];
+            for j in 0..ny {
+                let y = ((jlo + j as i64) * 4) as usize;
+                let l = y >> 3;
+                let mut rho = lev[l] + (lev[l + 1] - lev[l]) * ((y & 7) as f64 * 0.125);
+                for b in biases.density {
+                    rho += b.bias(wx, y as i32, wz);
+                }
+                for c in biases.clamp {
+                    rho = c.clamp(wx, y as i32, wz, rho);
+                }
+                out[(j * nz + iz) * nx + ix] = rho > 0.0;
+            }
+        }
+    }
+    (out, ny as u32)
+}
+
 /// `(top_block, top_y, floor_y, floor_block)` for one 128-block column.
 pub fn column_summary(col: &[u8]) -> (u8, u8, u8, u8) {
     let mut y = HEIGHT - 1;
