@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Plan-closing pass: close a plan once all its sub-issues are closed.
 
-Replaces the `finish-plan` job of claude-docs.yml. A plan whose sub-issues
-all closed is closed as completed, or as not planned (with a comment) when
+Took over from the retired `finish-plan` job of claude-docs.yml. A plan
+whose sub-issues all closed is closed as completed, or as not planned (with a comment) when
 it only ever had spec-questions. A plan that belongs to a design-doc phase
 and closed as completed also gets a `request_phase_done` action; the
 backend dispatches the docs updater, which opens the PR (the tick cannot

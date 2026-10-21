@@ -6,7 +6,7 @@
 Invariant violations and stalls become one issue body, grouped by kind and
 sorted, so the same findings give the same text in any input order. While
 anything is found the issue is created or updated (only if the body
-changed); once nothing is found it is closed, as `stalled.py --issue` does.
+changed); once nothing is found it is closed.
 (docs/design/factory-orchestrator.md Phase A, design rule 2)
 """
 import os

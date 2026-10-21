@@ -3,8 +3,10 @@
 #
 # The tick is level-triggered: it re-reads everything and writes only what
 # differs, so a second tick straight after does nothing. The schedule is
-# the heartbeat; events only make the next tick sooner. Runs alongside the
-# old workflows until #581 retires them.
+# the heartbeat; events only make the next tick sooner. It starts ready
+# tickets (claude.yml), closes finished plans and asks for their phase-done
+# PRs (claude-docs.yml), keeps the project board in step and keeps the
+# "Factory: stalled work" issue up to date.
 #
 # Run by hand without writing anything:
 #   gh workflow run factory-tick.yml -f dry-run=true
@@ -58,8 +60,8 @@ jobs:
           sparse-checkout: .github/scripts
       - name: Tick
         env:
-          # Reads use the project token's own budget, as in project-sync.yml;
-          # repo writes and dispatches use the workflow token (WRITE_TOKEN).
+          # Reads use the project token's own budget; repo writes and
+          # dispatches use the workflow token (WRITE_TOKEN).
           GH_TOKEN: ${{ secrets.PROJECT_TOKEN || github.token }}
           WRITE_TOKEN: ${{ github.token }}
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
