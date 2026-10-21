@@ -122,7 +122,7 @@ The selection outline shows up on water blocks. It shouldn't.
 
 **Phase A.** Items 3 and 5: the shared textured box-model drawer in `client/` (open question 10, default A), new cow, pig and chicken tiles plus raft log and lashing tiles in `art/`, and a raft model replacing the block mesh from `scene.raft_blocks()`. Done when `validate.py` (run from `art/`) prints `ok`, every new texture is used by the client, a client test covers the model drawer's UVs, and hurt-red and death-tip still work for animals. Final look is `[manual check]`.
 
-**Phase B.** Items 1 and 6: remove the rider's swell push, then keep or drop the item and animal push per open questions 1 and 2; and stop drawing the outline on water per open question 9. Done when `swell_without_sneak_drifts` is replaced by a test that the rider's offset from its start relative to the raft stays under 1e-6 after 1000 ticks of swell, and a test shows water yields no outline (in `walk.rs` if question 9 is B).
+**Phase B.** Items 1 and 6: remove the rider's swell push, then drop the item push too (note 1); animals on the deck get no swell push, like the rider; and stop drawing the outline on water while the ray still stops there (note 10). Done when `swell_without_sneak_drifts` is replaced by a test that the rider's offset from its start relative to the raft stays under 1e-6 after 1000 ticks of swell, and a test in `walk.rs` shows water yields no outline. (Decided in #635.)
 
 **Phase C.** Item 2: animals swim, steer towards land or the raft, and drown, per open questions 3 to 5. Done when tests show an animal placed in water stays at the surface, reaches a nearby support cell, and drowns after the configured ticks from `data/animals.toml`, deterministically from the tick counter and seeded `Rng`.
 
@@ -139,7 +139,6 @@ The selection outline shows up on water blocks. It shouldn't.
 
 ## Open questions (reconciler)
 
-2. **Animals on the deck.** If the rider no longer slides, should animals? Options: A. Same as the rider (none). B. Keep the push for animals only.
 3. **Animal swimming numbers (item 2).** Options: A. Reuse the player's 4.3 water numbers. B. Own numbers in `data/animals.toml` (buoyancy, swim speed). Suggest A with one `swim_speed` in `data/animals.toml`.
 4. **Drowning (item 2).** Options: A. Drown after N ticks under water, normal death and drops. B. Drown with no drops. C. Animals never drown but surface and swim (drop the drowning half). Also: does the player's breath get tracked later (4.3 mentions an air meter)? Suggest A.
 5. **Animals heading for land (item 2).** Options: A. Nearest solid support within a radius. B. The raft first, then land. C. Random swim only.
