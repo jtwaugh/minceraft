@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 
 REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
@@ -22,7 +23,7 @@ REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # "add_label", "set_parent", "report", "create_issue", ...
+    kind: str  # "add_label", "set_parent", "start_ticket", "close_issue", "request_phase_done", "report", "create_issue", ...
     target: str  # "issue#12"
     payload: dict = field(default_factory=dict, hash=False, compare=False)
     reason: str = ""
@@ -117,6 +118,16 @@ class FakeBackend(Backend):
                 issue["labels"].append(action.payload["label"])
         elif action.kind == "set_parent" and issue is not None:
             issue["parent"] = action.payload["parent"]
+        elif action.kind == "start_ticket" and issue is not None:
+            issue.setdefault("comments", []).append({
+                "user": "github-actions[bot]", "body": "<!-- factory-auto-start -->",
+                "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        elif action.kind == "close_issue" and issue is not None:
+            issue["state"] = "closed"
+            if "reason" in action.payload:
+                issue["state_reason"] = action.payload["reason"]
+        elif action.kind == "request_phase_done":
+            snapshot.reported.add((action.target, action.kind))
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         elif action.kind == "create_issue":
@@ -126,8 +137,6 @@ class FakeBackend(Backend):
                 "kind": "report", "body": action.payload["body"]})
         elif action.kind == "update_issue" and issue is not None:
             issue["body"] = action.payload["body"]
-        elif action.kind == "close_issue" and issue is not None:
-            issue["state"] = "closed"
         else:
             raise ValueError(f"unhandled action {action.kind} on {action.target}")
 
