@@ -30,3 +30,14 @@ test('timer reports the phase and seconds left', () => {
   assert.deepEqual(t('gathering', 120), { phase: 'gathering', secondsLeft: 120 });
   assert.deepEqual(t('service', 1), { phase: 'service', secondsLeft: 1 });
 });
+
+test('slotView picks frame by selection and icon by item texture', async () => {
+  const { slotView, hudScale } = await import('../hud.js');
+  const { readFileSync } = await import('node:fs');
+  const set = JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url), 'utf8'));
+  assert.deepEqual(slotView(set, 'sword', true), { frame: 'slot_selected', icon: 'sword' });
+  assert.deepEqual(slotView(set, 'hoe', false), { frame: 'slot', icon: 'hoe' });
+  assert.deepEqual(slotView(set, null, false), { frame: 'slot', icon: null });
+  assert.deepEqual(slotView(set, 'no_such_item', true), { frame: 'slot_selected', icon: null });
+  for (const [w, h] of [[0, 0], [100, 50], [1920, 1080]]) assert.ok(Number.isInteger(hudScale(w, h)) && hudScale(w, h) >= 1);
+});

@@ -51,7 +51,6 @@ window.debugMode = debug;
 
 const canvas = document.getElementById('gl');
 const overlay = document.getElementById('overlay');
-const hud = mountHud(document);
 const hint = document.getElementById('hint');
 const gl = canvas.getContext('webgl2', { antialias: true });
 if (!gl) throw new Error('WebGL2 is not available');
@@ -278,6 +277,7 @@ const ctx = legendContext(legendJson, faceLayer);
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
 const models = createModelDrawer(gl, tileset, RAFT_TEXTURES);
+const hud = mountHud(document, tileset);
 
 // With MSAA, cutout edges use alpha-to-coverage on a sharpened alpha so distant
 // leaves fade to partial coverage instead of popping in and out; without it the
