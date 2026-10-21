@@ -28,7 +28,7 @@ frame 50
 mark
 frame 50 x10
 expect moved ~ 0
-expect ticks >= 0
+expect ticks > 0
 
 case Tab again closes it and asks for the pointer
 start walk
