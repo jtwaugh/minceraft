@@ -290,6 +290,8 @@ mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
 mod navigability;
 pub use navigability::NavMap;
+mod pathfind;
+pub use pathfind::{erode, find_path};
 mod region;
 #[cfg(feature = "toml-io")]
 mod rule_check;
@@ -336,6 +338,8 @@ mod habitat_tests;
 mod level_tests;
 #[cfg(test)]
 mod navigability_tests;
+#[cfg(test)]
+mod pathfind_tests;
 #[cfg(test)]
 mod raft_tests;
 #[cfg(test)]
