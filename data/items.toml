@@ -58,6 +58,26 @@ label = "Raw chicken"
 name = "feather"
 label = "Feather"
 
+# Flowers, picked from the matching block (see [[pickable]]). Item names differ
+# from the block tile names, which are already texture names.
+[[item]]
+name = "dandelion_flower"
+label = "Dandelion"
+
+[[item]]
+name = "rose_flower"
+label = "Rose"
+
+# Blocks that can be picked, and the item each gives. Each block must be in the
+# terrain block list and appear once; each item must be in the item list.
+[[pickable]]
+block = "dandelion"
+item = "dandelion_flower"
+
+[[pickable]]
+block = "rose"
+item = "rose_flower"
+
 # Foraging tall grass with empty hands (section 9.5).
 [forage]
 # The item dropped, which must be in the item list.
