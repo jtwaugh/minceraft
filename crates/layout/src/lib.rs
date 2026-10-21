@@ -271,6 +271,8 @@ mod cache;
 pub use cache::{CacheChange, RegionCache};
 mod channel;
 pub use channel::ChannelEval;
+mod corridor;
+pub use corridor::Corridor;
 mod derived;
 pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
 mod fish;
@@ -316,6 +318,8 @@ mod cache_tests;
 mod channel_tests;
 #[cfg(test)]
 mod climate_tests;
+#[cfg(test)]
+mod corridor_tests;
 #[cfg(test)]
 mod derived_tests;
 #[cfg(test)]
