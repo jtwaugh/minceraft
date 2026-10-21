@@ -30,6 +30,9 @@ fn main() {
     // Stage times, single thread, same candidates as the search.
     let (mut build, mut pre, mut val) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
     let (mut rejected, mut failed, mut passed) = (0u64, 0u64, 0u64);
+    // `Layout` generates lazily, so the route+layout stage is near zero and
+    // its real cost lands in the prefilter and validation stages. Don't read
+    // the stage split literally.
     for seed in start..start + n {
         let now = Instant::now();
         let route = build_route(seed, k);
