@@ -35,8 +35,8 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
   let consoleOpen = false;
   let inventoryOpen = false;
   const cleanups = [];
-  const on = (target, type, fn) => {
-    target.addEventListener(type, fn);
+  const on = (target, type, fn, opts) => {
+    target.addEventListener(type, fn, opts);
     cleanups.push(() => target.removeEventListener(type, fn));
   };
 
@@ -111,7 +111,7 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
     if (!locked || consoleOpen || inventoryOpen) return;
     e.preventDefault();
     sampler.wheel(e.deltaY);
-  });
+  }, { passive: false }); // document wheel listeners default to passive
   on(canvas, 'contextmenu', (e) => e.preventDefault());
 
   return {
