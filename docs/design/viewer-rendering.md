@@ -6,7 +6,7 @@ source: ""
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
   E: todo
@@ -14,9 +14,11 @@ phases:
 
 ## Current state
 
-Checked against `master` (ba3a7e9). Phases B to E are not built and stay `todo`.
+Checked against `master` (ba3a7e9). Phase B is done; Phases C to E are not built and stay `todo`.
 
 - **Phase A is done:** the viewer (PRs #248, #250, #252) and the client (PR #520, ticket #505) both use radial fog with the shared curve in `viewer/fog.js`, trilinear and anisotropic filtering, texel snapping and the tint weight (plan #242).
+
+- **Phase B is done** (plan #537): shared mip builder `viewer/mips.js` (PR #555), used by the client's `client/tiles.js` (PR #560) and the viewer's `loadTextures` with a separate R8 tint array (PR #562, decision #538); alpha-to-coverage cutout in viewer and client (PR #550); per-block UV variation by world coordinate with the `origin` option of `meshBlocks` (PR #556), passed by all callers (PR #604); tested in `viewer/test/mesh_uv.test.mjs` and `client/test/meshorigin.test.mjs`. The `[manual check]` criteria (canopy sparkle, 1-block pattern) were not judged here.
 
 - **F1** holds: `viewer/index.html` sets `vdist = gl_Position.w` (~line 636)
   and fogs with a linear ramp from 0.55 to 1.15 × `fogFar` (~line 650).
