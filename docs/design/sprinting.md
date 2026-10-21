@@ -96,7 +96,8 @@ basic-gameplay rule 3 says "Movement should feel like Beta: no sprinting, no att
 
 Everything else about sprinting should match the original game: how fast you go, how long the double-tap window is, what ends a sprint, how it interacts with jumping, sneaking, water and walls, and any camera change while sprinting. Leave out anything to do with hunger or food.
 
-- `SPEC.md` has no player physics and no sprinting, and Beta 1.7.3 itself has no sprinting. None of this can come from memory: per CLAUDE.md, each of these needs a `research` spec-question, and the answers reach `SPEC.md` through the maintainer.
+- `SPEC.md` has no player physics and no sprinting, and Beta 1.7.3 itself has no sprinting. None of this can come from memory: per CLAUDE.md, each of these needs a `research` spec-question, and the answers reach `SPEC.md` through the maintainer. The research describes a current release of
+  the original game as the reference version. (Decided in #821.)
 - Until then, any tunables go in `data/player.toml` (`[movement]`) and `data/input.toml` as this game's own values, as the existing movement constants are (#90).
 
 ## 4. Tests
@@ -114,7 +115,7 @@ collision (the author's "walls"); other end conditions wait for research. Done
 when input scripts show a double-tap starting a sprint with higher speed, a slow
 second tap not starting one, and each listed end condition ending it. Also
 files the `research` spec-questions of section 3 (what the original does, per
-question 1's reference version).
+the reference version in section 3).
 
 **Phase B.** Section 3 items that wait on open questions: camera FOV change
 (question 2), raft and water behaviour (question 3), and a configurable window
@@ -123,9 +124,6 @@ question 1's reference version).
 
 ## Open questions
 
-1. **Reference version.** The original added sprinting after Beta 1.7.3. Which
-   version should the research use? A: the first release with sprinting.
-   B: a current release. C: the maintainer names one.
 2. **Camera.** Match the original's FOV change while sprinting? A: yes, with a
    tunable in `data/input.toml`. B: leave the camera alone.
 3. **Raft and water.** Does sprinting apply on the raft scene, and what happens
