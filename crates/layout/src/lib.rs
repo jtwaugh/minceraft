@@ -292,6 +292,8 @@ mod navigability;
 pub use navigability::NavMap;
 mod pathfind;
 pub use pathfind::{erode, find_path};
+mod prefilter;
+pub use prefilter::{prefilter, prefilter_layout, prefilter_regions, PrefilterReject};
 mod region;
 #[cfg(feature = "toml-io")]
 mod rule_check;
@@ -346,6 +348,8 @@ mod level_tests;
 mod navigability_tests;
 #[cfg(test)]
 mod pathfind_tests;
+#[cfg(test)]
+mod prefilter_tests;
 #[cfg(test)]
 mod raft_tests;
 #[cfg(test)]
