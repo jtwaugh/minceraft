@@ -218,6 +218,19 @@ impl Layout {
         decorate: bool,
         keep: impl Fn(Option<Bounds>) -> bool,
     ) -> Region {
+        let mut region = self.with_biases(keep, |biases| {
+            generate_region_with_biases(self.seed, x0, z0, w, d, biases, decorate)
+        });
+        self.stamp(&mut region);
+        region
+    }
+
+    /// Compile the terms `keep` selects into `Biases` and pass them to `f`.
+    pub(crate) fn with_biases<R>(
+        &self,
+        keep: impl Fn(Option<Bounds>) -> bool,
+        f: impl FnOnce(&Biases) -> R,
+    ) -> R {
         let density: Vec<DensityTerm> = self
             .density
             .iter()
@@ -272,9 +285,7 @@ impl Layout {
             },
             ..Biases::default()
         };
-        let mut region = generate_region_with_biases(self.seed, x0, z0, w, d, &biases, decorate);
-        self.stamp(&mut region);
-        region
+        f(&biases)
     }
 }
 

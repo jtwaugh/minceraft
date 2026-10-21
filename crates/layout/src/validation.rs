@@ -136,7 +136,7 @@ pub fn window(level: &Level, t: &Thresholds) -> (i32, i32, u32, u32) {
     (x0, z0, (x1 - x0 + 1) as u32, (z1 - z0 + 1) as u32)
 }
 
-fn is_land(region: &Region, x: u32, z: u32) -> bool {
+pub(crate) fn is_land(region: &Region, x: u32, z: u32) -> bool {
     let start = region.index(x, 0, z);
     let (top, top_y, _, _) = column_summary(&region.blocks[start..start + HEIGHT]);
     top != Block::Air as u8

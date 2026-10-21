@@ -27,6 +27,10 @@ pub struct ScoringConfig {
     pub cap_flat_factor: f64,
     /// Coastline interest reaches 1.0 at this perimeter / sqrt(area).
     pub cap_ratio: f64,
+    /// Extra islands: the count that reaches 1.0.
+    pub cap_extra_islands: f64,
+    /// Extra islands: height above `SEA_LEVEL` of the viewpoint on the route.
+    pub eye_height: f64,
 }
 
 include!(concat!(env!("OUT_DIR"), "/scoring.rs"));

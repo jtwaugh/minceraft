@@ -327,30 +327,78 @@ function step(w, { op, args }) {
   }
 }
 
+const START_USAGE = 'start fly|walk [raft] [debug] [stream]';
+
+/** The world options for a `start` line's arguments; throws the usage message when they are bad. */
+function parseStart(args) {
+  if (!args.length) return {};
+  const [mode, ...flags] = args;
+  if (!['fly', 'walk'].includes(mode) || flags.some((f) => !['raft', 'debug', 'stream'].includes(f))) {
+    throw new Error(START_USAGE);
+  }
+  const opts = { mode, raft: flags.includes('raft'), stream: flags.includes('stream') };
+  if (flags.includes('debug')) opts.debug = true;
+  return opts;
+}
+
+/**
+ * A live world driven one DSL line at a time. `startArgs` are the words after `start`
+ * (e.g. ['walk', 'raft']); none means the default world. `exec` (a DSL line) and
+ * `execStep` (a parsed `{ op, args }`) never throw: they return `{ ok: true }` or
+ * `{ ok: false, error }`. `transcript()` is the session as a valid script: `case <name>`,
+ * the `start` line, then every line that succeeded (errored ones are dropped).
+ * Call `close()` when done.
+ */
+export function createSession(startArgs = [], name = 'session') {
+  const w = world(parseStart(startArgs));
+  let open = true;
+  const lines = [`case ${name}`, `start ${(startArgs.length ? startArgs : ['walk']).join(' ')}`];
+  const execStep = ({ op, args }) => {
+    try {
+      if (!open) throw new Error('session is closed');
+      if (op === 'start') throw new Error('start is only allowed when the session is created');
+      if (op) {
+        step(w, { op, args });
+        lines.push([op, ...args].join(' '));
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+  return {
+    exec(line) {
+      const [op, ...args] = line.replace(/#.*/, '').trim().split(/\s+/);
+      return execStep({ op, args });
+    },
+    execStep,
+    read: (path) => read(w, path),
+    transcript: () => `${lines.join('\n')}\n`,
+    close() {
+      if (!open) return;
+      open = false;
+      w.controller.detach();
+      w.input.detach();
+    },
+  };
+}
+
 /** Run one parsed case; throws with the failing line number. */
 export function run(c) {
-  let i = 0;
-  const opts = {};
-  if (c.steps[0]?.op === 'start') {
-    const [mode, ...flags] = c.steps[0].args;
-    if (!['fly', 'walk'].includes(mode) || flags.some((f) => !['raft', 'debug', 'stream'].includes(f))) {
-      throw new Error(`line ${c.steps[0].line}: start fly|walk [raft] [debug] [stream]`);
-    }
-    Object.assign(opts, { mode, raft: flags.includes('raft'), stream: flags.includes('stream') });
-    if (flags.includes('debug')) opts.debug = true;
-    i = 1;
-  }
-  const w = world(opts);
+  const first = c.steps[0]?.op === 'start' ? c.steps[0] : null;
+  let session;
   try {
-    for (; i < c.steps.length; i++) {
-      try {
-        step(w, c.steps[i]);
-      } catch (e) {
-        throw new Error(`line ${c.steps[i].line} (${c.steps[i].op} ${c.steps[i].args.join(' ')}): ${e.message}`);
-      }
+    if (first && !first.args.length) throw new Error(START_USAGE);
+    session = createSession(first?.args);
+  } catch (e) {
+    throw new Error(`line ${first.line}: ${e.message}`);
+  }
+  try {
+    for (const { line, op, args } of c.steps.slice(first ? 1 : 0)) {
+      const r = session.execStep({ op, args });
+      if (!r.ok) throw new Error(`line ${line} (${op} ${args.join(' ')}): ${r.error}`);
     }
   } finally {
-    w.controller.detach();
-    w.input.detach();
+    session.close();
   }
 }
