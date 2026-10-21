@@ -275,7 +275,11 @@ Fix F4 and F5.
    - Keep the per-biome sky ramps as the base colour.
 3. **Water.**
    - Colour and alpha by depth to the floor (the map's `terrainColor`
-     already does this for its tiles).
+     already does this for its tiles). The mesher writes the depth into
+     byte 15 of the vertex for water faces: the number of water blocks from
+     the water top face down to the first non-water block, capped at 255.
+     The shader maps it to colour and alpha. No new draw pass or depth
+     texture. (Decided in #621.)
    - Fresnel: blend toward sky colour at low angles. The sea surface is
      the plane y = 63, so the view angle is cheap to compute.
 4. **Fog in linear colour.** Convert to linear before mixing with fog,
