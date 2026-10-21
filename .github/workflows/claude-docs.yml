@@ -6,6 +6,9 @@
 #   opens a PR for any that have drifted.
 # - Run by hand on one file, e.g. an idea committed as a file:
 #     gh workflow run claude-docs.yml -f path=docs/design/<name>.md
+# - The factory tick, having closed a finished plan, dispatches the
+#   phase-done PR for it:
+#     gh workflow run claude-docs.yml -f plan=<n>
 #
 # The reconciling itself follows .github/prompts/reconcile.md.
 name: Claude docs updater
@@ -21,6 +24,10 @@ on:
         description: "One design doc to reconcile (default: every accepted doc)"
         required: false
         type: string
+      plan:
+        description: "A closed plan whose phase-done PR to open (set by the factory tick)"
+        required: false
+        type: string
 
 concurrency:
   group: claude-docs
@@ -28,11 +35,13 @@ concurrency:
 
 jobs:
   # On a ticket closing: is its plan now finished? Also handles a plan
-  # issue closed directly (the planner closes a plan with nothing to build).
+  # issue closed directly (the planner closes a plan with nothing to build),
+  # and a plan the factory tick already closed (dispatch with `plan`).
   finish-plan:
     if: |
-      github.event_name == 'issues' &&
-      contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login)
+      (github.event_name == 'workflow_dispatch' && inputs.plan != '') ||
+      (github.event_name == 'issues' &&
+        contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login))
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -48,8 +57,16 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           TITLE: ${{ github.event.issue.title }}
           REASON: ${{ github.event.issue.state_reason }}
+          PLAN_INPUT: ${{ inputs.plan }}
         run: |
+          if [ -n "$PLAN_INPUT" ]; then
+            plan=$PLAN_INPUT
+            gh api "repos/$REPO/issues/$plan" > plan.json
+            [ "$(jq -r .state_reason plan.json)" = completed ] || { echo "Plan #$plan isn't closed as completed; nothing to do."; exit 0; }
+            TITLE=dispatched
+          fi
           case "$TITLE" in
+            dispatched) ;;
             Plan:*)
               # A plan closed directly. "Not planned" means abandoned: leave
               # the phase alone (the pick step may plan it again).
@@ -118,8 +135,9 @@ jobs:
           path_to_bun_executable: ${{ steps.claude-deps.outputs.bun }}
           path_to_claude_code_executable: ${{ steps.claude-deps.outputs.claude }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # A plan with nothing to build is closed by the Claude app.
-          allowed_bots: claude
+          # A plan with nothing to build is closed by the Claude app; the
+          # factory tick dispatches as github-actions.
+          allowed_bots: claude,github-actions
           prompt: |
             REPO: ${{ github.repository }}
 
@@ -171,7 +189,7 @@ jobs:
   drift:
     if: |
       github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.actor == 'jtwaugh')
+      (github.event_name == 'workflow_dispatch' && inputs.plan == '' && github.actor == 'jtwaugh')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

@@ -6,6 +6,9 @@
 #   later.
 # - Whenever an issue closes (usually a PR merging), every approved ticket
 #   whose dependencies are now all closed, and that has no open PR, starts.
+# - The factory tick (factory-tick.yml) starts a ready ticket by
+#   dispatching this workflow with its number:
+#     gh workflow run claude.yml -f issue=<n>
 # - Mention @claude in an issue or PR comment to ask for anything else, e.g.
 #   "@claude merge master into this branch and resolve the conflicts".
 #
@@ -24,6 +27,13 @@ on:
   # A merge can free tickets that were waiting for that PR's files.
   pull_request:
     types: [closed]
+  # The factory tick: it has checked the ticket and posted the start marker.
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Ticket to start"
+        required: true
+        type: string
 
 env:
   ALLOWED_TOOLS: >-
@@ -117,9 +127,11 @@ jobs:
         with:
           execution-file: ${{ steps.claude.outputs.execution_file }}
 
-  # An issue closed: which approved tickets are now unblocked?
+  # An issue closed: which approved tickets are now unblocked? Or the tick
+  # named one.
   find-ready:
     if: |
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issues' && github.event.action == 'closed' &&
         contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login)) ||
       (github.event_name == 'pull_request' && github.event.pull_request.merged &&
@@ -138,8 +150,13 @@ jobs:
       - id: ready
         env:
           GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ inputs.issue }}
         run: |
-          ready=$(python3 -B .github/scripts/tickets.py ready)
+          if [ -n "$ISSUE" ]; then
+            ready=$(jq -nc --arg n "$ISSUE" '[$n | tonumber]')
+          else
+            ready=$(python3 -B .github/scripts/tickets.py ready)
+          fi
           echo "ready=$ready" >> "$GITHUB_OUTPUT"
           echo "Ready to start: $ready" >> "$GITHUB_STEP_SUMMARY"
 
@@ -181,6 +198,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The tick already checked and marked it: skip only if a run
+          # (e.g. the old find-ready's, which this one waited for) made a PR.
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            if [ "$(python3 -B .github/scripts/tickets.py has-pr "${{ matrix.issue }}")" = true ]; then
+              echo "#${{ matrix.issue }} already has an open PR; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "go=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "go=true" >> "$GITHUB_OUTPUT"
+              echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
           if [ "$(python3 -B .github/scripts/tickets.py check "${{ matrix.issue }}")" != true ]; then
             echo "#${{ matrix.issue }} is no longer ready to start; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
             echo "go=false" >> "$GITHUB_OUTPUT"
@@ -206,8 +235,9 @@ jobs:
           path_to_claude_code_executable: ${{ steps.claude-deps.outputs.claude }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The closing event can come from the Claude app (e.g. the planner
-          # closing an empty plan); find-ready already limits who can.
-          allowed_bots: claude
+          # closing an empty plan), and the tick dispatches as
+          # github-actions; find-ready already limits who can.
+          allowed_bots: claude,github-actions
           prompt: |
             REPO: ${{ github.repository }}
 
