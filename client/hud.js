@@ -22,6 +22,17 @@ export function hudScale(viewportW, viewportH) {
   return uiScale(viewportW, viewportH, 80, 45);
 }
 
+/** Digit texture names for a non-negative whole number: 0 -> ['digit_0'], 125 -> ['digit_1', 'digit_2', 'digit_5']. */
+export function digitNames(n) {
+  const v = Math.max(0, Math.floor(Number(n)) || 0);
+  return [...String(v)].map((d) => `digit_${d}`);
+}
+
+/** Heart texture names left to right: full, then half, then empty. */
+export function heartNames({ full, half, empty }) {
+  return [...Array(full).fill('heart_full'), ...Array(half).fill('heart_half'), ...Array(empty).fill('heart_empty')];
+}
+
 export function hudModel({ belt, health, maxHealth, phase = 'gathering', secondsLeft = 0 }) {
   const hp = Math.max(0, Math.min(health, maxHealth));
   const full = Math.floor(hp / 2), half = hp % 2;
@@ -40,11 +51,9 @@ const CSS = `
 #hud-cross { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%);
   background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; mix-blend-mode: difference; }
 #hud-bottom { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-#hud-timer { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); padding: 2px 8px; background: rgba(0, 0, 0, .55); }
+#hud-timer { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); padding: 2px 8px; background: rgba(0, 0, 0, .55); display: flex; align-items: center; gap: 4px; }
+#hud-timer canvas, #hud-hearts canvas { image-rendering: pixelated; }
 #hud-hearts { display: flex; gap: 2px; }
-.heart { width: 14px; height: 14px; background: #3a0a0a; }
-.heart.full { background: #d22; }
-.heart.half { background: linear-gradient(90deg, #d22 50%, #3a0a0a 50%); }
 #hud-belt { display: flex; gap: 2px; }
 .slot { position: relative; image-rendering: pixelated; }
 .slot canvas { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
@@ -68,7 +77,6 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       if (key === last) return;
       last = key;
       cross.hidden = !m.crosshair;
-      timer.textContent = `${m.timer.phase} ${m.timer.secondsLeft}s`;
       const scale = hudScale(view.innerWidth, view.innerHeight);
       const icon = (name) => {
         const c = textureCanvas(set, name, document);
@@ -80,8 +88,9 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       };
       const hand = m.hands && icon(m.hands);
       hands.replaceChildren(...(m.hands ? [hand, Object.assign(document.createElement('span'), { textContent: m.hands })].filter(Boolean) : []));
-      const kinds = [...Array(m.hearts.full).fill('full'), ...Array(m.hearts.half).fill('half'), ...Array(m.hearts.empty).fill('empty')];
-      hearts.replaceChildren(...kinds.map((k) => Object.assign(document.createElement('div'), { className: `heart ${k}` })));
+      const digits = digitNames(m.timer.secondsLeft).map(icon).filter(Boolean);
+      timer.replaceChildren(Object.assign(document.createElement('span'), { textContent: m.timer.phase }), ...digits);
+      hearts.replaceChildren(...heartNames(m.hearts).map(icon).filter(Boolean));
       belt.replaceChildren(...m.slots.map((slot) => {
         const v = slotView(set, slot.name, slot.selected);
         const el = document.createElement('div');
