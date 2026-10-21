@@ -983,7 +983,7 @@ function build3d() {
   const tints = columnTints(wasm, CTX, state.seed, wx, wz, AREA);
   const t1 = performance.now();
   free(opaque); free(cutout); free(water); free(ice);
-  const m = meshBlocks(CTX, blocks, tints, AREA);
+  const m = meshBlocks(CTX, blocks, tints, AREA, 0, { origin: [wx, wz] });
   [opaque, cutout, water, ice] = [m.opaque, m.cutout, m.water, m.ice].map(uploadPacked);
   cam.ty = m.meanY;
   state.blocks = blocks;

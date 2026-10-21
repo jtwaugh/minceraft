@@ -41,7 +41,7 @@ const tasks = {
     const x = cx * CHUNK, z = cz * CHUNK;
     const blocks = wasm.generate_region_decorated(seed, x - 1, z - 1, CHUNK + 2, CHUNK + 2);
     const tints = columnTints(wasm, ctx, seed, x, z, CHUNK);
-    const m = meshBlocks(ctx, blocks, tints, CHUNK, 1, { fast });
+    const m = meshBlocks(ctx, blocks, tints, CHUNK, 1, { fast, origin: [x, z] });
     const parts = { opaque: m.opaque, cutout: m.cutout, water: m.water, ice: m.ice };
     return [{ cx, cz, fast, ...parts, meanY: m.meanY, minY: m.minY }, Object.values(parts).map((q) => q.verts)];
   },

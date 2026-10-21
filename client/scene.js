@@ -305,7 +305,7 @@ function meshRegion({ rx, rz }, remesh = false) {
   const blocks = padRegion((a, b) => walk.region_blocks(a, b), rx, rz, REGION_SIZE);
   const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE);
   if (rx === 0 && rz === 0) skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
-  const m = meshBlocks(ctx, blocks, tints, REGION_SIZE, 1);
+  const m = meshBlocks(ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });
   const parts = {};
   for (const k of Object.keys(meshes)) {
     const part = upload(m[k], [x, 0, z]);
@@ -343,7 +343,7 @@ if (scene) {
     const blocks = seaBlocks.slice();
     const t = walk.farm_tiles();
     for (let i = 0; i < t.length; i += 4) blocks[((t[i + 2] - min) * size + t[i] - min) * 128 + t[i + 1]] = t[i + 3];
-    const m = meshBlocks(ctx, blocks, tints, size, 0);
+    const m = meshBlocks(ctx, blocks, tints, size, 0, { origin: [min, min] });
     for (const k of Object.keys(meshes)) {
       for (const old of seaParts[k]) { gl.deleteVertexArray(old.vao); gl.deleteBuffer(old.buf); }
       meshes[k] = seaParts[k] = [upload(m[k], offset)].filter(Boolean);
