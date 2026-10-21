@@ -17,9 +17,12 @@ import sys
 from dataclasses import dataclass, field
 
 
+REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
+
+
 @dataclass(frozen=True)
 class Action:
-    kind: str  # "add_label", "set_parent", "report"
+    kind: str  # "add_label", "set_parent", "report", "create_issue", ...
     target: str  # "issue#12"
     payload: dict = field(default_factory=dict, hash=False, compare=False)
     reason: str = ""
@@ -85,7 +88,9 @@ class Snapshot:
             snap.issues.append({
                 "number": i["number"], "title": i["title"], "state": i["state"],
                 "labels": [lb["name"] for lb in i["labels"]],
-                "kind": "plan" if i["title"].startswith("Plan:") else "ticket",
+                "kind": ("plan" if i["title"].startswith("Plan:") else
+                         "report" if i["title"] == REPORT_TITLE else "ticket"),
+                "body": i.get("body") or "",
                 "body_excerpt": (i.get("body") or "")[:500]})
         snap.plans = [i for i in snap.issues if i["kind"] == "plan"]
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"]}
@@ -114,6 +119,15 @@ class FakeBackend(Backend):
             issue["parent"] = action.payload["parent"]
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
+        elif action.kind == "create_issue":
+            snapshot.issues.append({
+                "number": max([i["number"] for i in snapshot.issues], default=0) + 1,
+                "title": action.payload["title"], "state": "open", "labels": [],
+                "kind": "report", "body": action.payload["body"]})
+        elif action.kind == "update_issue" and issue is not None:
+            issue["body"] = action.payload["body"]
+        elif action.kind == "close_issue" and issue is not None:
+            issue["state"] = "closed"
         else:
             raise ValueError(f"unhandled action {action.kind} on {action.target}")
 
