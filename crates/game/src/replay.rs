@@ -144,6 +144,7 @@ fn flags_of(i: &TickInput) -> u32 {
         i.secondary_held,
         i.interact,
         i.drop,
+        i.sprint,
     ]
     .iter()
     .enumerate()
@@ -227,6 +228,7 @@ fn parse_input(body: &str) -> Result<TickInput, String> {
                 input.secondary_held = bit(4);
                 input.interact = bit(5);
                 input.drop = bit(6);
+                input.sprint = bit(7);
             }
             "slot" => {
                 input.tool_slot = if v == "-" {
@@ -331,6 +333,23 @@ mod tests {
     fn recording_round_trips() {
         let rec = sample();
         assert_eq!(Recording::parse(&rec.to_text()).unwrap(), rec);
+    }
+
+    #[test]
+    fn sprint_round_trips_as_bit_7() {
+        let mut rec = sample();
+        rec.ticks[1].input.sprint = true;
+        let text = rec.to_text();
+        assert!(text.contains("flags=128 "));
+        assert_eq!(Recording::parse(&text).unwrap(), rec);
+    }
+
+    #[test]
+    fn old_recording_parses_without_sprint() {
+        let text = "cheated false\ntick 1: input {fwd=3f800000 str=0 yaw=0 pitch=0 flags=65 slot=-}; commands []\n";
+        let rec = Recording::parse(text).unwrap();
+        let i = &rec.ticks[0].input;
+        assert!(i.jump && i.drop && !i.sprint);
     }
 
     #[test]
