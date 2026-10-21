@@ -236,3 +236,19 @@ fn steep_neighbour_breaks_flatness() {
     // Centre is no longer grass-topped and its 4 neighbours see a 3-block step.
     assert_eq!(rep.check(CHECK_FLAT_GRASS).unwrap().measured, 4.0);
 }
+
+#[test]
+fn raft_footprint_at_ignores_other_anchorages() {
+    let mut layout = Layout::new(1);
+    for origin in [[0, 64, 0], [500, 64, 0]] {
+        layout.structures.push(crate::StructurePlacement {
+            structure: "raft_start".into(),
+            origin,
+            rotation: 0,
+        });
+    }
+    let both = raft_footprint(&layout);
+    let one = raft_footprint_at(&layout, [500, 0]);
+    assert!(!one.is_empty() && one.len() * 2 == both.len());
+    assert!(one.iter().all(|&(x, _)| x > 400));
+}

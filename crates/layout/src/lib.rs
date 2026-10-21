@@ -306,6 +306,8 @@ mod route_validation;
 pub use route_validation::{validate_route, CHECK_ANCHORAGE_REACHABLE, CHECK_CHANNEL_CLEAR};
 mod route_layout;
 pub use route_layout::build_route_layout;
+mod route_retry;
+pub use route_retry::{find_route, RouteFound};
 mod structure;
 mod structure_error;
 #[cfg(feature = "toml-io")]
@@ -354,6 +356,8 @@ mod region_tests;
 mod retry_tests;
 #[cfg(test)]
 mod route_layout_tests;
+#[cfg(test)]
+mod route_retry_tests;
 #[cfg(test)]
 mod route_tests;
 #[cfg(test)]

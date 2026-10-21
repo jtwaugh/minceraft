@@ -18,7 +18,7 @@ use std::fmt;
 
 use terrain::{column_summary, Block, Region, HEIGHT, SEA_LEVEL};
 
-use crate::{Layout, Level, Structure};
+use crate::{Layout, Level, Structure, StructurePlacement};
 
 /// Thresholds from `data/validation.toml`.
 #[derive(Clone, Debug, PartialEq)]
@@ -222,8 +222,18 @@ fn block_at(region: &Region, x: i32, y: i32, z: i32) -> Option<u8> {
 /// Distinct world columns `(x, z)` under the non-air cells of every
 /// `raft = true` placement in `layout`: the raft footprint.
 pub fn raft_footprint(layout: &Layout) -> Vec<(i32, i32)> {
+    footprint_where(layout, |_| true)
+}
+
+/// The raft footprint of the placements at `anchorage` only, so a level in a
+/// multi-level layout is not judged on another level's raft.
+pub(crate) fn raft_footprint_at(layout: &Layout, anchorage: [i32; 2]) -> Vec<(i32, i32)> {
+    footprint_where(layout, |p| [p.origin[0], p.origin[2]] == anchorage)
+}
+
+fn footprint_where(layout: &Layout, keep: impl Fn(&StructurePlacement) -> bool) -> Vec<(i32, i32)> {
     let mut cols = Vec::new();
-    for p in &layout.structures {
+    for p in layout.structures.iter().filter(|p| keep(p)) {
         let Some(s) = Structure::named(&p.structure) else {
             continue;
         };
@@ -341,7 +351,7 @@ pub fn validate_level(layout: &Layout, level: &Level, t: &Thresholds) -> Validat
     let mut report = validate_island(&region, level, t);
     report
         .checks
-        .extend(validate_raft(&region, &raft_footprint(layout), t).checks);
+        .extend(validate_raft(&region, &raft_footprint_at(layout, level.anchorage), t).checks);
     report
         .checks
         .extend(validate_flat_grass(&region, level, t).checks);
