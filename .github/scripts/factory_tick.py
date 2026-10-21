@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Skeleton of the factory tick: a snapshot, passes over it, and a backend.
 
-    factory_tick.py                     load the live repo, print the request count
-    factory_tick.py --fixture FILE      load a fixture instead
+    factory_tick.py [--fixture FILE]    load the repo (or a fixture), print the counts
 
 A tick loads a `Snapshot`, runs each pass (`pass(snapshot) -> [Action]`) and
 applies the actions through a `Backend`. Passes are level-triggered: they
@@ -51,10 +50,8 @@ class Snapshot:
 
     @classmethod
     def from_github(cls, repo, etags=None):
-        """Read with paginated lists. `etags` (url -> (etag, body)) is updated
-        in place and sent as If-None-Match; a 304 reuses the stored body.
-        Plans are the issues titled "Plan:". Docs, branches and board items
-        are filled in by the wiring ticket."""
+        """Paginated reads; `etags` (path -> (etag, body)) is sent as
+        If-None-Match and a 304 reuses the body. Docs and board: later."""
         snap = cls()
         etags = {} if etags is None else etags
 
@@ -78,12 +75,10 @@ class Snapshot:
 
         def paged(path):
             out, page = [], 1
-            while True:
-                items = get(f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}")
-                out += items
-                if len(items) < 100:
-                    return out
+            while len(out) == 100 * (page - 1):
+                out += get(f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}")
                 page += 1
+            return out
 
         for i in paged(f"repos/{repo}/issues?state=all"):
             if "pull_request" in i:
@@ -142,8 +137,7 @@ def main(argv):
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} branches; {snap.requests} API requests")
-    actions = [a for p in PASSES for a in p(snap)]
-    for a in actions:
+    for a in (a for p in PASSES for a in p(snap)):
         print(f"{a.kind} {a.target}: {a.reason}")
 
 
