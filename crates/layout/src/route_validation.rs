@@ -7,7 +7,7 @@
 //! - Each segment gets its own **decorated** window (navigability is measured
 //!   on decorated terrain), without the layout's structures so the stamped
 //!   raft does not block its own anchorage. The window is the box of the two
-//!   anchorages grown by `window_margin + raft_half_width` plus the channel's
+//!   anchorages and the segment's two route points, grown by `window_margin + raft_half_width` plus the channel's
 //!   half-width.
 //! - `anchorage_reachable` is one check per consecutive pair: A* over the
 //!   eroded navigable set from one anchorage to the next. Its `name` is the
@@ -63,11 +63,14 @@ pub fn validate_route(
     for i in 0..pairs {
         let (from, to) = (&levels[i], &levels[i + 1]);
         let [(ax, az), (bx, bz)] = [from.anchorage, to.anchorage].map(|a| (a[0], a[1]));
-        let x0 = ax.min(bx) - margin;
-        let z0 = az.min(bz) - margin;
+        let (pa, pb) = (route.points[i], route.points[i + 1]);
+        let xs = [ax, bx, pa[0].floor() as i32, pb[0].floor() as i32];
+        let zs = [az, bz, pa[1].floor() as i32, pb[1].floor() as i32];
+        let x0 = xs.into_iter().min().unwrap() - margin;
+        let z0 = zs.into_iter().min().unwrap() - margin;
         let (w, d) = (
-            (ax.max(bx) + margin - x0 + 1) as u32,
-            (az.max(bz) + margin - z0 + 1) as u32,
+            (xs.into_iter().max().unwrap() + margin - x0 + 1) as u32,
+            (zs.into_iter().max().unwrap() + margin - z0 + 1) as u32,
         );
         let region = bare.generate_region(x0, z0, w, d, true);
         let nav = erode(&NavMap::from_region(&region, t), t.raft_half_width);
@@ -79,8 +82,7 @@ pub fn validate_route(
             passed: path.is_some(),
         });
 
-        let (a, b) = (route.points[i], route.points[i + 1]);
-        let (a, b) = ((a[0], a[1]), (b[0], b[1]));
+        let (a, b) = ((pa[0], pa[1]), (pb[0], pb[1]));
         let lo = SEA_LEVEL as usize;
         let hi = (lo + clear_above.max(0) as usize).min(HEIGHT);
         for lz in 0..d {
