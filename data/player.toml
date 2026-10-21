@@ -23,6 +23,9 @@ sneak_eye_drop = 0.08
 # sneak_scale while sneaking.
 input_scale = 0.98
 sneak_scale = 0.3
+# Placeholder (docs/design/sprinting.md): multiplier on input while sprinting,
+# pending research question #819. Must be greater than 1.
+sprint_scale = 1.3
 # Slipperiness of a normal block; the horizontal friction factor on ground is
 # slipperiness * friction.
 slipperiness = 0.6

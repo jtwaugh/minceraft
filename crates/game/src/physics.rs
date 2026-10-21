@@ -23,6 +23,8 @@ pub struct PlayerPhysics {
     pub input_scale: f32,
     /// Extra multiplier on input while sneaking.
     pub sneak_scale: f32,
+    /// Multiplier on input while sprinting.
+    pub sprint_scale: f32,
     /// Slipperiness of a normal block.
     pub slipperiness: f32,
     /// Horizontal friction per tick in air; on ground it is multiplied by
@@ -122,6 +124,12 @@ impl PlayerPhysics {
                 "body.max_health must be a whole number".into(),
             ));
         }
+        let sprint_scale = get("movement", "sprint_scale")?;
+        if sprint_scale <= 1.0 {
+            return Err(PhysicsError::Invalid(
+                "movement.sprint_scale must be greater than 1".into(),
+            ));
+        }
         Ok(PlayerPhysics {
             width: get("body", "width")?,
             height: get("body", "height")?,
@@ -131,6 +139,7 @@ impl PlayerPhysics {
             sneak_eye_drop: get("camera", "sneak_eye_drop")?,
             input_scale: get("movement", "input_scale")?,
             sneak_scale: get("movement", "sneak_scale")?,
+            sprint_scale,
             slipperiness: get("movement", "slipperiness")?,
             friction: get("movement", "friction")?,
             ground_accel: get("movement", "ground_accel")?,
@@ -170,6 +179,7 @@ mod tests {
         assert!((p.eye_offset(true) - 1.54).abs() < 1e-6);
         assert_eq!(p.input_scale, 0.98);
         assert_eq!(p.sneak_scale, 0.3);
+        assert_eq!(p.sprint_scale, 1.3);
         assert_eq!(p.slipperiness, 0.6);
         assert_eq!(p.friction, 0.91);
         assert_eq!(p.ground_accel, 0.1);
@@ -195,6 +205,22 @@ mod tests {
             PlayerPhysics::parse(&text),
             Err(PhysicsError::Missing(k)) if k == "water.swim_up_impulse"
         ));
+    }
+
+    #[test]
+    fn missing_or_bad_sprint_scale_is_an_error() {
+        assert!(matches!(
+            PlayerPhysics::parse(&without("sprint_scale")),
+            Err(PhysicsError::Missing(k)) if k == "movement.sprint_scale"
+        ));
+        for bad in ["\"fast\"", "1.0"] {
+            let text =
+                DEFAULT_PLAYER.replace("sprint_scale = 1.3", &format!("sprint_scale = {bad}"));
+            assert!(matches!(
+                PlayerPhysics::parse(&text),
+                Err(PhysicsError::Invalid(_))
+            ));
+        }
     }
 
     #[test]

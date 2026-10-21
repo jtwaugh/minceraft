@@ -92,6 +92,8 @@ pub struct Bindings {
     /// Radians per pixel of mouse motion (plain linear scale).
     pub sensitivity: f32,
     pub fov_degrees: f32,
+    /// Double-tap window for sprinting, in sim ticks.
+    pub double_tap_ticks: u32,
     actions: HashMap<Action, Binding>,
 }
 
@@ -166,6 +168,18 @@ impl Bindings {
                 "fov_degrees must be in 1..180".into(),
             ));
         }
+        let sprint = root
+            .get("sprint")
+            .and_then(|v| v.as_table())
+            .ok_or_else(|| BindingsError::Invalid("missing [sprint] table".into()))?;
+        let double_tap_ticks = match sprint.get("double_tap_ticks") {
+            Some(toml::Value::Integer(i)) if (1..=i64::from(u32::MAX)).contains(i) => *i as u32,
+            _ => {
+                return Err(BindingsError::Invalid(
+                    "sprint.double_tap_ticks must be a whole number of at least 1".into(),
+                ))
+            }
+        };
 
         let table = root
             .get("actions")
@@ -235,6 +249,7 @@ impl Bindings {
         Ok(Bindings {
             sensitivity,
             fov_degrees,
+            double_tap_ticks,
             actions,
         })
     }
