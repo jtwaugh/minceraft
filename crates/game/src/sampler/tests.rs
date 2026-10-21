@@ -125,3 +125,35 @@ fn unbound_keys_are_ignored() {
     s.key_up("KeyZ");
     assert_eq!(s.drain(), TickInput::default());
 }
+
+#[test]
+fn double_tap_forward_sprints_once_and_repeats_do_not_count() {
+    let mut s = sampler();
+    s.key_down("KeyW");
+    s.key_down("KeyW");
+    s.key_down("KeyW");
+    assert!(!s.drain().sprint);
+    s.key_up("KeyW");
+    s.drain();
+    s.key_down("KeyW");
+    s.key_down("KeyW");
+    assert!(s.drain().sprint);
+    assert!(!s.drain().sprint);
+}
+
+#[test]
+fn second_press_after_window_or_released_does_not_sprint() {
+    let window = sampler().bindings().double_tap_ticks;
+    let mut s = sampler();
+    s.key_down("KeyW");
+    s.key_up("KeyW");
+    for _ in 0..=window {
+        s.drain();
+    }
+    s.key_down("KeyW");
+    assert!(!s.drain().sprint);
+    s.key_up("KeyW");
+    s.key_down("KeyW");
+    s.key_up("KeyW");
+    assert!(!s.drain().sprint);
+}
