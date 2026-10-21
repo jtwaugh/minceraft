@@ -35,6 +35,7 @@ class Snapshot:
     branches: list = field(default_factory=list)
     board: list = field(default_factory=list)  # project board items
     requests: int = 0  # API requests the loader made
+    reported: set = field(default_factory=set)  # (target, reason) already reported
 
     @classmethod
     def from_dict(cls, d):
@@ -46,8 +47,7 @@ class Snapshot:
 
     @classmethod
     def from_fixture(cls, path):
-        with open(path) as f:
-            return cls.from_dict(json.load(f))
+        return cls.from_dict(json.load(open(path)))
 
     @classmethod
     def from_github(cls, repo, etags=None):
@@ -70,11 +70,10 @@ class Snapshot:
                 return cached[1]
             if p.returncode:
                 raise RuntimeError(f"gh api {path}: {p.stderr.strip()}")
-            tag = next((h.split(":", 1)[1].strip() for h in head.split("\n")
-                        if h.lower().startswith("etag:")), None)
             data = json.loads(body)
-            if tag:
-                etags[path] = (tag, data)
+            for h in head.split("\n"):
+                if h.lower().startswith("etag:"):
+                    etags[path] = (h.split(":", 1)[1].strip(), data)
             return data
 
         def paged(path):
@@ -95,8 +94,8 @@ class Snapshot:
                 "kind": "plan" if i["title"].startswith("Plan:") else "ticket",
                 "body_excerpt": (i.get("body") or "")[:500]})
         snap.plans = [i for i in snap.issues if i["kind"] == "plan"]
-        snap.prs = [{"number": p["number"], "head": p["head"]["ref"],
-                     "state": p["state"]} for p in paged(f"repos/{repo}/pulls?state=open")]
+        snap.prs = [{"number": p["number"], "head": p["head"]["ref"]}
+                    for p in paged(f"repos/{repo}/pulls?state=open")]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
         return snap
 
@@ -120,21 +119,16 @@ class FakeBackend(Backend):
         elif action.kind == "set_parent" and issue is not None:
             issue["parent"] = action.payload["parent"]
         elif action.kind == "report":
-            snapshot.reported = getattr(snapshot, "reported", set()) | {
-                (action.target, action.reason)}
+            snapshot.reported.add((action.target, action.reason))
         else:
             raise ValueError(f"unhandled action {action.kind} on {action.target}")
 
 
 def tick(snapshot, passes, backend):
     """Run every pass on the snapshot, apply the actions, return them."""
-    actions = [a for p in passes for a in p(snapshot)]
-    seen, applied = set(), []
-    for a in actions:
-        if a not in seen:
-            seen.add(a)
-            backend.apply(snapshot, a)
-            applied.append(a)
+    applied = list(dict.fromkeys(a for p in passes for a in p(snapshot)))
+    for a in applied:
+        backend.apply(snapshot, a)
     return applied
 
 
