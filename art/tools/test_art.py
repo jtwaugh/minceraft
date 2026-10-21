@@ -52,7 +52,7 @@ class Export(unittest.TestCase):
             want[f"panel_{n}"] = (4, 4)
         for n in range(10):
             want[f"digit_{n}"] = (4, 6)
-        for n in ("sword", "hoe", "seeds", "raw_beef", "leather", "raw_pork", "raw_chicken", "feather", "wheat"):
+        for n in ("sword", "hoe", "seeds", "raw_beef", "leather", "raw_pork", "raw_chicken", "feather", "wheat", "dandelion_flower", "rose_flower"):
             want[n] = (8, 8)
         for name, (w, h) in want.items():
             self.assertIn(name, textures)

@@ -274,3 +274,10 @@ logs fills one 1-block raft cell footprint; box 4 wide, 4 tall, 16 deep at
 lashings of sand with dark brown shadow, the same on side and top faces):
   front 4×4, back 4×4 (log end: rings), left 16×4, right 16×4 (mirror),
   top 4×16, bottom 4×16 (no rope shown in sand, darker, no highlights)
+
+BATCH 18: FLOWER ITEM ICONS (items, 8x8, transparent background, 2 to 5
+colors; a picked flower, matching the `dandelion` and `rose` tiles of
+batch 14; file batches_18.json)
+dandelion_flower (a yellow head with a tan centre and a near-black
+outline, on a short green stem), rose_flower (a red bloom with a dark
+brown shadow and a near-black outline, on a short green stem with a leaf)
