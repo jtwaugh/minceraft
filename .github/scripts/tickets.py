@@ -16,7 +16,8 @@ The factory tick decides what to start (factory_ready.py, which reuses the
 pure helpers here); `ready` and `check` print the same rules from the API.
 
 A ticket's dependencies are every issue number on its "**Depends on:**"
-line, plus any "Blocked by #n" in its body (the planner writes both) or in
+line (which must be exactly `none` or `#n, #m, ...`; a ticket whose line
+isn't is never started, and the tick reports it), plus any "Blocked by #n" in its body (the planner writes both) or in
 a comment from the maintainer or an agent (the implementer writes one when
 it stops on a question it raised mid-run). A dependency closed as "not
 planned" counts as closed. Plan issues are never tickets.
@@ -68,6 +69,23 @@ def comment_blockers(n):
         for m in BLOCKED.finditer(c.get("body") or ""):
             out += [(int(x), c["created_at"]) for x in re.findall(r"#(\d+)", m.group(1))]
     return out
+
+
+DEPENDS = re.compile(r"^\*\*Depends on:\*\*(.*)$", re.M)
+DEPENDS_VALUE = re.compile(r'(?i)"?none"?|#\d+(\s*,\s*#\d+)*')
+
+
+def depends_error(body):
+    """Why the "**Depends on:**" line can't be read, or None if it can (or
+    there is none). The value must be exactly `none` or `#n, #m, ...`: a
+    line with prose in it ("the swimming tickets in this plan") would
+    otherwise read as fewer dependencies than it names, and the ticket
+    would start too early. Reasons belong in the body, not on the line."""
+    for m in DEPENDS.finditer(body or ""):
+        value = m.group(1).strip().rstrip(".")
+        if not DEPENDS_VALUE.fullmatch(value):
+            return f'"**Depends on:**{m.group(1)}" is not `none` or `#n, #m, ...`'
+    return None
 
 
 def deps(body):
@@ -175,6 +193,10 @@ def ready_tickets(prs):
     ready, claimed = [], {}
     for t in sorted(tickets, key=lambda t: t["number"]):
         n = t["number"]
+        bad = depends_error(t.get("body"))
+        if bad:
+            print(f"#{n}: {bad}", file=sys.stderr)
+            continue
         waiting = open_deps(t)
         if waiting:
             print(f"#{n}: waiting on {waiting}", file=sys.stderr)
@@ -205,6 +227,9 @@ def main():
     mode = sys.argv[1]
     if mode == "blocked":
         issue = gh(f"repos/{REPO}/issues/{sys.argv[2]}")
+        bad = depends_error(issue.get("body"))
+        if bad:  # fail the check, so the run stops instead of starting early
+            sys.exit(f"#{sys.argv[2]}: {bad}")
         print(json.dumps(open_deps(issue) + busy_prs(issue, open_prs())))
     elif mode == "ready":
         print(json.dumps(ready_tickets(open_prs())))

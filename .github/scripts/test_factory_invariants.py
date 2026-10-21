@@ -41,6 +41,15 @@ class Test(unittest.TestCase):
         self.assertIn("plan-as-dependency:issue#519", k)
         self.assertEqual(sum(x.startswith("plan-as-dependency") for x in k), 1)
 
+    def test_unreadable_depends(self):
+        s = load()
+        self.assertFalse([x for x in keys(s) if x.startswith("unreadable-depends")])
+        i = issue(s, 500)
+        i["body"] = "**Depends on:** the swimming tickets in this plan\n"
+        self.assertNotIn("unreadable-depends:issue#500", keys(s))  # closed: history
+        i["state"] = "open"
+        self.assertIn("unreadable-depends:issue#500", keys(s))
+
     def test_accepted_doc_without_phases(self):
         self.assertEqual([x for x in keys(load()) if x.startswith("accepted-doc")],
                          ["accepted-doc-without-phases:docs/design/raft-scene-feedback.md"])

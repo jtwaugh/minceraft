@@ -131,9 +131,10 @@ or `preview.mjs` shows; `viewer/pkg/` is stale until you do.
    `python3 .github/scripts/pr_size.py origin/master HEAD` exits 0. Tests,
    docs and generated files don't count, so never trim tests to fit. If the
    ticket can't fit, build a coherent first part that passes every check,
-   open a follow-up issue labelled `planned` for the rest (the planner's
-   ticket format, with `**Depends on:** #<this ticket>`), and link it in the
-   PR. CI fails larger PRs unless the maintainer labels them `oversize-ok`.
+   open a follow-up `planned` ticket for the rest (the planner's ticket
+   format, with `**Depends on:** #<this ticket>`) with
+   `python3 .github/scripts/planner_issue.py ticket --title <t> --body-file <f>`,
+   which refuses a header the factory can't read, and link it in the PR. CI fails larger PRs unless the maintainer labels them `oversize-ok`.
 
 Keep PRs to one issue. Don't reformat or refactor code you weren't asked
 to touch.
