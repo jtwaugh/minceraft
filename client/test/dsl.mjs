@@ -99,7 +99,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   const sampler = new InputSampler();
   const input = attachInput({ sampler, canvas, document, window, debug });
   const scene = raft ? new Scene() : null;
-  const walk = raft ? Walk.in_scene(scene) : stream ? Walk.streamed(12345, 50.5, 110, 40.5) : new Walk(32, 70.5, 32);
+  const walk = raft ? Walk.in_scene(scene) : stream ? Walk.streamed(12345n, 50.5, 110, 40.5) : new Walk(32, 70.5, 32);
   if (raft) spawnTestItems(walk);
   const fly = stream ? new FlyCamera(50.5, 110, 40.5) : new FlyCamera(32, 94, 32);
   const controller = createController({
