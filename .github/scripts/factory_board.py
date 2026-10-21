@@ -113,11 +113,13 @@ def load_board(snap, login, number):
     """Read the project once into snap.board and snap.board_meta, and fill what
     the passes need from GitHub: PR status and files, issue comment blockers and
     the time `idea` was last taken off a card now showing Idea."""
-    _, _, options, items, waiting_field = project_sync.load_project(login, number)
+    project, status_field, options, items, waiting_field = project_sync.load_project(login, number)
     # load_project aliases a missing OPTIONAL column to its fallback's id; those aren't real columns
     real = [n for n, oid in options.items()
             if not (n in project_sync.OPTIONAL and oid == options.get(project_sync.OPTIONAL[n]))]
-    snap.board_meta = {"options": real, "waiting": bool(waiting_field)}
+    snap.board_meta = {"options": real, "waiting": bool(waiting_field), "loaded": True,
+                       "number": number, "project": project, "status_field": status_field,
+                       "waiting_field": waiting_field, "option_ids": options}
     repo = project_sync.REPO
     snap.board = []
     for node in items:
@@ -125,7 +127,7 @@ def load_board(snap, login, number):
         if not c or (repo and c["repository"]["nameWithOwner"] != repo):
             continue
         status, waiting = node.get("status") or {}, node.get("waiting") or {}
-        snap.board.append({"kind": c["__typename"], "number": c["number"], "state": c["state"],
+        snap.board.append({"item": node["id"], "kind": c["__typename"], "number": c["number"], "state": c["state"],
                            "status": status.get("name"), "status_updated": status.get("updatedAt"),
                            "waiting": waiting.get("text")})
     for p in snap.prs:

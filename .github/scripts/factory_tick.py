@@ -69,6 +69,7 @@ class Snapshot:
         """Paginated reads; `etags` (path -> (etag, body)) is sent as
         If-None-Match and a 304 reuses the body. The board is read when
         PROJECT_TOKEN and PROJECT_NUMBER are set. Docs: later."""
+        import tickets
         snap = cls()
         etags = {} if etags is None else etags
 
@@ -111,6 +112,12 @@ class Snapshot:
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"],
                      "sha": p["head"]["sha"], "body": p.get("body") or ""}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
+        for i in snap.issues:  # trusted comments only, for open `factory` tickets
+            if i["kind"] == "ticket" and i["state"] == "open" and "factory" in i["labels"]:
+                i["comments"] = [
+                    {"user": c["user"]["login"], "body": c.get("body") or "", "created_at": c["created_at"]}
+                    for c in get(f"repos/{repo}/issues/{i['number']}/comments?per_page=100")
+                    if c["user"]["login"] in tickets.TRUSTED]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
         number = os.environ.get("PROJECT_NUMBER", "").strip()
         if os.environ.get("PROJECT_TOKEN") and number:
@@ -229,12 +236,18 @@ def main(argv):
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} branches; {snap.requests} API requests")
+    backend = FakeBackend()
     if not (dry or "--fixture" in args):
-        sys.exit("writing to GitHub needs the live backend (follow-up to #579); use --dry-run")
-    actions = tick(snap, passes(), FakeBackend())
+        from factory_backend import GhBackend
+        backend = GhBackend(os.environ["GITHUB_REPOSITORY"])
+    actions = tick(snap, passes(), backend)
     for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
-    print(f"{len(actions)} action(s), nothing written; {snap.requests} API requests")
+    for a in getattr(backend, "refused", []):
+        print(f"refused {a.kind} {a.target}: actor {a.payload['actor']} is not trusted")
+    written = isinstance(backend, FakeBackend) and "nothing written" or "applied"
+    print(f"{len(actions)} action(s), {written}; "
+          f"{snap.requests + getattr(backend, 'requests', 0)} API requests")
 
 
 if __name__ == "__main__":
