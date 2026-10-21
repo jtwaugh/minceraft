@@ -302,6 +302,8 @@ mod retry;
 pub use retry::{find_level, find_v0_level, LevelFound, RetryError};
 mod route;
 pub use route::{build_route, build_route_with, Route, RouteParams};
+mod route_layout;
+pub use route_layout::build_route_layout;
 mod structure;
 mod structure_error;
 #[cfg(feature = "toml-io")]
@@ -348,6 +350,8 @@ mod region_coord_tests;
 mod region_tests;
 #[cfg(test)]
 mod retry_tests;
+#[cfg(test)]
+mod route_layout_tests;
 #[cfg(test)]
 mod route_tests;
 #[cfg(test)]
