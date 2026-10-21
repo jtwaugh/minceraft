@@ -89,6 +89,8 @@ impl FarmTile {
 pub struct FarmWorld<W> {
     base: W,
     edits: HashMap<(i32, i32, i32), Block>,
+    /// Columns `(x, z)` edited since the last `drain_touched`.
+    touched: Vec<(i32, i32)>,
 }
 
 impl<W: CollisionWorld> FarmWorld<W> {
@@ -96,7 +98,13 @@ impl<W: CollisionWorld> FarmWorld<W> {
         FarmWorld {
             base,
             edits: HashMap::new(),
+            touched: Vec::new(),
         }
+    }
+
+    /// Columns edited since the last call, oldest first, with repeats.
+    pub fn drain_touched(&mut self) -> Vec<(i32, i32)> {
+        std::mem::take(&mut self.touched)
     }
 
     pub fn base(&self) -> &W {
@@ -113,6 +121,7 @@ impl<W: CollisionWorld> FarmWorld<W> {
         match tile.block() {
             Some(b) if (0..HEIGHT as i32).contains(&y) => {
                 self.edits.insert((x, y, z), b);
+                self.touched.push((x, z));
                 true
             }
             _ => false,
@@ -127,6 +136,7 @@ impl<W: CollisionWorld> FarmWorld<W> {
             return false;
         }
         self.edits.insert((x, y, z), block);
+        self.touched.push((x, z));
         true
     }
 
@@ -163,10 +173,19 @@ impl<W: CollisionWorld> FarmWorld<W> {
         v
     }
 
+    /// Every overlay block with its position, in no set order.
+    pub fn edits(&self) -> impl Iterator<Item = ([i32; 3], Block)> + '_ {
+        self.edits.iter().map(|(&(x, y, z), &b)| ([x, y, z], b))
+    }
+
     /// Remove the tile at `(x, y, z)`, restoring the generated block. Returns
     /// the tile that was there.
     pub fn clear(&mut self, x: i32, y: i32, z: i32) -> Option<FarmTile> {
-        self.edits.remove(&(x, y, z)).and_then(FarmTile::from_block)
+        let old = self.edits.remove(&(x, y, z));
+        if old.is_some() {
+            self.touched.push((x, z));
+        }
+        old.and_then(FarmTile::from_block)
     }
 }
 

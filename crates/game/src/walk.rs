@@ -166,7 +166,7 @@ struct Floating {
 pub struct Walker {
     player: Player,
     physics: PlayerPhysics,
-    world: FarmWorld<RegionSet>,
+    pub(crate) world: FarmWorld<RegionSet>,
     floating: Option<Floating>,
     streamer: Option<Streamer>,
     prev_eye: [f64; 3],
@@ -410,6 +410,35 @@ impl Walker {
     /// The region cache behind the stream, if this walker streams.
     pub fn streamer_cache(&self) -> Option<&layout::RegionCache> {
         self.streamer.as_ref().map(|s| s.cache())
+    }
+
+    /// The blocks of the loaded streamed region `coord` (x then z then y, as
+    /// generated) with the overlay edits inside it applied. `None` if it is
+    /// not loaded.
+    pub fn region_blocks(&self, coord: layout::RegionCoord) -> Option<Vec<u8>> {
+        let mut blocks = self.streamer_cache()?.get(coord)?.region.blocks.clone();
+        let (x0, z0) = coord.origin();
+        let size = layout::REGION_SIZE as i32;
+        for ([x, y, z], b) in self.world.edits() {
+            let (lx, lz) = (x - x0, z - z0);
+            if (0..size).contains(&lx) && (0..size).contains(&lz) {
+                blocks[(lz * size + lx) as usize * HEIGHT + y as usize] = b as u8;
+            }
+        }
+        Some(blocks)
+    }
+
+    /// Loaded regions whose meshed view changed by an edit since the last
+    /// call: the owner of each edited column, and a neighbour too when the
+    /// column is on the shared border (neighbours pad with that edge).
+    pub fn drain_edited_regions(&mut self) -> Vec<layout::RegionCoord> {
+        let mut out = std::collections::BTreeSet::new();
+        for (x, z) in self.world.drain_touched() {
+            for (dx, dz) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
+                out.insert(layout::RegionCoord::containing(x + dx, z + dz));
+            }
+        }
+        out.into_iter().collect()
     }
 
     /// A walker in the raft test scene: the sea, the raft moving under the

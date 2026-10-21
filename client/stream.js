@@ -42,6 +42,15 @@ export function createStream({ budget = 1 } = {}) {
       }
       return { mesh, free };
     },
+    // `pairs` is the flat [rx, rz, ...] of Walk.drain_edited_regions: the meshed
+    // regions among them, to mesh again. Unmeshed ones pick the edit up when meshed.
+    edited(pairs) {
+      const out = [];
+      for (let i = 0; i < pairs.length; i += 2) {
+        if (meshed.has(key(pairs[i], pairs[i + 1]))) out.push({ rx: pairs[i], rz: pairs[i + 1] });
+      }
+      return out;
+    },
     get pending() { return queued.size; },
     get meshed() { return meshed.size; },
   };

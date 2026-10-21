@@ -62,7 +62,8 @@ export function createController({ input, walk, fly, clock, document, flying = f
     }
     const { mesh, free } = regions.frame(walk.drain_stream(), centre);
     freed += free.length;
-    return { mesh, free, loaded: regions.meshed, freed, pending: regions.pending, centre };
+    const remesh = regions.edited(walk.drain_edited_regions());
+    return { mesh, free, remesh, loaded: regions.meshed, freed, pending: regions.pending, centre };
   };
 
   return {

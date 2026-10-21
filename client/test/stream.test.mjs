@@ -57,3 +57,10 @@ test('a region unloaded then loaded again is meshed again', () => {
   assert.deepEqual(out.free, [at(0, 0)]);
   assert.deepEqual(out.mesh, [at(0, 0)]);
 });
+
+test('edited keeps only the meshed regions among the edited ones', () => {
+  const s = createStream({ budget: 1 });
+  s.frame(load([0, 0], [1, 0]), at(0, 0)); // (0, 0) meshed, (1, 0) still queued
+  assert.deepEqual(s.edited([0, 0, 1, 0, 5, 5]), [at(0, 0)]);
+  assert.deepEqual(s.edited([]), []);
+});
