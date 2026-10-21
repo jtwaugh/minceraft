@@ -446,7 +446,7 @@ impl Walker {
     pub fn in_raft_scene(scene: RaftScene) -> Result<Walker, String> {
         let mut w = Walker::new(scene.spawn).map_err(|e| e.to_string())?;
         w.floating = Some(Floating {
-            raft: Raft::new(&scene.cells),
+            raft: Raft::with_helm(&scene.cells, scene.helm),
             swell: Swell::default_from_data()?,
             tick: 0,
             prev_offset: [0.0; 3],

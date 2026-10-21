@@ -28,6 +28,8 @@ pub struct RaftScene {
     pub sea: Region,
     /// The raft's mask cells.
     pub cells: Vec<[i32; 3]>,
+    /// The helm: one of `cells`, on the top layer nearest the raft's centre.
+    pub helm: [i32; 3],
     /// The raft's blocks alone, in a region the same size as `sea`.
     pub raft: Region,
     /// Feet position in the water, facing the raft at yaw 0 (towards -z).
@@ -85,17 +87,39 @@ pub fn raft_scene() -> RaftScene {
         (min_y - 1) as f64,
         max_z as f64 + 1.0 + SPAWN_GAP,
     ];
+    let helm = pick_helm(&cells);
     let (entities, planters) = add_islet(&mut sea, spawn);
     let field = add_field(&mut sea, spawn);
     RaftScene {
         sea,
         cells: cells.iter().map(|&(x, y, z, _)| [x, y, z]).collect(),
+        helm,
         raft,
         spawn,
         field,
         planters,
         entities,
     }
+}
+
+/// The deck cell to steer from: on the top layer, nearest the xz centre of
+/// the raft's bounding box, ties broken by the smaller cell.
+fn pick_helm(cells: &[(i32, i32, i32, u8)]) -> [i32; 3] {
+    let top = cells.iter().map(|c| c.1).max().unwrap_or(0);
+    let span = |f: fn(&(i32, i32, i32, u8)) -> i32| {
+        let lo = cells.iter().map(f).min().unwrap_or(0);
+        let hi = cells.iter().map(f).max().unwrap_or(0);
+        lo + hi
+    };
+    let (sx, sz) = (span(|c| c.0), span(|c| c.2));
+    // Twice the distance from the centre, to stay in integers.
+    let cost = |c: &[i32; 3]| (2 * c[0] + 1 - sx).abs() + (2 * c[2] + 1 - sz).abs();
+    cells
+        .iter()
+        .filter(|c| c.1 == top)
+        .map(|&(x, y, z, _)| [x, y, z])
+        .min_by_key(|c| (cost(c), *c))
+        .unwrap_or([0, SURFACE, 0])
 }
 
 /// A grassy 3x3 islet beside the spawn with a few placed plants on it, and a
@@ -195,6 +219,8 @@ mod tests {
         assert_eq!(at(s.spawn), Block::Water);
         let solid = s.raft.blocks.iter().filter(|&&b| b != 0).count();
         assert_eq!(solid, s.cells.len());
+        assert!(s.cells.contains(&s.helm));
+        assert!(s.cells.iter().all(|c| c[1] <= s.helm[1]));
     }
 
     #[test]

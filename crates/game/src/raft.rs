@@ -122,6 +122,8 @@ pub struct Raft {
     /// Mask cells at the rest pose.
     cells: Vec<[i32; 3]>,
     rest: HashSet<[i32; 3]>,
+    /// The helm: one of `cells`, where the player steers from.
+    helm: Option<[i32; 3]>,
     /// Rest-pose centre of the mask's xz bounding box.
     centre: [f64; 2],
     offset: [f64; 3],
@@ -141,11 +143,20 @@ impl Raft {
         Raft {
             cells: cells.to_vec(),
             rest: cells.iter().copied().collect(),
+            helm: None,
             centre: [range(0), range(2)],
             offset: [0.0; 3],
             yaw: 0.0,
             turns: 0,
         }
+    }
+
+    /// A raft with a helm at `helm`, which must be one of `cells`; any other
+    /// cell leaves the raft without a helm.
+    pub fn with_helm(cells: &[[i32; 3]], helm: [i32; 3]) -> Raft {
+        let mut raft = Raft::new(cells);
+        raft.helm = raft.rest.contains(&helm).then_some(helm);
+        raft
     }
 
     /// Build the raft from the per-region raft masks (world-layout 4.5): the
@@ -174,14 +185,29 @@ impl Raft {
 
     /// The collision box of every cell at the current pose.
     pub fn boxes(&self) -> impl Iterator<Item = Aabb> + '_ {
-        self.cells.iter().map(|c| {
-            let (x, y, z) = (c[0] as f64, c[1] as f64, c[2] as f64);
-            let a = rotate([x, y, z], self.centre, self.turns);
-            let b = rotate([x + 1.0, y + 1.0, z + 1.0], self.centre, self.turns);
-            let lo = |i: usize| a[i].min(b[i]) + self.offset[i];
-            let hi = |i: usize| a[i].max(b[i]) + self.offset[i];
-            Aabb::new([lo(0), lo(1), lo(2)], [hi(0), hi(1), hi(2)])
-        })
+        self.cells.iter().map(|c| self.cell_box(c))
+    }
+
+    fn cell_box(&self, c: &[i32; 3]) -> Aabb {
+        let (x, y, z) = (c[0] as f64, c[1] as f64, c[2] as f64);
+        let a = rotate([x, y, z], self.centre, self.turns);
+        let b = rotate([x + 1.0, y + 1.0, z + 1.0], self.centre, self.turns);
+        let lo = |i: usize| a[i].min(b[i]) + self.offset[i];
+        let hi = |i: usize| a[i].max(b[i]) + self.offset[i];
+        Aabb::new([lo(0), lo(1), lo(2)], [hi(0), hi(1), hi(2)])
+    }
+
+    /// The helm cell at the rest pose, if the raft has one.
+    pub fn helm(&self) -> Option<[i32; 3]> {
+        self.helm
+    }
+
+    /// Whether a body occupying `bb` stands on the helm cell: the same test
+    /// as `supports`, against the helm cell's box alone.
+    pub fn on_helm(&self, bb: &Aabb) -> bool {
+        let probe = bb.offset([0.0, -SUPPORT_EPS, 0.0]);
+        self.helm
+            .is_some_and(|h| self.cell_box(&h).intersects(&probe))
     }
 
     /// Whether a raft box holds up a body occupying `bb`: the box under its
@@ -436,6 +462,53 @@ mod tests {
             );
         }
         assert_eq!(raft.quarter_turns(), 0);
+    }
+
+    /// A body standing in the middle of the top of cell `c` at the current pose.
+    fn stand_on(c: [i32; 3], r: &Raft) -> Aabb {
+        let b = r.cell_box(&c);
+        let (x, z) = ((b.min[0] + b.max[0]) / 2.0, (b.min[2] + b.max[2]) / 2.0);
+        Aabb::from_size([x - 0.3, b.max[1], z - 0.3], [0.6, 1.8, 0.6])
+    }
+
+    fn check_helm(raft: &Raft, helm: [i32; 3]) {
+        for x in 0..4 {
+            for z in 0..4 {
+                let c = [x, 64, z];
+                assert_eq!(
+                    raft.on_helm(&stand_on(c, raft)),
+                    c == helm,
+                    "{c:?} turns {}",
+                    raft.quarter_turns()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn helm_is_only_under_the_helm_cell_through_moves_and_turns() {
+        let (_, plain) = deck();
+        assert_eq!(plain.helm(), None);
+        assert!(!plain.on_helm(&stand_on([1, 64, 2], &plain)));
+        let cells: Vec<[i32; 3]> = plain.cells.clone();
+        let helm = [1, 64, 2];
+        let mut raft = Raft::with_helm(&cells, helm);
+        assert_eq!(raft.helm(), Some(helm));
+        check_helm(&raft, helm);
+        raft.advance(&slide(0.75), &mut [], &phys());
+        check_helm(&raft, helm);
+        let quarter = RaftFrame {
+            yaw_delta: FRAC_PI_2,
+            ..RaftFrame::default()
+        };
+        raft.advance(&quarter, &mut [], &phys());
+        assert_eq!(raft.quarter_turns(), 1);
+        check_helm(&raft, helm);
+        // A body in the air above the helm is not on it.
+        let high = stand_on(helm, &raft).offset([0.0, 2.0, 0.0]);
+        assert!(!raft.on_helm(&high));
+        // A cell outside the mask is no helm.
+        assert_eq!(Raft::with_helm(&cells, [9, 64, 9]).helm(), None);
     }
 
     #[test]
