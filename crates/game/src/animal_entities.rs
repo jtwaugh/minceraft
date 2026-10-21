@@ -98,6 +98,14 @@ fn advance_wander(w: &mut Wander, facing: &mut f64, def: &AnimalDef, rng: &mut R
     w.walking
 }
 
+/// The 4.3 water numbers from `data/player.toml`, as the animals use them.
+#[derive(Clone, Copy, Debug)]
+struct WaterNumbers {
+    velocity_multiplier: f64,
+    gravity: f64,
+    swim_up_impulse: f64,
+}
+
 /// All animals. Ids are never reused within a store. They share one space
 /// with every other entity the eye ray can target; `first_id` lets the
 /// caller start this store above the others.
@@ -110,6 +118,9 @@ pub struct AnimalStore {
     rng: Rng,
     /// Step-up height for walking, as for the player (4.4).
     step_height: f64,
+    /// Water numbers shared with the player (4.3): per-tick velocity
+    /// multiplier, gravity and swim-up impulse (blocks per tick).
+    water: WaterNumbers,
     // Kept sorted by id (ids only grow), so lookups can bisect.
     animals: Vec<AnimalEntity>,
 }
@@ -122,16 +133,18 @@ impl AnimalStore {
         first_id: EntityId,
         seed: u64,
     ) -> AnimalStore {
+        let player = PlayerPhysics::default_from_data().expect("data/player.toml is valid");
         AnimalStore {
             kinds,
             physics,
             next_id: first_id,
             rng: Rng::new(seed),
-            step_height: f64::from(
-                PlayerPhysics::default_from_data()
-                    .expect("data/player.toml is valid")
-                    .step_height,
-            ),
+            step_height: f64::from(player.step_height),
+            water: WaterNumbers {
+                velocity_multiplier: f64::from(player.water_velocity_multiplier),
+                gravity: f64::from(player.water_gravity),
+                swim_up_impulse: f64::from(player.water_swim_up_impulse),
+            },
             animals: Vec::new(),
         }
     }
@@ -286,9 +299,12 @@ impl AnimalStore {
                 && advance_wander(&mut e.wander, &mut e.facing, def, &mut self.rng);
             let mut bb = e.aabb();
             lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
+            let in_water = world.body_in_water(&bb);
             // The wander drive would overwrite a knockback, so it waits.
             if (walking || fleeing) && e.hurt_ticks_left == 0 {
-                let speed = if fleeing {
+                let speed = if in_water {
+                    def.swim_speed
+                } else if fleeing {
                     def.flee_speed
                 } else {
                     def.wander_speed
@@ -298,16 +314,35 @@ impl AnimalStore {
                 e.velocity[0] = sin * speed;
                 e.velocity[2] = -cos * speed;
             }
-            e.velocity[1] -= cfg.gravity * dt;
+            if in_water {
+                // Swim up (4.3, as if jump were held) until the head is out
+                // of the water, then float at rest at the surface.
+                let top = Aabb::new(
+                    [bb.min[0], bb.max[1] - 1e-3, bb.min[2]],
+                    [bb.max[0], bb.max[1], bb.max[2]],
+                );
+                if world.body_in_water(&top) {
+                    e.velocity[1] +=
+                        (self.water.swim_up_impulse - self.water.gravity) * TICKS_PER_SECOND;
+                } else {
+                    e.velocity[1] = 0.0;
+                }
+            } else {
+                e.velocity[1] -= cfg.gravity * dt;
+            }
             let v = e.velocity.map(|c| c * dt);
-            let on_ground = e.velocity[1] == 0.0;
+            let on_ground = !in_water && e.velocity[1] == 0.0;
             let m = move_with_step(world, &bb, v, self.step_height, on_ground);
             for i in 0..3 {
                 e.pos[i] += m.applied[i];
                 if m.applied[i] != v[i] {
                     e.velocity[i] = 0.0;
                 }
-                e.velocity[i] *= cfg.drag;
+                e.velocity[i] *= if in_water {
+                    self.water.velocity_multiplier
+                } else {
+                    cfg.drag
+                };
             }
             if m.on_ground {
                 for i in [0, 2] {
@@ -500,6 +535,56 @@ mod tests {
         assert_eq!((a, b), (1000, 1001));
         s.remove(a);
         assert_eq!(s.spawn("cow", [0.0; 3], 0.0), Some(1002));
+    }
+
+    /// A stone floor at y=0 under 6 blocks of water (y = 1..7), walled in.
+    fn pool() -> MemoryWorld {
+        let mut w = MemoryWorld::new();
+        for x in -8..8 {
+            for z in -8..8 {
+                w.set(x, 0, z, Block::Stone);
+                for y in 1..7 {
+                    if x.abs().max(z.abs()) == 5 {
+                        w.set(x, y, z, Block::Stone);
+                    } else if x.abs().max(z.abs()) < 5 {
+                        w.set(x, y, z, Block::Water);
+                    }
+                }
+            }
+        }
+        w
+    }
+
+    #[test]
+    fn animals_in_deep_water_rest_at_the_surface() {
+        let w = pool();
+        for species in ["cow", "pig", "chicken"] {
+            let mut s = store(1);
+            let id = s.spawn(species, [0.5, 3.0, 0.5], 0.0).unwrap();
+            run(&mut s, &w, 400);
+            let e = s.get(id).unwrap();
+            let top = e.pos[1] + e.box_size[1];
+            assert!((7.0..7.2).contains(&top), "{species} top {top}");
+            // Wandering sideways continues, but it stays up.
+            for _ in 0..600 {
+                s.tick(&w);
+                let e = s.get(id).unwrap();
+                assert!(e.pos[1] + e.box_size[1] >= 7.0, "{species} sank");
+            }
+        }
+    }
+
+    #[test]
+    fn swimming_is_deterministic() {
+        let w = pool();
+        let go = || {
+            let mut s = store(1);
+            s.spawn("cow", [0.5, 3.0, 0.5], 10.0);
+            s.spawn("pig", [-1.5, 2.0, 1.5], 20.0);
+            run(&mut s, &w, 300);
+            s.iter().map(|e| (e.pos, e.velocity)).collect::<Vec<_>>()
+        };
+        assert_eq!(go(), go());
     }
 
     #[test]
