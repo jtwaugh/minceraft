@@ -4,7 +4,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_tick import FakeBackend, Snapshot, passes, tick  # noqa: E402
+from factory_backend import GhBackend  # noqa: E402
+from factory_tick import Action, FakeBackend, Snapshot, passes, tick  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "history.json")
 
@@ -45,6 +46,43 @@ class Replay(unittest.TestCase):
 
     def test_second_tick_does_nothing(self):
         self.assertEqual(self.second, [])
+
+
+class Live(unittest.TestCase):
+    """GhBackend with an injected `run` that records requests instead of calling gh."""
+
+    def backend(self):
+        calls = []
+
+        def run(args, project=False):
+            calls.append(args)
+            return "123\n"
+        return GhBackend("o/r", run), calls
+
+    def test_untrusted_actor_is_refused_without_a_request(self):
+        b, calls = self.backend()
+        snap = Snapshot.from_fixture(FIXTURE)
+        b.apply(snap, Action("add_label", "issue#521", {"label": "nope", "actor": "mallory"}))
+        self.assertEqual((calls, len(b.refused)), ([], 1))
+        self.assertNotIn("nope", next(i for i in snap.issues if i["number"] == 521)["labels"])
+        b.apply(snap, Action("add_label", "issue#521", {"label": "nope", "actor": "jtwaugh"}))
+        self.assertEqual(len(calls), 1)
+
+    def test_satisfied_action_makes_no_request(self):
+        b, calls = self.backend()
+        snap = Snapshot.from_fixture(FIXTURE)
+        snap.issues[0]["labels"] = ["planned"]
+        b.apply(snap, Action("add_label", f"issue#{snap.issues[0]['number']}", {"label": "planned"}))
+        self.assertEqual(calls, [])
+
+    def test_second_live_tick_writes_nothing(self):
+        snap = Snapshot.from_fixture(FIXTURE)
+        b, calls = self.backend()
+        self.assertTrue(tick(snap, passes(), b))
+        self.assertTrue(calls)
+        again, calls2 = self.backend()
+        self.assertEqual(tick(snap, passes(), again), [])
+        self.assertEqual(calls2, [])
 
 
 if __name__ == "__main__":

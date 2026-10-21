@@ -229,12 +229,18 @@ def main(argv):
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} branches; {snap.requests} API requests")
+    backend = FakeBackend()
     if not (dry or "--fixture" in args):
-        sys.exit("writing to GitHub needs the live backend (follow-up to #579); use --dry-run")
-    actions = tick(snap, passes(), FakeBackend())
+        from factory_backend import GhBackend
+        backend = GhBackend(os.environ["GITHUB_REPOSITORY"])
+    actions = tick(snap, passes(), backend)
     for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
-    print(f"{len(actions)} action(s), nothing written; {snap.requests} API requests")
+    for a in getattr(backend, "refused", []):
+        print(f"refused {a.kind} {a.target}: actor {a.payload['actor']} is not trusted")
+    written = isinstance(backend, FakeBackend) and "nothing written" or "applied"
+    print(f"{len(actions)} action(s), {written}; "
+          f"{snap.requests + getattr(backend, 'requests', 0)} API requests")
 
 
 if __name__ == "__main__":
