@@ -47,7 +47,7 @@ class Export(unittest.TestCase):
         for b in batches.values():
             textures.update(b.get("textures", {}))
             sizes.update(b.get("sizes", {}))
-        want = {"heart_full": (8, 8), "heart_half": (8, 8), "slot": (10, 10), "slot_selected": (10, 10)}
+        want = {"heart_full": (8, 8), "heart_half": (8, 8), "heart_empty": (8, 8), "slot": (10, 10), "slot_selected": (10, 10)}
         for n in ("tl", "t", "tr", "l", "c", "r", "bl", "b", "br"):
             want[f"panel_{n}"] = (4, 4)
         for n in range(10):

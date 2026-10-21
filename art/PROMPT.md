@@ -126,6 +126,8 @@ frame; moon_0 is full, moon_4 is new and almost invisible, 1 to 3 wane
 from the right, 5 to 7 wax from the left; the dark part is transparent)
 
 BATCH 10: INVENTORY (transparent background where noted)
+heart_empty (8×8: the same outline and silhouette as heart_full, with a
+dark interior and no highlight, for lost health),
 slot (10×10: a 1-pixel frame around an 8x8 opening for an item; frame is
 dark on the top and left edges and light on the bottom and right, so it
 looks recessed; the opening is dark brown), slot_selected (10×10: the
