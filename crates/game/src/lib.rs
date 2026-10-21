@@ -28,6 +28,7 @@ pub mod pick;
 pub mod plant;
 pub mod player;
 pub mod raft;
+pub mod raft_travel;
 pub mod replay;
 pub mod rng;
 pub mod sampler;
