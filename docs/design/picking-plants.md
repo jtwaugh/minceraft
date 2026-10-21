@@ -30,7 +30,7 @@ Checked against the code:
 
 1. **Rule 2 conflict.** basic-gameplay section 1 rule 2 says "Players cannot break or place blocks", and 9.1 relies on "allowed under the no-breaking rule". Section 1 here loosens it. This design supersedes that rule for plants only; the docs updater or a follow-up edit to `basic-gameplay.md` should reword the rule (the reconciler may not edit that doc). Terrain, logs and raft cells stay unbreakable.
 2. **9.4 conflict.** basic-gameplay 9.4 resets a harvested crop and says no seed is needed to replant "since breaking is not allowed". Picking a crop changes that rationale. Decision: picking replaces harvest-and-reset. Pick removes a crop at any stage and drops its produce only if the crop is mature; replanting needs seeds, and harvest-and-reset goes away. (Decided in #511.)
-3. **Removing a block.** `FarmWorld` (`farm.rs`) is a world overlay for crops and farmland; flowers are terrain blocks. Picking a flower must remove a terrain block, which no action does today. The game world (`CollisionWorld` and the client mesh) needs a way to record an edit and re-mesh the chunk. Decision: the world gets a general block-edit layer that later features (place, break) can use, not a plants-only overlay. The blocks that may be removed are limited to foliage if a limit is needed; terrain, logs and raft cells stay unbreakable (note 1). Whether edits persist across region reloads is open question 9. (Decided in #512.)
+3. **Removing a block.** `FarmWorld` (`farm.rs`) is a world overlay for crops and farmland; flowers are terrain blocks. Picking a flower must remove a terrain block, which no action does today. The game world (`CollisionWorld` and the client mesh) needs a way to record an edit and re-mesh the chunk. Decision: the world gets a general block-edit layer that later features (place, break) can use, not a plants-only overlay. The blocks that may be removed are limited to foliage if a limit is needed; terrain, logs and raft cells stay unbreakable (note 1). (Decided in #512.) Edits are kept for the session, so a picked flower stays gone when its region reloads, and picked plants do not grow back. Persisting edits across sessions is a later save-game question. (Decided in #659.)
 4. **Picking tall grass.** Section 3 keeps tall grass as a forage target (the grass stays). `pick` must apply to flowers and crops only, so the `forage` rule for tall grass is unchanged.
 5. **Held items.** Item pickup and hands rules are in `items.rs` and `player.rs` (Phase 5 of basic-gameplay). "Hands full, drop as an item entity" matches the existing item-entity code (`item_entities.rs`); no new mechanism is needed.
 6. **Art.** Each new item needs an icon in `art/` (one 16-colour palette, 8x8, `snake_case` names; `art/PROMPT.md` lists what should exist). Flower icons also need a `PROMPT.md` entry. That file is not in the design lane, so it is a ticket, not part of this doc.
@@ -85,7 +85,6 @@ Holding seeds and using them on farmland plants a crop.
 
 2. Foraging: always drop seeds, or better odds plus feedback on a miss?
 3. Do picked flowers do anything yet (sell, decorate, cook), or are they just items for now?
-4. Can picked plants grow back (flowers respawning on grass over days), or are they gone?
 
 ## Open questions (reconciler)
 
@@ -99,7 +98,3 @@ Holding seeds and using them on farmland plants a crop.
 8. **Flower items (author's question 3).**
    - A: items only for now, with icons; no use.
    - B: also a use in this doc (decoration or a sale at a station).
-9. **Regrowth (author's question 4).**
-   - A: picked plants stay gone; the generator still places new ones when a region reloads from the seed.
-   - B: a flower regrows on its grass block after a number of days (data).
-   - Note: with the block-edit layer (note 3), whether a reload restores the flower depends on whether the edits are kept. Decide that with this question.
