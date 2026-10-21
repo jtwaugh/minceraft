@@ -7,8 +7,10 @@ import { createSession } from './dsl.mjs';
 test('steps lines one at a time and reads state', () => {
   const s = createSession(['walk']);
   try {
-    assert.deepEqual(s.exec('mark'), { ok: true });
     assert.equal(s.read('mode'), 'walk');
+    // like scripts/modes.input: keys only count once the pointer is locked and the player has settled
+    for (const line of ['click', 'lock', 'frame 50 x10']) assert.deepEqual(s.exec(line), { ok: true });
+    assert.deepEqual(s.exec('mark'), { ok: true });
     assert.deepEqual(s.exec('down KeyW'), { ok: true });
     assert.deepEqual(s.exec('frame 50 x10'), { ok: true });
     assert.ok(s.read('moved') > 0);
