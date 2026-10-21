@@ -16,7 +16,6 @@ import sys
 
 os.environ.setdefault("GITHUB_REPOSITORY", "")  # project_sync and tickets read it on import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import project_sync  # noqa: E402
 import tickets  # noqa: E402
 from factory_tick import Backend, FakeBackend  # noqa: E402
 
@@ -53,21 +52,13 @@ class GhBackend(Backend):
             return
         if self._satisfied(snapshot, action):
             return
-        self._item = None
         self._write(snapshot, action)
         self.mirror.apply(snapshot, action)
-        if self._item:
-            self._card(snapshot, action)["item"] = self._item
 
     # -- what the snapshot already shows
 
     def _issue(self, snapshot, action):
         return next((i for i in snapshot.issues if f"issue#{i['number']}" == action.target), None)
-
-    def _card(self, snapshot, action):
-        kind, n = ("Issue", action.target[6:]) if action.target.startswith("issue#") \
-            else ("PullRequest", action.target[3:])
-        return next((c for c in snapshot.board if (c["kind"], c["number"]) == (kind, int(n))), None)
 
     def _satisfied(self, snapshot, action):
         k, p = action.kind, action.payload
@@ -88,26 +79,12 @@ class GhBackend(Backend):
             return any(i["title"] == p["title"] and i["state"] == "open" for i in snapshot.issues)
         if k in ("report", "request_phase_done"):
             return (action.target, action.reason if k == "report" else k) in snapshot.reported
-        card = self._card(snapshot, action)
-        if k == "add_card":
-            return card is not None
-        if k == "set_status":
-            return card is not None and card.get("status") == p["status"]
-        if k == "set_waiting":
-            return card is not None and (card.get("waiting") or "") == p["text"]
         return False
 
     # -- the requests
 
-    def _id(self, n, node=False):
-        return self._gh("api", f"repos/{self.repo}/issues/{n}", "--jq",
-                        ".node_id" if node else ".id").strip()
-
-    def _graphql(self, query, jq=".", **variables):
-        args = ["api", "graphql", "-f", f"query={query}"]
-        for k, v in variables.items():
-            args += ["-f", f"{k}={v}"]
-        return self._gh(*args, "--jq", jq, project=True).strip()
+    def _id(self, n):
+        return self._gh("api", f"repos/{self.repo}/issues/{n}", "--jq", ".id").strip()
 
     def _write(self, snapshot, action):
         k, p, t = action.kind, action.payload, action.target
@@ -135,32 +112,5 @@ class GhBackend(Backend):
             self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}")
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"path={p['file']}")
-        elif k in ("set_status", "set_waiting", "add_card"):
-            self._write_card(snapshot, action)
         elif k != "report":  # a report is only remembered; the report pass writes the issue
             raise ValueError(f"unhandled action {k} on {t}")
-
-    def _write_card(self, snapshot, action):
-        """Set the card's Status and "Waiting on", adding the card first when
-        it isn't on the board; the new item id is kept on the mirrored card."""
-        p, meta = action.payload, snapshot.board_meta
-        project, waiting = meta["project"], meta.get("waiting_field")
-        card = self._card(snapshot, action)
-        if card is None:
-            n = action.target.split("#")[-1]
-            content = self._id(n, node=True) if action.target.startswith("issue#") else self._gh(
-                "api", f"repos/{self.repo}/pulls/{n}", "--jq", ".node_id").strip()
-            item = self._graphql(project_sync.ADD_ITEM, ".data.addProjectV2ItemById.item.id",
-                                 project=project, content=content)
-        else:
-            item = card["item"]
-        self._item = item
-        if "status" in p:
-            self._graphql(project_sync.SET_STATUS, project=project, item=item,
-                          field=meta["status_field"], option=meta["option_ids"][p["status"]])
-        text = p.get("text", p.get("waiting"))
-        if waiting and text is not None and (text or card is not None):
-            if text:
-                self._graphql(project_sync.SET_TEXT, project=project, item=item, field=waiting, text=text)
-            else:
-                self._graphql(project_sync.CLEAR, project=project, item=item, field=waiting)

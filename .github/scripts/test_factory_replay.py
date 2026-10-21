@@ -1,5 +1,4 @@
 """Replay the 2026-10-19/20 stall history through one full tick. python3 -I test_factory_replay.py"""
-import json
 import os
 import sys
 import unittest
@@ -84,37 +83,6 @@ class Live(unittest.TestCase):
         again, calls2 = self.backend()
         self.assertEqual(tick(snap, passes(), again), [])
         self.assertEqual(calls2, [])
-
-    def test_card_is_added_then_set(self):
-        b, calls = self.backend()
-        snap = Snapshot()
-        snap.board_meta = {"project": "P", "status_field": "F", "waiting_field": "W",
-                           "option_ids": {"Approved": "o1"}}
-        b.apply(snap, Action("add_card", "issue#5", {"status": "Approved", "waiting": "#4"}))
-        self.assertEqual(snap.board[0]["item"], "123")
-        self.assertEqual(len(calls), 4)  # node id, add, status, waiting
-        b.apply(snap, Action("set_status", "issue#5", {"status": "Approved"}))
-        self.assertEqual(len(calls), 4)
-
-
-class Loader(unittest.TestCase):
-    def test_only_trusted_comments_are_read(self):
-        import subprocess
-        from unittest import mock
-
-        def fake(cmd, **kw):
-            path = cmd[cmd.index("GET") + 1]
-            user = lambda u: {"user": {"login": u}, "body": "Blocked by #1", "created_at": "t"}
-            data = []
-            if path.startswith("repos/o/r/issues?") and path.endswith("page=1"):
-                data = [{"number": 7, "title": "T", "state": "open", "labels": [{"name": "factory"}]}]
-            elif path.endswith("/issues/7/comments?per_page=100"):
-                data = [user("jtwaugh"), user("mallory")]
-            return subprocess.CompletedProcess(cmd, 0, "HTTP/2 200\r\n\r\n" + json.dumps(data), "")
-        with mock.patch("factory_tick.subprocess.run", fake), \
-                mock.patch.dict(os.environ, {"PROJECT_NUMBER": ""}):
-            snap = Snapshot.from_github("o/r")
-        self.assertEqual([c["user"] for c in snap.issues[0]["comments"]], ["jtwaugh"])
 
 
 if __name__ == "__main__":

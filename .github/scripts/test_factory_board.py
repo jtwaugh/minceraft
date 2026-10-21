@@ -50,13 +50,9 @@ class Test(unittest.TestCase):
                 mock.patch.object(project_sync, "graphql", return_value=result), \
                 mock.patch.object(factory_board.tickets, "comment_blockers", return_value=[(5, "t")]):
             factory_board.load_board(s, "me", 1)
-        self.assertEqual(s.board, [{"item": "i1", "kind": "Issue", "number": 1, "state": "OPEN",
-                                    "status": "Inbox", "status_updated": "t1", "waiting": "#2"}])
-        self.assertEqual(s.board_meta, {
-            "options": project_sync.STATUSES, "waiting": True, "loaded": True, "number": 1,
-            "project": "P", "status_field": "F", "waiting_field": "W",
-            "option_ids": {**{n: f"o{n}" for n in project_sync.STATUSES},
-                           "Submitted": "oApproved", "Idea": "oInbox"}})
+        self.assertEqual(s.board, [{"kind": "Issue", "number": 1, "state": "OPEN", "status": "Inbox",
+                                    "status_updated": "t1", "waiting": "#2"}])
+        self.assertEqual(s.board_meta, {"options": project_sync.STATUSES, "waiting": True})
         self.assertEqual(s.issues[0]["comment_blockers"], [5])
 
     def test_missing_link_gets_one_action_then_none(self):

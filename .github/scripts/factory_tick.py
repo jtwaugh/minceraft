@@ -69,7 +69,6 @@ class Snapshot:
         """Paginated reads; `etags` (path -> (etag, body)) is sent as
         If-None-Match and a 304 reuses the body. The board is read when
         PROJECT_TOKEN and PROJECT_NUMBER are set. Docs: later."""
-        import tickets
         snap = cls()
         etags = {} if etags is None else etags
 
@@ -112,12 +111,6 @@ class Snapshot:
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"],
                      "sha": p["head"]["sha"], "body": p.get("body") or ""}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
-        for i in snap.issues:  # trusted comments only, for open `factory` tickets
-            if i["kind"] == "ticket" and i["state"] == "open" and "factory" in i["labels"]:
-                i["comments"] = [
-                    {"user": c["user"]["login"], "body": c.get("body") or "", "created_at": c["created_at"]}
-                    for c in get(f"repos/{repo}/issues/{i['number']}/comments?per_page=100")
-                    if c["user"]["login"] in tickets.TRUSTED]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
         number = os.environ.get("PROJECT_NUMBER", "").strip()
         if os.environ.get("PROJECT_TOKEN") and number:
