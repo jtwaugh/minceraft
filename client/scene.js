@@ -19,6 +19,7 @@ import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadI
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
+import { raftBoxes, RAFT_TEXTURES } from './raftmodel.js';
 import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
@@ -276,7 +277,7 @@ const ctx = legendContext(legendJson, faceLayer);
 // Textured-model drawer (modelgl.js); nothing is drawn with it yet. Without the
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
-const models = createModelDrawer(gl, tileset);
+const models = createModelDrawer(gl, tileset, RAFT_TEXTURES);
 
 // With MSAA, cutout edges use alpha-to-coverage on a sharpened alpha so distant
 // leaves fade to partial coverage instead of popping in and out; without it the
@@ -291,7 +292,7 @@ const cut = (draw) => {
 let skyColor = [0.61, 0.76, 0.9];
 const meshes = { opaque: [], cutout: [], water: [], ice: [] };
 
-const raftMeshes = { opaque: [], cutout: [] }; // moved each frame by the sim's raft offset
+let raftModel = null; // the raft's boxes; moved each frame by the sim's raft offset
 // Meshes of each streamed region, by "rx,rz", so they can be freed when it unloads.
 const regionParts = new Map();
 // Loaded neighbours of a newly meshed region, remeshed one per spare frame: they were
@@ -356,11 +357,7 @@ if (scene) {
     farmSig = sig;
     meshSea();
   };
-  const m = meshBlocks(ctx, scene.raft_blocks(), tints, size, 0);
-  for (const k of Object.keys(raftMeshes)) {
-    const part = upload(m[k], offset);
-    if (part) raftMeshes[k].push(part);
-  }
+  raftModel = models.addModel(raftBoxes(scene.raft_blocks(), size));
   remeshFarm();
 }
 
@@ -451,9 +448,7 @@ function render(now) {
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
-    const moved = (parts) => parts.map((p) => ({ ...p, offset: [p.offset[0] + dx, p.offset[1] + dy, p.offset[2] + dz] }));
-    bind(solidProg, 1); drawParts(solidProg, moved(raftMeshes.opaque));
-    bind(cutProg, 1); cut(() => drawParts(cutProg, moved(raftMeshes.cutout)));
+    models.drawModel(mvp, new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, scene.min + dx, dy, scene.min + dz, 1]), raftModel);
   }
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
