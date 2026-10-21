@@ -21,3 +21,9 @@ tilt_amplitude = 3.0
 period_ticks = 160
 # Direction the swell runs, in the xz plane: 0 is +x, 90 is +z.
 direction_degrees = 30.0
+
+# Travel between levels along the pathfound route (world-layout.md Phase E).
+# The raft moves at this constant speed and does not turn.
+[travel]
+# Blocks per tick (20 ticks per second).
+speed = 0.15
