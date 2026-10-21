@@ -16,6 +16,11 @@
 sensitivity = 0.0025
 fov_degrees = 70.0
 
+[sprint]
+# Placeholder (docs/design/sprinting.md): the double-tap window, in sim ticks,
+# pending research question #820. Must be a whole number of at least 1.
+double_tap_ticks = 7
+
 [actions.move_forward]
 keys = ["KeyW"]
 mode = "hold"

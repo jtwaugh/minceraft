@@ -23,6 +23,7 @@ fn shipped_file_loads_every_action() {
         assert!(!b.get(a).keys.is_empty(), "{}", a.name());
     }
     assert_eq!(b.fov_degrees, 70.0);
+    assert_eq!(b.double_tap_ticks, 7);
     assert!(b.sensitivity > 0.0);
     assert_eq!(b.get(Action::MoveForward).keys, ["KeyW"]);
     assert_eq!(b.get(Action::Jump).mode, Mode::Hold);
@@ -127,5 +128,15 @@ fn errors_convert_to_data_error_with_same_message() {
         assert_eq!(data.file, DataFile::Input);
         assert_eq!(data.to_string(), msg);
         assert_eq!(shown, msg);
+    }
+}
+
+#[test]
+fn rejects_missing_or_bad_double_tap_window() {
+    let missing = shipped().replace("double_tap_ticks = 7", "");
+    assert_err_contains::<(), _>(Bindings::parse(&missing).map(|_| ()), "double_tap_ticks");
+    for bad in ["\"7\"", "7.5", "0"] {
+        let text = shipped().replace("double_tap_ticks = 7", &format!("double_tap_ticks = {bad}"));
+        assert_err_contains::<(), _>(Bindings::parse(&text).map(|_| ()), "double_tap_ticks");
     }
 }
