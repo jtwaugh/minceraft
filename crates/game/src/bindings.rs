@@ -94,6 +94,10 @@ pub struct Bindings {
     pub fov_degrees: f32,
     /// Double-tap window for sprinting, in sim ticks.
     pub double_tap_ticks: u32,
+    /// Degrees the field of view widens while sprinting.
+    pub sprint_fov_extra_degrees: f32,
+    /// Seconds the sprint field of view takes to ease in and out.
+    pub sprint_fov_ease_seconds: f32,
     actions: HashMap<Action, Binding>,
 }
 
@@ -180,6 +184,8 @@ impl Bindings {
                 ))
             }
         };
+        let sprint_fov_extra_degrees = positive(sprint, "fov_extra_degrees")?;
+        let sprint_fov_ease_seconds = positive(sprint, "fov_ease_seconds")?;
 
         let table = root
             .get("actions")
@@ -250,6 +256,8 @@ impl Bindings {
             sensitivity,
             fov_degrees,
             double_tap_ticks,
+            sprint_fov_extra_degrees,
+            sprint_fov_ease_seconds,
             actions,
         })
     }
@@ -272,6 +280,17 @@ fn number(t: &toml::value::Table, key: &str) -> Result<f32, BindingsError> {
         Some(toml::Value::Integer(i)) => Ok(*i as f32),
         _ => Err(BindingsError::Invalid(format!(
             "look.{key} must be a finite number"
+        ))),
+    }
+}
+
+/// A finite, strictly positive number in the `[sprint]` table.
+fn positive(t: &toml::value::Table, key: &str) -> Result<f32, BindingsError> {
+    match t.get(key) {
+        Some(toml::Value::Float(f)) if f.is_finite() && *f > 0.0 => Ok(*f as f32),
+        Some(toml::Value::Integer(i)) if *i > 0 => Ok(*i as f32),
+        _ => Err(BindingsError::Invalid(format!(
+            "sprint.{key} must be a positive number"
         ))),
     }
 }
