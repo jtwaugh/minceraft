@@ -51,8 +51,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Always master's scripts: on PR events the default checkout is the
+      # PR's code, which would run unreviewed with this job's write access.
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/scripts
       - name: Tick
         env:

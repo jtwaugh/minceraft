@@ -63,11 +63,11 @@ jobs:
             plan=$PLAN_INPUT
             gh api "repos/$REPO/issues/$plan" > plan.json
             [ "$(jq -r .state_reason plan.json)" = completed ] || { echo "Plan #$plan isn't closed as completed; nothing to do."; exit 0; }
-            TITLE=dispatched
           fi
-          case "$TITLE" in
-            dispatched) ;;
-            Plan:*)
+          # "<plan input>:<title>": a dispatch (input set), else by title
+          case "$PLAN_INPUT:$TITLE" in
+            [!:]*) ;;
+            :Plan:*)
               # A plan closed directly. "Not planned" means abandoned: leave
               # the phase alone (the pick step may plan it again).
               [ "$REASON" = completed ] || { echo "Plan #$ISSUE closed as $REASON; nothing to do."; exit 0; }

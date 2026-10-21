@@ -198,8 +198,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The tick already checked and marked it: skip only if a run
+          # A dispatched run trusts the tick, which has already checked
+          # dependencies and overlap and posted the marker: skip only if a run
           # (e.g. the old find-ready's, which this one waited for) made a PR.
+          # Only maintainers can dispatch, so a hand-run
+          # `gh workflow run claude.yml -f issue=<n>` starts any ticket, even
+          # a blocked one.
           if [ "${{ github.event_name }}" = workflow_dispatch ]; then
             if [ "$(python3 -B .github/scripts/tickets.py has-pr "${{ matrix.issue }}")" = true ]; then
               echo "#${{ matrix.issue }} already has an open PR; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
