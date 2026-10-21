@@ -314,6 +314,8 @@ mod scoring;
 mod scoring_island;
 pub use scoring::{path_directness, spacing_regularity, ScoringConfig};
 pub use scoring_island::{coastline_interest, island_quality, score_island};
+mod search;
+pub use search::{search_seeds, Scored, SearchParams, SearchProgress, TermScores};
 mod scoring_extra;
 pub use scoring_extra::{extra_islands, ExtraIslands};
 mod structure;
@@ -378,6 +380,8 @@ mod scoring_extra_tests;
 mod scoring_island_tests;
 #[cfg(test)]
 mod scoring_tests;
+#[cfg(test)]
+mod search_tests;
 #[cfg(test)]
 mod structure_tests;
 #[cfg(test)]
