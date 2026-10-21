@@ -91,10 +91,16 @@ fn main() {
     );
     println!("stage times, one thread (ms per candidate entering the stage):");
     let ms = |d: Duration, m: u64| 1000.0 * d.as_secs_f64() / m.max(1) as f64;
-    println!("  route+layout {:.2}", ms(build, n));
+    println!(
+        "  route+layout {:.2} (lazy: real cost lands in prefilter/validation)",
+        ms(build, n)
+    );
     println!("  prefilter    {:.2}", ms(pre, n));
     println!("  validation   {:.2}", ms(val, n - rejected));
-    println!("  scoring      {:.2}", ms(score, passed));
+    println!(
+        "  scoring      {:.2} (upper bound, by difference)",
+        ms(score, passed)
+    );
 
     println!(
         "top {} (score, seed; anchorage: biome, temperature):",
