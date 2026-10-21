@@ -22,6 +22,12 @@ pub struct Player {
     /// The fall distance of a landing on the ground made this tick (before
     /// it was reset); cleared at the start of the next tick.
     pub last_landing: Option<f64>,
+    /// Set on the tick health reaches 0 and kept after. While set, `tick`
+    /// ignores input.
+    pub dead: bool,
+    /// True only on the tick on which the player died; cleared at the start
+    /// of the next tick.
+    pub died_this_tick: bool,
 }
 
 impl Player {
@@ -33,6 +39,8 @@ impl Player {
             health: physics.max_health,
             fall_distance: 0.0,
             last_landing: None,
+            dead: false,
+            died_this_tick: false,
         }
     }
 
@@ -118,6 +126,10 @@ impl Player {
         world: &impl CollisionWorld,
     ) {
         self.last_landing = None;
+        self.died_this_tick = false;
+        // A dead player is pushed by gravity and collision only.
+        let neutral = TickInput::default();
+        let input = if self.dead { &neutral } else { input };
         // 1. Read input and scale it. Over-long raw input (diagonals) is
         // normalised first so no direction is faster than straight ahead.
         let (mut fwd, mut strafe) = input.movement();
@@ -173,6 +185,10 @@ impl Player {
         }
         self.on_ground = m.on_ground;
         self.update_fall(m.applied[1], physics, world);
+        if self.health == 0 && !self.dead {
+            self.dead = true;
+            self.died_this_tick = true;
+        }
 
         if in_water {
             // 4.3 replaces steps 6 and 7: scale every axis, then sink.
@@ -552,6 +568,60 @@ mod tests {
     fn starts_with_max_health() {
         let p = phys();
         assert_eq!(Player::new([0.0; 3], &p).health, p.max_health);
+    }
+
+    #[test]
+    fn fatal_fall_sets_dead_on_that_tick_only() {
+        let (p, w) = (phys(), floor());
+        assert!(!Player::new([0.5, 5.0, 0.5], &p).dead);
+        let mut pl = Player::new([0.5, 101.0, 0.5], &p);
+        let mut deaths = 0;
+        for _ in 0..200 {
+            let was_on_ground = pl.on_ground;
+            pl.tick(&TickInput::default(), &p, &w);
+            if pl.died_this_tick {
+                deaths += 1;
+                assert!(pl.dead && pl.health == 0 && pl.on_ground && !was_on_ground);
+            } else if !pl.dead {
+                assert!(pl.health > 0);
+            }
+        }
+        assert_eq!(deaths, 1);
+        assert!(pl.dead && !pl.died_this_tick);
+    }
+
+    #[test]
+    fn survivable_fall_does_not_kill() {
+        let pl = drop_from(6.2, &floor());
+        assert!(!pl.dead && !pl.died_this_tick);
+    }
+
+    #[test]
+    fn dead_player_ignores_input_but_still_falls() {
+        let (p, w) = (phys(), floor());
+        let all = TickInput {
+            move_forward: 1.0,
+            move_strafe: 1.0,
+            jump: true,
+            sneak: true,
+            ..TickInput::default()
+        };
+        // On the ground: no input-driven motion, no jump.
+        let mut pl = grounded(&p, &w);
+        pl.dead = true;
+        let before = pl.clone();
+        for _ in 0..20 {
+            pl.tick(&all, &p, &w);
+        }
+        assert_eq!((pl.pos, pl.vel), (before.pos, before.vel));
+        // In the air: gravity applies, horizontal velocity only decays.
+        let mut pl = Player::new([0.5, 10.0, 0.5], &p);
+        pl.dead = true;
+        pl.tick(&all, &p, &w);
+        assert_eq!((pl.vel[0], pl.vel[2]), (0.0, 0.0));
+        assert!(pl.vel[1] < 0.0 && pl.pos[1] == 10.0);
+        pl.tick(&all, &p, &w);
+        assert!(pl.pos[1] < 10.0 && pl.pos[0] == 0.5 && pl.pos[2] == 0.5);
     }
 
     #[test]
