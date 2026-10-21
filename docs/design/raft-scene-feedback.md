@@ -112,7 +112,7 @@ The raft is meshed from ordinary blocks (`scene.raft_blocks()`).
 The selection outline shows up on water blocks. It shouldn't.
 
 - Today: basic-gameplay section 5 (decided in #174) says every non-air block, liquids included, has a selection box, so the ray stops on the water surface and can target water.
-- Want: water never shows the outline. Open: whether the ray should pass through water entirely (so you can target things under it) or still stop there for rules that need water (filling a bucket later) but just not draw the outline.
+- Want: water never shows the outline. The ray still stops at water and `Target::Block` can be water (for rules that need it, such as filling a bucket later), but no outline is drawn for it. (Decided in #636.)
 
 > **Reconciler:** Confirmed. See note 10.
 
@@ -147,5 +147,4 @@ The selection outline shows up on water blocks. It shouldn't.
 6. **Driving control scheme (item 4).** Options: A. Keys while standing on a helm cell. B. Interact with a tiller block to take the helm, then movement keys steer, interact again to leave. C. Keys anywhere on the deck. Suggest B.
 7. **Turning (item 4).** Options: A. Quarter turns only (a key press turns 90 degrees over N ticks, visual yaw eased, collision snaps at the end). B. Continuous yaw, with collision using the nearest quarter turn. B can disagree with where the player appears to stand; suggest A.
 8. **What stops the raft (item 4).** Options: A. Any solid block in the raft's footprint. B. A: plus water shallower than a draught. C. Soft stop: speed drops to zero without moving into the cell.
-9. **Water targeting (item 6).** Options: A. Ray passes through water; water is never a target. B. Ray stops at water, `Target::Block` can be water, no outline is drawn. Suggest B if a bucket is planned (basic-gameplay lists buckets in art batch 6), else A.
 10. **Model rendering (items 3 and 5).** Options: A. Box models with per-face UVs from the existing tile sheet (smallest). B. A new mesh format. Suggest A.
