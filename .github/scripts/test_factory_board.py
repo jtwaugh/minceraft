@@ -74,15 +74,6 @@ class Test(unittest.TestCase):
         tick(s, [board_pass], FakeBackend())
         self.assertEqual(board_pass(s), [])
 
-    def test_blocked_by_links(self):
-        issues = [issue(10, ["planned"]),
-                  issue(11, ["planned"], body_excerpt="**Depends on:** #10", blocked_by_links=[])]
-        s = snap(issues, [])
-        acts = [a for a in board_pass(s) if a.kind == "add_blocked_by"]
-        self.assertEqual(len(acts), 1)
-        tick(s, [board_pass], FakeBackend())
-        self.assertEqual(board_pass(s), [])
-
 
 if __name__ == "__main__":
     unittest.main()

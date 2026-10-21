@@ -51,7 +51,7 @@ class Snapshot:
     @classmethod
     def from_github(cls, repo, etags=None):
         """Paginated reads; `etags` (path -> (etag, body)) is sent as
-        If-None-Match and a 304 reuses the body. Docs: later."""
+        If-None-Match and a 304 reuses the body. Docs and board: later."""
         snap = cls()
         etags = {} if etags is None else etags
 
@@ -92,11 +92,6 @@ class Snapshot:
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"]}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
-        number = os.environ.get("PROJECT_NUMBER", "").strip()
-        if os.environ.get("PROJECT_TOKEN") and number.isdigit():
-            import factory_board  # circular at module level
-            factory_board.load_board(snap, os.environ.get("PROJECT_OWNER") or repo.split("/")[0],
-                                     int(number))
         return snap
 
 
@@ -121,8 +116,6 @@ class FakeBackend(Backend):
         elif action.kind == "remove_label" and issue is not None:
             if action.payload["label"] in issue["labels"]:
                 issue["labels"].remove(action.payload["label"])
-        elif action.kind == "add_blocked_by" and issue is not None:
-            issue.setdefault("blocked_by_links", []).append(action.payload["blocker"])
         elif action.kind in ("set_status", "set_waiting", "add_card"):
             kind, n = ("Issue", action.target[6:]) if action.target.startswith("issue#") \
                 else ("PullRequest", action.target[3:])

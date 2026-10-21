@@ -8,16 +8,10 @@ the loader already read. It emits one action per difference and nothing for a
 card that matches, so a second pass over the applied state is empty.
 (docs/design/factory-orchestrator.md Phase A, design rule 6)
 
-Snapshot inputs beyond the base fields:
-  board items   {kind: "Issue"|"PullRequest", number, state, status,
-                 status_updated, waiting}
-  board_meta    {"options": [Status column names], "waiting": bool}; empty
-                means every column and the field exist
-  prs[]         "status" (project_sync.pr_status, computed by the loader),
-                optional "body" and "files"
-  issues[]      optional "body" (else body_excerpt), "comment_blockers",
-                "blocked_by_links" (absent means unknown: no link actions),
-                "idea_unlabelled_at"
+Extra snapshot inputs: board items {kind, number, state, status,
+status_updated, waiting}; board_meta {"options", "waiting"} (empty: all
+columns and the field exist); prs[] "status" = (status, why), "body", "files";
+issues[] "body", "comment_blockers", "idea_unlabelled_at".
 """
 import os
 import sys
@@ -29,19 +23,6 @@ import tickets  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
 MANAGED = {"planned", "spec-question", "idea", "factory"}
-
-
-def load_board(snap, login, number):
-    """The one board read: fills snap.board and snap.board_meta."""
-    _, _, options, items, waiting = project_sync.load_project(login, number)
-    snap.board_meta = {"options": [n for n, o in options.items() if o], "waiting": bool(waiting)}
-    for it in items:
-        c = it["content"]
-        if c and c.get("__typename") in ("Issue", "PullRequest"):
-            status = it.get("status") or {}
-            snap.board.append({"kind": c["__typename"], "number": c["number"], "state": c["state"],
-                               "status": status.get("name"), "status_updated": status.get("updatedAt"),
-                               "waiting": (it.get("waiting") or {}).get("text")})
 
 
 def _target(kind, n):
@@ -125,12 +106,4 @@ def board_pass(snap):
             status = status if status in options else project_sync.OPTIONAL.get(status, status)
             actions.append(Action("add_card", _target(*key), {"status": status, "waiting": text},
                                   f"added as {status} ({why})"))
-    for i in snap.issues:
-        if "blocked_by_links" not in i or i["state"].lower() != "open" or i["kind"] == "plan":
-            continue
-        declared = tickets.deps(i.get("body") or i.get("body_excerpt")) | set(i.get("comment_blockers", []))
-        for d in sorted(declared - {i["number"]} - set(i["blocked_by_links"])):
-            if d in issues:
-                actions.append(Action("add_blocked_by", f"issue#{i['number']}", {"blocker": d},
-                                      f"declared dependency #{d}"))
     return actions
