@@ -27,6 +27,8 @@ pub struct AnimalDef {
     pub drops: Vec<Drop>,
     /// Wander speed, blocks per second.
     pub wander_speed: f64,
+    /// Wander and flee speed while in water, blocks per second.
+    pub swim_speed: f64,
     /// Inclusive range of ticks a wander walk lasts.
     pub walk_ticks: [u32; 2],
     /// Inclusive range of ticks between walks.
@@ -110,6 +112,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
             "drops",
             "box",
             "wander_speed",
+            "swim_speed",
             "walk_ticks",
             "pause_ticks",
             "hurt_ticks",
@@ -147,6 +150,11 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
         .filter(|s| s.is_finite() && *s > 0.0)
         .ok_or_else(|| bad("`wander_speed` must be above zero".to_string()))?;
+    let swim_speed = table
+        .get("swim_speed")
+        .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .ok_or_else(|| bad("`swim_speed` must be above zero".to_string()))?;
     let ticks = |field: &str| {
         table
             .get(field)
@@ -239,6 +247,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         box_size,
         drops,
         wander_speed,
+        swim_speed,
         walk_ticks,
         pause_ticks,
         hurt_ticks,
@@ -325,9 +334,27 @@ mod tests {
     }
 
     #[test]
+    fn swim_speeds_are_loaded() {
+        let a = Animals::default_animals();
+        assert!(a.kinds.iter().all(|k| k.swim_speed > 0.0));
+        assert_eq!(a.get("cow").unwrap().swim_speed, 0.5);
+    }
+
+    #[test]
+    fn unknown_field_next_to_swim_speed_rejected() {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../data/animals.toml"
+        ))
+        .unwrap();
+        let bad = text.replacen("\nswim_speed", "\nswim_spead", 1);
+        assert_err_contains(Animals::from_toml(&bad), "swim_spead");
+    }
+
+    #[test]
     fn unknown_drop_item_rejected() {
         let a = Animals::from_toml(
-            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nswim_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
         )
         .unwrap();
         assert!(matches!(
@@ -358,6 +385,10 @@ mod tests {
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 0\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\n",
             "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\n",
+            // swim_speed: missing, zero, negative.
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nswim_speed = 0\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\ndrops = []\nwander_speed = 1\nswim_speed = -1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\n",
             "not toml [",
         ] {
             assert_err_contains(Animals::from_toml(bad), "animals.toml");
