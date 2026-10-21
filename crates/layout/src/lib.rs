@@ -288,6 +288,8 @@ mod habitat_map;
 pub use habitat_map::{HabitatMap, NO_HABITAT};
 mod level;
 pub use level::{Level, LevelFile, LevelFileError, WorldConfig};
+mod navigability;
+pub use navigability::NavMap;
 mod region;
 #[cfg(feature = "toml-io")]
 mod rule_check;
@@ -332,6 +334,8 @@ mod habitat_map_tests;
 mod habitat_tests;
 #[cfg(all(test, feature = "toml-io"))]
 mod level_tests;
+#[cfg(test)]
+mod navigability_tests;
 #[cfg(test)]
 mod raft_tests;
 #[cfg(test)]
