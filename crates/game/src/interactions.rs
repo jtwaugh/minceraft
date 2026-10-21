@@ -534,7 +534,7 @@ mod tests {
     #[test]
     fn punch_fallback_matches_with_no_tool() {
         let r = resolved(&animal(HeldThing::Empty)).unwrap();
-        assert_eq!((r.rule_index, r.action), (8, ActionKind::Attack));
+        assert_eq!((r.rule_index, r.action), (10, ActionKind::Attack));
     }
 
     #[test]
@@ -572,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_only_targets_crops() {
+    fn pick_only_targets_crops_and_flowers() {
         let rules = Interactions::default_rules().rules;
         let picks: Vec<_> = rules
             .iter()
@@ -581,7 +581,20 @@ mod tests {
         assert!(!picks.is_empty());
         assert!(picks
             .iter()
-            .all(|r| r.target == Target::Block("crop".to_string())));
+            .all(|r| r.target == Target::Block("crop".to_string())
+                || r.target == Target::Block("flower".to_string())));
+    }
+
+    #[test]
+    fn flowers_pick_and_tall_grass_forages() {
+        for held in [HeldThing::Empty, HeldThing::Tool("hoe".into())] {
+            let c = ctx(held, Button::Secondary, "flower", Face::Top);
+            assert_eq!(action(&c), Some(ActionKind::Pick));
+        }
+        let c = ctx(HeldThing::Empty, Button::Secondary, "tall_grass", Face::Top);
+        assert_eq!(action(&c), Some(ActionKind::Forage));
+        let c = ctx(HeldThing::Empty, Button::Secondary, "dandelion", Face::Top);
+        assert_eq!(action(&c), None);
     }
 
     #[test]
@@ -677,6 +690,18 @@ mod tests {
                 Held::AnyTool,
                 Button::Secondary,
                 block("crop"),
+                ActionKind::Pick,
+            ),
+            rule(
+                Held::Empty,
+                Button::Secondary,
+                block("flower"),
+                ActionKind::Pick,
+            ),
+            rule(
+                Held::AnyTool,
+                Button::Secondary,
+                block("flower"),
                 ActionKind::Pick,
             ),
             rule(
