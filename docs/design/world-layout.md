@@ -701,7 +701,7 @@ To account for raft size, erode the navigable set by the raft's half-width (defa
 
 ### 6.3 Seed scoring
 
-Each term is normalized to 0..1 and weighted. Weights live in `data/scoring.toml`.
+Each term is normalized to 0..1 and weighted. Weights live in `data/scoring.toml`. Normalization is linear against a cap, and the caps live in `data/scoring.toml` too. Each term is averaged over the levels. Spacing regularity is `1 - min(|gap - spacing| / spacing_spread, 1)` per gap, averaged, with `spacing` and `spacing_spread` from the route. Path directness is the mean over segments of straight-line distance over path length, clamped to 0..1. Island quality is the mean of `min(area / (cap_area_factor * min_area), 1)` and the same for flat tiles, with the `cap_*_factor` values in the file. Coastline interest is `min(ratio / cap_ratio, 1)`. (Decided in #742.)
 
 | Term | Meaning | Weight |
 |---|---|---|
