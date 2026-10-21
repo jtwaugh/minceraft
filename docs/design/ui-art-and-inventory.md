@@ -90,7 +90,7 @@ Done when: `validate.py` prints `ok` with a nonzero count, the item-coverage tes
 ### Phase B: Styled HUD and menu
 
 - `client/hud.js` draws slot frames, the selection highlight, item icons, the hands indicator, hearts (full, half, empty) and digits from the tileset, with integer pixel scaling. The model (`hudModel`) stays DOM-free and tested.
-- Root `index.html` and `client/menu.js` get the title-screen styling, keeping the "alpha" label (`client/test/menu.test.mjs` still passes). The live-background question is settled first (open question 3).
+- Root `index.html` and `client/menu.js` get the title-screen styling, keeping the "alpha" label (`client/test/menu.test.mjs` still passes). The menu background is a CSS-animated raft or sea built from tiles, with no wasm loaded on the root page. (Decided in #585.)
 - The day phase timer is styled when the clock exists; otherwise this phase leaves it out.
 
 Done when: the HUD and menu model tests pass, the scale-factor test passes, `published_files.py` finds every file the pages load, and the look is accepted `[manual check]`.
@@ -112,6 +112,5 @@ Done when: the input scripts pass and the view's model test lists the belt and h
 ## Open questions
 
 1. **Inventory kind** (author's question 1). Options: A) readout of belt, hands and later crates, rule 4 unchanged (recommended, note 1); B) a real multi-slot inventory, which reverses rule 4 and needs its own design doc first.
-3. **Menu background** (author's question 3). Options: A) static (recommended: the menu must not load wasm, `root-menu.md` note 6); B) a CSS-animated raft or sea from tiles, no wasm; C) a live flyover, which loads wasm and the terrain on the root page and adds download size.
 4. **Sim while open.** Options: A) keep ticking with neutral input, as the console does (recommended, matches #402); B) pause the sim, which puts a pause flag in the Rust command layer's territory (`debug-console.md` section 9).
 5. **Open key.** Options: A) `Tab`; B) `KeyI`; C) `KeyE`, which is already Interact (not advised). Stored in `data/input.toml` by code.
