@@ -1,6 +1,6 @@
 //! Region cache with load and unload radii (design: world-layout Phase D).
 
-use crate::{Layout, LayoutRegion, RegionCoord};
+use crate::{Corridor, Layout, LayoutRegion, RegionCoord};
 use std::collections::HashMap;
 
 /// Which regions an [`RegionCache::update`] call generated and dropped, each
@@ -17,6 +17,7 @@ pub struct RegionCache {
     decorate: bool,
     regions: HashMap<RegionCoord, LayoutRegion>,
     generations: usize,
+    corridor: Option<Corridor>,
 }
 
 /// Chebyshev distance between two region coordinates.
@@ -33,7 +34,22 @@ impl RegionCache {
             decorate,
             regions: HashMap::new(),
             generations: 0,
+            corridor: None,
         }
+    }
+
+    /// Restricts loading to `corridor` (or lifts the restriction with `None`).
+    /// The next [`update`](Self::update) drops loaded regions outside it.
+    pub fn set_corridor(&mut self, corridor: Option<Corridor>) {
+        self.corridor = corridor;
+    }
+
+    pub fn corridor(&self) -> Option<&Corridor> {
+        self.corridor.as_ref()
+    }
+
+    fn allowed(&self, coord: RegionCoord) -> bool {
+        self.corridor.as_ref().is_none_or(|k| k.contains(coord))
     }
 
     pub fn layout(&self) -> &Layout {
@@ -76,7 +92,8 @@ impl RegionCache {
     /// Loads every region within `load_radius` (Chebyshev) of `centre` and
     /// drops those beyond `unload_radius`. Negative `load_radius` counts as 0
     /// and `unload_radius` is raised to at least `load_radius`, so a region
-    /// at the edge is never loaded and dropped in the same call.
+    /// at the edge is never loaded and dropped in the same call. With a
+    /// corridor set, only regions inside it are loaded, and others are dropped.
     pub fn update(
         &mut self,
         centre: RegionCoord,
@@ -90,7 +107,7 @@ impl RegionCache {
             .regions
             .keys()
             .copied()
-            .filter(|&c| distance(c, centre) > unload)
+            .filter(|&c| distance(c, centre) > unload || !self.allowed(c))
             .collect();
         unloaded.sort();
         for c in &unloaded {
@@ -104,7 +121,7 @@ impl RegionCache {
                     (centre.rx as i64 + dx) as i32,
                     (centre.rz as i64 + dz) as i32,
                 );
-                if !self.regions.contains_key(&c) {
+                if self.allowed(c) && !self.regions.contains_key(&c) {
                     self.get_or_generate(c);
                     loaded.push(c);
                 }
