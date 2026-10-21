@@ -4,8 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_backend import GhBackend  # noqa: E402
-from factory_tick import Action, FakeBackend, Snapshot, passes, tick, trusted_comments  # noqa: E402
+from factory_tick import FakeBackend, Snapshot, passes, tick  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "history.json")
 
@@ -46,27 +45,6 @@ class Replay(unittest.TestCase):
 
     def test_second_tick_does_nothing(self):
         self.assertEqual(self.second, [])
-
-
-class Live(unittest.TestCase):
-    def test_untrusted_actor_refused(self):
-        calls = []
-        b = GhBackend("o/r", Snapshot(), run=lambda *a, **k: calls.append(a))
-        with self.assertRaises(PermissionError):
-            b.apply(Snapshot(), Action("add_label", "issue#1", {"label": "factory", "actor": "mallory"}))
-        self.assertEqual(calls, [])
-
-    def test_satisfied_action_makes_no_request(self):
-        snap = Snapshot(issues=[{"number": 1, "labels": ["factory"], "state": "open"}])
-        calls = []
-        GhBackend("o/r", snap, run=lambda *a, **k: calls.append(a)).apply(
-            snap, Action("add_label", "issue#1", {"label": "factory"}))
-        self.assertEqual(calls, [])
-
-    def test_only_trusted_comments_are_read(self):
-        raw = [{"user": {"login": u}, "body": "Blocked by #3", "created_at": "t"}
-               for u in ("jtwaugh", "mallory")]
-        self.assertEqual([c["user"] for c in trusted_comments(raw)], ["jtwaugh"])
 
 
 if __name__ == "__main__":

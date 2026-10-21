@@ -12,7 +12,6 @@ The passes themselves live in later tickets.
 """
 import json
 import os
-import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -22,20 +21,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
-TRUSTED = {"jtwaugh", "claude[bot]", "github-actions[bot]"}  # same set as tickets.TRUSTED
-
-
-def trusted_comments(raw):
-    """Comments (as the passes read them) from the maintainer or the factory's own accounts."""
-    return [{"user": c["user"]["login"], "body": c.get("body") or "", "created_at": c["created_at"]}
-            for c in raw if c["user"]["login"] in TRUSTED]
-
-
-def blockers(comments):
-    """(number, created_at) for each "Blocked by #x" in the comments."""
-    return [(int(x), c["created_at"]) for c in comments
-            for m in re.finditer(r"[Bb]locked by ([^\n]*)", c["body"])
-            for x in re.findall(r"#(\d+)", m.group(1))]
 
 
 @dataclass(frozen=True)
@@ -64,27 +49,6 @@ class Snapshot:
         plans = d.get("plans") or [i for i in issues if i.get("kind") == "plan"]
         return cls(issues, d.get("prs", []), plans, d.get("docs", []),
                    d.get("branches", []), d.get("board", []), {"loaded": True})
-
-    def load_board(self, repo, raw_prs):
-        import project_sync
-        project, field, options, items, waiting = project_sync.load_project(
-            os.environ.get("PROJECT_OWNER") or repo.split("/")[0], int(os.environ["PROJECT_NUMBER"]))
-        self.board_meta = {"loaded": True, "options": list(options), "waiting": bool(waiting),
-                           "ids": (project, field, options, waiting)}
-        for p, r in zip(self.prs, raw_prs):  # same order
-            p["status"] = project_sync.pr_status(r)
-        for it in items:
-            c = it["content"]
-            if c and c.get("__typename") in ("Issue", "PullRequest") and c["repository"]["nameWithOwner"] == repo:
-                self.board.append({"kind": c["__typename"], "number": c["number"], "state": c["state"],
-                                   "item": it["id"], "status": (it.get("status") or {}).get("name"),
-                                   "status_updated": (it.get("status") or {}).get("updatedAt"),
-                                   "waiting": (it.get("waiting") or {}).get("text")})
-        for c in self.board:
-            if c["status"] == "Idea" and c["kind"] == "Issue":
-                issue = next((i for i in self.issues if i["number"] == c["number"]), None)
-                if issue:
-                    issue["idea_unlabelled_at"] = project_sync.unlabelled_idea_at(c["number"])
 
     def mark_reported(self):
         """Findings already in the open report issue count as reported."""
@@ -143,18 +107,9 @@ class Snapshot:
                 "body": i.get("body") or "",
                 "body_excerpt": (i.get("body") or "")[:500]})
         snap.plans = [i for i in snap.issues if i["kind"] == "plan"]
-        raw = paged(f"repos/{repo}/pulls?state=open")
-        snap.prs = [{"number": p["number"], "head": p["head"]["ref"], "body": p.get("body"),
-                     "state": "open",
-                     "files": [f["filename"] for f in paged(f"repos/{repo}/pulls/{p['number']}/files")]}
-                    for p in raw]
+        snap.prs = [{"number": p["number"], "head": p["head"]["ref"]}
+                    for p in paged(f"repos/{repo}/pulls?state=open")]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
-        for i in snap.issues:  # human inputs: only trusted accounts' comments count
-            if i["state"] == "open" and "factory" in i["labels"]:
-                i["comments"] = trusted_comments(paged(f"repos/{repo}/issues/{i['number']}/comments"))
-                i["comment_blockers"] = [b for b, _ in blockers(i["comments"])]
-        if os.environ.get("PROJECT_NUMBER", "").strip().isdigit():
-            snap.load_board(repo, raw)
         snap.mark_reported()
         return snap
 
@@ -264,16 +219,12 @@ def main(argv):
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} branches; {snap.requests} API requests")
-    if "--fixture" in args:
-        backend = FakeBackend()
-    else:
-        from factory_backend import GhBackend
-        backend = GhBackend(os.environ["GITHUB_REPOSITORY"], snap)
-    actions = tick(snap, passes(), FakeBackend() if dry else backend)
+    if not (dry or "--fixture" in args):
+        sys.exit("writing to GitHub needs the live backend (follow-up to #579); use --dry-run")
+    actions = tick(snap, passes(), FakeBackend())
     for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
-    print(f"{len(actions)} action(s){' (dry run, nothing written)' if dry else ''}; "
-          f"{snap.requests + getattr(backend, 'requests', 0)} API requests")
+    print(f"{len(actions)} action(s), nothing written; {snap.requests} API requests")
 
 
 if __name__ == "__main__":
