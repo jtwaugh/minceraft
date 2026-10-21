@@ -97,6 +97,7 @@ Animals are plain coloured boxes (`ANIMAL_COLORS` in `client/scene.js`), red whi
 
 - Want: a way to drive the raft: move it across the sea and turn it.
 - Open: how the player controls it (a tiller or helm block to interact with, or keys while standing at a spot), speed, how turning works given the deck only rotates in 90-degree steps for collision (#140), and what stops it (islands, shallows).
+- Stop: any solid block in the raft's footprint stops the raft. (Decided in #802.)
 
 > **Reconciler:** Confirmed: only the swell produces `RaftFrame`s. See notes 7 to 9. A helm block would also need a block (`data/blocks.toml`, which `crates/terrain` reads) or a game-side marker on the raft mask; a game-side marker avoids changing terrain.
 
@@ -145,5 +146,6 @@ The selection outline shows up on water blocks. It shouldn't.
 ## Open questions (reconciler)
 
 6. **Driving control scheme (item 4).** Options: A. Keys while standing on a helm cell. B. Interact with a tiller block to take the helm, then movement keys steer, interact again to leave. C. Keys anywhere on the deck. Suggest B.
+7. **Turning (item 4).** Options: A. Quarter turns only (a key press turns 90 degrees over N ticks, visual yaw eased, collision snaps at the end). B. Continuous yaw, with collision using the nearest quarter turn. B can disagree with where the player appears to stand; suggest A.
 8. **What stops the raft (item 4).** Options: A. Any solid block in the raft's footprint. B. A: plus water shallower than a draught. C. Soft stop: speed drops to zero without moving into the cell.
 10. **Model rendering (items 3 and 5).** Options: A. Box models with per-face UVs from the existing tile sheet (smallest). B. A new mesh format. Suggest A.
