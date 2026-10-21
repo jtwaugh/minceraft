@@ -74,6 +74,7 @@ If the critic can read `rule.secondary`, raw `events` or `field.crop`, it can't 
 - Want: the default observation holds only what a player could perceive: the HUD (hearts, belt, selected slot, hands, timer), crosshair target and whether it's outlined, console output, mode and pointer lock.
 - Want: a separate debug observation (the full DSL paths and events), used only to verify findings and never while playing.
 - Controls are not given to the critic in advance. If it can't find them from what the game shows, that is a finding.
+- The debug console does not count as what the game shows. The critic plays without `?debug=1`, so the player observation never contains console output, and goals about the console are not tested by the critic. (Decided in #774.)
 
 > **Reconciler:** see notes 3, 4 and 5. `[manual check]` "can't find the controls from what the game shows"; measurable version in note 16.
 
@@ -123,7 +124,6 @@ The HUD's layout is done by CSS flex in `mountHud` (`client/hud.js`), so Node ca
 2. Should a confirmed repro also be added to `client/test/scripts/` as an expected-failing case, or only attached to the issue?
 3. How much may it file per run without review: one grouped issue (proposed), or a draft the maintainer approves before it's posted?
 4. Does `hudLayout` replacing CSS flex in `mountHud` need a basic-gameplay section 12 change, or is it an implementation detail?
-5. Should the debug console count as "what the game shows" for discovering controls, given it's a debug-only feature?
 
 ## Open questions (reconciler)
 
@@ -131,6 +131,5 @@ The HUD's layout is done by CSS flex in `mountHud` (`client/hud.js`), so Node ca
 2. **Q2 expected-failing scripts.** `scripts.test.mjs` has no expected-failure mode, so A: attach to the issue only (suggested). B: add an `xfail` case marker to the DSL first.
 3. **Q3 filing.** A: one grouped `idea` issue per run (proposed), with duplicate search first. B: a draft the maintainer approves. A is the lighter option; the `idea` label that starts the reconciler can stay maintainer-only to keep a gate (note 12).
 4. **Q4 `hudLayout`.** Implementation detail (note 6); no change to basic-gameplay section 12. Suggest closing it as such.
-5. **Q5 console as game-shown.** A: no, the console is debug-only and the critic plays without `?debug=1` (suggested; the critic then also cannot test console goals). B: yes for a separate "console" goal run with debug on, kept apart from discovery runs.
 6. **Phone viewport scale.** A: scale below 2 on phone portrait is a finding. B: it is expected there and the check is advisory for narrow viewports. Needs the maintainer's call.
 7. **HUD text.** Draw the timer phase and hands labels from textures so `hudLayout` is exact (A), or estimate text boxes (B) (note 7).
