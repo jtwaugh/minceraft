@@ -8,3 +8,9 @@ spacing_spread = 30.0
 # The heading changes by at most this many degrees per step, so the route
 # bends but never doubles back.
 max_turn_degrees = 30.0
+
+# Channel along each route segment (DensityTerm::Channel).
+channel_half_width = 6.0
+channel_falloff = 6.0
+channel_depth_below_sea = 4.0
+channel_clear_above = 4

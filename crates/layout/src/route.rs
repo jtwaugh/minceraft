@@ -16,6 +16,10 @@ pub struct RouteParams {
     pub spacing: f64,
     pub spacing_spread: f64,
     pub max_turn_degrees: f64,
+    pub channel_half_width: f64,
+    pub channel_falloff: f64,
+    pub channel_depth_below_sea: f64,
+    pub channel_clear_above: i32,
 }
 
 include!(concat!(env!("OUT_DIR"), "/route.rs"));
@@ -34,7 +38,7 @@ pub struct Route {
 }
 
 /// Unit float in [0, 1) from the hash of `seed` and a stream number.
-fn unit(seed: u64, stream: u64) -> f64 {
+pub(crate) fn unit(seed: u64, stream: u64) -> f64 {
     let mix = |z: u64| mix64(z.wrapping_add(0x9E37_79B9_7F4A_7C15));
     (mix(seed ^ mix(stream)) >> 11) as f64 / (1u64 << 53) as f64
 }

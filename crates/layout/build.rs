@@ -47,6 +47,10 @@ struct RouteParams {
     spacing: f64,
     spacing_spread: f64,
     max_turn_degrees: f64,
+    channel_half_width: f64,
+    channel_falloff: f64,
+    channel_depth_below_sea: f64,
+    channel_clear_above: i32,
 }
 
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {
@@ -171,8 +175,15 @@ fn main() {
         .unwrap_or_else(|e| panic!("{}: {e}", route_path.display()));
     let out = format!(
         "static SHIPPED_ROUTE: RouteParams = RouteParams {{ spacing: {:?}, \
-         spacing_spread: {:?}, max_turn_degrees: {:?} }};\n",
-        r.spacing, r.spacing_spread, r.max_turn_degrees
+         spacing_spread: {:?}, max_turn_degrees: {:?}, channel_half_width: {:?}, \
+         channel_falloff: {:?}, channel_depth_below_sea: {:?}, channel_clear_above: {:?} }};\n",
+        r.spacing,
+        r.spacing_spread,
+        r.max_turn_degrees,
+        r.channel_half_width,
+        r.channel_falloff,
+        r.channel_depth_below_sea,
+        r.channel_clear_above
     );
     std::fs::write(out_dir.join("route.rs"), out).unwrap();
 
