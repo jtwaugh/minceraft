@@ -5,6 +5,7 @@
 //! - `fish.rs` from `data/fish.toml` (`src/fish.rs`)
 //! - `validation.rs` from `data/validation.toml` (`src/validation.rs`)
 //! - `route.rs` from `data/route.toml` (`src/route.rs`)
+//! - `scoring.rs` from `data/scoring.toml` (`src/scoring.rs`)
 //! - `structure.rs` from `data/structures/raft_start.toml` (`src/structure.rs`)
 //!
 //! A bad file fails the build. The shipped data reaches the crate as static
@@ -57,6 +58,20 @@ struct RouteParams {
     corridor_margin: u32,
 }
 
+/// Mirrors `ScoringConfig` in `src/scoring.rs`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScoringConfig {
+    weight_spacing_regularity: f64,
+    weight_path_directness: f64,
+    weight_island_quality: f64,
+    weight_coastline_interest: f64,
+    weight_extra_islands: f64,
+    cap_area_factor: f64,
+    cap_flat_factor: f64,
+    cap_ratio: f64,
+}
+
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {
     match v {
         Some(x) => format!("Some({x:?})"),
@@ -83,8 +98,15 @@ fn main() {
     let fish_path = root.join("fish.toml");
     let validation_path = root.join("validation.toml");
     let route_path = root.join("route.toml");
+    let scoring_path = root.join("scoring.toml");
     let raft_path = root.join("structures/raft_start.toml");
-    for p in [&fish_path, &validation_path, &route_path, &raft_path] {
+    for p in [
+        &fish_path,
+        &validation_path,
+        &route_path,
+        &scoring_path,
+        &raft_path,
+    ] {
         println!("cargo:rerun-if-changed={}", p.display());
     }
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
@@ -195,6 +217,26 @@ fn main() {
         r.corridor_margin
     );
     std::fs::write(out_dir.join("route.rs"), out).unwrap();
+
+    // Scoring weights and caps.
+    let c: ScoringConfig = toml::from_str(&read(&scoring_path))
+        .unwrap_or_else(|e| panic!("{}: {e}", scoring_path.display()));
+    let out = format!(
+        "static SHIPPED_SCORING: ScoringConfig = ScoringConfig {{ \
+         weight_spacing_regularity: {:?}, weight_path_directness: {:?}, \
+         weight_island_quality: {:?}, weight_coastline_interest: {:?}, \
+         weight_extra_islands: {:?}, cap_area_factor: {:?}, cap_flat_factor: {:?}, \
+         cap_ratio: {:?} }};\n",
+        c.weight_spacing_regularity,
+        c.weight_path_directness,
+        c.weight_island_quality,
+        c.weight_coastline_interest,
+        c.weight_extra_islands,
+        c.cap_area_factor,
+        c.cap_flat_factor,
+        c.cap_ratio
+    );
+    std::fs::write(out_dir.join("scoring.rs"), out).unwrap();
 
     // Built-in structure templates.
     let raft = structure_rules::parse_structure(&read(&raft_path), &|n| block_id(n))
