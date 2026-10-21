@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Tick pass: find design docs the factory has stopped moving on.
 
-The checks of `stalled.py`, run over a `Snapshot` with no API calls. Each
-accepted doc is checked (docs with an open PR are skipped: the PR is the
-next step):
+The checks the retired `stalled.py` made, run over a `Snapshot` with no API
+calls. Each accepted doc is checked (docs with an open PR are skipped: the
+PR is the next step):
 
 - no phases in the header: the planner skips the doc entirely;
 - next `todo` phase has no plan;
@@ -13,7 +13,7 @@ next step):
 Leftover `docs/*` branches the docs updater would want to create again (an
 open plan's phase-done branch, any `-sync` branch) are reported too.
 Findings are `report` actions; nothing is edited.
-(docs/design/factory-orchestrator.md Phase A, taking over stalled.py)
+(docs/design/factory-orchestrator.md Phase A)
 """
 import os
 import sys

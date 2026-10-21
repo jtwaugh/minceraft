@@ -177,17 +177,17 @@ class LiveBoard(unittest.TestCase):
 
     def test_loader_fills_new_fields(self):
         import factory_board
-        import project_sync
+        import project_board
         node = {"id": "I1", "content": {"__typename": "Issue", "number": 5, "state": "OPEN",
-                                        "repository": {"nameWithOwner": project_sync.REPO}},
+                                        "repository": {"nameWithOwner": project_board.REPO}},
                 "status": {"name": "Inbox", "updatedAt": "1"}, "waiting": None}
-        orig = project_sync.load_project
-        project_sync.load_project = lambda *_: ("P", "SF", {"Inbox": "o1", "Done": "o2"}, [node], "WF")
+        orig = project_board.load_project
+        project_board.load_project = lambda *_: ("P", "SF", {"Inbox": "o1", "Done": "o2"}, [node], "WF")
         try:
             snap = Snapshot()
             factory_board.load_board(snap, "me", 7)
         finally:
-            project_sync.load_project = orig
+            project_board.load_project = orig
         self.assertEqual(snap.board[0]["item"], "I1")
         for k, v in {"loaded": True, "number": 7, "project": "P", "status_field": "SF",
                      "waiting_field": "WF"}.items():

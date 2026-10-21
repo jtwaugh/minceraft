@@ -5,8 +5,9 @@
 # now conflict and has Claude merge master into each, resolve the conflicts
 # keeping both sides, run the checks and push. If a conflict needs a real
 # decision, it aborts and says so on the PR instead (and isn't retried on
-# that commit). Fewer conflicts arise in the first place because tickets
-# wait for open PRs on the same files (.github/scripts/tickets.py).
+# that commit). Fewer conflicts arise in the first place because the factory
+# tick holds tickets back while open PRs edit the same files
+# (.github/scripts/factory_ready.py, with the rules in tickets.py).
 #
 # Run by hand: gh workflow run resolve-conflicts.yml [-f pr=<n>]
 name: Resolve conflicts

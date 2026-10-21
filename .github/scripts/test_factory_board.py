@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import project_sync  # noqa: E402
+import project_board  # noqa: E402
 import factory_board  # noqa: E402
 from factory_board import blocked_by_pass, board_pass  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
@@ -40,22 +40,22 @@ class Test(unittest.TestCase):
     def test_loader_fills_board_with_optional_fallbacks(self):
         result = {"user": {"projectV2": {
             "id": "P", "field": {"id": "F", "options": [
-                {"id": f"o{n}", "name": n} for n in project_sync.STATUSES]},
+                {"id": f"o{n}", "name": n} for n in project_board.STATUSES]},
             "waitingField": {"id": "W", "dataType": "TEXT"},
             "items": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": [
                 node("Issue", 1, "OPEN", "Inbox", "#2"), node("Issue", 9, "OPEN", "Inbox", repo="x/y"),
                 {"id": "d", "content": None}]}}}}
         s = snap([issue(1, ["planned"])], [])
-        with mock.patch.object(project_sync, "REPO", "o/r"), \
-                mock.patch.object(project_sync, "graphql", return_value=result), \
+        with mock.patch.object(project_board, "REPO", "o/r"), \
+                mock.patch.object(project_board, "graphql", return_value=result), \
                 mock.patch.object(factory_board.tickets, "comment_blockers", return_value=[(5, "t")]):
             factory_board.load_board(s, "me", 1)
         self.assertEqual(s.board, [{"item": "i1", "kind": "Issue", "number": 1, "state": "OPEN", "status": "Inbox",
                                     "status_updated": "t1", "waiting": "#2"}])
         self.assertEqual(s.board_meta, {
             "loaded": True, "number": 1, "project": "P", "status_field": "F", "waiting_field": "W",
-            "options": project_sync.STATUSES, "waiting": True,
-            "option_ids": {n: f"o{n}" for n in project_sync.STATUSES}})
+            "options": project_board.STATUSES, "waiting": True,
+            "option_ids": {n: f"o{n}" for n in project_board.STATUSES}})
         self.assertEqual(s.issues[0]["comment_blockers"], [5])
 
     def test_missing_link_gets_one_action_then_none(self):

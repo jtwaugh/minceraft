@@ -2,31 +2,27 @@
 #
 # - Label a ticket "factory" to approve it. If its dependencies (its
 #   "Depends on:" line and any "Blocked by #n") are all closed, Claude starts
-#   at once; otherwise it says what it's waiting on and starts by itself
-#   later.
-# - Whenever an issue closes (usually a PR merging), every approved ticket
-#   whose dependencies are now all closed, and that has no open PR, starts.
+#   at once; otherwise it says what it's waiting on, and the factory tick
+#   starts it once they close.
 # - The factory tick (factory-tick.yml) starts a ready ticket by
 #   dispatching this workflow with its number:
 #     gh workflow run claude.yml -f issue=<n>
 # - Mention @claude in an issue or PR comment to ask for anything else, e.g.
 #   "@claude merge master into this branch and resolve the conflicts".
 #
-# Dependency checks are .github/scripts/tickets.py.
+# Dependency checks are .github/scripts/tickets.py; deciding when a waiting
+# ticket is ready is the tick's (.github/scripts/factory_ready.py).
 name: Claude implementer
 
 on:
   issues:
-    types: [labeled, closed]
+    types: [labeled]
   issue_comment:
     types: [created]
   pull_request_review_comment:
     types: [created]
   pull_request_review:
     types: [submitted]
-  # A merge can free tickets that were waiting for that PR's files.
-  pull_request:
-    types: [closed]
   # The factory tick: it has checked the ticket and posted the start marker.
   workflow_dispatch:
     inputs:
@@ -80,7 +76,7 @@ jobs:
           persist-credentials: false
 
       # A labelled ticket whose dependencies are still open waits, without
-      # spending a Claude run. It starts later from the start-ready job.
+      # spending a Claude run. The factory tick starts it later.
       - name: Check dependencies
         id: deps
         if: github.event_name == 'issues'
@@ -127,50 +123,13 @@ jobs:
         with:
           execution-file: ${{ steps.claude.outputs.execution_file }}
 
-  # An issue closed: which approved tickets are now unblocked? Or the tick
-  # named one.
-  find-ready:
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' && github.event.action == 'closed' &&
-        contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login)) ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged &&
-        github.event.pull_request.merged_by.login == 'jtwaugh')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-    outputs:
-      ready: ${{ steps.ready.outputs.ready }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 1
-      - id: ready
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ inputs.issue }}
-        run: |
-          if [ -n "$ISSUE" ]; then
-            ready=$(jq -nc --arg n "$ISSUE" '[$n | tonumber]')
-          else
-            ready=$(python3 -B .github/scripts/tickets.py ready)
-          fi
-          echo "ready=$ready" >> "$GITHUB_OUTPUT"
-          echo "Ready to start: $ready" >> "$GITHUB_STEP_SUMMARY"
-
-  start-ready:
-    needs: find-ready
-    if: needs.find-ready.outputs.ready != '' && needs.find-ready.outputs.ready != '[]'
-    strategy:
-      max-parallel: 2
-      fail-fast: false
-      matrix:
-        issue: ${{ fromJSON(needs.find-ready.outputs.ready) }}
+  # The tick named a ticket: it has checked dependencies and overlap and
+  # posted the start marker.
+  start:
+    if: github.event_name == 'workflow_dispatch'
     concurrency:
       # Same group as the implement job, so a ticket never runs twice at once.
-      group: claude-${{ matrix.issue }}
+      group: claude-${{ inputs.issue }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -188,41 +147,22 @@ jobs:
           # remote). A persisted workflow token would win and push as
           # github-actions[bot], which the reviewer then skips.
           persist-credentials: false
-      # Marks the ticket as auto-started, so tickets.py never starts it
-      # automatically again (no retry loops). Relabel it, or comment
-      # @claude, to try again. Re-checks first: a merge closes its ticket
-      # too, so two find-ready runs can pick the same ticket, and another
-      # ticket may have opened a PR on the same files since.
-      - name: Mark as started
+      # Skips only if a run (e.g. one this one waited for) already made a PR.
+      # Only maintainers can dispatch, so a hand-run
+      # `gh workflow run claude.yml -f issue=<n>` starts any ticket, even a
+      # blocked one.
+      - name: Skip a ticket that has a PR
         id: mark
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A dispatched run trusts the tick, which has already checked
-          # dependencies and overlap and posted the marker: skip only if a run
-          # (e.g. the old find-ready's, which this one waited for) made a PR.
-          # Only maintainers can dispatch, so a hand-run
-          # `gh workflow run claude.yml -f issue=<n>` starts any ticket, even
-          # a blocked one.
-          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
-            if [ "$(python3 -B .github/scripts/tickets.py has-pr "${{ matrix.issue }}")" = true ]; then
-              echo "#${{ matrix.issue }} already has an open PR; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "go=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "go=true" >> "$GITHUB_OUTPUT"
-              echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-            fi
-            exit 0
-          fi
-          if [ "$(python3 -B .github/scripts/tickets.py check "${{ matrix.issue }}")" != true ]; then
-            echo "#${{ matrix.issue }} is no longer ready to start; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$(python3 -B .github/scripts/tickets.py has-pr "${{ inputs.issue }}")" = true ]; then
+            echo "#${{ inputs.issue }} already has an open PR; skipping." | tee -a "$GITHUB_STEP_SUMMARY"
             echo "go=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           fi
-          echo "go=true" >> "$GITHUB_OUTPUT"
-          gh issue comment "${{ matrix.issue }}" --repo "${{ github.repository }}" \
-            --body "<!-- factory-auto-start --> Dependencies closed; starting automatically ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))."
-          echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - if: steps.mark.outputs.go == 'true'
         uses: ./.github/actions/toolchain
       # Bun and the Claude CLI from the Actions cache (see the action)
@@ -233,26 +173,24 @@ jobs:
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         id: claude
         env:
-          ISSUE: ${{ matrix.issue }}
+          ISSUE: ${{ inputs.issue }}
         with:
           path_to_bun_executable: ${{ steps.claude-deps.outputs.bun }}
           path_to_claude_code_executable: ${{ steps.claude-deps.outputs.claude }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # The closing event can come from the Claude app (e.g. the planner
-          # closing an empty plan), and the tick dispatches as
-          # github-actions; find-ready already limits who can.
+          # The tick dispatches as github-actions.
           allowed_bots: claude,github-actions
           prompt: |
             REPO: ${{ github.repository }}
 
-            Implement ticket #${{ matrix.issue }}. It was approved earlier
+            Implement ticket #${{ inputs.issue }}. It was approved earlier
             and its dependencies have just closed.
 
-            1. Run `gh pr list --state open --search "${{ matrix.issue }}"`. If
+            1. Run `gh pr list --state open --search "${{ inputs.issue }}"`. If
                a pull request for this ticket already exists, stop.
-            2. Read the ticket: `gh issue view ${{ matrix.issue }} --comments`.
+            2. Read the ticket: `gh issue view ${{ inputs.issue }} --comments`.
             3. Create a branch with
-               `git checkout -b claude/issue-${{ matrix.issue }}-<yyyymmdd-hhmm>`
+               `git checkout -b claude/issue-${{ inputs.issue }}-<yyyymmdd-hhmm>`
                from master, implement the ticket, and run every check.
             4. Commit, push with `git push -u origin <that branch>`, and open
                the pull request. Never push to any other branch.
@@ -270,7 +208,7 @@ jobs:
         if: ${{ !cancelled() && steps.mark.outputs.go == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -B .github/scripts/expect.py ticket "${{ matrix.issue }}" "${{ steps.mark.outputs.at }}"
+        run: python3 -B .github/scripts/expect.py ticket "${{ inputs.issue }}" "${{ steps.mark.outputs.at }}"
       - name: Report the run
         if: ${{ !cancelled() && steps.mark.outputs.go == 'true' }}
         uses: ./.github/actions/claude-report
@@ -278,5 +216,5 @@ jobs:
           execution-file: ${{ steps.claude.outputs.execution_file }}
           ok: ${{ steps.check.outputs.ok }}
           expected: ${{ steps.check.outputs.expected }}
-          issue: ${{ matrix.issue }}
+          issue: ${{ inputs.issue }}
           retry: Comment `@claude` here to retry.

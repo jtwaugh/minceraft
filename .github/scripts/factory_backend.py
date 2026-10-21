@@ -15,9 +15,9 @@ import os
 import subprocess
 import sys
 
-os.environ.setdefault("GITHUB_REPOSITORY", "")  # project_sync and tickets read it on import
+os.environ.setdefault("GITHUB_REPOSITORY", "")  # project_board and tickets read it on import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import project_sync  # noqa: E402
+import project_board  # noqa: E402
 import tickets  # noqa: E402
 from factory_tick import Backend, FakeBackend  # noqa: E402
 
@@ -28,7 +28,7 @@ DOCS_WORKFLOW = "claude-docs.yml"
 
 def gh_run(args, project=False):
     """`gh <args>`; project calls use PROJECT_TOKEN and repo calls WRITE_TOKEN
-    (the workflow token) when set, as in project_sync."""
+    (the workflow token) when set."""
     env = dict(os.environ)
     if project and env.get("PROJECT_TOKEN"):
         env["GH_TOKEN"] = env["PROJECT_TOKEN"]
@@ -115,25 +115,25 @@ class GhBackend(Backend):
         project, n = meta["project"], action.target.split("#")[-1]
         if k == "add_card":
             node = self._gh("api", f"repos/{self.repo}/issues/{n}", "--jq", ".node_id").strip()
-            item = self._graphql(project_sync.ADD_ITEM, project=project,
+            item = self._graphql(project_board.ADD_ITEM, project=project,
                                  content=node)["addProjectV2ItemById"]["item"]["id"]
-            self._graphql(project_sync.SET_STATUS, project=project, item=item,
+            self._graphql(project_board.SET_STATUS, project=project, item=item,
                           field=meta["status_field"], option=meta["option_ids"][p["status"]])
             if p["waiting"] and meta.get("waiting_field"):
-                self._graphql(project_sync.SET_TEXT, project=project, item=item,
+                self._graphql(project_board.SET_TEXT, project=project, item=item,
                               field=meta["waiting_field"], text=p["waiting"])
             self.mirror.apply(snapshot, action)
             self._card(snapshot, action)["item"] = item
             return
         card = self._card(snapshot, action)
         if k == "set_status":
-            self._graphql(project_sync.SET_STATUS, project=project, item=card["item"],
+            self._graphql(project_board.SET_STATUS, project=project, item=card["item"],
                           field=meta["status_field"], option=meta["option_ids"][p["status"]])
         elif p["text"]:
-            self._graphql(project_sync.SET_TEXT, project=project, item=card["item"],
+            self._graphql(project_board.SET_TEXT, project=project, item=card["item"],
                           field=meta["waiting_field"], text=p["text"])
         else:
-            self._graphql(project_sync.CLEAR, project=project, item=card["item"],
+            self._graphql(project_board.CLEAR, project=project, item=card["item"],
                           field=meta["waiting_field"])
         self.mirror.apply(snapshot, action)
 

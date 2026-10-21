@@ -3,7 +3,7 @@
     board_pass(snapshot) -> [Action]
 
 Works out what each card should show from the snapshot, using the rules in
-`project_sync.py` (imported, not copied), and compares it with the board items
+`project_board.py` (imported, not copied), and compares it with the board items
 the loader already read. It emits one action per difference and nothing for a
 card that matches, so a second pass over the applied state is empty.
 (docs/design/factory-orchestrator.md Phase A, design rule 6)
@@ -17,9 +17,9 @@ issues[] "body", "comment_blockers", "idea_unlabelled_at", "blocked_by_links"
 import os
 import sys
 
-os.environ.setdefault("GITHUB_REPOSITORY", "")  # project_sync and tickets read it on import
+os.environ.setdefault("GITHUB_REPOSITORY", "")  # project_board and tickets read it on import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import project_sync  # noqa: E402
+import project_board  # noqa: E402
 import tickets  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
@@ -36,7 +36,7 @@ def _wanted(snap):
             "files": p.get("files", []), "status": p.get("status")} for p in snap.prs]
     want, by_ticket = {}, {}
     for pr in prs:
-        t = project_sync.ticket_of(pr)
+        t = project_board.ticket_of(pr)
         if t and t not in by_ticket:
             by_ticket[t] = pr
         if pr["status"]:
@@ -56,7 +56,7 @@ def _wanted(snap):
             if pr["status"]:
                 want[key] = (*pr["status"], "")
             continue
-        status, why = project_sync.issue_status(
+        status, why = project_board.issue_status(
             {"number": i["number"], "title": i["title"], "labels": [{"name": n} for n in labels]}, {})
         waits = []
         if "spec-question" not in labels:
@@ -75,7 +75,7 @@ def _wanted(snap):
 
 def board_pass(snap):
     meta = snap.board_meta
-    options = set(meta.get("options") or project_sync.STATUSES + list(project_sync.OPTIONAL))
+    options = set(meta.get("options") or project_board.STATUSES + list(project_board.OPTIONAL))
     waiting_field = meta.get("waiting", True)
     want = _wanted(snap)
     unlabelled = {i["number"]: i.get("idea_unlabelled_at", "") for i in snap.issues}
@@ -90,7 +90,7 @@ def board_pass(snap):
             status, why, text = want[key]
         else:
             continue  # a plan, or something the board pass doesn't manage
-        status = status if status in options else project_sync.OPTIONAL.get(status, status)
+        status = status if status in options else project_board.OPTIONAL.get(status, status)
         if waiting_field and (it.get("waiting") or "") != text:
             actions.append(Action("set_waiting", target, {"text": text},
                                   f"waiting on {text or 'nothing'}"))
@@ -103,7 +103,7 @@ def board_pass(snap):
             actions.append(Action("set_status", target, {"status": status}, f"{current} -> {status} ({why})"))
     for key, (status, why, text) in sorted(want.items(), key=lambda kv: kv[0][1]):
         if key not in seen:
-            status = status if status in options else project_sync.OPTIONAL.get(status, status)
+            status = status if status in options else project_board.OPTIONAL.get(status, status)
             actions.append(Action("add_card", _target(*key), {"status": status, "waiting": text},
                                   f"added as {status} ({why})"))
     return actions
@@ -113,15 +113,15 @@ def load_board(snap, login, number):
     """Read the project once into snap.board and snap.board_meta, and fill what
     the passes need from GitHub: PR status and files, issue comment blockers and
     the time `idea` was last taken off a card now showing Idea."""
-    project, status_field, options, items, waiting_field = project_sync.load_project(login, number)
+    project, status_field, options, items, waiting_field = project_board.load_project(login, number)
     # load_project aliases a missing OPTIONAL column to its fallback's id; those aren't real columns
     real = [n for n, oid in options.items()
-            if not (n in project_sync.OPTIONAL and oid == options.get(project_sync.OPTIONAL[n]))]
+            if not (n in project_board.OPTIONAL and oid == options.get(project_board.OPTIONAL[n]))]
     snap.board_meta = {"loaded": True, "number": number, "project": project,
                        "status_field": status_field, "waiting_field": waiting_field,
                        "options": real, "option_ids": {n: options[n] for n in real},
                        "waiting": bool(waiting_field)}
-    repo = project_sync.REPO
+    repo = project_board.REPO
     snap.board = []
     for node in items:
         c = node.get("content") or {}
@@ -133,7 +133,7 @@ def load_board(snap, login, number):
                            "waiting": waiting.get("text")})
     for p in snap.prs:
         pr = {"number": p["number"], "head": {"ref": p["head"], "sha": p.get("sha", "")}}
-        p["status"] = project_sync.pr_status(pr)
+        p["status"] = project_board.pr_status(pr)
         p["files"] = tickets.pr_files(pr)
     shown_idea = {c["number"] for c in snap.board if c["kind"] == "Issue" and c["status"] == "Idea"}
     for i in snap.issues:
@@ -141,7 +141,7 @@ def load_board(snap, login, number):
             continue
         i["comment_blockers"] = sorted({b for b, _ in tickets.comment_blockers(i["number"])})
         if i["number"] in shown_idea:
-            i["idea_unlabelled_at"] = project_sync.unlabelled_idea_at(i["number"])
+            i["idea_unlabelled_at"] = project_board.unlabelled_idea_at(i["number"])
 
 
 def blocked_by_pass(snap):

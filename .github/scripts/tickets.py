@@ -8,9 +8,12 @@
                            pull request yet, and whose files no open pull
                            request (or other ticket in the list) is editing.
   tickets.py check <n>     Print true if ticket #n would be in `ready` now,
-                           else false (start-ready re-checks before starting).
+                           else false.
   tickets.py has-pr <n>    Print true if ticket #n has an open pull request
-                           (start-ready's check on a run the tick dispatched).
+                           (claude.yml's check on a run the tick dispatched).
+
+The factory tick decides what to start (factory_ready.py, which reuses the
+pure helpers here); `ready` and `check` print the same rules from the API.
 
 A ticket's dependencies are every issue number on its "**Depends on:**"
 line, plus any "Blocked by #n" in its body (the planner writes both) or in
@@ -28,8 +31,8 @@ request edits a file the ticket expects to change: the backticked file names
 in its body (the planner's **Files:** line, or "Likely files: `walk.rs`").
 Files every feature touches (lib.rs, mod.rs, Cargo.toml, Cargo.lock) don't
 count; conflicts there are trivial and resolved after each merge
-(resolve-conflicts.yml). When that pull request merges, find-ready runs and
-the ticket starts.
+(resolve-conflicts.yml). When that pull request merges, the next factory
+tick starts the ticket.
 """
 import json
 import os

@@ -1,14 +1,13 @@
 # Docs updater: keeps design docs in docs/design/ true to the code.
 #
-# - When the last ticket under a "Plan:" issue closes, it closes the plan
-#   and, for a design doc, opens a PR marking that phase done.
+# - When a design-doc plan finishes, it opens a PR marking that phase done.
+#   The factory tick closes the finished plan and dispatches this:
+#     gh workflow run claude-docs.yml -f plan=<n>
+#   A plan the planner closed itself (nothing to build) gets the same.
 # - Every Monday it re-reconciles each "accepted" doc against the code and
 #   opens a PR for any that have drifted.
 # - Run by hand on one file, e.g. an idea committed as a file:
 #     gh workflow run claude-docs.yml -f path=docs/design/<name>.md
-# - The factory tick, having closed a finished plan, dispatches the
-#   phase-done PR for it:
-#     gh workflow run claude-docs.yml -f plan=<n>
 #
 # The reconciling itself follows .github/prompts/reconcile.md.
 name: Claude docs updater
@@ -34,17 +33,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # On a ticket closing: is its plan now finished? Also handles a plan
-  # issue closed directly (the planner closes a plan with nothing to build),
-  # and a plan the factory tick already closed (dispatch with `plan`).
-  finish-plan:
+  # Which doc and phase a closed plan was for: a plan the factory tick
+  # closed (dispatch with `plan`), or one the planner closed directly.
+  plan-source:
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.plan != '') ||
-      (github.event_name == 'issues' &&
+      (github.event_name == 'issues' && startsWith(github.event.issue.title, 'Plan:') &&
         contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.sender.login))
     runs-on: ubuntu-latest
     permissions:
-      issues: write
+      issues: read
     outputs:
       plan: ${{ steps.check.outputs.plan }}
       file: ${{ steps.check.outputs.file }}
@@ -54,48 +52,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          ISSUE: ${{ github.event.issue.number }}
-          TITLE: ${{ github.event.issue.title }}
-          REASON: ${{ github.event.issue.state_reason }}
-          PLAN_INPUT: ${{ inputs.plan }}
+          PLAN: ${{ inputs.plan || github.event.issue.number }}
         run: |
-          if [ -n "$PLAN_INPUT" ]; then
-            plan=$PLAN_INPUT
-            gh api "repos/$REPO/issues/$plan" > plan.json
-            [ "$(jq -r .state_reason plan.json)" = completed ] || { echo "Plan #$plan isn't closed as completed; nothing to do."; exit 0; }
-          fi
-          # "<plan input>:<title>": a dispatch (input set), else by title
-          case "$PLAN_INPUT:$TITLE" in
-            [!:]*) ;;
-            :Plan:*)
-              # A plan closed directly. "Not planned" means abandoned: leave
-              # the phase alone (the pick step may plan it again).
-              [ "$REASON" = completed ] || { echo "Plan #$ISSUE closed as $REASON; nothing to do."; exit 0; }
-              plan=$ISSUE
-              gh api "repos/$REPO/issues/$plan" > plan.json ;;
-            *)
-              parent=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.parent_issue_url // ""')
-              [ -n "$parent" ] || { echo "No parent issue; nothing to do."; exit 0; }
-              plan=${parent##*/}
-              gh api "repos/$REPO/issues/$plan" > plan.json
-              title=$(jq -r .title plan.json)
-              case "$title" in Plan:*) ;; *) echo "Parent #$plan is not a plan."; exit 0;; esac
-              [ "$(jq -r .state plan.json)" = open ] || { echo "Plan #$plan already closed."; exit 0; }
-              open=$(gh api "repos/$REPO/issues/$plan/sub_issues" --paginate --jq '[.[] | select(.state=="open")] | length')
-              [ "$open" -eq 0 ] || { echo "Plan #$plan has $open open sub-issues."; exit 0; }
-              tickets=$(gh api "repos/$REPO/issues/$plan/sub_issues" --paginate --jq '[.[] | select([.labels[].name] | index("spec-question") | not)] | length')
-              if [ "$tickets" -eq 0 ]; then
-                # Only questions, now answered: the phase needs planning
-                # again, not marking done. Close the plan; the planner's
-                # pick step will re-plan the phase on the next doc change.
-                gh api "repos/$REPO/issues/$plan" -X PATCH -f state=closed -f state_reason=not_planned > /dev/null
-                gh issue comment "$plan" --repo "$REPO" --body "All questions answered. Closing this plan; the phase will be planned again with the answers. To do it now: \`gh workflow run claude-plan.yml -f file=<doc>\`."
-                echo "Plan #$plan only had questions; closed for re-planning."
-                exit 0
-              fi
-              gh api "repos/$REPO/issues/$plan" -X PATCH -f state=closed -f state_reason=completed > /dev/null
-              echo "Closed plan #$plan." ;;
-          esac
+          gh api "repos/$REPO/issues/$PLAN" > plan.json
+          # "Not planned" means abandoned, or only questions to re-plan:
+          # leave the phase alone.
+          reason=$(jq -r .state_reason plan.json)
+          [ "$reason" = completed ] || { echo "Plan #$PLAN closed as $reason; nothing to do."; exit 0; }
+          plan=$PLAN
 
           # The planner records its source as <!-- plan-source file=... section=... -->
           marker=$(jq -r .body plan.json | grep -o '<!-- plan-source .* -->' | head -1 || true)
@@ -106,8 +70,8 @@ jobs:
           echo "section=$section" >> "$GITHUB_OUTPUT"
 
   phase-done:
-    needs: finish-plan
-    if: startsWith(needs.finish-plan.outputs.file, 'docs/design/')
+    needs: plan-source
+    if: startsWith(needs.plan-source.outputs.file, 'docs/design/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -128,9 +92,9 @@ jobs:
       - id: claude
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         env:
-          DOC: ${{ needs.finish-plan.outputs.file }}
-          SECTION: ${{ needs.finish-plan.outputs.section }}
-          PLAN: ${{ needs.finish-plan.outputs.plan }}
+          DOC: ${{ needs.plan-source.outputs.file }}
+          SECTION: ${{ needs.plan-source.outputs.section }}
+          PLAN: ${{ needs.plan-source.outputs.plan }}
         with:
           path_to_bun_executable: ${{ steps.claude-deps.outputs.bun }}
           path_to_claude_code_executable: ${{ steps.claude-deps.outputs.claude }}
@@ -175,7 +139,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -B .github/scripts/expect.py phase-done "${{ needs.finish-plan.outputs.plan }}" "${{ steps.start.outputs.at }}"
+        run: python3 -B .github/scripts/expect.py phase-done "${{ needs.plan-source.outputs.plan }}" "${{ steps.start.outputs.at }}"
       - name: Report the run
         if: ${{ !cancelled() }}
         uses: ./.github/actions/claude-report
@@ -183,7 +147,7 @@ jobs:
           execution-file: ${{ steps.claude.outputs.execution_file }}
           ok: ${{ steps.check.outputs.ok }}
           expected: ${{ steps.check.outputs.expected }}
-          issue: ${{ needs.finish-plan.outputs.plan }}
+          issue: ${{ needs.plan-source.outputs.plan }}
           retry: To retry, reopen this plan and close it again as completed.
 
   drift:
