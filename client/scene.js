@@ -15,7 +15,7 @@
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, * as game from './pkg/game_web.js';
-import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
+import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
@@ -80,6 +80,8 @@ function program(cut) {
     layout(location=3) in float shade;
     layout(location=4) in vec3 tint;
     layout(location=5) in float top;
+    layout(location=6) in float ao; // AO level 0-3 (mesh.js byte 13)
+    const float AO_SHADE[4] = float[4](${AO_SHADE.map((v) => v.toFixed(3)).join(', ')});
     uniform mat4 mvp;
     uniform vec3 unpack;
     uniform vec3 offset;
@@ -94,7 +96,7 @@ function program(cut) {
       gl_Position = mvp * vec4(w, 1.0);
       bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
-      vshade = shade * unpack.z;
+      vshade = shade * unpack.z * AO_SHADE[int(ao)];
       vtint = tint;
       vdist = distance(w, eye);
     }`));
@@ -236,7 +238,7 @@ function upload({ verts, faces }, offset) {
   };
   attr(0, 3, gl.SHORT, false, 0); attr(1, 2, gl.UNSIGNED_BYTE, false, 6); attr(2, 1, gl.UNSIGNED_BYTE, false, 8);
   attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10);
-  attr(5, 1, gl.UNSIGNED_BYTE, true, 14);
+  attr(5, 1, gl.UNSIGNED_BYTE, true, 14); attr(6, 1, gl.UNSIGNED_BYTE, false, 13);
   gl.bindVertexArray(null);
   return { vao, buf, n: faces * 6, offset };
 }
