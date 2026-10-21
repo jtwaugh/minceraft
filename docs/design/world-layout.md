@@ -358,9 +358,11 @@ spawn_water_radius = 8.0
 points = [[0, 0], [80, 25], [162, 41]]
 
 [climate]
-temp_start = -0.25
-temp_end = 0.15
+temp_start = -0.55
+temp_end = 0.55
 ```
+
+The route's `AlongPath` climate bias takes its values from shipped defaults in `data/route.toml`, identical for every seed: `temp_start = -0.55`, `temp_end = 0.55`, `d_humid_start = 0`, `d_humid_end = 0`, `half_width = 64` and `falloff = 64` (blocks). The level file's `[climate]` table is read and written but only records what was used. (Decided in #846.)
 
 > **Reconciler:** `sea_level` in the file duplicates the compile-time
 > `SEA_LEVEL`. Suggest the loader reject a mismatch instead of honouring it.
