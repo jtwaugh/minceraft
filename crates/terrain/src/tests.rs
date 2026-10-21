@@ -347,3 +347,104 @@ fn raft_blocks_have_distinct_ids_and_old_ids_unchanged() {
         assert!(info.opaque_cube && info.opacity == 255);
     }
 }
+
+// ---- coarse density sampler (seed prefilter) ----
+
+const BAND: (i32, i32) = (SEA_LEVEL - 8, SEA_LEVEL + 8);
+
+fn coarse_at(seed: u64, x0: i32, z0: i32, n: u32, b: &Biases) -> (Vec<bool>, u32) {
+    generate_coarse_density(seed, x0, z0, n, n, BAND, b)
+}
+
+#[test]
+fn coarse_density_matches_full_terrain() {
+    let (seed, n) = (12345u64, 24u32);
+    let (x0, z0) = (-203, 77);
+    let (ax, az) = (x0 & !3, z0 & !3);
+    let (flags, ny) = coarse_at(seed, x0, z0, n, &Biases::default());
+    assert_eq!(ny, 5); // y = 56, 60, 64, 68, 72
+    let r = generate_region(seed, ax, az, (n - 1) * 4 + 1, (n - 1) * 4 + 1);
+    let (mut bad, mut total) = (0, 0);
+    for j in 0..ny {
+        for k in 0..n {
+            for i in 0..n {
+                let b = r.get(i * 4, 56 + j * 4, k * 4);
+                let solid = b != Block::Air && b != Block::Water && b != Block::Ice;
+                total += 1;
+                bad += (flags[((j * n + k) * n + i) as usize] != solid) as u32;
+            }
+        }
+    }
+    assert_eq!(bad, 0, "{bad}/{total} flags differ");
+}
+
+#[test]
+fn coarse_density_is_origin_and_extent_independent() {
+    let seed = 0xBEEF;
+    let (big, ny) = coarse_at(seed, -64, -32, 30, &Biases::default());
+    let (small, sny) = generate_coarse_density(seed, -41, -19, 7, 9, BAND, &Biases::default());
+    assert_eq!(ny, sny);
+    // Small origin rounds down to (-44, -20); big starts at (-64, -32).
+    let (dx, dz) = (5usize, 3usize);
+    for j in 0..ny as usize {
+        for k in 0..9 {
+            for i in 0..7 {
+                assert_eq!(
+                    small[(j * 9 + k) * 7 + i],
+                    big[(j * 30 + k + dz) * 30 + i + dx]
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn coarse_density_honours_biases() {
+    let seed = 7;
+    let plain = coarse_at(seed, 0, 0, 20, &Biases::default()).0;
+    let count = |v: &[bool]| v.iter().filter(|&&s| s).count();
+    let raise = |_: i32, _: i32, _: f64| 40.0;
+    let up: [&dyn BaseHeightBias; 1] = [&raise];
+    let higher = coarse_at(
+        seed,
+        0,
+        0,
+        20,
+        &Biases {
+            base_height: &up,
+            ..Biases::default()
+        },
+    )
+    .0;
+    assert!(count(&higher) > count(&plain));
+    let lift = |_: i32, y: i32, _: i32| if y < 70 { 1000.0 } else { 0.0 };
+    let d: [&dyn DensityBias; 1] = [&lift];
+    let (solid, ny) = coarse_at(
+        seed,
+        0,
+        0,
+        20,
+        &Biases {
+            density: &d,
+            ..Biases::default()
+        },
+    );
+    for (idx, &s) in solid.iter().enumerate() {
+        let y = 56 + 4 * (idx / (20 * 20)) as i32;
+        assert_eq!(s, y < 70 || plain[idx], "y={y}");
+    }
+    let cut = |_: i32, _: i32, _: i32, _: f64| -1.0;
+    let c: [&dyn DensityClamp; 1] = [&cut];
+    let none = coarse_at(
+        seed,
+        0,
+        0,
+        20,
+        &Biases {
+            clamp: &c,
+            ..Biases::default()
+        },
+    )
+    .0;
+    assert!(none.iter().all(|&s| !s) && ny == 5);
+}
