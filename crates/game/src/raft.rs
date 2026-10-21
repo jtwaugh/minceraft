@@ -98,6 +98,54 @@ impl Swell {
     }
 }
 
+/// Driving tunables from `[drive]` in `data/raft.toml`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Drive {
+    /// Blocks per tick with forward held fully.
+    pub speed: f64,
+    /// Radians per tick with the turn axis held fully.
+    pub turn_rate: f64,
+}
+
+impl Drive {
+    /// The shipped defaults from `data/raft.toml`.
+    pub fn default_from_data() -> Result<Drive, String> {
+        Drive::parse(DEFAULT_RAFT)
+    }
+
+    pub fn parse(text: &str) -> Result<Drive, String> {
+        let root: toml::Value = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
+        let get = |key: &str| -> Result<f64, String> {
+            let n = match root.get("drive").and_then(|t| t.get(key)) {
+                Some(toml::Value::Float(f)) => *f,
+                Some(toml::Value::Integer(i)) => *i as f64,
+                Some(_) => return Err(format!("drive.{key} must be a number")),
+                None => return Err(format!("missing drive.{key}")),
+            };
+            if !n.is_finite() || n <= 0.0 {
+                return Err(format!("drive.{key} must be a positive number"));
+            }
+            Ok(n)
+        };
+        Ok(Drive {
+            speed: get("speed")?,
+            turn_rate: get("turn_rate")?,
+        })
+    }
+
+    /// One tick of driving with `forward` and `turn` in -1..1 (clamped), from
+    /// continuous `heading` (see `Raft::heading`). Heading 0 faces -z and
+    /// positive turns towards +x, like `RaftFrame::yaw_delta`.
+    pub fn frame(&self, forward: f64, turn: f64, heading: f64) -> RaftFrame {
+        let step = forward.clamp(-1.0, 1.0) * self.speed;
+        RaftFrame {
+            displacement: [step * heading.sin(), 0.0, -step * heading.cos()],
+            yaw_delta: turn.clamp(-1.0, 1.0) * self.turn_rate,
+            tilt: [0.0, 0.0],
+        }
+    }
+}
+
 /// Rotate `p` by `turns` quarter turns (same sense as positive yaw) about
 /// the point `c`, in the xz plane.
 fn rotate(p: [f64; 3], c: [f64; 2], turns: i32) -> [f64; 3] {
@@ -181,6 +229,12 @@ impl Raft {
     /// Quarter turns applied so far.
     pub fn quarter_turns(&self) -> i32 {
         self.turns
+    }
+
+    /// Continuous yaw in radians: the quarter turns applied plus the yaw not
+    /// yet turned into one. Collision still uses `quarter_turns`.
+    pub fn heading(&self) -> f64 {
+        self.turns as f64 * FRAC_PI_2 + self.yaw
     }
 
     /// The collision box of every cell at the current pose.
@@ -527,6 +581,57 @@ mod tests {
             .map(|t| sw.frame(t).tilt[0].hypot(sw.frame(t).tilt[1]))
             .fold(0.0, f64::max);
         assert!((peak - sw.tilt_amplitude).abs() < 0.05, "{peak}");
+    }
+
+    #[test]
+    fn drive_loads_and_rejects_bad_data() {
+        let d = Drive::default_from_data().unwrap();
+        assert!(d.speed > 0.0 && d.turn_rate > 0.0);
+        assert_err_contains(Drive::parse("[drive]\n"), "missing drive.");
+        assert_err_contains(
+            Drive::parse("[drive]\nspeed=\"x\"\nturn_rate=0.1\n"),
+            "drive.speed must be a number",
+        );
+        assert_err_contains(
+            Drive::parse("[drive]\nspeed=0.1\nturn_rate=0.0\n"),
+            "drive.turn_rate must be",
+        );
+    }
+
+    #[test]
+    fn drive_frame_is_zero_linear_clamped_and_along_heading() {
+        let d = Drive {
+            speed: 0.2,
+            turn_rate: 0.05,
+        };
+        assert_eq!(d.frame(0.0, 0.0, 1.3), RaftFrame::default());
+        let f = d.frame(0.5, -0.5, 0.0);
+        assert!((f.displacement[2] + 0.1).abs() < 1e-12 && f.displacement[0].abs() < 1e-12);
+        assert!((f.yaw_delta + 0.025).abs() < 1e-12);
+        assert_eq!(d.frame(7.0, 7.0, 0.4), d.frame(1.0, 1.0, 0.4));
+        // A quarter turn faces +x; backwards reverses.
+        let f = d.frame(1.0, 0.0, FRAC_PI_2);
+        assert!((f.displacement[0] - 0.2).abs() < 1e-12 && f.displacement[2].abs() < 1e-12);
+        let b = d.frame(-1.0, 0.0, FRAC_PI_2);
+        assert!((b.displacement[0] + 0.2).abs() < 1e-12);
+    }
+
+    #[test]
+    fn heading_is_continuous_across_quarter_turn_boundary() {
+        let mut raft = Raft::new(&[[0, 64, 0]]);
+        let step = RaftFrame {
+            yaw_delta: FRAC_PI_2 / 10.0,
+            ..RaftFrame::default()
+        };
+        let mut prev = raft.heading();
+        for i in 1..=25 {
+            raft.advance(&step, &mut [], &phys());
+            let h = raft.heading();
+            assert!((h - prev - step.yaw_delta).abs() < 1e-9, "step {i}");
+            prev = h;
+        }
+        assert_eq!(raft.quarter_turns(), 3);
+        assert!((prev - 2.5 * FRAC_PI_2).abs() < 1e-9);
     }
 
     #[test]
