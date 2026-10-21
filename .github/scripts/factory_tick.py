@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # e.g. "add_label", "set_parent", "report"
-    target: str  # e.g. "issue#12", "branch:docs/x"
+    kind: str  # "add_label", "set_parent", "report"
+    target: str  # "issue#12"
     payload: dict = field(default_factory=dict, hash=False, compare=False)
     reason: str = ""
 
@@ -40,9 +40,8 @@ class Snapshot:
     def from_dict(cls, d):
         issues = d.get("issues", [])
         plans = d.get("plans") or [i for i in issues if i.get("kind") == "plan"]
-        return cls(issues=issues, prs=d.get("prs", []), plans=plans,
-                   docs=d.get("docs", []), branches=d.get("branches", []),
-                   board=d.get("board", []))
+        return cls(issues, d.get("prs", []), plans, d.get("docs", []),
+                   d.get("branches", []), d.get("board", []))
 
     @classmethod
     def from_fixture(cls, path):
@@ -128,7 +127,6 @@ def tick(snapshot, passes, backend):
 
 
 PASSES = []  # filled in by later tickets
-
 
 def main(argv):
     if len(argv) == 3 and argv[1] == "--fixture":
