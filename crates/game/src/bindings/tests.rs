@@ -31,6 +31,9 @@ fn shipped_file_loads_every_action() {
     assert!(b.get(Action::Secondary).hold_repeat);
     assert_eq!(b.action_for_key("Digit3"), Some(Action::SelectTool));
     assert_eq!(b.action_for_key("WheelUp"), Some(Action::SelectTool));
+    assert_eq!(b.action_for_key("Tab"), Some(Action::Inventory));
+    assert_eq!(b.get(Action::Inventory).keys, ["Tab"]);
+    assert_eq!(b.get(Action::Inventory).mode, Mode::Edge);
     assert_eq!(b.action_for_key("KeyZ"), None);
 }
 
