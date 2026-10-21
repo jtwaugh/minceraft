@@ -164,6 +164,8 @@ class GhBackend(Backend):
         elif k == "start_ticket":
             self._gh("issue", "comment", n, "--repo", r, "--body", START_MARKER)
             self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}")
+        elif k == "rerun_jobs":
+            self._gh("api", "-X", "POST", f"repos/{r}/actions/runs/{p['run_id']}/rerun-failed-jobs")
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
         elif k != "report":  # a report is only remembered; the report pass writes the issue

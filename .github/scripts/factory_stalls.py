@@ -70,7 +70,8 @@ def messages(snap):
                         f"or the docs updater can't push its phase-done PR."))
     for b in sorted(x for x in branches if x.endswith("-sync")):
         out.append((b, f"Branch `{b}` is left over; delete it, or the next drift run can't push."))
-    return out
+    from factory_rerun import messages as rerun_messages
+    return out + rerun_messages(snap)
 
 
 def stalls(snap):

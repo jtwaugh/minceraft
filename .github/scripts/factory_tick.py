@@ -131,6 +131,13 @@ class Snapshot:
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"],
                      "sha": p["head"]["sha"], "body": p.get("body") or ""}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
+        from factory_rerun import is_ticket_pr
+        for pr in snap.prs:  # runs on the head commit, for ticket PRs only
+            if is_ticket_pr(snap, pr):
+                runs = get(f"repos/{repo}/actions/runs?head_sha={pr['sha']}&per_page=100")
+                pr["runs"] = [{"id": r["id"], "name": r["name"], "conclusion": r["conclusion"],
+                               "run_attempt": r["run_attempt"]}
+                              for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
         number = os.environ.get("PROJECT_NUMBER", "").strip()
         if os.environ.get("PROJECT_TOKEN") and number:
@@ -184,6 +191,10 @@ class FakeBackend(Backend):
                 issue["state_reason"] = action.payload["reason"]
         elif action.kind == "request_phase_done":
             snapshot.reported.add((action.target, action.kind))
+        elif action.kind == "rerun_jobs":
+            pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
+            run = next(r for r in pr["runs"] if r["id"] == action.payload["run_id"])
+            run["run_attempt"], run["conclusion"] = run["run_attempt"] + 1, None
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         elif action.kind == "create_issue":
@@ -228,16 +239,17 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, stalls, report, plans, ready, board."""
+    """The fixed order: invariants, stalls, rerun, report, plans, ready, board."""
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
     from factory_ready import ready
     from factory_report import report
+    from factory_rerun import rerun_failed
     from factory_stalls import stalls
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, stalls, report, close_finished_plans, ready, board_pass]
+    return [invariants, stalls, rerun_failed, report, close_finished_plans, ready, board_pass]
 
 
 def main(argv):
