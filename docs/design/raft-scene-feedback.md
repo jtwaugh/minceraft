@@ -72,7 +72,7 @@ An animal that ends up in the water falls to the bottom of the ocean and stays t
 
 - Today: `crates/game/src/animal_entities.rs` has no water handling; animals just fall under gravity.
 - Want: animals in water try to swim. They float or paddle at the surface and head for land (or the raft) if they can find it.
-- If an animal stays under water too long, it drowns and dies (with its normal death and drops, or none; open question).
+- If an animal stays under water too long, it drowns and dies, with its normal death animation and drops. (Decided in #713.)
 - Swimming animals use the player's water numbers from basic-gameplay 4.3 (`data/player.toml` `[water]`), plus one `swim_speed` per species in `data/animals.toml`; no separate buoyancy or gravity numbers. (Decided in #712.)
 
 > **Reconciler:** Confirmed: no water handling in `animal_entities.rs`. See notes 3 and 4. "Under water too long" needs a number in `data/animals.toml`.
@@ -142,7 +142,6 @@ The selection outline shows up on water blocks. It shouldn't.
 
 ## Open questions (reconciler)
 
-4. **Drowning (item 2).** Options: A. Drown after N ticks under water, normal death and drops. B. Drown with no drops. C. Animals never drown but surface and swim (drop the drowning half). Also: does the player's breath get tracked later (4.3 mentions an air meter)? Suggest A.
 6. **Driving control scheme (item 4).** Options: A. Keys while standing on a helm cell. B. Interact with a tiller block to take the helm, then movement keys steer, interact again to leave. C. Keys anywhere on the deck. Suggest B.
 7. **Turning (item 4).** Options: A. Quarter turns only (a key press turns 90 degrees over N ticks, visual yaw eased, collision snaps at the end). B. Continuous yaw, with collision using the nearest quarter turn. B can disagree with where the player appears to stand; suggest A.
 8. **What stops the raft (item 4).** Options: A. Any solid block in the raft's footprint. B. A: plus water shallower than a draught. C. Soft stop: speed drops to zero without moving into the cell.
