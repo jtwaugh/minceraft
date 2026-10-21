@@ -21,7 +21,7 @@ Checked against the code:
 
 - **Interaction rules** are in `data/interactions.toml`: `till`, `plant` (`item:seeds` on `block:farmland`, top face, air above), `harvest` (empty hands or any tool, `block:crop`, `require_state = "mature"`), `forage` (empty hands, `block:tall_grass`) and `attack`. The first match wins. There is no `pick` action and no rule targeting `block:dandelion` or `block:rose`.
 - **Actions** live in `crates/game/src/`: `plant.rs`, `harvest.rs` (resets the crop to stage 0 and returns the yields from `data/crops.toml`), `forage.rs` (`Forager`, per-block cooldown), `till.rs`, `farm.rs`.
-- **Foraging data** is `[forage]` in `data/items.toml`: item `seeds`, `chance = 6`, `cooldown_ticks = 1200` (one minute at 20 Hz; basic-gameplay 9.5 says one day by default). A forage inside the cooldown does nothing and rolls nothing; any other forage starts the cooldown, hit or miss. Tilling grass uses `[till]` `chance = 8`.
+- **Foraging data** is `[forage]` in `data/items.toml`: item `seeds`, `chance = 6`, `cooldown_ticks = 1200` (one minute at 20 Hz). A forage inside the cooldown does nothing and rolls nothing; any other forage starts the cooldown, hit or miss. Tilling grass uses `[till]` `chance = 8`. The forage cooldown is one minute; basic-gameplay 9.5, which says one day by default, should be reworded to match (that doc is not edited here). (Decided in #760.)
 - **Events**: `foraged` and `crop_harvested` exist (`crates/game/src/events.rs`, basic-gameplay section 11). There is no event for a miss, so the client has nothing to show when a forage drops nothing.
 - **Items** in `data/items.toml`: `seeds`, `wheat`, animal drops, two tools. There are no flower items. `art/PROMPT.md` lists `seeds` and `wheat` but has no flower item icons.
 - **Flower blocks** `dandelion` (id 17) and `rose` (id 18) are in `data/blocks.toml` (collision none, tinted tiles in `client/tiles.js`). They are placed by terrain decoration, so they exist in the world and on islands.
@@ -40,6 +40,7 @@ Checked against the code:
 8. **[manual check]** "In play that feels like foraging does nothing" (section 3) is a feel judgment. A measurable version: with the shipped chance and cooldown, a player foraging distinct tall grass blocks gets seeds within N tries with probability at least P (for example, 1 in 6 gives 90% within 13 tries). The tests can assert the chance and cooldown values and the feedback event; whether it feels right is for the maintainer.
 9. **[manual check]** "I want the farming loop to feel natural" has no test; the loop script (forage, plant, grow, harvest) is the closest measurable check.
 10. **Phases.** One phase per section of the author's text: Phase A is section 1 (the `pick` action for crops, loosening rule 2), Phase B is section 2 (flowers: items, icons, overlay), Phase C is section 3 (foraging) and Phase D is section 4 (seed planting script). (Decided in #510.)
+11. **Foraging odds and feedback.** Foraging keeps the cooldown and gets better odds than 1 in 6 (the option's example is 1 in 3), plus a `forage_missed` event so the client can show a cue when a forage drops nothing. The client cue is particle effects that make clear the forage happened. (Decided in #759.)
 
 ---
 
@@ -85,18 +86,10 @@ Holding seeds and using them on farmland plants a crop.
 
 ## Open questions
 
-2. Foraging: always drop seeds, or better odds plus feedback on a miss?
 3. Do picked flowers do anything yet (sell, decorate, cook), or are they just items for now?
 
 ## Open questions (reconciler)
 
-6. **Foraging (author's question 2).**
-   - A: always drop seeds, keep the cooldown.
-   - B: better odds (for example 1 in 3) plus a `forage_missed` event so the client can show a cue.
-   - C: both: a guaranteed drop on the first forage of a block, then the existing odds.
-7. **Forage cooldown.** `data/items.toml` uses one minute; basic-gameplay 9.5 says one day by default. Which is meant?
-   - A: keep one minute, and update 9.5.
-   - B: one day, and raise the odds so a miss isn't a long wait.
 8. **Flower items (author's question 3).**
    - A: items only for now, with icons; no use.
    - B: also a use in this doc (decoration or a sale at a station).

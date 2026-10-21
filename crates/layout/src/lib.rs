@@ -292,6 +292,8 @@ mod navigability;
 pub use navigability::NavMap;
 mod pathfind;
 pub use pathfind::{erode, find_path};
+mod prefilter;
+pub use prefilter::{prefilter, prefilter_layout, prefilter_regions, PrefilterReject};
 mod region;
 #[cfg(feature = "toml-io")]
 mod rule_check;
@@ -312,6 +314,8 @@ mod scoring;
 mod scoring_island;
 pub use scoring::{path_directness, spacing_regularity, ScoringConfig};
 pub use scoring_island::{coastline_interest, island_quality, score_island};
+mod scoring_extra;
+pub use scoring_extra::{extra_islands, ExtraIslands};
 mod structure;
 mod structure_error;
 #[cfg(feature = "toml-io")]
@@ -351,6 +355,8 @@ mod navigability_tests;
 #[cfg(test)]
 mod pathfind_tests;
 #[cfg(test)]
+mod prefilter_tests;
+#[cfg(test)]
 mod raft_tests;
 #[cfg(test)]
 mod region_coord_tests;
@@ -368,6 +374,7 @@ mod route_tests;
 mod route_validation_tests;
 #[cfg(test)]
 mod scoring_island_tests;
+mod scoring_extra_tests;
 #[cfg(test)]
 mod scoring_tests;
 #[cfg(test)]
