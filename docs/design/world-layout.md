@@ -8,7 +8,7 @@ phases:
   A: done
   B: done
   C: done
-  D: todo
+  D: done
   E: todo
   F: todo
   G: todo
@@ -21,7 +21,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Phase A is done** (plan #17): base-height hook (#33), humidity hook (#34), `crates/layout` with `RadialBaseHeight` (#35), `Exclusion` as a `ProtectedMask` (#37), `ClimateBias` (#39), `Layout` and the `generate_region` wrapper (#40), `Channel` (#45, with #31, #27 and #43). The bullets below predate it.
 - **Phase B is done** (plan #47): raft blocks (#57), `Level` and the level file loader (#56), structure templates and `raft_start` (#69), stamping and the raft mask (#73), `build_layout` (#74), validation config and island checks (#70), raft footprint and flat grass checks (#78), retry loop and the v0 level file (#80). The game-side criteria (loading the level, spawning on the deck, the sim building its raft entity) wait for the game crates; the layout crate returns the level and raft mask.
 - **Phase C is done** (plan #89): derived water maps (#118), shore distance (#122), habitat rules and classifier (#120), habitat map per region (#125), sampling across seeds (#133), habitat viewer mode (#129) and `species_for` with the `fish.toml` loader (#130). Tests in `crates/layout/src/habitat_map_tests.rs` and `fish_tests.rs` cover the three criteria; `data/fish.toml` ships no species, as decided in #93.
-- **Phase D's sim half is built, the renderer half is not** (plan #169): region coordinates and region-keyed generation (#185), region cache with load and unload radii (#188), region-keyed collision set with unload (#189), streaming around the player (#195), raft and rider across region borders (#194), and browser bindings plus `client/stream.js` (#507, PR #522). Code: `crates/layout/src/region_coord.rs`, `crates/game/src/stream.rs`, `crates/game-web/src/lib.rs`, `client/stream.js`. The phase stays `todo`; see the Phase D note below.
+- **Phase D is done** (plan #169): region coordinates and region-keyed generation (#185), region cache with load and unload radii (#188), region-keyed collision set with unload (#189), streaming around the player (#195), raft and rider across region borders (#194), browser bindings plus `client/stream.js` (#507, PR #522), and meshing and freeing streamed regions in the client (#521, PR #563). Code: `crates/layout/src/region_coord.rs`, `crates/game/src/stream.rs`, `crates/game-web/src/lib.rs`, `client/stream.js`, `client/scene.js`; input scripts in `client/test/scripts/stream.input`. "No seams, pops or collision gaps" stays a `[manual check]`.
 - **Generator entry points.** `crates/terrain/src/lib.rs` has
   `generate_region(seed, x0, z0, w, d)`, `generate_decorated`,
   `generate_region_with_biases(.., &Biases, decorate)` and
@@ -153,6 +153,9 @@ and any game, sim or streaming code.
     > chunks at startup and never meshes or frees streamed regions, and fog
     > still follows `?radius=`. Open ticket #521 covers this, plus the input
     > scripts that fly across regions. Phase D stays `todo` until #521 closes.
+    >
+    > **Update (#521 closed, PR #563):** the client meshes and frees streamed
+    > regions and the input scripts cover crossing borders. Phase D is `done`.
 
 ## Mince Raft: World Layout Specification
 
