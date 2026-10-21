@@ -232,7 +232,9 @@ impl Raft {
     }
 
     /// Continuous yaw in radians: the quarter turns applied plus the yaw not
-    /// yet turned into one. Collision still uses `quarter_turns`.
+    /// yet turned into one. Continuous modulo 2π: the value drops by 2π when
+    /// the quarter turns wrap, so use `sin`/`cos`, not differences. Collision
+    /// still uses `quarter_turns`.
     pub fn heading(&self) -> f64 {
         self.turns as f64 * FRAC_PI_2 + self.yaw
     }
@@ -623,15 +625,18 @@ mod tests {
             yaw_delta: FRAC_PI_2 / 10.0,
             ..RaftFrame::default()
         };
-        let mut prev = raft.heading();
-        for i in 1..=25 {
+        // Past a full revolution (45 steps = 4.5 quarter turns), so the
+        // quarter-turn count wraps; compare sin/cos of the unwrapped angle.
+        let mut total = 0.0;
+        for i in 1..=45 {
             raft.advance(&step, &mut [], &phys());
+            total += step.yaw_delta;
             let h = raft.heading();
-            assert!((h - prev - step.yaw_delta).abs() < 1e-9, "step {i}");
-            prev = h;
+            assert!((h.sin() - total.sin()).abs() < 1e-9, "step {i}");
+            assert!((h.cos() - total.cos()).abs() < 1e-9, "step {i}");
         }
-        assert_eq!(raft.quarter_turns(), 3);
-        assert!((prev - 2.5 * FRAC_PI_2).abs() < 1e-9);
+        assert_eq!(raft.quarter_turns(), 1);
+        assert!((raft.heading() - 0.5 * FRAC_PI_2).abs() < 1e-9);
     }
 
     #[test]
