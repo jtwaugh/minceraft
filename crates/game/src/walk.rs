@@ -1068,9 +1068,12 @@ fn aim(
             world.selection_boxes_in(&query, &mut all);
             let mut base = Vec::new();
             block_selection_boxes_in(world, &query, &mut base);
+            // Water stays a target for rules but never gets an outline
+            // (raft-scene-feedback item 6).
+            let is_water = world.block_at(pos[0], pos[1], pos[2]).info().liquid;
             let boxed = all
                 .iter()
-                .filter(|b| b.pos == pos)
+                .filter(|b| !is_water && b.pos == pos)
                 .filter_map(|b| ray_vs_box(eye, dir, &b.aabb).map(|h| (h.distance, b.aabb)))
                 .min_by(|a, b| a.0.total_cmp(&b.0))
                 .map(|(_, aabb)| (aabb, !base.iter().any(|b| b.aabb == aabb)));
@@ -2042,6 +2045,27 @@ mod tests {
         let (b, on_raft) = w.target_box().unwrap();
         assert!(!on_raft);
         assert_eq!((b.min, b.max), ([0.0, 3.0, 0.0], [1.0, 4.0, 1.0]));
+    }
+
+    fn water_aim(block: Block) -> Aim {
+        let mut world = crate::collision::MemoryWorld::new();
+        world.set(0, 3, 0, block);
+        let cfg = TargetingConfig::default_from_data().unwrap();
+        let input = look(-std::f32::consts::FRAC_PI_2, false);
+        aim(&world, &[], &cfg, [0.5, 5.0, 0.5], &input)
+    }
+
+    #[test]
+    fn water_is_targeted_but_has_no_outline() {
+        let a = water_aim(Block::Water);
+        assert!(matches!(a.target, Target::Block { pos: [0, 3, 0], .. }));
+        assert_eq!(a.boxed, None);
+    }
+
+    #[test]
+    fn solid_blocks_still_have_an_outline() {
+        let a = water_aim(Block::Stone);
+        assert!(a.boxed.is_some());
     }
 
     #[test]
