@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # "add_label", "set_parent", "start_ticket", "report"
+    kind: str  # "add_label", "set_parent", "start_ticket", "close_issue", "request_phase_done", "report"
     target: str  # "issue#12"
     payload: dict = field(default_factory=dict, hash=False, compare=False)
     reason: str = ""
@@ -117,6 +117,11 @@ class FakeBackend(Backend):
             issue.setdefault("comments", []).append({
                 "user": "github-actions[bot]", "body": "<!-- factory-auto-start -->",
                 "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        elif action.kind == "close_issue" and issue is not None:
+            issue["state"] = "closed"
+            issue["state_reason"] = action.payload["reason"]
+        elif action.kind == "request_phase_done":
+            snapshot.reported.add((action.target, action.kind))
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         else:
