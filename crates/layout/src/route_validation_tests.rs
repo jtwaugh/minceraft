@@ -110,6 +110,19 @@ fn solid_block_in_clearance_band_fails_channel_clear() {
 }
 
 #[test]
+fn route_point_far_from_anchorage_is_still_checked() {
+    // The second route point is 200 blocks from its anchorage; the wall on
+    // the segment stands well outside the box of the two anchorages.
+    let route = Route {
+        points: vec![[0.0, 0.0], [100.0, 200.0]],
+    };
+    let l = layout(true, Some(0.0));
+    let r = validate_route(&l, &levels(), &route, &Thresholds::shipped());
+    let c = check(&r, CHECK_CHANNEL_CLEAR);
+    assert!(!c.passed && c.measured > 0.0, "{c}");
+}
+
+#[test]
 fn route_without_channel_term_fails_channel_clear() {
     let l = layout(false, None);
     let r = validate_route(&l, &levels(), &route(), &Thresholds::shipped());

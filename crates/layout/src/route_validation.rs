@@ -7,8 +7,8 @@
 //! - Each segment gets its own **decorated** window (navigability is measured
 //!   on decorated terrain), without the layout's structures so the stamped
 //!   raft does not block its own anchorage. The window is the box of the two
-//!   anchorages and the segment's two route points, grown by `window_margin + raft_half_width` plus the channel's
-//!   half-width.
+//!   anchorages and the segment's two route points, grown by
+//!   `window_margin + raft_half_width` plus the channel's half-width.
 //! - `anchorage_reachable` is one check per consecutive pair: A* over the
 //!   eroded navigable set from one anchorage to the next. Its `name` is the
 //!   shared constant; the pair is named in `required`.
