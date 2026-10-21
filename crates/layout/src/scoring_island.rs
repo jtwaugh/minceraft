@@ -6,8 +6,6 @@
 //!   outside the island (4-neighbourhood), so a holed island counts its
 //!   inner coast too.
 //! - An empty island scores 0.0 on both terms.
-//! - Island quality averages two surplus ratios, each 0.0 at the validation
-//!   minimum and 1.0 at `cap_factor` times it, linear between.
 
 use std::collections::HashSet;
 
@@ -16,25 +14,25 @@ use terrain::Region;
 
 use crate::{Level, ScoringConfig, Thresholds};
 
-/// `(value - min) / (factor * min - min)` clamped to 0..1: 0 at the minimum,
-/// 1 at `factor` times it, linear between.
-fn surplus(value: f64, min: f64, factor: f64) -> f64 {
-    let span = factor * min - min;
-    if span <= 0.0 {
-        return if value > min { 1.0 } else { 0.0 };
+/// `min(value / (factor * min), 1)`: linear from 0, capped at 1 from
+/// `factor` times the minimum.
+fn capped(value: f64, min: f64, factor: f64) -> f64 {
+    let cap = factor * min;
+    if cap <= 0.0 {
+        return 1.0;
     }
-    ((value - min) / span).clamp(0.0, 1.0)
+    (value / cap).clamp(0.0, 1.0)
 }
 
-/// Mean of the area surplus and the flat-tile surplus over the validation
+/// Mean of the capped area and flat-tile ratios against the validation
 /// minimums, in 0..1.
 pub fn island_quality(area: usize, flat_tiles: usize, t: &Thresholds, c: &ScoringConfig) -> f64 {
-    let a = surplus(
+    let a = capped(
         area as f64,
         f64::from(t.min_island_columns),
         c.cap_area_factor,
     );
-    let f = surplus(
+    let f = capped(
         flat_tiles as f64,
         f64::from(t.min_flat_grass_tiles),
         c.cap_flat_factor,

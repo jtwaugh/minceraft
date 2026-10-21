@@ -32,14 +32,15 @@ fn ragged(area: usize) -> Vec<(i32, i32)> {
 }
 
 #[test]
-fn minimums_score_zero_and_caps_score_one() {
+fn quality_is_linear_from_zero_and_caps_at_one() {
     let (t, c) = (t(), c());
     let (a, f) = (
         t.min_island_columns as usize,
         t.min_flat_grass_tiles as usize,
     );
-    assert_eq!(island_quality(a, f, &t, &c), 0.0);
-    assert_eq!(island_quality(a - 10, f, &t, &c), 0.0);
+    assert_eq!(island_quality(0, 0, &t, &c), 0.0);
+    let at_min = (1.0 / c.cap_area_factor + 1.0 / c.cap_flat_factor) / 2.0;
+    assert!((island_quality(a, f, &t, &c) - at_min).abs() < 1e-12);
     let (ca, cf) = (
         (c.cap_area_factor * a as f64) as usize,
         (c.cap_flat_factor * f as f64) as usize,
