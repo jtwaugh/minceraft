@@ -53,16 +53,17 @@ fn main() {
     }
     let staged = build + pre + val;
 
-    // Whole search on one worker gives scoring by difference.
+    // Whole search on one worker gives scoring by difference. This also
+    // includes the search's own route and layout rebuilds, prefilter and
+    // validation re-run, and thread setup, so scoring is an upper bound.
     let now = Instant::now();
     search_seeds(&params(Some(1)), &t, &c, &SearchProgress::default());
     let single = now.elapsed();
     let score = single.saturating_sub(staged);
 
     // Whole search on all cores.
-    let progress = SearchProgress::default();
     let now = Instant::now();
-    let top = search_seeds(&params(None), &t, &c, &progress);
+    let top = search_seeds(&params(None), &t, &c, &SearchProgress::default());
     let wall = now.elapsed();
 
     let pct = |a: u64, b: u64| 100.0 * a as f64 / b.max(1) as f64;
@@ -84,16 +85,6 @@ fn main() {
         "prefilter rejected {rejected} ({:.1}%), failed validation {failed} ({:.1}% of survivors), scored {passed}",
         pct(rejected, n),
         pct(failed, n - rejected)
-    );
-    println!(
-        "search counters: rejected {}, failed {}, scored {}",
-        progress
-            .prefilter_rejected
-            .load(std::sync::atomic::Ordering::Relaxed),
-        progress
-            .failed_validation
-            .load(std::sync::atomic::Ordering::Relaxed),
-        progress.scored.load(std::sync::atomic::Ordering::Relaxed),
     );
     println!("stage times, one thread (ms per candidate entering the stage):");
     let ms = |d: Duration, m: u64| 1000.0 * d.as_secs_f64() / m.max(1) as f64;
