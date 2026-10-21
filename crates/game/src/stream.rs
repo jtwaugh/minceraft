@@ -2,7 +2,7 @@
 //! See docs/design/world-layout.md Phase D (Multi-region world).
 
 use crate::walk::RegionSet;
-use layout::{CacheChange, Layout, RegionCache, RegionCoord};
+use layout::{CacheChange, Corridor, Layout, RegionCache, RegionCoord};
 
 const DEFAULT_STREAMING: &str = include_str!("../../../data/streaming.toml");
 
@@ -76,6 +76,13 @@ impl Streamer {
     /// that streams for long without a renderer should drain now and then.
     pub fn drain_changes(&mut self) -> CacheChange {
         std::mem::take(&mut self.pending)
+    }
+
+    /// Streams only regions inside `corridor` (all regions with `None`). Takes
+    /// effect at the next `update`, even if the player has not changed region.
+    pub fn set_corridor(&mut self, corridor: Option<Corridor>) {
+        self.cache.set_corridor(corridor);
+        self.centre = None;
     }
 
     pub fn cache(&self) -> &RegionCache {
@@ -254,5 +261,27 @@ mod tests {
             assert_eq!(streamed.player().pos, single.player().pos, "tick {i}");
         }
         assert!(streamed.player().pos[0] > 64.5 + 300.0);
+    }
+
+    #[test]
+    fn corridor_keeps_streaming_inside_it() {
+        let size = REGION_SIZE as f64;
+        let corridor = Corridor::new(
+            &layout::Route {
+                points: vec![[64.5, 64.5], [size * 4.0, 64.5]],
+            },
+            0,
+        );
+        let mut world = RegionSet::default();
+        let mut s = Streamer::new(layout(), StreamConfig::default_from_data().unwrap());
+        s.set_corridor(Some(corridor.clone()));
+        for x in (64..(size as i32 * 4)).step_by(32) {
+            s.update([x as f64, 100.0, 64.5], &mut world);
+            assert!(s.cache().len() <= corridor.regions().len());
+        }
+        let ch = s.drain_changes();
+        assert!(!ch.loaded.is_empty());
+        assert!(ch.loaded.iter().all(|&c| corridor.contains(c)));
+        assert!(s.cache().generations() <= corridor.regions().len());
     }
 }
