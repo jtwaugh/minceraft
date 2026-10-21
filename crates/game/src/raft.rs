@@ -32,59 +32,6 @@ pub struct RaftFrame {
     pub tilt: [f64; 2],
 }
 
-/// The swell push tunables from `data/raft.toml`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SwellPush {
-    /// Push per degree of tilt, blocks per tick.
-    pub per_degree: f64,
-    /// Strength multiplier for loose item entities.
-    pub item_multiplier: f64,
-}
-
-impl SwellPush {
-    /// The shipped defaults from `data/raft.toml`.
-    pub fn default_from_data() -> Result<SwellPush, String> {
-        SwellPush::parse(DEFAULT_RAFT)
-    }
-
-    pub fn parse(text: &str) -> Result<SwellPush, String> {
-        let root: toml::Value = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
-        let get = |key: &str| -> Result<f64, String> {
-            let n = match root.get("swell_push").and_then(|t| t.get(key)) {
-                Some(toml::Value::Float(f)) => *f,
-                Some(toml::Value::Integer(i)) => *i as f64,
-                Some(_) => return Err(format!("swell_push.{key} must be a number")),
-                None => return Err(format!("missing swell_push.{key}")),
-            };
-            if !n.is_finite() || n < 0.0 {
-                return Err(format!("swell_push.{key} must be a non-negative number"));
-            }
-            Ok(n)
-        };
-        Ok(SwellPush {
-            per_degree: get("per_degree")?,
-            item_multiplier: get("item_multiplier")?,
-        })
-    }
-
-    /// The `[x, z]` push for a deck tilt (degrees about the x and z axes).
-    /// A positive `tilt[0]` pushes towards +z and a positive `tilt[1]`
-    /// towards +x (4.7, decided in #158). Sneaking cancels it.
-    pub fn push(&self, tilt: [f64; 2], sneaking: bool) -> [f64; 2] {
-        if sneaking {
-            return [0.0; 2];
-        }
-        [self.per_degree * tilt[1], self.per_degree * tilt[0]]
-    }
-
-    /// The same push at the strength loose items get on the deck. Phase 5's
-    /// item entities will use this.
-    pub fn item_push(&self, tilt: [f64; 2]) -> [f64; 2] {
-        let [x, z] = self.push(tilt, false);
-        [x * self.item_multiplier, z * self.item_multiplier]
-    }
-}
-
 /// The scripted swell from `data/raft.toml`: the raft sways along a fixed
 /// direction and its deck tilts, as a pure function of the tick number.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -489,25 +436,6 @@ mod tests {
             );
         }
         assert_eq!(raft.quarter_turns(), 0);
-    }
-
-    #[test]
-    fn swell_push_direction_and_magnitude() {
-        let sp = SwellPush::default_from_data().unwrap();
-        assert_eq!(sp.per_degree, 0.004);
-        assert_eq!(sp.item_multiplier, 2.0);
-        // tilt[0] pushes +z, tilt[1] pushes +x, each separately.
-        assert_eq!(sp.push([10.0, 0.0], false), [0.0, 0.04]);
-        assert_eq!(sp.push([0.0, 10.0], false), [0.04, 0.0]);
-        assert_eq!(sp.push([-5.0, 2.5], false), [0.01, -0.02]);
-        assert_eq!(sp.item_push([10.0, -10.0]), [-0.08, 0.08]);
-    }
-
-    #[test]
-    fn swell_push_cancelled_by_sneak_and_zero_tilt() {
-        let sp = SwellPush::default_from_data().unwrap();
-        assert_eq!(sp.push([10.0, 10.0], true), [0.0, 0.0]);
-        assert_eq!(sp.push([0.0, 0.0], false), [0.0, 0.0]);
     }
 
     #[test]
