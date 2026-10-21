@@ -17,6 +17,8 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 
 REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
 
@@ -46,7 +48,17 @@ class Snapshot:
         issues = d.get("issues", [])
         plans = d.get("plans") or [i for i in issues if i.get("kind") == "plan"]
         return cls(issues, d.get("prs", []), plans, d.get("docs", []),
-                   d.get("branches", []), d.get("board", []))
+                   d.get("branches", []), d.get("board", []), {"loaded": True})
+
+    def mark_reported(self):
+        """Findings already in the open report issue count as reported."""
+        from factory_invariants import check
+        from factory_stalls import messages
+        body = next((i["body"] for i in self.issues
+                     if i["title"] == REPORT_TITLE and i["state"] == "open"), "")
+        self.reported |= {(v.subject, f"{v.key}: {v.detail}".rstrip(": ")) for v in check(self)
+                          if f"`{v.key}`" in body}
+        self.reported |= {(t, m) for t, m in messages(self) if f"- {m}" in body}
 
     @classmethod
     def from_fixture(cls, path):
@@ -98,11 +110,12 @@ class Snapshot:
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"]}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
         snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
+        snap.mark_reported()
         return snap
 
 
 class Backend:
-    """Applies actions. Live implementations come with the wiring ticket."""
+    """Applies actions."""
 
     def apply(self, snapshot, action):
         raise NotImplementedError
@@ -155,24 +168,63 @@ class FakeBackend(Backend):
 
 
 def tick(snapshot, passes, backend):
-    """Run every pass on the snapshot, apply the actions, return them."""
-    applied = list(dict.fromkeys(a for p in passes for a in p(snapshot)))
-    for a in applied:
-        backend.apply(snapshot, a)
+    """Run the passes in order, applying each one's actions before the next
+    pass reads the snapshot; return every action applied."""
+    applied = []
+    for p in passes:
+        for a in dict.fromkeys(p(snapshot)):
+            backend.apply(snapshot, a)
+            applied.append(a)
     return applied
 
 
-PASSES = []  # filled in by later tickets
+def invariants(snap):
+    """Pass: report each violated invariant not yet reported, and adopt an
+    orphan ticket into the plan its first dependency belongs to."""
+    from factory_invariants import check
+    by = {i["number"]: i for i in snap.issues}
+    out = []
+    for v in check(snap):
+        reason = f"{v.key}: {v.detail}".rstrip(": ")
+        if (v.subject, reason) not in snap.reported:
+            out.append(Action("report", v.subject, {"kind": v.kind}, reason))
+        if v.kind == "orphan-ticket":
+            parents = [by[d]["parent"] for d in by[int(v.subject[6:])].get("depends_on", [])
+                       if d in by and by[d].get("parent") is not None]
+            if parents:
+                out.append(Action("set_parent", v.subject, {"parent": parents[0]},
+                                  f"orphan ticket follows #{parents[0]}'s plan"))
+    return out
+
+
+def passes():
+    """The fixed order: invariants, stalls, report, plans, ready, board."""
+    from factory_board import board_pass as board
+    from factory_plans import close_finished_plans
+    from factory_ready import ready
+    from factory_report import report
+    from factory_stalls import stalls
+    def board_pass(snap):
+        return board(snap) if snap.board_meta.get("loaded") else []
+
+    return [invariants, stalls, report, close_finished_plans, ready, board_pass]
+
 
 def main(argv):
-    if len(argv) == 3 and argv[1] == "--fixture":
-        snap = Snapshot.from_fixture(argv[2])
+    args = argv[1:]
+    dry = "--dry-run" in args
+    if "--fixture" in args:
+        snap = Snapshot.from_fixture(args[args.index("--fixture") + 1])
     else:
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} branches; {snap.requests} API requests")
-    for a in (a for p in PASSES for a in p(snap)):
+    if not (dry or "--fixture" in args):
+        sys.exit("writing to GitHub needs the live backend (follow-up to #579); use --dry-run")
+    actions = tick(snap, passes(), FakeBackend())
+    for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
+    print(f"{len(actions)} action(s), nothing written; {snap.requests} API requests")
 
 
 if __name__ == "__main__":
