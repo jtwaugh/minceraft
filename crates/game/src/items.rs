@@ -7,6 +7,7 @@
 use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::interactions::{Held, HeldThing, Interactions};
 use std::fmt;
+use terrain::Block;
 
 const DEFAULT_ITEMS: &str = include_str!("../../../data/items.toml");
 
@@ -28,6 +29,8 @@ pub struct Items {
     pub items: Vec<Def>,
     /// Attack damage with the hand, and with any tool that sets none.
     pub hand_damage: u32,
+    /// Pickable block name -> item name, in file order.
+    pub pickable: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -153,6 +156,58 @@ fn parse_defs(table: &toml::value::Table, kind: &'static str) -> Result<Vec<Def>
     Ok(out)
 }
 
+fn parse_pickable(
+    table: &toml::value::Table,
+    items: &[Def],
+) -> Result<Vec<(String, String)>, ItemsError> {
+    let bad = |index: usize, problem: &str| ItemsError::BadEntry {
+        kind: "pickable",
+        index,
+        problem: problem.to_string(),
+    };
+    let Some(list) = table.get("pickable") else {
+        return Ok(Vec::new());
+    };
+    let list = list
+        .as_array()
+        .ok_or_else(|| bad(0, "not an array of tables"))?;
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (i, entry) in list.iter().enumerate() {
+        let index = i + 1;
+        let entry = entry.as_table().ok_or_else(|| bad(index, "not a table"))?;
+        if let Some(field) = entry.keys().find(|f| *f != "block" && *f != "item") {
+            return Err(bad(index, &format!("unknown field `{field}`")));
+        }
+        let text = |field: &str| {
+            entry
+                .get(field)
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| bad(index, &format!("`{field}` must be a string")))
+        };
+        let (block, item) = (text("block")?, text("item")?);
+        if !Block::ALL.iter().any(|b| b.info().name == block) {
+            return Err(ItemsError::UnknownName {
+                kind: "block",
+                name: block.to_string(),
+            });
+        }
+        if !items.iter().any(|d| d.name == item) {
+            return Err(ItemsError::UnknownName {
+                kind: "item",
+                name: item.to_string(),
+            });
+        }
+        if out.iter().any(|(b, _)| b == block) {
+            return Err(ItemsError::Duplicate {
+                kind: "pickable",
+                name: block.to_string(),
+            });
+        }
+        out.push((block.to_string(), item.to_string()));
+    }
+    Ok(out)
+}
+
 impl Items {
     /// The tables shipped in `data/items.toml`.
     pub fn default_items() -> Items {
@@ -168,11 +223,22 @@ impl Items {
             .filter(|d| (1..=i64::from(u32::MAX)).contains(d))
             .ok_or_else(|| ItemsError::Parse("`hand_damage` must be a positive integer".into()))?
             as u32;
+        let items = parse_defs(&table, "item")?;
+        let pickable = parse_pickable(&table, &items)?;
         Ok(Items {
             tools: parse_defs(&table, "tool")?,
-            items: parse_defs(&table, "item")?,
+            items,
             hand_damage,
+            pickable,
         })
+    }
+
+    /// The item picking a `block` gives, or `None` if it can't be picked.
+    pub fn pick_item(&self, block: &str) -> Option<&str> {
+        self.pickable
+            .iter()
+            .find(|(b, _)| b == block)
+            .map(|(_, i)| i.as_str())
     }
 
     /// Attack damage in half-hearts with `tool` in hand, or with the bare
@@ -319,6 +385,43 @@ mod tests {
         let items = Items::default_items();
         assert!(items.has_tool("sword") && items.has_tool("hoe"));
         assert!(items.has_item("seeds"));
+    }
+
+    #[test]
+    fn flowers_are_pickable_and_nothing_else_is() {
+        let items = Items::default_items();
+        assert_eq!(items.pick_item("dandelion"), Some("dandelion_flower"));
+        assert_eq!(items.pick_item("rose"), Some("rose_flower"));
+        for block in ["tall_grass", "crop", "grass", "stone", "air", "nope"] {
+            assert_eq!(items.pick_item(block), None, "{block}");
+        }
+    }
+
+    #[test]
+    fn rejects_bad_pickable() {
+        let head = "hand_damage=1\n[[item]]\nname='f'\nlabel='F'\n";
+        let ok = format!("{head}[[pickable]]\nblock='rose'\nitem='f'\n");
+        assert_eq!(Items::from_toml(&ok).unwrap().pick_item("rose"), Some("f"));
+        let unknown_block = format!("{head}[[pickable]]\nblock='nope'\nitem='f'\n");
+        assert!(matches!(
+            Items::from_toml(&unknown_block),
+            Err(ItemsError::UnknownName { kind: "block", .. })
+        ));
+        let unknown_item = format!("{head}[[pickable]]\nblock='rose'\nitem='g'\n");
+        assert!(matches!(
+            Items::from_toml(&unknown_item),
+            Err(ItemsError::UnknownName { kind: "item", .. })
+        ));
+        let dup = format!("{ok}[[pickable]]\nblock='rose'\nitem='f'\n");
+        assert!(matches!(
+            Items::from_toml(&dup),
+            Err(ItemsError::Duplicate {
+                kind: "pickable",
+                ..
+            })
+        ));
+        let extra = format!("{head}[[pickable]]\nblock='rose'\nitem='f'\nx=1\n");
+        assert_err_contains(Items::from_toml(&extra), "items.toml");
     }
 
     #[test]

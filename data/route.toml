@@ -1,0 +1,10 @@
+# Route builder defaults (docs/design/world-layout.md Phase E).
+# Read by crates/layout at compile time.
+
+# Distance between consecutive anchorages is spacing +/- spacing_spread.
+spacing = 150.0
+spacing_spread = 30.0
+
+# The heading changes by at most this many degrees per step, so the route
+# bends but never doubles back.
+max_turn_degrees = 30.0

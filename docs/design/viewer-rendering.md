@@ -270,9 +270,14 @@ Fix F4 and F5.
    - Draw the sky as a full-screen pass: horizon colour toward the
      horizon, a slightly deeper colour at the zenith, warmer toward
      `SUN_DIR`.
+   - The zenith is the sky ramp colour × 0.85 per channel. The warm tint
+     mixes toward a fixed warm colour by up to 0.25 within about 40° of
+     `SUN_DIR`.
    - Fog toward the sky colour in the fragment's view direction, not one
      flat `fogColor`, so fogged hills blend into the horizon band.
    - Keep the per-biome sky ramps as the base colour.
+   - Under water, keep today's flat water fog and skip the sky pass.
+     (Decided in #620.)
 3. **Water.**
    - Colour and alpha by depth to the floor (the map's `terrainColor`
      already does this for its tiles). The mesher writes the depth into

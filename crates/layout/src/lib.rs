@@ -294,6 +294,8 @@ mod region_coord;
 pub use region_coord::{RegionCoord, REGION_SIZE};
 mod retry;
 pub use retry::{find_level, find_v0_level, LevelFound, RetryError};
+mod route;
+pub use route::{build_route, build_route_with, Route, RouteParams};
 mod structure;
 mod structure_error;
 #[cfg(feature = "toml-io")]
@@ -334,6 +336,8 @@ mod region_coord_tests;
 mod region_tests;
 #[cfg(test)]
 mod retry_tests;
+#[cfg(test)]
+mod route_tests;
 #[cfg(test)]
 mod structure_tests;
 #[cfg(test)]
