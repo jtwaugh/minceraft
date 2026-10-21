@@ -244,24 +244,6 @@ impl Raft {
         self.boxes().any(|b| b.intersects(&probe))
     }
 
-    /// Add the swell push for `tilt` to the velocity of `player` if the raft
-    /// is holding it up. Call once per tick before the player's own tick.
-    pub fn push_rider(
-        &self,
-        player: &mut Player,
-        tilt: [f64; 2],
-        sneaking: bool,
-        push: &SwellPush,
-        physics: &PlayerPhysics,
-    ) {
-        if !self.supports(&player.aabb(physics)) {
-            return;
-        }
-        let [dx, dz] = push.push(tilt, sneaking);
-        player.vel[0] += dx;
-        player.vel[2] += dz;
-    }
-
     /// Move the raft by one frame. Each rider supported by the raft before it
     /// moves is carried by the same translation and quarter turns. A body that
     /// is not carried but ends up overlapping the raft is shoved by the
@@ -526,33 +508,6 @@ mod tests {
         let sp = SwellPush::default_from_data().unwrap();
         assert_eq!(sp.push([10.0, 10.0], true), [0.0, 0.0]);
         assert_eq!(sp.push([0.0, 0.0], false), [0.0, 0.0]);
-    }
-
-    #[test]
-    fn rider_drifts_down_slope_unless_sneaking() {
-        let (base, raft) = deck();
-        let p = phys();
-        let sp = SwellPush::default_from_data().unwrap();
-        let world = RaftWorld::new(&base, &raft);
-        let run = |sneak: bool| {
-            let mut pl = Player::new([2.0, 65.0, 2.0], &p);
-            settle(&mut pl, &p, &world);
-            raft.push_rider(&mut pl, [3.0, 0.0], sneak, &sp, &p);
-            let input = TickInput {
-                sneak,
-                ..TickInput::default()
-            };
-            pl.tick(&input, &p, &world);
-            pl
-        };
-        let drift = run(false);
-        assert!(drift.pos[2] > 2.0 && drift.pos[0] == 2.0);
-        let still = run(true);
-        assert_eq!(still.pos, [2.0, 65.0, 2.0]);
-        // A player off the raft gets no push.
-        let mut off = Player::new([10.0, 65.0, 2.0], &p);
-        raft.push_rider(&mut off, [3.0, 3.0], false, &sp, &p);
-        assert_eq!(off.vel, [0.0; 3]);
     }
 
     #[test]
