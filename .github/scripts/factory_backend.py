@@ -27,10 +27,13 @@ DOCS_WORKFLOW = "claude-docs.yml"
 
 
 def gh_run(args, project=False):
-    """`gh <args>`; project calls use PROJECT_TOKEN when it is set."""
+    """`gh <args>`; project calls use PROJECT_TOKEN and repo calls WRITE_TOKEN
+    (the workflow token) when set, as in project_sync."""
     env = dict(os.environ)
     if project and env.get("PROJECT_TOKEN"):
         env["GH_TOKEN"] = env["PROJECT_TOKEN"]
+    elif not project and env.get("WRITE_TOKEN"):
+        env["GH_TOKEN"] = env["WRITE_TOKEN"]
     p = subprocess.run(["gh", *args], capture_output=True, text=True, env=env)
     if p.returncode:
         raise RuntimeError(f"gh {' '.join(args[:3])}: {p.stderr.strip()}")
@@ -162,6 +165,6 @@ class GhBackend(Backend):
             self._gh("issue", "comment", n, "--repo", r, "--body", START_MARKER)
             self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}")
         elif k == "request_phase_done":
-            self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"path={p['file']}")
+            self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
         elif k != "report":  # a report is only remembered; the report pass writes the issue
             raise ValueError(f"unhandled action {k} on {t}")

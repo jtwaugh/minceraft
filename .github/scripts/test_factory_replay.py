@@ -130,10 +130,50 @@ class LiveBoard(unittest.TestCase):
                         {"user": {"login": "jtwaugh"}, "body": "ok", "created_at": "1"},
                         {"user": {"login": "mallory"}, "body": "Blocked by #9", "created_at": "2"}]
                     }.get(path, [])
-            return mock.Mock(stdout="HTTP/2 200\r\n\r\n" + json.dumps(data), stderr="", returncode=0)
+            return mock.Mock(stdout="HTTP/2 200\n\n" + json.dumps(data), stderr="", returncode=0)
         with mock.patch("factory_tick.subprocess.run", fake):
             snap = Snapshot.from_github("o/r")
         self.assertEqual([c["user"] for c in snap.issues[0]["comments"]], ["jtwaugh"])
+
+    def test_loader_reads_parent_deps_and_kind(self):
+        import json
+        from unittest import mock
+        issues = [
+            {"number": 1, "title": "Plan: x", "state": "open", "labels": [],
+             "body": "Plan.\n<!-- plan-source file=docs/design/d.md section=Phase A (One) -->"},
+            {"number": 2, "title": "t", "state": "open", "body": "**Depends on:** #3, #2",
+             "labels": [{"name": "planned"}],
+             "parent_issue_url": "https://api.github.com/repos/o/r/issues/1"},
+            {"number": 3, "title": "q", "state": "open", "body": "",
+             "labels": [{"name": "spec-question"}, {"name": "decision"}]},
+            {"number": 4, "title": "Idea: y", "state": "open", "body": "", "labels": [{"name": "idea"}]}]
+
+        def fake(cmd, **kw):
+            path = cmd[cmd.index("GET") + 1].split("?")[0]
+            # what subprocess.run(text=True) hands back: \r\n already turned into \n
+            body = json.dumps(issues if path == "repos/o/r/issues" else [])
+            return mock.Mock(stdout="HTTP/2.0 200 OK\nEtag: W/\"1\"\n\n" + body, stderr="", returncode=0)
+        with mock.patch("factory_tick.subprocess.run", fake):
+            snap = Snapshot.from_github("o/r")
+        by = {i["number"]: i for i in snap.issues}
+        self.assertEqual([by[n]["kind"] for n in (1, 2, 3, 4)], ["plan", "ticket", "decision", "idea"])
+        self.assertEqual((by[2]["parent"], by[3]["parent"]), (1, None))
+        self.assertEqual(by[2]["depends_on"], [3])
+        self.assertEqual(by[1]["plan_source"], {"file": "docs/design/d.md", "section": "Phase A (One)"})
+
+    def test_repo_calls_use_the_write_token(self):
+        import factory_backend
+        from unittest import mock
+        seen = []
+
+        def fake(cmd, **kw):
+            seen.append(kw["env"]["GH_TOKEN"])
+            return mock.Mock(stdout="", stderr="", returncode=0)
+        env = {"GH_TOKEN": "read", "WRITE_TOKEN": "write", "PROJECT_TOKEN": "project"}
+        with mock.patch.dict(os.environ, env), mock.patch("factory_backend.subprocess.run", fake):
+            factory_backend.gh_run(["issue", "edit", "1"])
+            factory_backend.gh_run(["api", "graphql"], project=True)
+        self.assertEqual(seen, ["write", "project"])
 
     def test_loader_fills_new_fields(self):
         import factory_board
