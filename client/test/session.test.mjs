@@ -49,3 +49,49 @@ test('a bare start line in a script is still a usage error', () => {
   const [c] = parse('case bare\nstart\n');
   assert.throws(() => run(c), /line 2: start fly\|walk/);
 });
+
+/** Replay a transcript through parse and a fresh session; returns the observed state. */
+function replay(text) {
+  const [c] = parse(text);
+  const s = createSession(c.steps[0].args, c.name);
+  try {
+    for (const { op, args } of c.steps.slice(1)) {
+      const r = s.execStep({ op, args });
+      assert.equal(r.ok, true, r.error);
+    }
+    return observe(s);
+  } finally { s.close(); }
+}
+
+const observe = (s) => ({ tick: s.read('sim_tick'), x: s.read('eye.x'), y: s.read('eye.y'), z: s.read('eye.z') });
+
+test('transcript has header lines and drops errored lines', () => {
+  const s = createSession(['walk', 'raft'], 'demo');
+  try {
+    for (const line of ['# note', '', 'click', 'expect mode = fly', 'bogus', 'frame 50 x3', 'approach cow']) s.exec(line);
+    assert.equal(s.transcript(), 'case demo\nstart walk raft\nclick\nframe 50 x3\n');
+  } finally { s.close(); }
+  const d = createSession();
+  try {
+    assert.equal(d.transcript(), 'case session\nstart walk\n');
+    assert.equal(d.exec('# only a comment').ok, true);
+    assert.equal(d.exec('   ').ok, true);
+    assert.equal(d.transcript(), 'case session\nstart walk\n');
+  } finally { d.close(); }
+});
+
+for (const [name, args, lines] of [
+  ['raft approach and use', ['walk', 'raft'], ['click', 'lock', 'frame 50 x10', 'approach animal', 'face animal', 'frame 50 x5', 'click', 'frame 50 x5', 'bogus']],
+  ['stream start', ['walk', 'stream'], ['click', 'lock', 'frame 50 x20', 'down KeyW', 'frame 50 x20']],
+]) {
+  test(`transcript replays to the same state: ${name}`, () => {
+    const s = createSession(args, 'rt');
+    let live;
+    try {
+      for (const l of lines) s.exec(l);
+      live = observe(s);
+      assert.ok(live.tick > 0);
+      assert.deepEqual(replay(s.transcript()), live);
+    } finally { s.close(); }
+  });
+}
