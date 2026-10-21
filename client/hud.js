@@ -4,9 +4,23 @@
 //
 //   hudModel({ belt, health, maxHealth, phase, secondsLeft }) ->
 //     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected }], selected, hands, hearts: { full, half, empty } }
-//   mountHud(document, parent) -> { update(model) }
+//
+//   slotView(set, name, selected) -> { frame, icon }   frame is `slot` or `slot_selected`; icon is the item's texture name or null
+//   mountHud(document, set, parent) draws frames and icons from the parsed tileset at an integer scale (uiScale).
 //
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
+
+import { findTexture, textureCanvas, textureSize, uiScale } from './uipx.js';
+
+/** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
+export function slotView(set, name, selected) {
+  return { frame: selected ? 'slot_selected' : 'slot', icon: name && findTexture(set, name) ? name : null };
+}
+
+/** Pixel scale for the HUD: whole multiples of the 10x10 slot, about 8 slots wide on the viewport. */
+export function hudScale(viewportW, viewportH) {
+  return uiScale(viewportW, viewportH, 80, 45);
+}
 
 export function hudModel({ belt, health, maxHealth, phase = 'gathering', secondsLeft = 0 }) {
   const hp = Math.max(0, Math.min(health, maxHealth));
@@ -32,12 +46,13 @@ const CSS = `
 .heart.full { background: #d22; }
 .heart.half { background: linear-gradient(90deg, #d22 50%, #3a0a0a 50%); }
 #hud-belt { display: flex; gap: 2px; }
-.slot { min-width: 48px; padding: 6px 4px; text-align: center; background: rgba(0, 0, 0, .55); border: 2px solid #555; }
-.slot.selected { border-color: #fff; }
-#hud-hands { min-height: 1.2em; text-shadow: 0 0 3px #000; }
+.slot { position: relative; image-rendering: pixelated; }
+.slot canvas { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
+#hud-hands { min-height: 1.2em; text-shadow: 0 0 3px #000; display: flex; align-items: center; gap: 4px; }
+#hud-hands canvas { image-rendering: pixelated; }
 `;
 
-export function mountHud(document, parent = document.body) {
+export function mountHud(document, set, parent = document.body, view = globalThis) {
   const style = document.createElement('style');
   style.textContent = CSS;
   const root = document.createElement('div');
@@ -54,12 +69,35 @@ export function mountHud(document, parent = document.body) {
       last = key;
       cross.hidden = !m.crosshair;
       timer.textContent = `${m.timer.phase} ${m.timer.secondsLeft}s`;
-      hands.textContent = m.hands ? `carrying ${m.hands}` : '';
+      const scale = hudScale(view.innerWidth, view.innerHeight);
+      const icon = (name) => {
+        const c = textureCanvas(set, name, document);
+        if (!c) return null;
+        const { w, h } = textureSize(set, name);
+        c.style.width = `${w * scale}px`;
+        c.style.height = `${h * scale}px`;
+        return c;
+      };
+      const hand = m.hands && icon(m.hands);
+      hands.replaceChildren(...(m.hands ? [hand, Object.assign(document.createElement('span'), { textContent: m.hands })].filter(Boolean) : []));
       const kinds = [...Array(m.hearts.full).fill('full'), ...Array(m.hearts.half).fill('half'), ...Array(m.hearts.empty).fill('empty')];
       hearts.replaceChildren(...kinds.map((k) => Object.assign(document.createElement('div'), { className: `heart ${k}` })));
-      belt.replaceChildren(...m.slots.map((s, i) => Object.assign(document.createElement('div'), {
-        className: s.selected ? 'slot selected' : 'slot', textContent: `${i + 1} ${s.name ?? '-'}`,
-      })));
+      belt.replaceChildren(...m.slots.map((slot) => {
+        const v = slotView(set, slot.name, slot.selected);
+        const el = document.createElement('div');
+        el.className = slot.selected ? 'slot selected' : 'slot';
+        const frame = icon(v.frame);
+        if (frame) el.append(frame);
+        const ic = v.icon && icon(v.icon);
+        if (ic) {
+          // Centre the icon in the frame, on whole texels.
+          const f = textureSize(set, v.frame), t = textureSize(set, v.icon);
+          ic.style.left = `${Math.floor((f.w - t.w) / 2) * scale}px`;
+          ic.style.top = `${Math.floor((f.h - t.h) / 2) * scale}px`;
+          el.append(ic);
+        }
+        return el;
+      }));
     },
   };
 }
