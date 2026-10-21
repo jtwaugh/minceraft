@@ -42,6 +42,17 @@ Checked against `master` (ba3a7e9). Phase B is done; Phases C to E are not built
 
 ## Reconciliation notes
 
+- **Phase C is still incomplete (plan #619 closed; water depth missing).**
+  Built: C.1 vertex AO (PRs #688, #692, #694; `viewer/mesh.js`,
+  `viewer/test/mesh_ao.test.mjs`), C.2 sky gradient, sky pass and
+  directional fog (PRs #691, #701, #724; `viewer/sky.js`), and the C.3
+  Fresnel half (PRs #702, #725; `viewer/water.js`). Not built: the C.3
+  water colour and alpha by depth to the floor. The mesher does not write
+  depth into byte 15 and no shader reads it. The plan said that ticket
+  would be planned once #621 was answered (decided A in #621, PR #647),
+  but it was never created. C.4 is optional and not built. Suggest a
+  planned ticket for the byte 15 depth in `meshBlocks` plus the viewer and
+  client shader mapping. Phase C stays `todo`.
 - **Phase A was incomplete (resolved by PR #520, now `done`): the viewer was done, the client was not**
   (checked after plan #242 closed; PRs #248, #250, #252). `viewer/index.html`
   now has radial fog (`camPos`, `distance(wp, camPos)`, `viewer/fog.js`),
