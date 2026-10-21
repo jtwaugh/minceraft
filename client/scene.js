@@ -24,6 +24,7 @@ import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
 import { mountHud } from './hud.js';
+import { mountInventory } from './inventoryui.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
@@ -323,6 +324,7 @@ const ctx = legendContext(legendJson, faceLayer);
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
 const models = createModelDrawer(gl, tileset, RAFT_TEXTURES);
 const hud = mountHud(document, tileset);
+const inventoryView = mountInventory(document, tileset);
 
 // With MSAA, cutout edges use alpha-to-coverage on a sharpened alpha so distant
 // leaves fade to partial coverage instead of popping in and out; without it the
@@ -530,6 +532,7 @@ function render(now) {
   gl.bindVertexArray(null);
   if (scene) drawAnimals(mvp, readAnimals(walk));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
+  inventoryView.update(controller.state.inventory, controller.state.belt);
   hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
 
   if (lastFrame !== null) frames.push(now - lastFrame);
