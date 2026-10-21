@@ -294,9 +294,9 @@ impl Walk {
 
     /// A player over a streamed world of the given seed: regions around the
     /// player load and unload as they move (`data/streaming.toml`).
-    pub fn streamed(seed: f64, x: f64, y: f64, z: f64) -> Result<Walk, JsError> {
+    pub fn streamed(seed: u64, x: f64, y: f64, z: f64) -> Result<Walk, JsError> {
         let layout = Layout {
-            seed: seed as u64,
+            seed,
             ..Layout::default()
         };
         let walker = Walker::with_layout(layout, [x, y, z]).map_err(|e| JsError::new(&e))?;
