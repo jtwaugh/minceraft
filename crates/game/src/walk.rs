@@ -304,6 +304,11 @@ impl Walker {
         std::mem::take(&mut self.command_output)
     }
 
+    /// Whether the player is dead.
+    pub fn dead(&self) -> bool {
+        self.player.dead
+    }
+
     /// Ticks run so far.
     pub fn sim_tick(&self) -> u64 {
         self.sim_tick
@@ -325,6 +330,7 @@ impl Walker {
         h.f64s(&p.vel);
         h.u64(u64::from(p.on_ground));
         h.u64(u64::from(p.health));
+        h.u64(u64::from(p.dead));
         for slot in &self.state.tool_belt {
             match slot {
                 Some(t) => {
@@ -541,6 +547,22 @@ impl Walker {
 
     /// One 20 Hz step.
     pub fn tick(&mut self, input: &TickInput) {
+        // A dead player swings, drops, picks up and plants nothing.
+        let silenced;
+        let input = if self.player.dead {
+            silenced = TickInput {
+                primary: false,
+                secondary: false,
+                secondary_held: false,
+                interact: false,
+                drop: false,
+                tool_slot: None,
+                ..*input
+            };
+            &silenced
+        } else {
+            input
+        };
         self.run_queued_commands();
         self.look_yaw = input.yaw;
         self.sim_tick += 1;
@@ -596,6 +618,11 @@ impl Walker {
         }
         if let Some(fall_distance) = self.player.last_landing {
             self.events.push(GameEvent::Landed { fall_distance });
+        }
+        if self.player.died_this_tick {
+            self.events.push(GameEvent::PlayerDied {
+                cause: "fall".to_string(),
+            });
         }
         let after = self.movement_state();
         Self::emit_movement(&mut self.events, before, after);
@@ -3155,5 +3182,80 @@ mod tests {
             item: "seeds".into(),
         });
         assert!(swings(&mut w, &level_click()).is_empty());
+    }
+
+    fn fatal_fall() -> Walker {
+        let mut w = settled();
+        w.player.pos[1] += 100.0;
+        w.player.on_ground = false;
+        w
+    }
+
+    #[test]
+    fn a_fatal_fall_emits_one_player_died_after_landed() {
+        let mut w = fatal_fall();
+        let mut seen = Vec::new();
+        for _ in 0..200 {
+            w.tick(&TickInput::default());
+            seen.extend(w.drain_events());
+        }
+        let died: Vec<_> = seen
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| matches!(e, GameEvent::PlayerDied { .. }))
+            .collect();
+        assert_eq!(died.len(), 1, "{seen:?}");
+        assert_eq!(
+            died[0].1,
+            &GameEvent::PlayerDied {
+                cause: "fall".into()
+            }
+        );
+        let landed = seen
+            .iter()
+            .position(|e| matches!(e, GameEvent::Landed { .. }))
+            .unwrap();
+        assert!(landed < died[0].0);
+        assert!(w.dead());
+    }
+
+    #[test]
+    fn a_dead_player_ignores_actions() {
+        let mut w = fatal_fall();
+        for _ in 0..200 {
+            w.tick(&TickInput::default());
+        }
+        assert!(w.dead());
+        w.drain_events();
+        w.player_state_mut().hands = Some(ItemInstance {
+            item: "wheat".into(),
+        });
+        let belt = w.player_state().tool_belt.clone();
+        let hands = w.player_state().hands.clone();
+        let selected = w.player_state().selected;
+        let input = TickInput {
+            primary: true,
+            secondary: true,
+            secondary_held: true,
+            interact: true,
+            drop: true,
+            tool_slot: Some((selected + 1) % 4),
+            ..TickInput::default()
+        };
+        for _ in 0..5 {
+            w.tick(&input);
+        }
+        assert!(w.drain_events().is_empty());
+        assert_eq!(w.player_state().tool_belt, belt);
+        assert_eq!(w.player_state().hands, hands);
+        assert_eq!(w.player_state().selected, selected);
+    }
+
+    #[test]
+    fn world_hash_differs_when_dead() {
+        let alive = settled();
+        let mut dead = settled();
+        dead.player.dead = true;
+        assert_ne!(alive.world_hash(), dead.world_hash());
     }
 }

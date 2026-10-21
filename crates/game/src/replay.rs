@@ -12,7 +12,7 @@
 //!
 //! `Recorder` captures a session as it runs and `replay` feeds a recording
 //! to a fresh `Walker`. `Walker::world_hash` is FNV-1a 64 over: `sim_tick`,
-//! `cheated`; the player's position, velocity, ground flag and health; the
+//! `cheated`; the player's position, velocity, ground flag, health and dead flag; the
 //! belt, selection and hands; each item entity's id, item, position and
 //! velocity; each animal's id, species, health, position, velocity and
 //! facing. Floats are hashed by their bits.
