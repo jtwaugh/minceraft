@@ -96,3 +96,32 @@ export function boxVertices(box, uvOf) {
   });
   return { vertices, indices };
 }
+
+// Animal models in the tileset export (batch 15); the client requests exactly these.
+export const ANIMAL_MODELS = ['cow', 'pig', 'chicken'];
+const FACE_NAMES = FACES.map((f) => f.name);
+
+/** Unit box (footprint 1x1 centred on the origin, 1 high) textured with `species`'s faces; unknown species get grey faces. */
+export function animalBoxes(species) {
+  const faces = ANIMAL_MODELS.includes(species) ? Object.fromEntries(FACE_NAMES.map((n) => [n, `${species}.${n}`])) : {};
+  return [{ lo: [-0.5, 0, -0.5], size: [1, 1, 1], faces }];
+}
+
+const HURT_TINT = [0.85, 0.12, 0.1];
+
+/**
+ * Pose of animal `a` ({ pos, size: [w, h], facing (degrees), dying, hurt }) for
+ * drawing the unit box of animalBoxes: { model: column-major Float32Array(16)
+ * (scale to size, then turn about the bottom centre, then move to pos), tint }.
+ */
+export function animalPose(a) {
+  const [w, h] = a.size, f = a.facing * Math.PI / 180;
+  // Facing 0 looks along -z, so local x is (cos f, 0, sin f) and local z
+  // (-sin f, 0, cos f). Tipping rolls the body 90 degrees about local z:
+  // x goes up and y goes to the -x side, so the lift is half the width.
+  const c = Math.cos(f), s = Math.sin(f);
+  const model = new Float32Array(a.dying
+    ? [0, w, 0, 0, -c * h, 0, -s * h, 0, -s * w, 0, c * w, 0, a.pos[0], a.pos[1] + w / 2, a.pos[2], 1]
+    : [c * w, 0, s * w, 0, 0, h, 0, 0, -s * w, 0, c * w, 0, a.pos[0], a.pos[1], a.pos[2], 1]);
+  return { model, tint: a.hurt ? HURT_TINT : [1, 1, 1] };
+}

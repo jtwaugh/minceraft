@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { packAtlas, boxVertices, FALLBACK } from '../models.js';
+import { packAtlas, boxVertices, FALLBACK, animalPose, animalBoxes, ANIMAL_MODELS } from '../models.js';
 
 const fixture = {
   palette: { 0: '#101010', 1: '#ff0000', 2: '#00ff00' },
@@ -103,4 +103,28 @@ test('missing face names fall back to grey without throwing', () => {
   assert.equal(vertices[4], g.v0);
   const r = atlas.rects[FALLBACK];
   assert.equal(g.u0, r.x / atlas.width);
+});
+
+const pose = (o) => animalPose({ pos: [1, 2, 3], size: [0.9, 1.4], facing: 0, dying: false, hurt: false, ...o });
+const near = (a, b) => a.forEach((v, i) => assert.ok(Math.abs(v - b[i]) < 1e-5, `${[...a]} vs ${b}`));
+
+test('animalPose faces and scales', () => {
+  near(pose({}).model, [0.9, 0, 0, 0, 0, 1.4, 0, 0, 0, 0, 0.9, 0, 1, 2, 3, 1]);
+  near(pose({ facing: 90 }).model, [0, 0, 0.9, 0, 0, 1.4, 0, 0, -0.9, 0, 0, 0, 1, 2, 3, 1]);
+  assert.deepEqual(pose({}).tint, [1, 1, 1]);
+});
+
+test('animalPose tips a dying animal and reddens a hurt one', () => {
+  near(pose({ dying: true }).model, [0, 0.9, 0, 0, -1.4, 0, 0, 0, 0, 0, 0.9, 0, 1, 2.45, 3, 1]);
+  const t = pose({ hurt: true }).tint;
+  assert.ok(t[0] > t[1] && t[0] > t[2]);
+});
+
+test('every batch-15 animal model is requested by the client', async () => {
+  const { readFileSync } = await import('node:fs');
+  const b = JSON.parse(readFileSync(new URL('../../art/batches_15.json', import.meta.url)));
+  const names = Object.keys(Object.values(b)[0].models).sort();
+  assert.deepEqual([...ANIMAL_MODELS].sort(), names);
+  assert.equal(animalBoxes('cow')[0].faces.front, 'cow.front');
+  assert.deepEqual(animalBoxes('dragon')[0].faces, {});
 });
