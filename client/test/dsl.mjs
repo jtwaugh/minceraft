@@ -345,16 +345,22 @@ function parseStart(args) {
  * A live world driven one DSL line at a time. `startArgs` are the words after `start`
  * (e.g. ['walk', 'raft']); none means the default world. `exec` (a DSL line) and
  * `execStep` (a parsed `{ op, args }`) never throw: they return `{ ok: true }` or
- * `{ ok: false, error }`. Call `close()` when done.
+ * `{ ok: false, error }`. `transcript()` is the session as a valid script: `case <name>`,
+ * the `start` line, then every line that succeeded (errored ones are dropped).
+ * Call `close()` when done.
  */
-export function createSession(startArgs = []) {
+export function createSession(startArgs = [], name = 'session') {
   const w = world(parseStart(startArgs));
   let open = true;
+  const lines = [`case ${name}`, `start ${(startArgs.length ? startArgs : ['walk']).join(' ')}`];
   const execStep = ({ op, args }) => {
     try {
       if (!open) throw new Error('session is closed');
       if (op === 'start') throw new Error('start is only allowed when the session is created');
-      if (op) step(w, { op, args });
+      if (op) {
+        step(w, { op, args });
+        lines.push([op, ...args].join(' '));
+      }
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -367,6 +373,7 @@ export function createSession(startArgs = []) {
     },
     execStep,
     read: (path) => read(w, path),
+    transcript: () => `${lines.join('\n')}\n`,
     close() {
       if (!open) return;
       open = false;
