@@ -166,6 +166,16 @@ mod tests {
         }
     }
 
+    /// Feet just above the terrain at (64, 64), so a settling fall is not fatal.
+    fn spawn() -> [f64; 3] {
+        let ground = terrain::generate_decorated(25, 64, 64, 1, 1);
+        let top = (0..terrain::HEIGHT as u32)
+            .rev()
+            .find(|&y| ground.get(0, y, 0) != terrain::Block::Air)
+            .unwrap();
+        [64.5, top as f64 + 1.0, 64.5]
+    }
+
     /// Walk towards +x, hopping over small obstacles.
     fn east() -> TickInput {
         TickInput {
@@ -234,7 +244,7 @@ mod tests {
 
     #[test]
     fn walking_streams_regions_and_stays_within_the_bound() {
-        let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
+        let mut w = Walker::with_layout(layout(), spawn()).unwrap();
         let c = StreamConfig::default_from_data().unwrap();
         let bound = (2 * c.unload as usize + 1).pow(2);
         let mut seen = std::collections::BTreeSet::new();
@@ -290,8 +300,8 @@ mod tests {
     #[test]
     fn streamed_walk_matches_one_large_region() {
         let l = layout();
-        let mut streamed = Walker::with_layout(l.clone(), [64.5, 120.0, 64.5]).unwrap();
-        let mut single = Walker::new([64.5, 120.0, 64.5]).unwrap();
+        let mut streamed = Walker::with_layout(l.clone(), spawn()).unwrap();
+        let mut single = Walker::new(spawn()).unwrap();
         single.add_region(l.generate_layout_region(-256, -256, 1024, 640, true).region);
         let input = east();
         for i in 0..1800 {
