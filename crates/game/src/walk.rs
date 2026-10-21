@@ -18,14 +18,14 @@ use crate::interactions::{
     resolve, ActionKind, Button, Dispatcher, HeldThing, Interactions, ResolveCtx, Resolved,
     TargetFacts,
 };
-use crate::item_entities::{Deck, ItemEntityConfig, ItemStore};
+use crate::item_entities::{ItemEntityConfig, ItemStore};
 use crate::items::{ItemInstance, Items, PlayerState};
 use crate::phase::{Phase, PhaseClock};
 use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::pick::pick_crop;
 use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
-use crate::raft::{Raft, RaftWorld, Swell, SwellPush};
+use crate::raft::{Raft, RaftWorld, Swell};
 use crate::replay::Fnv;
 use crate::rng::Rng;
 use crate::scene::RaftScene;
@@ -158,7 +158,6 @@ const GROWTH_SEED: u64 = 5;
 struct Floating {
     raft: Raft,
     swell: Swell,
-    push: SwellPush,
     tick: u64,
     prev_offset: [f64; 3],
 }
@@ -420,7 +419,6 @@ impl Walker {
         w.floating = Some(Floating {
             raft: Raft::new(&scene.cells),
             swell: Swell::default_from_data()?,
-            push: SwellPush::default_from_data()?,
             tick: 0,
             prev_offset: [0.0; 3],
         });
@@ -537,14 +535,7 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&world);
-                let dropped = self.animals.tick(
-                    &world,
-                    Some(Deck {
-                        raft: &f.raft,
-                        tilt: frame.tilt,
-                        push: &f.push,
-                    }),
-                );
+                let dropped = self.animals.tick(&world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let aim = aim(&world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);
@@ -554,7 +545,7 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&self.world);
-                let dropped = self.animals.tick(&self.world, None);
+                let dropped = self.animals.tick(&self.world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
                 self.take_aim(aim, input);

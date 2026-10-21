@@ -1,7 +1,7 @@
 //! Animals in the world: the animal entity type and the store that holds
 //! them. See docs/design/basic-gameplay.md section 8.3.
 //!
-//! [`AnimalStore::tick`] moves them (gravity, landing, the deck push) and
+//! [`AnimalStore::tick`] moves them (gravity, landing) and
 //! makes idle animals wander: pause, pick a heading, walk, repeat (8.2). A
 //! hit animal flees along a random heading for a few seconds, then wanders.
 //! A killed animal plays out its death animation, then is removed and
@@ -10,7 +10,7 @@
 
 use crate::animals::{AnimalDef, Animals};
 use crate::collision::{Aabb, CollisionWorld};
-use crate::item_entities::{lift_out_of_blocks, Deck, ItemEntityConfig, TICKS_PER_SECOND};
+use crate::item_entities::{lift_out_of_blocks, ItemEntityConfig, TICKS_PER_SECOND};
 use crate::movement::move_with_step;
 use crate::physics::PlayerPhysics;
 use crate::rng::Rng;
@@ -264,14 +264,11 @@ impl AnimalStore {
 
     /// Advance every animal one tick, in id order, against `world` (which
     /// should include the raft's boxes where there is one). Same motion as
-    /// items: the deck push, gravity, a swept move, drag and ground friction.
+    /// items: gravity, a swept move, drag and ground friction. Deck swell
+    /// does not push animals (#635).
     /// Animals whose death animation ends this tick are removed, and their
     /// drops (counts drawn from each drop's range) are returned.
-    pub fn tick(
-        &mut self,
-        world: &impl CollisionWorld,
-        deck: Option<Deck<'_>>,
-    ) -> Vec<DroppedItem> {
+    pub fn tick(&mut self, world: &impl CollisionWorld) -> Vec<DroppedItem> {
         let cfg = self.physics;
         let dt = 1.0 / TICKS_PER_SECOND;
         let mut scratch = Vec::new();
@@ -289,13 +286,6 @@ impl AnimalStore {
                 && advance_wander(&mut e.wander, &mut e.facing, def, &mut self.rng);
             let mut bb = e.aabb();
             lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
-            if let Some(d) = &deck {
-                if d.raft.supports(&bb) {
-                    let [px, pz] = d.push.item_push(d.tilt);
-                    e.velocity[0] += px * TICKS_PER_SECOND;
-                    e.velocity[2] += pz * TICKS_PER_SECOND;
-                }
-            }
             // The wander drive would overwrite a knockback, so it waits.
             if (walking || fleeing) && e.hurt_ticks_left == 0 {
                 let speed = if fleeing {
@@ -380,7 +370,7 @@ impl AnimalStore {
 mod tests {
     use super::*;
     use crate::collision::MemoryWorld;
-    use crate::raft::{Raft, RaftWorld, SwellPush};
+    use crate::raft::{Raft, RaftWorld};
     use crate::targeting::{cast_target, Target, TargetingConfig};
     use terrain::Block;
 
@@ -413,7 +403,7 @@ mod tests {
 
     fn run(s: &mut AnimalStore, w: &impl CollisionWorld, n: usize) {
         for _ in 0..n {
-            s.tick(w, None);
+            s.tick(w);
         }
     }
 
@@ -436,7 +426,7 @@ mod tests {
         let w = floor();
         let mut s = store(1);
         let id = s.spawn("cow", [0.5, 5.0, 0.5], 0.0).unwrap();
-        s.tick(&w, None);
+        s.tick(&w);
         assert!(s.get(id).unwrap().pos[1] < 5.0, "falls");
         run(&mut s, &w, 100);
         let e = s.get(id).unwrap();
@@ -445,7 +435,7 @@ mod tests {
     }
 
     #[test]
-    fn animal_on_the_deck_is_carried_like_an_item() {
+    fn animal_on_the_tilting_deck_stays_put() {
         let mut base = MemoryWorld::new();
         let mut cells = Vec::new();
         for x in 0..4 {
@@ -456,23 +446,23 @@ mod tests {
         }
         let raft = Raft::new(&cells);
         let world = RaftWorld::new(&base, &raft);
-        let push = SwellPush::default_from_data().unwrap();
         let mut s = store(1);
         let id = s.spawn("pig", [2.0, 65.0, 2.0], 0.0).unwrap();
         run(&mut s, &world, 5);
         let y = s.get(id).unwrap().pos[1];
         assert!((y - 65.0).abs() < 1e-6, "rests on the deck: {y}");
-        for _ in 0..10 {
-            let deck = Deck {
-                raft: &raft,
-                tilt: [0.0, 3.0],
-                push: &push,
-            };
-            s.tick(&world, Some(deck));
+        // The swell no longer reaches animals: with wandering stopped, a
+        // pig on the deck stays where it is for many ticks.
+        s.animals[0].wander = Wander {
+            walking: false,
+            ticks_left: u32::MAX,
+        };
+        let start = s.get(id).unwrap().pos;
+        for _ in 0..200 {
+            s.tick(&world);
         }
         let e = s.get(id).unwrap();
-        assert!(e.pos[0] > 2.0, "slides along the deck: {}", e.pos[0]);
-        assert!((e.pos[1] - y).abs() < 1e-9);
+        assert_eq!(e.pos, start);
     }
 
     #[test]
@@ -536,7 +526,7 @@ mod tests {
         let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
         let mut trace = Vec::new();
         for _ in 0..ticks {
-            s.tick(&w, None);
+            s.tick(&w);
             let e = s.get(id).unwrap();
             trace.push((e.pos, e.wander.walking));
         }
@@ -571,7 +561,7 @@ mod tests {
         let id = s.spawn("pig", [0.5, 1.0, 0.5], 0.0).unwrap();
         let half = s.get(id).unwrap().box_size[0] / 2.0;
         for _ in 0..3000 {
-            s.tick(&w, None);
+            s.tick(&w);
             let p = s.get(id).unwrap().pos;
             assert!(
                 p[0].abs() + half <= 3.0 && p[2].abs() + half <= 3.0,
@@ -639,7 +629,7 @@ mod tests {
             Some(0),
             "still inside after n-1 ticks"
         );
-        s.tick(&w, None);
+        s.tick(&w);
         assert_eq!(s.get(id).unwrap().hurt_ticks_left, 0);
         assert_eq!(s.hit(id, 1, ORIGIN), Some(1), "open after n ticks");
     }
@@ -673,7 +663,7 @@ mod tests {
             assert!(s.get(id).unwrap().hurt_ticks_left > 0);
             let mut top = before[1];
             for _ in 0..6 {
-                s.tick(&w, None);
+                s.tick(&w);
                 top = top.max(s.get(id).unwrap().pos[1]);
             }
             let after = s.get(id).unwrap().pos;
@@ -690,7 +680,7 @@ mod tests {
         let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
         run(&mut s, &w, 30);
         s.hit(id, 4, [-1.0, 1.0, 0.5]);
-        s.tick(&w, None);
+        s.tick(&w);
         let v = s.get(id).unwrap().velocity;
         s.hit(id, 4, [0.5, 1.0, 3.0]);
         assert_eq!(s.get(id).unwrap().velocity, v, "unchanged");
@@ -740,7 +730,7 @@ mod tests {
         s.hit(id, 1, [0.5, 1.0, 0.5]);
         let mut trace = Vec::new();
         for _ in 0..n {
-            s.tick(&w, None);
+            s.tick(&w);
             trace.push(s.get(id).unwrap().pos);
         }
         (trace, s, id)
@@ -796,7 +786,7 @@ mod tests {
         assert!((def.flee_ticks[0]..=def.flee_ticks[1]).contains(&left));
         run(&mut s, &w, left as usize - 1);
         assert_eq!(s.get(id).unwrap().flee_ticks_left, 1);
-        s.tick(&w, None);
+        s.tick(&w);
         assert_eq!(s.get(id).unwrap().flee_ticks_left, 0);
     }
 
@@ -846,10 +836,10 @@ mod tests {
             .death_ticks;
         assert_eq!(s.get(id).unwrap().death_ticks_left, Some(n));
         for _ in 0..n - 1 {
-            assert!(s.tick(&w, None).is_empty());
+            assert!(s.tick(&w).is_empty());
             assert!(s.get(id).is_some());
         }
-        let dropped = s.tick(&w, None);
+        let dropped = s.tick(&w);
         assert!(s.get(id).is_none());
         assert!(s.is_empty());
         assert!(dropped.iter().any(|d| d.item == "raw_chicken"));
@@ -887,7 +877,7 @@ mod tests {
             kill(&mut s, id);
             let mut dropped = Vec::new();
             for _ in 0..20 {
-                dropped.extend(s.tick(&w, None));
+                dropped.extend(s.tick(&w));
             }
             let def = kinds.get(species).unwrap();
             for d in &def.drops {
@@ -924,7 +914,7 @@ mod tests {
         s.hit(id, 99, ORIGIN);
         let mut dropped = Vec::new();
         for _ in 0..20 {
-            dropped.extend(s.tick(&w, None));
+            dropped.extend(s.tick(&w));
         }
         let def = Animals::default_animals().get("cow").unwrap().clone();
         assert!(!dropped.is_empty());
@@ -943,7 +933,7 @@ mod tests {
             let mut s = store(1);
             let id = s.spawn("cow", [0.5, 1.0, 0.5], 0.0).unwrap();
             kill(&mut s, id);
-            (0..20).flat_map(|_| s.tick(&w, None)).collect::<Vec<_>>()
+            (0..20).flat_map(|_| s.tick(&w)).collect::<Vec<_>>()
         };
         assert_eq!(go(), go());
     }

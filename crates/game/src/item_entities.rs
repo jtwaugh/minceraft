@@ -8,7 +8,6 @@ use crate::collision::{Aabb, CollisionWorld};
 use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::items::ItemInstance;
 use crate::movement::move_box;
-use crate::raft::{Raft, SwellPush};
 use crate::targeting::{EntityId, TargetableEntity};
 use std::fmt;
 
@@ -120,15 +119,6 @@ const REST_SPEED: f64 = 1e-3;
 
 /// Step used to lift an item out of a block, blocks.
 const LIFT_STEP: f64 = 1.0 / 16.0;
-
-/// The raft deck and the swell acting on items that rest on it.
-#[derive(Clone, Copy)]
-pub struct Deck<'a> {
-    pub raft: &'a Raft,
-    /// Deck tilt this tick, degrees about the x and z axes.
-    pub tilt: [f64; 2],
-    pub push: &'a SwellPush,
-}
 
 /// Raise an item whose box overlaps a block until it is clear, so it never
 /// rests inside a full block. Gives up after 64 blocks of lift.
@@ -302,6 +292,7 @@ mod tests {
     use super::*;
     use crate::collision::MemoryWorld;
     use crate::interactions::{Button, HeldThing, Interactions, ResolveCtx, TargetFacts};
+    use crate::raft::Raft;
     use crate::raft::RaftWorld;
     use crate::targeting::{cast_target, Target, TargetingConfig};
     use terrain::Block;
