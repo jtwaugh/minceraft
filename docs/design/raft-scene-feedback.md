@@ -6,7 +6,7 @@ source: "#446"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
 ---
@@ -23,6 +23,8 @@ Checked against the code on `master`:
 - **Water outline (item 6).** `selection_box` in `crates/game/src/collision.rs` gives every non-air block, liquids included, a selection box. `crates/game/src/targeting.rs` has the test `casts_hit_solid_plant_and_water`. The client draws the box from the target (`client/overlay.js`, `client/scene.js` `drawBox`).
 
 Phase A (items 3 and 5) is done: animal box models and raft model art (#545, #559), the model atlas and UVs (#547, `client/models.js`), the GL model drawer (#564, `client/modelgl.js`), animals drawn as models with hurt-red and death-tip kept (#592) and the raft drawn as a model (#606, `client/raftmodel.js`). Items 1, 2, 4 and 6 are not done.
+
+Phase B (items 1 and 6) is done: the rider's swell push removed (#686), no selection outline on water with the ray still stopping there (#703), loose items stop sliding on the deck (#698) and animals on the deck get no swell push (#707). `[swell_push]` and `SwellPush` no longer exist in the code. Items 2 and 4 are not done.
 
 ## Reconciliation notes
 
