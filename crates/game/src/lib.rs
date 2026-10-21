@@ -3,6 +3,7 @@
 
 pub mod aliases;
 pub mod animal_entities;
+pub mod animal_steer;
 pub mod animals;
 pub mod bindings;
 pub mod camera;
