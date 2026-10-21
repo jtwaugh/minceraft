@@ -72,7 +72,10 @@ What exists today that this doc relies on or overlaps (checked against the code)
    every agent workflow. The implementer can write the scripts and tests
    (`.github/scripts/`, Python); the workflow edits must be done by the
    maintainer. The planner should split each phase that way and tag the
-   workflow tickets `[manual check]`.
+   workflow tickets `[manual check]`. The maintainer makes each workflow
+   change and the agent prepares the script side; the factory gets no token
+   allowed to change workflows, so `FACTORY.md` decision 1 stands.
+   (Decided in #582.)
 3. **Rule 1 vs. design docs.** Rule 1 puts "docs, phases" in the store, but a
    doc's `status` and `phases` header is read by CI, `plan_targets.py` and
    `stalled.py`, and is changed only by merged PRs (`docs/design/README.md`).
@@ -283,7 +286,3 @@ Options for the author's questions, and new ones from the notes above.
 7. **Docs and phases in the store** (note 3). A: headers stay the source of
    truth, the store mirrors them. B: the store owns phase status and a PR
    writes it back. Suggest A.
-8. **Who edits workflows** (note 2). A: the maintainer makes each workflow
-   change, with the agent preparing the script side. B: give the factory a
-   token allowed to change workflows (weakens decision 1 of `FACTORY.md`).
-   Suggest A.
