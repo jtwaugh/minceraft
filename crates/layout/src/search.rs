@@ -6,7 +6,7 @@
 //! - One attempt per seed (the seed builds route and world), no retry loop.
 //! - Score = sum of term * weight from `data/scoring.toml`; island terms are
 //!   the mean over levels; no Phase G terms.
-//! - Path directness reuses `validate_route`'s per-pair window and eroded A*.
+//! - Path directness is not scored yet (follow-up ticket).
 //! - Extra islands use an undecorated region around the route points plus
 //!   `VIEW_MARGIN` blocks.
 //! - Workers take seeds from a shared counter and keep their own top N; the
@@ -17,9 +17,9 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::thread;
 
 use crate::{
-    build_route, build_route_layout, erode, extra_islands, find_path, path_directness,
-    prefilter_layout, score_island, spacing_regularity, validate_route, window, Layout, Level,
-    NavMap, Route, RouteParams, ScoringConfig, Thresholds, WorldConfig,
+    build_route, build_route_layout, extra_islands, prefilter_layout, score_island,
+    spacing_regularity, validate_route, window, Layout, Level, Route, RouteParams, ScoringConfig,
+    Thresholds, WorldConfig,
 };
 
 /// Blocks of margin around the route points for the extra-islands region.
@@ -43,7 +43,6 @@ pub struct SearchParams {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TermScores {
     pub spacing_regularity: f64,
-    pub path_directness: f64,
     pub island_quality: f64,
     pub coastline_interest: f64,
     pub extra_islands: f64,
@@ -70,7 +69,6 @@ pub struct SearchProgress {
 
 fn weighted(t: &TermScores, c: &ScoringConfig) -> f64 {
     t.spacing_regularity * c.weight_spacing_regularity
-        + t.path_directness * c.weight_path_directness
         + t.island_quality * c.weight_island_quality
         + t.coastline_interest * c.weight_coastline_interest
         + t.extra_islands * c.weight_extra_islands
@@ -82,33 +80,6 @@ fn bounds(pts: &[[i32; 2]], margin: i32) -> Option<(i32, i32, u32, u32)> {
     let hi = |k: usize| pts.iter().map(|p| p[k]).max().map(|v| v + margin);
     let (x0, z0) = (lo(0)?, lo(1)?);
     Some((x0, z0, (hi(0)? - x0 + 1) as u32, (hi(1)? - z0 + 1) as u32))
-}
-
-/// One A* path per consecutive anchorage pair, windowed as in `validate_route`.
-fn pair_paths(
-    layout: &Layout,
-    levels: &[Level],
-    route: &Route,
-    t: &Thresholds,
-) -> Vec<Vec<[i32; 2]>> {
-    let bare = Layout {
-        structures: Vec::new(),
-        ..layout.clone()
-    };
-    let half = RouteParams::shipped().channel_half_width.ceil() as i32;
-    let margin = t.window_margin + t.raft_half_width as i32 + half;
-    let cell = |p: [f64; 2]| p.map(|v| v.floor() as i32);
-    let pairs = levels.len().min(route.points.len()).saturating_sub(1);
-    (0..pairs)
-        .filter_map(|i| {
-            let [a, b] = [levels[i].anchorage, levels[i + 1].anchorage];
-            let pts = [a, b, cell(route.points[i]), cell(route.points[i + 1])];
-            let (x0, z0, w, d) = bounds(&pts, margin)?;
-            let region = bare.generate_region(x0, z0, w, d, true);
-            let nav = erode(&NavMap::from_region(&region, t), t.raft_half_width);
-            find_path(&nav, [a[0] - x0, a[1] - z0], [b[0] - x0, b[1] - z0])
-        })
-        .collect()
 }
 
 fn score_seed(
@@ -138,7 +109,6 @@ fn score_seed(
     });
     TermScores {
         spacing_regularity: spacing_regularity(&route.points, &RouteParams::shipped()),
-        path_directness: path_directness(&pair_paths(layout, levels, route, t)),
         island_quality: quality / n,
         coastline_interest: coast / n,
         extra_islands: extra,
