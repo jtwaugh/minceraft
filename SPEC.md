@@ -1176,7 +1176,7 @@ Beta 1.7.3 has no sprinting. These rules are this project's own choices, not fac
 
 - **Sneaking.** Sprinting is disabled while sneaking: a sprint can't start while sneaking, and starting to sneak ends a sprint.
 - **Water.** Sprinting is disabled in water: a sprint can't start in water, and entering water ends a sprint.
-- **Walls.** Hitting a wall ends the sprint.
+- **Walls.** Only a head-on hit ends the sprint: being blocked in the facing direction. Sliding along a wall does not. (Decided in #861.)
 - **Camera.** While sprinting the view gets a slight fisheye effect: the field of view widens a little. The amount and how quickly it eases in and out are this game's own tunables in `data/input.toml`.
 
-Not yet decided: whether any horizontal contact with a wall counts or only a head-on hit, and whether a sprint ended by sneaking or water resumes without a fresh double-tap.
+A sprint ended by sneaking or water does not resume by itself when the condition clears, even with forward still held; it needs a fresh double-tap to start again. (Decided in #861.)
