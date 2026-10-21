@@ -8,6 +8,7 @@
 //! [`AnimalStore::tick`] returns its drops for the caller to spawn as items
 //! (8.2, 8.3). Spawning policy is a separate ticket.
 
+use crate::animal_steer::{steer_to_support, SEARCH_RADIUS};
 use crate::animals::{AnimalDef, Animals};
 use crate::collision::{Aabb, CollisionWorld};
 use crate::item_entities::{lift_out_of_blocks, ItemEntityConfig, TICKS_PER_SECOND};
@@ -304,8 +305,19 @@ impl AnimalStore {
             let mut bb = e.aabb();
             lift_out_of_blocks(world, &mut bb, &mut e.pos, &mut scratch);
             let in_water = world.body_in_water(&bb);
+            // In water the heading comes from the steering target, whether
+            // wandering, pausing or fleeing; with no target the random
+            // wander or flee carries on.
+            let target = if in_water && !dying {
+                steer_to_support(world, e.pos, SEARCH_RADIUS)
+            } else {
+                None
+            };
+            if let Some(heading) = target {
+                e.facing = heading;
+            }
             // The wander drive would overwrite a knockback, so it waits.
-            if (walking || fleeing) && e.hurt_ticks_left == 0 {
+            if (walking || fleeing || target.is_some()) && e.hurt_ticks_left == 0 {
                 let speed = if in_water {
                     def.swim_speed
                 } else if fleeing {
@@ -679,6 +691,79 @@ mod tests {
             s.spawn("cow", [0.5, 3.0, 0.5], 10.0);
             s.spawn("pig", [-1.5, 2.0, 1.5], 20.0);
             run(&mut s, &w, 300);
+            s.iter().map(|e| (e.pos, e.velocity)).collect::<Vec<_>>()
+        };
+        assert_eq!(go(), go());
+    }
+
+    /// Open sea (water y = 1..7 over a stone floor) with a stone island of
+    /// one block at `(6, 6)`, its top level with the water surface.
+    fn sea(island: bool) -> MemoryWorld {
+        let mut w = MemoryWorld::new();
+        for x in -12..13 {
+            for z in -12..13 {
+                w.set(x, 0, z, Block::Stone);
+                for y in 1..7 {
+                    w.set(x, y, z, Block::Water);
+                }
+            }
+        }
+        if island {
+            for y in 1..7 {
+                w.set(6, y, 0, Block::Stone);
+            }
+        }
+        w
+    }
+
+    fn swim(w: &impl CollisionWorld, species: &str, n: usize) -> (AnimalStore, EntityId) {
+        let mut s = store(1);
+        let id = s.spawn(species, [0.5, 5.0, 0.5], 180.0).unwrap();
+        run(&mut s, w, n);
+        (s, id)
+    }
+
+    #[test]
+    fn a_swimming_animal_reaches_nearby_support() {
+        let w = sea(true);
+        for species in ["cow", "pig", "chicken"] {
+            let (s, id) = swim(&w, species, 600);
+            let e = s.get(id).unwrap();
+            assert!(e.pos[0] > 5.0, "{species} stayed at x {}", e.pos[0]);
+            assert!(e.pos[0] < 6.0, "{species} is inside the island");
+            assert_eq!(e.breath_ticks, 0);
+        }
+    }
+
+    #[test]
+    fn with_no_support_in_range_it_keeps_wandering_at_the_surface() {
+        let w = sea(false);
+        let (mut s, id) = swim(&w, "cow", 200);
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..600 {
+            s.tick(&w);
+            let e = s.get(id).unwrap();
+            assert!(e.pos[1] + e.box_size[1] >= 7.0, "sank");
+            seen.insert((e.facing * 1000.0) as i64);
+        }
+        assert!(seen.len() > 1, "never changed heading");
+    }
+
+    #[test]
+    fn a_swimmer_reaches_the_raft_when_it_is_the_nearest_support() {
+        let w = sea(false);
+        let raft = crate::raft::Raft::new(&[[4, 6, 0], [5, 6, 0]]);
+        let world = crate::raft::RaftWorld::new(&w, &raft);
+        let (s, id) = swim(&world, "pig", 600);
+        let e = s.get(id).unwrap();
+        assert!(e.pos[0] > 3.0, "stayed at x {}", e.pos[0]);
+    }
+
+    #[test]
+    fn steering_in_water_is_deterministic() {
+        let w = sea(true);
+        let go = || {
+            let (s, _) = swim(&w, "cow", 400);
             s.iter().map(|e| (e.pos, e.velocity)).collect::<Vec<_>>()
         };
         assert_eq!(go(), go());
