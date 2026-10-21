@@ -167,6 +167,7 @@ On 2026-10-19/20 the factory stalled several times, and every cause was the same
 - **A confused reviewer.** It answered "@claude fix the nits" instead of reviewing, because tag mode made the newest mention its task (fixed in #463).
 - **An API storm.** Project sync ran 447 times in an hour and used up the workflow token's 1,000-requests-an-hour budget. The review gate, the reviewer and the implementer's dependency check all failed with it (#565).
 - **Nobody saw what was waiting on the maintainer.** Merges, branch deletions and relabels waited unnoticed.
+- **Blocked PRs waited for a "pls fix".** A PR the reviewer blocked, or whose check failed, sat in Blocked until the maintainer noticed it and commented `@claude` asking for a fix. Many only needed a failed CI run re-run, most of the rest needed no judgment, and the few that did weren't asked as questions.
 
 Each fix so far (`stalled.py`, orphan adoption, debounce) adds another observer. The goal is one owner.
 
@@ -206,6 +207,8 @@ Each fix so far (`stalled.py`, orphan adoption, debounce) adds another observer.
 > **Reconciler:** see notes 2 and 5. `.github/` is the implementation lane
 > except for workflow files, which only the maintainer can change.
 
+9. **Blocked is a job, not a resting place.** A ticket whose PR is Blocked gets a fix attempt from the tick without anyone asking. It only waits on the maintainer through a question issue that says exactly what input or action is needed (section 3, "Blocked tickets").
+
 ## 3. Ticket and plan states
 
 Ticket: `proposed` → `approved` (maintainer) → `waiting` (dependencies, file leases) → `running` → `in_review` → `merged` → `done`, plus `blocked_on_question` and `failed` (retry count, last error). Plan: `open` → `built` → `phase_done`. Every transition is recorded with a timestamp and a reason, so "why is this stuck" is a query.
@@ -219,9 +222,28 @@ File leases replace `tickets.py`'s predicted-files regex: a ticket claims the fi
 > list in its structured result (Phase C) and the tick uses the regex until
 > then.
 
+### Blocked tickets
+
+A ticket is Blocked when its PR can't merge as is: it conflicts with `master`, a check failed on the head commit, or the reviewer said Blocked about the head commit and nobody used `/override` (the board's Blocked column today). Each tick, for every Blocked ticket:
+
+1. **Re-run first.** If the cause is a failed check, the tick re-runs the failed jobs once for that head commit before anything else, since many failures are flaky or infrastructure errors (a runner lost, a network timeout, the API budget of section 1). A re-run is not a fix attempt and costs no agent run. If it passes, the ticket goes back to waiting on review; the tick records a `rerun` transition with the check's name, so a check that keeps needing re-runs shows up as a query (and in the needs-you queue past a threshold, as a flaky test to fix). If it fails again, go to step 2 with the second run's log.
+2. **Try a fix.** If no fix run is in flight and none has been tried for this PR, head commit and cause, start one. Its task comes from the tick (rule 5), built from the cause: merge `master` and resolve the conflicts; the failing check's name and log excerpt; or the reviewer's numbered blockers. The fix runs as the implementer under the same rules (CLAUDE.md, the 200-line limit, every check before pushing), and its push gets reviewed again like any other. This replaces the maintainer's "pls fix" comment and `resolve-conflicts.yml`.
+3. **Retry within a budget.** A fix that pushes a commit clears the attempt; if the new head is Blocked again, that counts as the next attempt. After two attempts on one ticket that end Blocked (a setting in the tick's config), or a run that pushes nothing, the tick stops trying and asks (step 4). Attempts and their outcomes are recorded as transitions (`fix_attempt`, with the cause and the run).
+4. **Ask when it needs the maintainer.** The fix run stops, and the tick opens a question issue, when the fix needs something only the maintainer can give:
+   - the spec or a design doc is ambiguous, incomplete or seems wrong (the usual `spec-question` with `decision` or `research`; never filled from knowledge of the original);
+   - the agent disagrees with a reviewer blocker (an `/override` or a reply to the reviewer);
+   - a conflict that needs a real decision about which side wins;
+   - a change outside the implementation lane (a workflow file, `SPEC.md`, a design doc, a secret, branch protection);
+   - the PR can't fit 200 lines and splitting it would leave a broken first part (`oversize-ok` or a different split);
+   - the retry budget is spent.
+
+   The question names the ticket and PR, quotes the blocker, says what was tried, and lists options (A, B, ...) or the one action needed (merge, label, `/override <reason>`, edit a workflow), so it can be answered from the issue alone. Questions that aren't about the spec are labelled `needs-you`. The ticket moves to `blocked_on_question` and is linked as blocked by the question, so it restarts when the question is answered or closed. One open question per ticket and cause: later ticks update it instead of opening another.
+
+The tick leaves a Blocked PR alone while the maintainer is working on it: a maintainer push or `@claude` comment after the block counts as the attempt. PRs not opened by the factory (not on a `claude/` branch) are never fixed automatically; they only appear in the needs-you queue.
+
 ## 4. Implementation phases
 
-**Phase A: One tick.** A single `factory-tick` workflow on a five-minute schedule (plus `workflow_dispatch` and webhook-triggered runs) takes over from find-ready and start-ready, project sync, `stalled.py`, and the docs updater's plan-closing step. It reads GitHub as today but is level-triggered and idempotent, and enforces the invariants of rule 3 by reporting violations to one issue. The old workflows are removed as the tick covers them. Done when replaying tonight's issue history in a test (fixtures of issues, PRs and plans) produces no stall the tick doesn't report or fix, and a second tick right after the first does nothing.
+**Phase A: One tick.** A single `factory-tick` workflow on a five-minute schedule (plus `workflow_dispatch` and webhook-triggered runs) takes over from find-ready and start-ready, project sync, `stalled.py`, and the docs updater's plan-closing step. It reads GitHub as today but is level-triggered and idempotent, and enforces the invariants of rule 3 by reporting violations to one issue. It also runs the Blocked-ticket loop of section 3: re-runs of failed checks, fix attempts (replacing `resolve-conflicts.yml`), the retry budget, and question issues when a fix needs the maintainer. Before Phase C the fix run reports that it stopped with a marker comment the tick reads. The old workflows are removed as the tick covers them. Done when replaying tonight's issue history in a test (fixtures of issues, PRs and plans) produces no stall the tick doesn't report or fix, and a second tick right after the first does nothing; and when a failed check gets exactly one re-run before any fix attempt, each Blocked cause (conflict, failed check that fails again, reviewer block) gets one fix attempt, and one whose attempts fail gets exactly one question issue, on any number of ticks.
 
 > **Reconciler:** `[manual check]` criteria and a measurable version in
 > note 8. Workflow edits are maintainer-only (note 2). The review-gate and
@@ -233,7 +255,7 @@ File leases replace `tickets.py`'s predicted-files regex: a ticket claims the fi
 > The `factory-state` branch needs a branch-protection exemption for the
 > tick's identity, since `master` is protected; a separate branch is fine.
 
-**Phase C: Structured agent results.** Agent runs return JSON against a schema per role (implementer first, then reviewer, planner, docs updater, reconciler, spec editor), through `claude -p` with an output schema or the Agent SDK. Done when `expect.py` and the comment and verdict regexes are deleted.
+**Phase C: Structured agent results.** Agent runs return JSON against a schema per role (implementer first, then reviewer, planner, docs updater, reconciler, spec editor), through `claude -p` with an output schema or the Agent SDK. A fix run's result includes `needs_maintainer: {kind, question, options}` when it stops, and the tick writes the question issue from it. Done when `expect.py` and the comment and verdict regexes are deleted.
 
 > **Reconciler:** see note 11. Deleting the verdict regexes in
 > `review_gate.py` changes the `review-verdict` check, which is required on
@@ -244,7 +266,7 @@ File leases replace `tickets.py`'s predicted-files regex: a ticket claims the fi
 > **Reconciler:** `[external]` machines; see notes 6, 7 and 8. The shared
 > setup today is `.github/actions/toolchain/`.
 
-**Phase E: Needs-you queue and alerts.** A view (an issue, a page, or a push notification) listing what waits on the maintainer, ordered by blocked work, with time in state and an alert threshold. Done when every item the maintainer had to find by hand on 2026-10-20 would have appeared there.
+**Phase E: Needs-you queue and alerts.** A view (an issue, a page, or a push notification) listing what waits on the maintainer, ordered by blocked work, with time in state and an alert threshold. Open `spec-question` and `needs-you` issues from Blocked tickets are queue items, ranked by the work they block. Done when every item the maintainer had to find by hand on 2026-10-20 would have appeared there.
 
 > **Reconciler:** a push notification channel is `[external]`; an issue or
 > page can be built here. See note 8 for a measurable version.
