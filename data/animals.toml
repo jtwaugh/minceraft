@@ -13,7 +13,9 @@
 # `scatter_lift`, both in blocks per second (section 8.3).
 # In water an animal swims instead of falling (raft-scene-feedback item 2): it
 # wanders and flees at `swim_speed` (blocks per second) and uses the player's
-# water numbers (`[water]` in player.toml) for buoyancy and drag.
+# water numbers (`[water]` in player.toml) for buoyancy and drag. An animal
+# whose head stays under water for `drown_ticks` ticks in a row drowns: it
+# dies as if killed (death animation, drops). Out of water resets the count.
 
 [cow]
 health = 10
@@ -28,6 +30,7 @@ knockback_lift = 4.0
 flee_speed = 2.0
 flee_ticks = [60, 100]
 death_ticks = 20
+drown_ticks = 300
 scatter_speed = 1.5
 scatter_lift = 3.0
 drops = [{ item = "raw_beef", min = 1, max = 3 }, { item = "leather", min = 0, max = 1 }]
@@ -45,6 +48,7 @@ knockback_lift = 4.0
 flee_speed = 2.2
 flee_ticks = [60, 100]
 death_ticks = 20
+drown_ticks = 300
 scatter_speed = 1.5
 scatter_lift = 3.0
 drops = [{ item = "raw_pork", min = 1, max = 3 }]
@@ -62,6 +66,7 @@ knockback_lift = 4.0
 flee_speed = 2.4
 flee_ticks = [60, 100]
 death_ticks = 20
+drown_ticks = 300
 scatter_speed = 1.5
 scatter_lift = 3.0
 drops = [{ item = "raw_chicken", min = 1, max = 1 }, { item = "feather", min = 0, max = 2 }]

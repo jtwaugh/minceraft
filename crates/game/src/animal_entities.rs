@@ -65,6 +65,9 @@ pub struct AnimalEntity {
     /// over for as long); `None` while alive. A dying animal cannot be hit,
     /// walk or be targeted.
     pub death_ticks_left: Option<u32>,
+    /// Consecutive ticks the head has been under water; reset to 0 out of
+    /// water. Reaching the species' `drown_ticks` starts the death animation.
+    pub breath_ticks: u32,
 }
 
 impl AnimalEntity {
@@ -175,6 +178,7 @@ impl AnimalStore {
             last_damage: 0,
             flee_ticks_left: 0,
             death_ticks_left: None,
+            breath_ticks: 0,
         });
         Some(id)
     }
@@ -314,6 +318,7 @@ impl AnimalStore {
                 e.velocity[0] = sin * speed;
                 e.velocity[2] = -cos * speed;
             }
+            let mut submerged = false;
             if in_water {
                 // Swim up (4.3, as if jump were held) until the head is out
                 // of the water, then float at rest at the surface.
@@ -322,6 +327,7 @@ impl AnimalStore {
                     [bb.max[0], bb.max[1], bb.max[2]],
                 );
                 if world.body_in_water(&top) {
+                    submerged = true;
                     e.velocity[1] +=
                         (self.water.swim_up_impulse - self.water.gravity) * TICKS_PER_SECOND;
                 } else {
@@ -329,6 +335,17 @@ impl AnimalStore {
                 }
             } else {
                 e.velocity[1] -= cfg.gravity * dt;
+            }
+            if dying || !submerged {
+                e.breath_ticks = 0;
+            } else {
+                e.breath_ticks += 1;
+                if e.breath_ticks >= def.drown_ticks {
+                    // Drowned: the normal death path, as if killed.
+                    e.health = 0;
+                    e.death_ticks_left = Some(def.death_ticks);
+                    e.flee_ticks_left = 0;
+                }
             }
             let v = e.velocity.map(|c| c * dt);
             let on_ground = !in_water && e.velocity[1] == 0.0;
@@ -572,6 +589,86 @@ mod tests {
                 assert!(e.pos[1] + e.box_size[1] >= 7.0, "{species} sank");
             }
         }
+    }
+
+    /// The pool with a stone lid on the water, so nothing can surface.
+    fn covered_pool() -> MemoryWorld {
+        let mut w = pool();
+        for x in -4..5 {
+            for z in -4..5 {
+                w.set(x, 7, z, Block::Stone);
+            }
+        }
+        w
+    }
+
+    fn drown_ticks(s: &AnimalStore, species: &str) -> usize {
+        s.kinds.get(species).unwrap().drown_ticks as usize
+    }
+
+    #[test]
+    fn a_submerged_animal_drowns_exactly_at_the_limit() {
+        let w = covered_pool();
+        for species in ["cow", "pig", "chicken"] {
+            let mut s = store(1);
+            let id = s.spawn(species, [0.5, 2.0, 0.5], 0.0).unwrap();
+            let n = drown_ticks(&s, species);
+            run(&mut s, &w, n - 1);
+            let e = s.get(id).unwrap();
+            assert_eq!(e.death_ticks_left, None, "{species} drowned early");
+            assert_eq!(e.breath_ticks as usize, n - 1);
+            s.tick(&w);
+            let e = s.get(id).unwrap();
+            let death = s.kinds.get(species).unwrap().death_ticks;
+            assert_eq!(e.death_ticks_left, Some(death - 1), "{species}");
+            assert_eq!(e.health, 0);
+            // The normal death path: removed after the animation, with drops.
+            let mut dropped = Vec::new();
+            for _ in 0..death {
+                dropped.extend(s.tick(&w));
+            }
+            assert!(s.get(id).is_none());
+            assert!(!dropped.is_empty(), "{species} dropped nothing");
+        }
+    }
+
+    #[test]
+    fn surfacing_or_being_lifted_out_resets_the_breath() {
+        let covered = covered_pool();
+        let dry = floor();
+        let mut s = store(1);
+        let id = s.spawn("cow", [0.5, 2.0, 0.5], 0.0).unwrap();
+        let n = drown_ticks(&s, "cow");
+        run(&mut s, &covered, n - 5);
+        assert!(s.get(id).unwrap().breath_ticks > 0);
+        s.tick(&dry);
+        assert_eq!(s.get(id).unwrap().breath_ticks, 0);
+        run(&mut s, &covered, n - 1);
+        assert_eq!(s.get(id).unwrap().death_ticks_left, None);
+        // An animal that can surface never drowns.
+        let open = pool();
+        let mut s = store(1);
+        let id = s.spawn("pig", [0.5, 2.0, 0.5], 0.0).unwrap();
+        run(&mut s, &open, 3 * n);
+        let e = s.get(id).unwrap();
+        assert_eq!((e.death_ticks_left, e.health), (None, 10));
+    }
+
+    #[test]
+    fn drowning_is_deterministic() {
+        let w = covered_pool();
+        let go = || {
+            let mut s = store(1);
+            s.spawn("cow", [0.5, 2.0, 0.5], 10.0);
+            s.spawn("chicken", [-1.5, 3.0, 1.5], 20.0);
+            let n = drown_ticks(&s, "cow");
+            let mut out = Vec::new();
+            for _ in 0..n + 40 {
+                out.extend(s.tick(&w));
+            }
+            (s.iter().cloned().collect::<Vec<_>>(), out.len())
+        };
+        assert_eq!(go(), go());
     }
 
     #[test]
