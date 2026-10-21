@@ -1,6 +1,9 @@
 // Water Fresnel, shared by the shader (GLSL below) and the unit test (fresnel).
-// The sea surface is the plane y = 63, so the view angle is just abs(dir.y) of
-// the unit eye-to-fragment direction. Schlick's approximation: 1 at grazing
+// The sea surface is a horizontal plane, so the view angle is just abs(dir.y)
+// of the unit eye-to-fragment direction. This is an approximation: lakes and
+// rivers at other heights are still horizontal, so it holds for them, but
+// vertical water faces get the term from the eye direction rather than their
+// own normal. Schlick's approximation: 1 at grazing
 // angles (full sky colour), FRESNEL_F0 looking straight down. The sky colour is
 // taken in the reflected direction (dir.y flipped). Not applied under water.
 export const FRESNEL_F0 = 0.02;

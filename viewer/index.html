@@ -185,7 +185,7 @@
 <script type="module">
 import init, * as wasm from './pkg/terrain_web.js';
 import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, quadIndices, columnTints, meshBlocks } from './mesh.js';
-import { hydrate, VIEW, BIOME, SNOWY } from './flyover/plan.js';
+import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
 import { FOG_GLSL } from './fog.js';
@@ -1135,7 +1135,7 @@ function draw() {
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   setU('alpha', 0.45);
-  setU('waterFresnel', eye[1] + target[1] > 64 ? 1 : 0); // not under water
+  setU('waterFresnel', eye[1] + target[1] > SEA ? 1 : 0); // not under water
   drawMesh(water, AT);
   setU('waterFresnel', 0);
   setU('alpha', 0.72);
