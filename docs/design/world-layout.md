@@ -649,13 +649,13 @@ Adds:
 
 Done when:
 - Over 100 searched worlds, the first anchorage is in a cold biome and the last in a warm one in at least 90 percent.
-- No two consecutive islands share the same biome in the top-scored worlds, unless the route is shorter than the climate noise scale.
+- In the top-scored worlds, at least 75 percent of consecutive anchorage pairs have islands in different biomes. There is no exemption for short routes. (Decided in #845.)
 
 > **Reconciler:** the biome and vegetation work this depends on is done, so
 > Phase G's dependency on it is met. "Cold" and "warm" biome need a definition
 > (for example, a list of biomes in `data/biomes.toml` terms, or T thresholds).
-> "The climate noise scale" is a number from SPEC 7 (frequency 0.025 for T);
-> state it as a distance. Fish habitat following is a consequence, not work.
+> The second criterion no longer uses the climate noise scale (#845). Fish
+> habitat following is a consequence, not work.
 
 ---
 
