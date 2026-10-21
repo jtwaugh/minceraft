@@ -21,7 +21,7 @@ Checked against the code:
 
 - **Interaction rules** are in `data/interactions.toml`: `till`, `plant` (`item:seeds` on `block:farmland`, top face, air above), `harvest` (empty hands or any tool, `block:crop`, `require_state = "mature"`), `forage` (empty hands, `block:tall_grass`) and `attack`. The first match wins. There is no `pick` action and no rule targeting `block:dandelion` or `block:rose`.
 - **Actions** live in `crates/game/src/`: `plant.rs`, `harvest.rs` (resets the crop to stage 0 and returns the yields from `data/crops.toml`), `forage.rs` (`Forager`, per-block cooldown), `till.rs`, `farm.rs`.
-- **Foraging data** is `[forage]` in `data/items.toml`: item `seeds`, `chance = 6`, `cooldown_ticks = 1200` (one minute at 20 Hz; basic-gameplay 9.5 says one day by default). A forage inside the cooldown does nothing and rolls nothing; any other forage starts the cooldown, hit or miss. Tilling grass uses `[till]` `chance = 8`.
+- **Foraging data** is `[forage]` in `data/items.toml`: item `seeds`, `chance = 6`, `cooldown_ticks = 1200` (one minute at 20 Hz). A forage inside the cooldown does nothing and rolls nothing; any other forage starts the cooldown, hit or miss. Tilling grass uses `[till]` `chance = 8`. The forage cooldown is one minute; basic-gameplay 9.5, which says one day by default, should be reworded to match (that doc is not edited here). (Decided in #760.)
 - **Events**: `foraged` and `crop_harvested` exist (`crates/game/src/events.rs`, basic-gameplay section 11). There is no event for a miss, so the client has nothing to show when a forage drops nothing.
 - **Items** in `data/items.toml`: `seeds`, `wheat`, animal drops, two tools. There are no flower items. `art/PROMPT.md` lists `seeds` and `wheat` but has no flower item icons.
 - **Flower blocks** `dandelion` (id 17) and `rose` (id 18) are in `data/blocks.toml` (collision none, tinted tiles in `client/tiles.js`). They are placed by terrain decoration, so they exist in the world and on islands.
@@ -94,9 +94,6 @@ Holding seeds and using them on farmland plants a crop.
    - A: always drop seeds, keep the cooldown.
    - B: better odds (for example 1 in 3) plus a `forage_missed` event so the client can show a cue.
    - C: both: a guaranteed drop on the first forage of a block, then the existing odds.
-7. **Forage cooldown.** `data/items.toml` uses one minute; basic-gameplay 9.5 says one day by default. Which is meant?
-   - A: keep one minute, and update 9.5.
-   - B: one day, and raise the odds so a miss isn't a long wait.
 8. **Flower items (author's question 3).**
    - A: items only for now, with icons; no use.
    - B: also a use in this doc (decoration or a sale at a station).
