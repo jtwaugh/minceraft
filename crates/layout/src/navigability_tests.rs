@@ -62,7 +62,6 @@ fn removing_overhang_makes_column_navigable() {
 fn any_non_air_block_blocks() {
     for b in [Block::OakLeaves, Block::Stone, Block::Water] {
         let mut r = hand_built();
-        r.blocks[HEIGHT + SURFACE + 1] = Block::Air as u8;
         r.blocks[SURFACE + 1] = b as u8;
         assert!(!NavMap::from_region(&r, &t()).at(0, 0), "{b:?}");
     }
