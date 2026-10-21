@@ -651,7 +651,7 @@ Adds:
 
 Done when:
 - Over 100 searched worlds, the first anchorage is in a cold biome and the last in a warm one in at least 90 percent.
-- No two consecutive islands share the same biome in the top-scored worlds, unless the route is shorter than the climate noise scale.
+- In the top-scored worlds, at least 75 percent of consecutive anchorage pairs have islands in different biomes. There is no exemption for short routes. (Decided in #845.)
 
 > **Reconciler:** the biome and vegetation work this depends on is done, so
 > Phase G's dependency on it is met. "Cold" and "warm" biome are defined in
