@@ -309,7 +309,9 @@ pub use route_layout::build_route_layout;
 mod route_retry;
 pub use route_retry::{find_route, RouteFound};
 mod scoring;
+mod scoring_island;
 pub use scoring::{path_directness, spacing_regularity, ScoringConfig};
+pub use scoring_island::{coastline_interest, island_quality, score_island};
 mod structure;
 mod structure_error;
 #[cfg(feature = "toml-io")]
@@ -364,6 +366,8 @@ mod route_retry_tests;
 mod route_tests;
 #[cfg(test)]
 mod route_validation_tests;
+#[cfg(test)]
+mod scoring_island_tests;
 #[cfg(test)]
 mod scoring_tests;
 #[cfg(test)]
