@@ -37,6 +37,7 @@ class Snapshot:
     docs: list = field(default_factory=list)
     branches: list = field(default_factory=list)
     board: list = field(default_factory=list)  # project board items
+    board_meta: dict = field(default_factory=dict)  # Status options, "Waiting on" field
     requests: int = 0  # API requests the loader made
     reported: set = field(default_factory=set)  # (target, reason) already reported
 
@@ -118,6 +119,18 @@ class FakeBackend(Backend):
                 issue["labels"].append(action.payload["label"])
         elif action.kind == "set_parent" and issue is not None:
             issue["parent"] = action.payload["parent"]
+        elif action.kind == "remove_label" and issue is not None:
+            if action.payload["label"] in issue["labels"]:
+                issue["labels"].remove(action.payload["label"])
+        elif action.kind in ("set_status", "set_waiting", "add_card"):
+            kind, n = ("Issue", action.target[6:]) if action.target.startswith("issue#") \
+                else ("PullRequest", action.target[3:])
+            card = next((c for c in snapshot.board if (c["kind"], c["number"]) == (kind, int(n))), None)
+            if card is None:
+                snapshot.board.append(card := {"kind": kind, "number": int(n), "state": "OPEN"})
+            if "status" in action.payload:
+                card["status"], card["status_updated"] = action.payload["status"], "9999"
+            card["waiting"] = action.payload.get("text", action.payload.get("waiting", card.get("waiting")))
         elif action.kind == "start_ticket" and issue is not None:
             issue.setdefault("comments", []).append({
                 "user": "github-actions[bot]", "body": "<!-- factory-auto-start -->",
