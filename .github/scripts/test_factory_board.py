@@ -3,9 +3,12 @@ import copy
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_board import board_pass  # noqa: E402
+import project_sync  # noqa: E402
+import factory_board  # noqa: E402
+from factory_board import blocked_by_pass, board_pass  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
 
 
@@ -26,7 +29,40 @@ def snap(issues, board, prs=(), meta=None):
     return s
 
 
+def node(typename, n, state, status=None, waiting=None, repo="o/r"):
+    return {"id": f"i{n}", "content": {"__typename": typename, "number": n, "state": state,
+                                       "repository": {"nameWithOwner": repo}},
+            "status": {"name": status, "updatedAt": "t1"} if status else {},
+            "waiting": {"text": waiting} if waiting else {}}
+
+
 class Test(unittest.TestCase):
+    def test_loader_fills_board_with_optional_fallbacks(self):
+        result = {"user": {"projectV2": {
+            "id": "P", "field": {"id": "F", "options": [
+                {"id": f"o{n}", "name": n} for n in project_sync.STATUSES]},
+            "waitingField": {"id": "W", "dataType": "TEXT"},
+            "items": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": [
+                node("Issue", 1, "OPEN", "Inbox", "#2"), node("Issue", 9, "OPEN", "Inbox", repo="x/y"),
+                {"id": "d", "content": None}]}}}}
+        s = snap([issue(1, ["planned"])], [])
+        with mock.patch.object(project_sync, "REPO", "o/r"), \
+                mock.patch.object(project_sync, "graphql", return_value=result), \
+                mock.patch.object(factory_board.tickets, "comment_blockers", return_value=[(5, "t")]):
+            factory_board.load_board(s, "me", 1)
+        self.assertEqual(s.board, [{"kind": "Issue", "number": 1, "state": "OPEN", "status": "Inbox",
+                                    "status_updated": "t1", "waiting": "#2"}])
+        self.assertEqual(s.board_meta, {"options": project_sync.STATUSES, "waiting": True})
+        self.assertEqual(s.issues[0]["comment_blockers"], [5])
+
+    def test_missing_link_gets_one_action_then_none(self):
+        s = snap([issue(1, [], body="**Depends on:** #2", blocked_by_links=[]), issue(2, []),
+                  issue(3, [], body="**Depends on:** #2")], [])
+        acts = tick(s, [blocked_by_pass], FakeBackend())
+        self.assertEqual([(a.kind, a.target, a.payload) for a in acts],
+                         [("add_blocked_by", "issue#1", {"blocker": 2})])
+        self.assertEqual(tick(s, [blocked_by_pass], FakeBackend()), [])
+
     def test_wrong_status_one_update_and_match_none(self):
         issues = [issue(1, ["planned", "factory"]), issue(2, ["planned"])]
         s = snap(issues, [card(1, "Inbox"), card(2, "Inbox")])
