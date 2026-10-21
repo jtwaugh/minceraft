@@ -11,6 +11,19 @@
   a { color: #8cf; }
   ul { margin: 0; padding-left: 24px; }
   .alpha { margin-left: 8px; padding: 1px 6px; font-size: 12px; color: #000; background: #fc4; border-radius: 3px; vertical-align: middle; }
+
+  body.styled { min-height: 100vh; box-sizing: border-box; padding: calc(8 * var(--px)); text-align: center;
+    color: #fff; background: var(--sea) 0 0 / var(--sea-size) var(--sea-size); image-rendering: pixelated;
+    animation: sea 8s linear infinite; }
+  body.styled h1 { margin: 0 0 calc(8 * var(--px)); font-size: calc(8 * var(--px)); text-shadow: var(--px) var(--px) #000; }
+  body.styled section { width: calc(60 * var(--px)); margin: 0 auto calc(4 * var(--px)); text-align: left;
+    border: calc(4 * var(--px)) solid transparent; border-image: var(--panel) 4 fill / calc(4 * var(--px)) stretch;
+    image-rendering: pixelated; }
+  body.styled h2 { margin: 0; font-size: calc(5 * var(--px)); }
+  body.styled a { color: #fff; text-shadow: var(--px) var(--px) #000; }
+  body.styled ul { font-size: calc(3.5 * var(--px)); }
+  @keyframes sea { to { background-position: var(--sea-size) 0; } }
+  @media (prefers-reduced-motion: reduce) { body.styled { animation: none; } }
 </style>
 </head>
 <body>
