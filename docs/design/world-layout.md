@@ -663,6 +663,12 @@ Done when:
 > land columns are cold or warm. Its biome, for the variety score and the
 > "no two consecutive islands share the same biome" rule, is the most common
 > biome among its land columns. (Decided in #844.)
+>
+> **Sea ice in the route's channels.** The whole route channel stays open
+> water, including the spawn water zone. Add a layout-only rule that skips
+> the sea-ice step on columns inside the route's channels, as a new hook into
+> the terrain sea-ice step; the sea-ice rule is unchanged everywhere else.
+> (Decided in #867.)
 
 ---
 
