@@ -11,7 +11,8 @@ card that matches, so a second pass over the applied state is empty.
 Extra snapshot inputs: board items {kind, number, state, status,
 status_updated, waiting}; board_meta {"options", "waiting"} (empty: all
 columns and the field exist); prs[] "status" = (status, why), "body", "files";
-issues[] "body", "comment_blockers", "idea_unlabelled_at".
+issues[] "body", "comment_blockers", "idea_unlabelled_at", "blocked_by_links"
+(issue numbers already linked as blockers; absent means unknown).
 """
 import os
 import sys
@@ -105,4 +106,51 @@ def board_pass(snap):
             status = status if status in options else project_sync.OPTIONAL.get(status, status)
             actions.append(Action("add_card", _target(*key), {"status": status, "waiting": text},
                                   f"added as {status} ({why})"))
+    return actions
+
+
+def load_board(snap, login, number):
+    """Read the project once into snap.board and snap.board_meta, and fill what
+    the passes need from GitHub: PR status and files, issue comment blockers and
+    the time `idea` was last taken off a card now showing Idea."""
+    _, _, options, items, waiting_field = project_sync.load_project(login, number)
+    # load_project aliases a missing OPTIONAL column to its fallback's id; those aren't real columns
+    real = [n for n, oid in options.items()
+            if not (n in project_sync.OPTIONAL and oid == options.get(project_sync.OPTIONAL[n]))]
+    snap.board_meta = {"options": real, "waiting": bool(waiting_field)}
+    repo = project_sync.REPO
+    snap.board = []
+    for node in items:
+        c = node.get("content") or {}
+        if not c or (repo and c["repository"]["nameWithOwner"] != repo):
+            continue
+        status, waiting = node.get("status") or {}, node.get("waiting") or {}
+        snap.board.append({"kind": c["__typename"], "number": c["number"], "state": c["state"],
+                           "status": status.get("name"), "status_updated": status.get("updatedAt"),
+                           "waiting": waiting.get("text")})
+    for p in snap.prs:
+        pr = {"number": p["number"], "head": {"ref": p["head"], "sha": p.get("sha", "")}}
+        p["status"] = project_sync.pr_status(pr)
+        p["files"] = tickets.pr_files(pr)
+    shown_idea = {c["number"] for c in snap.board if c["kind"] == "Issue" and c["status"] == "Idea"}
+    for i in snap.issues:
+        if i["state"].lower() != "open" or i["kind"] != "ticket":
+            continue
+        i["comment_blockers"] = sorted({b for b, _ in tickets.comment_blockers(i["number"])})
+        if i["number"] in shown_idea:
+            i["idea_unlabelled_at"] = project_sync.unlabelled_idea_at(i["number"])
+
+
+def blocked_by_pass(snap):
+    """One add_blocked_by per declared dependency (body plus comment blockers)
+    that isn't linked yet. Issues without `blocked_by_links` are skipped."""
+    known = {i["number"] for i in snap.issues}
+    actions = []
+    for i in snap.issues:
+        if i["state"].lower() != "open" or i["kind"] != "ticket" or "blocked_by_links" not in i:
+            continue
+        deps = tickets.deps(i.get("body") or i.get("body_excerpt") or "") | set(i.get("comment_blockers", []))
+        for d in sorted((deps - {i["number"]}) & known - set(i["blocked_by_links"])):
+            actions.append(Action("add_blocked_by", f"issue#{i['number']}", {"blocker": d},
+                                  f"declares a dependency on #{d}"))
     return actions
