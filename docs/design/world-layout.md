@@ -584,7 +584,7 @@ Depends on: B and D.
 Adds:
 - Route builder: from the first anchorage, place K further anchorages. Default spacing 150 plus or minus 30 blocks, heading changing by at most 30 degrees per step, so the route bends but never doubles back.
 - For each route segment, a `Channel` bias (default `half_width = 6`, `falloff = 6`, `depth_below_sea = 4`, `clear_above = 4`).
-- For each anchorage, the Phase B level biases (island, spawn water, exclusion), with the island placed beside the channel, not in it.
+- For each anchorage, the Phase B level biases (island, spawn water, exclusion), with the island placed beside the channel, not in it. Every island sits on the same side of the route, the left of the heading, at a distance from the channel centre line in a range chosen by the builder. (Decided in #631.)
 - Navigability map (section 6.2) and pathfinding between consecutive anchorages to confirm the channel works.
 - Corridor generation: only regions within a margin of the route are generated. Regions outside the corridor render as open ocean at sea level, or not at all if the camera never sees them.
 - Raft travel: between levels, the raft entity follows the pathfound route. This plays during the weekend screen.
@@ -756,7 +756,6 @@ A checklist for adapting this spec to the current code:
 
 ## 9. Open questions
 
-- Should islands be able to sit on both sides of a channel, or always on one side? One side is simpler for validation; both sides looks more natural.
 - Do levels later than week 1 need their own starting structures (a dock, a second raft, a wreck), or does the raft always arrive as-is from the previous week?
 - How much of the corridor should be generated ahead of time versus on demand during raft travel? Ahead of time is simpler and the corridor is small.
 - Should frozen water ever block the route, forcing a detour or an ice-breaking mechanic? Interesting, but it conflicts with the no-breaking rule unless fire melts ice.
