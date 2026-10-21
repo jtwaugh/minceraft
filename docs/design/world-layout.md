@@ -683,6 +683,13 @@ Run per level after generation. All thresholds live in `data/validation.toml`.
 > decoration (open question 4). Rows "Of those" and "Trees on the island" are
 > checkable today.
 
+In the two Phase G rows, a tree is any log or leaves block. A tile is
+decorated if any cell in the column above its ground block is a log, leaves,
+`tall_grass`, `fern`, `dandelion`, `rose`, a mushroom, `sugar_cane`,
+`pumpkin`, `cactus` or `snow_layer`; only undecorated tiles count in the
+"Of those" row. "Trees on the island" is 1 if at least one log block stands
+on an island column, and 0 otherwise (not a count of columns). (Decided in #848.)
+
 ### 6.2 Navigability
 
 A column is navigable if:
