@@ -1167,3 +1167,16 @@ Random-tick growth of a crop:
 Wheat has 8 stages, 0 to 7. Each success advances it by exactly 1, and stage 7 is the cap.
 
 Uncertain items: the random-tick rate, whether freshly tilled farmland starts dry, and light under slabs or stairs.
+
+---
+
+### Sprinting (Part III, player movement)
+
+Beta 1.7.3 has no sprinting. These rules are this project's own choices, not facts about the original. (Decided in #820.)
+
+- **Sneaking.** Sprinting is disabled while sneaking: a sprint can't start while sneaking, and starting to sneak ends a sprint.
+- **Water.** Sprinting is disabled in water: a sprint can't start in water, and entering water ends a sprint.
+- **Walls.** Hitting a wall ends the sprint.
+- **Camera.** While sprinting the view gets a slight fisheye effect: the field of view widens a little. The amount and how quickly it eases in and out are this game's own tunables in `data/input.toml`.
+
+Not yet decided: whether any horizontal contact with a wall counts or only a head-on hit, and whether a sprint ended by sneaking or water resumes without a fresh double-tap.
