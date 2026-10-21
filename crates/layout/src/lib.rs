@@ -305,7 +305,9 @@ pub use retry::{find_level, find_v0_level, LevelFound, RetryError};
 mod route;
 pub use route::{build_route, build_route_with, Route, RouteParams};
 mod route_validation;
-pub use route_validation::{validate_route, CHECK_ANCHORAGE_REACHABLE, CHECK_CHANNEL_CLEAR};
+pub use route_validation::{
+    anchorage_paths, validate_route, CHECK_ANCHORAGE_REACHABLE, CHECK_CHANNEL_CLEAR,
+};
 mod route_layout;
 pub use route_layout::build_route_layout;
 mod route_retry;

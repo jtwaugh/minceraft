@@ -50,7 +50,8 @@ fn results_are_valid_bounded_and_ordered() {
         let (layout, levels) = build_route_layout(&WorldConfig { seed: s.seed }, &s.route);
         assert_eq!(s.levels, levels);
         assert!(validate_route(&layout, &levels, &s.route, &t).passed());
-        assert!((0.0..=3.0).contains(&s.score));
+        assert!((0.0..=1.0).contains(&s.terms.path_directness));
+        assert!((0.0..=4.0).contains(&s.score));
     }
     assert!(found
         .windows(2)

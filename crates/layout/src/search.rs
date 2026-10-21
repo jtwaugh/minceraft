@@ -6,7 +6,7 @@
 //! - One attempt per seed (the seed builds route and world), no retry loop.
 //! - Score = sum of term * weight from `data/scoring.toml`; island terms are
 //!   the mean over levels; no Phase G terms.
-//! - Path directness is not scored yet (follow-up ticket).
+//! - Path directness uses `anchorage_paths`, the paths `validate_route` finds.
 //! - Extra islands use an undecorated region around the route points plus
 //!   `VIEW_MARGIN` blocks.
 //! - Workers take seeds from a shared counter and keep their own top N; the
@@ -17,9 +17,9 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::thread;
 
 use crate::{
-    build_route, build_route_layout, extra_islands, prefilter_layout, score_island,
-    spacing_regularity, validate_route, window, Layout, Level, Route, RouteParams, ScoringConfig,
-    Thresholds, WorldConfig,
+    anchorage_paths, build_route, build_route_layout, extra_islands, path_directness,
+    prefilter_layout, score_island, spacing_regularity, validate_route, window, Layout, Level,
+    Route, RouteParams, ScoringConfig, Thresholds, WorldConfig,
 };
 
 /// Blocks of margin around the route points for the extra-islands region.
@@ -39,13 +39,14 @@ pub struct SearchParams {
     pub workers: Option<usize>,
 }
 
-/// The five scored terms (each 0..1) for one seed.
+/// The scored terms (each 0..1) for one seed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TermScores {
     pub spacing_regularity: f64,
     pub island_quality: f64,
     pub coastline_interest: f64,
     pub extra_islands: f64,
+    pub path_directness: f64,
 }
 
 /// A seed that passed validation, with its scores.
@@ -72,6 +73,7 @@ fn weighted(t: &TermScores, c: &ScoringConfig) -> f64 {
         + t.island_quality * c.weight_island_quality
         + t.coastline_interest * c.weight_coastline_interest
         + t.extra_islands * c.weight_extra_islands
+        + t.path_directness * c.weight_path_directness
 }
 
 /// Region `(x0, z0, w, d)` boxing `pts` grown by `margin`.
@@ -112,6 +114,7 @@ fn score_seed(
         island_quality: quality / n,
         coastline_interest: coast / n,
         extra_islands: extra,
+        path_directness: path_directness(&anchorage_paths(layout, levels, route, t)),
     }
 }
 
