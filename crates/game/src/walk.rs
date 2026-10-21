@@ -536,12 +536,7 @@ impl Walker {
                 self.player.tick(input, &self.physics, &world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                let deck = Deck {
-                    raft: &f.raft,
-                    tilt: frame.tilt,
-                    push: &f.push,
-                };
-                self.items.tick(&world, Some(deck));
+                self.items.tick(&world);
                 let dropped = self.animals.tick(
                     &world,
                     Some(Deck {
@@ -558,7 +553,7 @@ impl Walker {
                 self.player.tick(input, &self.physics, &self.world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
-                self.items.tick(&self.world, None);
+                self.items.tick(&self.world);
                 let dropped = self.animals.tick(&self.world, None);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let aim = aim(&self.world, &entities, &self.targeting, self.cur_eye, input);
