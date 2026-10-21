@@ -6,7 +6,7 @@ source: "#502"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
 ---
 
@@ -25,6 +25,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Pointer release and modes.** `client/input.js` already has a console mode on `Backquote` (debug only) that releases pointer lock and closes with Enter or Escape (`debug-console.md` section 2), and `client/test/dsl.mjs` has the input-script DSL with `mode = ...` expectations.
 - **Phase A done** (#513): PRs #549 (sword, leather, feather icons), #568 (raw_beef, raw_pork, raw_chicken icons) and #569 (every `data/items.toml` name has a texture, export carries UI tiles) added the six icons to `art/PROMPT.md` and `art/tools/draw_7_12.py` and the coverage check in `art/tools/test_art.py`. This supersedes the "Art that is missing" item above.
 - **Belt and hands data.** `PlayerState` in `crates/game/src/player.rs` holds the belt (5 slots) and one hands item; the client reads them via `belt` and `walk.health()` in `client/controller.js`.
+- **Phase B done** (#584): PRs #595 (pixel-scale and texture helper, `client/uipx.js`), #596 (`heart_empty`), #599 (styled title screen with CSS-animated sea, "alpha" label kept), #613 (belt slots, icons and hands from the tileset) and #615 (hearts and timer digits from the tileset) replace the CSS-box HUD and plain menu. This supersedes the HUD and "No day phase timer" items above. Whether the look is accepted stays `[manual check]`.
 
 ## Reconciliation notes
 
