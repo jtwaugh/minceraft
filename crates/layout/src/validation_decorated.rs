@@ -1,11 +1,11 @@
 //! Phase G validation checks (design 6.1): measured on a **decorated**
 //! region. The Phase B flat-grass check stays on undecorated terrain.
 
-use terrain::{Block, Region, HEIGHT};
+use terrain::{Block, Region, HEIGHT, SEA_LEVEL};
 
 use crate::validation::{
-    block_at, flat_grass_tiles_with, island_columns, CheckResult, Thresholds, ValidationReport,
-    CHECK_CLEAR_FLAT, CHECK_TREES,
+    block_at, flat_grass_tiles_with, island_columns_with, CheckResult, Thresholds,
+    ValidationReport, CHECK_CLEAR_FLAT, CHECK_TREES,
 };
 use crate::Level;
 
@@ -61,7 +61,10 @@ fn decorated(region: &Region, x: i32, z: i32) -> bool {
 /// tiles with nothing above the ground, and whether any log stands on the
 /// island.
 pub fn validate_decorated(region: &Region, level: &Level, t: &Thresholds) -> ValidationReport {
-    let island = island_columns(region, level.island_center);
+    let island = island_columns_with(region, level.island_center, |r, x, z| {
+        ground_under_decoration(r, x as i32 + r.x0, z as i32 + r.z0)
+            .is_some_and(|(_, y)| y >= SEA_LEVEL)
+    });
     let clear = flat_grass_tiles_with(region, &island, ground_under_decoration, |x, z| {
         !decorated(region, x, z)
     });

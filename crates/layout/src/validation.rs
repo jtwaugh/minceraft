@@ -168,6 +168,15 @@ pub(crate) fn is_land(region: &Region, x: u32, z: u32) -> bool {
 /// World columns `(x, z)` of the island: land 4-connected to the island
 /// centre inside `region`. Empty if the centre is not land (or outside).
 pub(crate) fn island_columns(region: &Region, centre: [i32; 2]) -> Vec<(i32, i32)> {
+    island_columns_with(region, centre, is_land)
+}
+
+/// [`island_columns`] with a custom land test on local `(x, z)`.
+pub(crate) fn island_columns_with(
+    region: &Region,
+    centre: [i32; 2],
+    is_land: impl Fn(&Region, u32, u32) -> bool,
+) -> Vec<(i32, i32)> {
     let (w, d) = (region.width as i64, region.depth as i64);
     let local = |x: i32, z: i32| (x as i64 - region.x0 as i64, z as i64 - region.z0 as i64);
     let (cx, cz) = local(centre[0], centre[1]);

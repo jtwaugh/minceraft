@@ -100,6 +100,16 @@ fn island_covered_in_plants_fails_clear_tiles() {
 }
 
 #[test]
+fn canopy_over_water_is_not_island() {
+    let mut r = island(0);
+    // A log and canopy over open water next to the island (x 30, z 20).
+    put(&mut r, 30, SEA_LEVEL as usize, 20, Block::OakLeaves);
+    put(&mut r, 30, TOP, 20, Block::OakLog);
+    assert_eq!(measured(&r, CHECK_TREES), 0.0);
+    assert_eq!(measured(&r, CHECK_CLEAR_FLAT), 324.0);
+}
+
+#[test]
 fn same_counts_from_overlapping_windows() {
     let mut a = island(0);
     let mut b = island(5);
