@@ -28,17 +28,15 @@ fn main() {
     };
 
     // Stage times, single thread, same candidates as the search.
-    let (mut build, mut pre, mut val) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
+    let (mut pre, mut val) = (Duration::ZERO, Duration::ZERO);
     let (mut rejected, mut failed, mut passed) = (0u64, 0u64, 0u64);
-    // `Layout` generates lazily, so the route+layout stage is near zero and
-    // its real cost lands in the prefilter and validation stages. Don't read
-    // the stage split literally.
+    // `Layout` generates lazily, so building the route and layout costs almost
+    // nothing on its own. It is timed together with the prefilter, and the
+    // rest of its cost lands in validation.
     for seed in start..start + n {
         let now = Instant::now();
         let route = build_route(seed, k);
         let (layout, levels) = build_route_layout(&WorldConfig { seed }, &route);
-        build += now.elapsed();
-        let now = Instant::now();
         let ok = prefilter_layout(&layout, &levels, &route).is_ok();
         pre += now.elapsed();
         if !ok {
@@ -54,7 +52,7 @@ fn main() {
             failed += 1;
         }
     }
-    let staged = build + pre + val;
+    let staged = pre + val;
 
     // Whole search on one worker gives scoring by difference. This also
     // includes the search's own route and layout rebuilds, prefilter and
@@ -91,11 +89,7 @@ fn main() {
     );
     println!("stage times, one thread (ms per candidate entering the stage):");
     let ms = |d: Duration, m: u64| 1000.0 * d.as_secs_f64() / m.max(1) as f64;
-    println!(
-        "  route+layout {:.2} (lazy: real cost lands in prefilter/validation)",
-        ms(build, n)
-    );
-    println!("  prefilter    {:.2}", ms(pre, n));
+    println!("  route+layout+prefilter {:.2}", ms(pre, n));
     println!("  validation   {:.2}", ms(val, n - rejected));
     println!(
         "  scoring      {:.2} (upper bound, by difference)",
