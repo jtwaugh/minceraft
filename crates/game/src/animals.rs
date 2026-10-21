@@ -45,6 +45,8 @@ pub struct AnimalDef {
     pub flee_ticks: [u32; 2],
     /// Ticks the death animation lasts before the drops spawn (8.2).
     pub death_ticks: u32,
+    /// Consecutive ticks with the head under water before the animal drowns.
+    pub drown_ticks: u32,
     /// Horizontal speed of a spawned drop, random direction, blocks per second.
     pub scatter_speed: f64,
     /// Upward speed of a spawned drop, blocks per second.
@@ -121,6 +123,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
             "flee_speed",
             "flee_ticks",
             "death_ticks",
+            "drown_ticks",
             "scatter_speed",
             "scatter_lift",
         ]
@@ -187,6 +190,12 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         .and_then(|v| v.as_integer())
         .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
         .ok_or_else(|| bad("`death_ticks` must be a positive integer".to_string()))?
+        as u32;
+    let drown_ticks = table
+        .get("drown_ticks")
+        .and_then(|v| v.as_integer())
+        .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
+        .ok_or_else(|| bad("`drown_ticks` must be a positive integer".to_string()))?
         as u32;
     let speed = |field: &str| {
         table
@@ -256,6 +265,7 @@ fn parse_kind(kind: &str, value: &toml::Value) -> Result<AnimalDef, AnimalsError
         flee_speed,
         flee_ticks,
         death_ticks,
+        drown_ticks,
         scatter_speed,
         scatter_lift,
     })
@@ -341,6 +351,31 @@ mod tests {
     }
 
     #[test]
+    fn drown_ticks_are_loaded_and_validated() {
+        let a = Animals::default_animals();
+        assert!(a.kinds.iter().all(|k| k.drown_ticks > 0));
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../data/animals.toml"
+        ))
+        .unwrap();
+        assert_err_contains(
+            Animals::from_toml(&text.replacen("\ndrown_ticks", "\ndrown_tick", 1)),
+            "drown_tick",
+        );
+        assert_err_contains(
+            Animals::from_toml(&text.replacen("drown_ticks = 300", "drown_ticks = 0", 1)),
+            "drown_ticks",
+        );
+        let missing: String = text
+            .lines()
+            .filter(|l| !l.starts_with("drown_ticks"))
+            .map(|l| format!("{l}\n"))
+            .collect();
+        assert_err_contains(Animals::from_toml(&missing), "drown_ticks");
+    }
+
+    #[test]
     fn unknown_field_next_to_swim_speed_rejected() {
         let text = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -354,7 +389,7 @@ mod tests {
     #[test]
     fn unknown_drop_item_rejected() {
         let a = Animals::from_toml(
-            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nswim_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
+            "[cow]\nhealth = 1\nbox = [1, 1]\nwander_speed = 1\nswim_speed = 1\nwalk_ticks = [1, 2]\npause_ticks = [1, 2]\nhurt_ticks = 1\nknockback_speed = 1\nknockback_lift = 1\nflee_speed = 1\nflee_ticks = [1, 2]\ndeath_ticks = 1\ndrown_ticks = 1\nscatter_speed = 1\nscatter_lift = 1\ndrops = [{ item = 'gold', min = 1, max = 1 }]\n",
         )
         .unwrap();
         assert!(matches!(
