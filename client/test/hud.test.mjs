@@ -41,3 +41,12 @@ test('slotView picks frame by selection and icon by item texture', async () => {
   assert.deepEqual(slotView(set, 'no_such_item', true), { frame: 'slot_selected', icon: null });
   for (const [w, h] of [[0, 0], [100, 50], [1920, 1080]]) assert.ok(Number.isInteger(hudScale(w, h)) && hudScale(w, h) >= 1);
 });
+
+test('digitNames splits a number into digit textures', async () => {
+  const { digitNames, heartNames } = await import('../hud.js');
+  assert.deepEqual(digitNames(0), ['digit_0']);
+  assert.deepEqual(digitNames(7), ['digit_7']);
+  assert.deepEqual(digitNames(10), ['digit_1', 'digit_0']);
+  assert.deepEqual(digitNames(125), ['digit_1', 'digit_2', 'digit_5']);
+  assert.deepEqual(heartNames({ full: 1, half: 1, empty: 1 }), ['heart_full', 'heart_half', 'heart_empty']);
+});
