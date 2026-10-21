@@ -311,7 +311,9 @@ pub use route_layout::build_route_layout;
 mod route_retry;
 pub use route_retry::{find_route, RouteFound};
 mod scoring;
+mod scoring_island;
 pub use scoring::{path_directness, spacing_regularity, ScoringConfig};
+pub use scoring_island::{coastline_interest, island_quality, score_island};
 mod scoring_extra;
 pub use scoring_extra::{extra_islands, ExtraIslands};
 mod structure;
@@ -372,6 +374,8 @@ mod route_tests;
 mod route_validation_tests;
 #[cfg(test)]
 mod scoring_extra_tests;
+#[cfg(test)]
+mod scoring_island_tests;
 #[cfg(test)]
 mod scoring_tests;
 #[cfg(test)]

@@ -316,18 +316,7 @@ fn ground(region: &Region, x: i32, z: i32) -> Option<(u8, i32)> {
 /// neighbours' ground heights are each within 1 block. A neighbour outside
 /// the region makes the tile not flat.
 pub fn validate_flat_grass(region: &Region, level: &Level, t: &Thresholds) -> ValidationReport {
-    let flat = island_columns(region, level.island_center)
-        .into_iter()
-        .filter(|&(x, z)| {
-            let Some((b, y)) = ground(region, x, z) else {
-                return false;
-            };
-            b == Block::Grass as u8
-                && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().all(|&(dx, dz)| {
-                    ground(region, x + dx, z + dz).is_some_and(|(_, ny)| (ny - y).abs() <= 1)
-                })
-        })
-        .count();
+    let flat = flat_grass_tiles(region, &island_columns(region, level.island_center));
     ValidationReport {
         checks: vec![CheckResult {
             name: CHECK_FLAT_GRASS,
@@ -336,6 +325,22 @@ pub fn validate_flat_grass(region: &Region, level: &Level, t: &Thresholds) -> Va
             passed: flat >= t.min_flat_grass_tiles as usize,
         }],
     }
+}
+
+/// Flat grass tiles among `island` columns (see [`validate_flat_grass`]).
+pub(crate) fn flat_grass_tiles(region: &Region, island: &[(i32, i32)]) -> usize {
+    island
+        .iter()
+        .filter(|&&(x, z)| {
+            let Some((b, y)) = ground(region, x, z) else {
+                return false;
+            };
+            b == Block::Grass as u8
+                && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().all(|&(dx, dz)| {
+                    ground(region, x + dx, z + dz).is_some_and(|(_, ny)| (ny - y).abs() <= 1)
+                })
+        })
+        .count()
 }
 
 /// Generate the undecorated window for `level` under `layout` and validate.
