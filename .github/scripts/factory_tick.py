@@ -12,6 +12,7 @@ The passes themselves live in later tickets.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -79,7 +80,8 @@ class Snapshot:
             if cached:
                 cmd += ["-H", f"If-None-Match: {cached[0]}"]
             p = subprocess.run(cmd, capture_output=True, text=True)
-            head, _, body = p.stdout.partition("\r\n\r\n")
+            # text=True has already turned the \r\n line ends into \n
+            head, _, body = p.stdout.replace("\r\n", "\n").partition("\n\n")
             if "304" in head.split("\n", 1)[0] and cached:
                 return cached[1]
             if p.returncode:
@@ -100,17 +102,27 @@ class Snapshot:
         for i in paged(f"repos/{repo}/issues?state=all"):
             if "pull_request" in i:
                 continue
+            labels = [lb["name"] for lb in i["labels"]]
             snap.issues.append({
                 "number": i["number"], "title": i["title"], "state": i["state"],
-                "labels": [lb["name"] for lb in i["labels"]],
+                "labels": labels,
                 "kind": ("plan" if i["title"].startswith("Plan:") else
-                         "report" if i["title"] == REPORT_TITLE else "ticket"),
+                         "report" if i["title"] == REPORT_TITLE else
+                         "decision" if "spec-question" in labels else
+                         "idea" if "idea" in labels else "ticket"),
                 "body": i.get("body") or "",
-                "body_excerpt": (i.get("body") or "")[:500]})
+                "body_excerpt": (i.get("body") or "")[:500],
+                "parent": (int(i["parent_issue_url"].rsplit("/", 1)[1])
+                           if i.get("parent_issue_url") else None)})
         snap.plans = [i for i in snap.issues if i["kind"] == "plan"]
+        for plan in snap.plans:  # the planner's <!-- plan-source file=... section=... -->
+            m = re.search(r"<!-- plan-source file=(\S+) section=(.*?) -->", plan["body"])
+            if m:
+                plan["plan_source"] = {"file": m.group(1), "section": m.group(2)}
         os.environ.setdefault("GITHUB_REPOSITORY", repo)
         import tickets  # here: tickets reads the environment on import
         for i in snap.issues:
+            i["depends_on"] = sorted(tickets.deps(i["body"]) - {i["number"]})
             if i["state"].lower() == "open" and i["kind"] == "ticket" and "factory" in i["labels"]:
                 i["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
                                   "created_at": c["created_at"]}

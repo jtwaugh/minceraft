@@ -9,6 +9,8 @@
                            request (or other ticket in the list) is editing.
   tickets.py check <n>     Print true if ticket #n would be in `ready` now,
                            else false (start-ready re-checks before starting).
+  tickets.py has-pr <n>    Print true if ticket #n has an open pull request
+                           (start-ready's check on a run the tick dispatched).
 
 A ticket's dependencies are every issue number on its "**Depends on:**"
 line, plus any "Blocked by #n" in its body (the planner writes both) or in
@@ -203,6 +205,8 @@ def main():
         print(json.dumps(open_deps(issue) + busy_prs(issue, open_prs())))
     elif mode == "ready":
         print(json.dumps(ready_tickets(open_prs())))
+    elif mode == "has-pr":
+        print("true" if has_open_pr(int(sys.argv[2]), open_prs()) else "false")
     elif mode == "check":
         n = int(sys.argv[2])
         print("true" if n in ready_tickets(open_prs()) else "false")

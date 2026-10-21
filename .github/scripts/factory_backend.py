@@ -27,10 +27,13 @@ DOCS_WORKFLOW = "claude-docs.yml"
 
 
 def gh_run(args, project=False):
-    """`gh <args>`; project calls use PROJECT_TOKEN when it is set."""
+    """`gh <args>`; project calls use PROJECT_TOKEN and repo calls WRITE_TOKEN
+    (the workflow token) when set, as in project_sync."""
     env = dict(os.environ)
     if project and env.get("PROJECT_TOKEN"):
         env["GH_TOKEN"] = env["PROJECT_TOKEN"]
+    elif not project and env.get("WRITE_TOKEN"):
+        env["GH_TOKEN"] = env["WRITE_TOKEN"]
     p = subprocess.run(["gh", *args], capture_output=True, text=True, env=env)
     if p.returncode:
         raise RuntimeError(f"gh {' '.join(args[:3])}: {p.stderr.strip()}")
