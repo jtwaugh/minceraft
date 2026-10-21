@@ -32,6 +32,70 @@ use crate::{
 pub const CHECK_ANCHORAGE_REACHABLE: &str = "anchorage_reachable";
 pub const CHECK_CHANNEL_CLEAR: &str = "channel_clear";
 
+/// Window `(x0, z0, w, d)` for one anchorage pair: the box of the two
+/// anchorages and the segment's two route points, grown by `margin`.
+fn pair_window(
+    from: &Level,
+    to: &Level,
+    pa: [f64; 2],
+    pb: [f64; 2],
+    margin: i32,
+) -> (i32, i32, u32, u32) {
+    let xs = [
+        from.anchorage[0],
+        to.anchorage[0],
+        pa[0].floor() as i32,
+        pb[0].floor() as i32,
+    ];
+    let zs = [
+        from.anchorage[1],
+        to.anchorage[1],
+        pa[1].floor() as i32,
+        pb[1].floor() as i32,
+    ];
+    let x0 = xs.into_iter().min().unwrap() - margin;
+    let z0 = zs.into_iter().min().unwrap() - margin;
+    (
+        x0,
+        z0,
+        (xs.into_iter().max().unwrap() + margin - x0 + 1) as u32,
+        (zs.into_iter().max().unwrap() + margin - z0 + 1) as u32,
+    )
+}
+
+/// The A* path for each consecutive anchorage pair that has one, using the
+/// same window and eroded navigable set as `validate_route`. Coordinates are
+/// window-local.
+pub fn anchorage_paths(
+    layout: &Layout,
+    levels: &[Level],
+    route: &Route,
+    t: &Thresholds,
+) -> Vec<Vec<[i32; 2]>> {
+    let bare = Layout {
+        structures: Vec::new(),
+        ..layout.clone()
+    };
+    let half_width = layout.density.iter().find_map(|d| match d {
+        DensityTerm::Channel { half_width, .. } => Some(*half_width),
+        _ => None,
+    });
+    let margin =
+        t.window_margin + t.raft_half_width as i32 + half_width.unwrap_or(0.0).ceil() as i32;
+    let pairs = levels.len().min(route.points.len()).saturating_sub(1);
+    (0..pairs)
+        .filter_map(|i| {
+            let (from, to) = (&levels[i], &levels[i + 1]);
+            let (x0, z0, w, d) =
+                pair_window(from, to, route.points[i], route.points[i + 1], margin);
+            let region = bare.generate_region(x0, z0, w, d, true);
+            let nav = erode(&NavMap::from_region(&region, t), t.raft_half_width);
+            let [a, b] = [from.anchorage, to.anchorage].map(|a| [a[0] - x0, a[1] - z0]);
+            find_path(&nav, a, b)
+        })
+        .collect()
+}
+
 /// Validate every level, every consecutive anchorage pair and the channel
 /// along `route`.
 pub fn validate_route(
@@ -64,14 +128,7 @@ pub fn validate_route(
         let (from, to) = (&levels[i], &levels[i + 1]);
         let [(ax, az), (bx, bz)] = [from.anchorage, to.anchorage].map(|a| (a[0], a[1]));
         let (pa, pb) = (route.points[i], route.points[i + 1]);
-        let xs = [ax, bx, pa[0].floor() as i32, pb[0].floor() as i32];
-        let zs = [az, bz, pa[1].floor() as i32, pb[1].floor() as i32];
-        let x0 = xs.into_iter().min().unwrap() - margin;
-        let z0 = zs.into_iter().min().unwrap() - margin;
-        let (w, d) = (
-            (xs.into_iter().max().unwrap() + margin - x0 + 1) as u32,
-            (zs.into_iter().max().unwrap() + margin - z0 + 1) as u32,
-        );
+        let (x0, z0, w, d) = pair_window(from, to, pa, pb, margin);
         let region = bare.generate_region(x0, z0, w, d, true);
         let nav = erode(&NavMap::from_region(&region, t), t.raft_half_width);
         let path = find_path(&nav, [ax - x0, az - z0], [bx - x0, bz - z0]);
