@@ -23,10 +23,11 @@ pub enum Action {
     Interact,
     Drop,
     SelectTool,
+    Inventory,
 }
 
 impl Action {
-    pub const ALL: [Action; 12] = [
+    pub const ALL: [Action; 13] = [
         Action::MoveForward,
         Action::MoveLeft,
         Action::MoveBack,
@@ -39,6 +40,7 @@ impl Action {
         Action::Interact,
         Action::Drop,
         Action::SelectTool,
+        Action::Inventory,
     ];
 
     /// The name used in `data/input.toml`.
@@ -56,6 +58,7 @@ impl Action {
             Action::Interact => "interact",
             Action::Drop => "drop",
             Action::SelectTool => "select_tool",
+            Action::Inventory => "inventory",
         }
     }
 

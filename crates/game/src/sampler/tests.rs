@@ -5,6 +5,16 @@ fn sampler() -> Sampler {
 }
 
 #[test]
+fn inventory_key_changes_no_tick_field() {
+    let mut s = sampler();
+    s.key_down("Tab");
+    s.key_up("Tab");
+    assert_eq!(s.drain(), sampler().drain());
+    s.key_down("Tab");
+    assert_eq!(s.drain(), sampler().drain());
+}
+
+#[test]
 fn wasd_and_opposites() {
     let mut s = sampler();
     s.key_down("KeyW");
