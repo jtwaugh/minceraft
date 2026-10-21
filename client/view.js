@@ -26,13 +26,16 @@ export const farPlane = (fogFar) => fogFar * 1.2;
 /** Under water: fog from the eye, solid at this distance in blocks. */
 export const UNDERWATER_FOG_END = 18;
 
+/** Unit direction to the sun, the same as the viewer's (low in the north-west). */
+export const SUN_DIR = (() => { const v = [-0.7, 0.16, -0.7], l = Math.hypot(...v); return v.map((c) => c / l); })();
+
 /**
  * Fog colour, fog range and colour multiplier for this frame.
  * `water` is the water block's colour from the legend, 0..255 per channel.
  */
 export function look({ underwater, skyColor, fogFar, water }) {
   if (!underwater) {
-    return { fogColor: skyColor, fogStart: fogFar * FOG_START, fogEnd: fogFar * FOG_END, fogFar: fogFar * FOG_END, tint: [1, 1, 1] };
+    return { fogColor: skyColor, fogStart: fogFar * FOG_START, fogEnd: fogFar * FOG_END, fogFar: fogFar * FOG_END, tint: [1, 1, 1], sky: true };
   }
   const w = water.map((v) => v / 255);
   const peak = Math.max(...w, 1e-6);
@@ -44,7 +47,21 @@ export function look({ underwater, skyColor, fogFar, water }) {
     fogEnd: UNDERWATER_FOG_END,
     // half way from white to the water's hue at full brightness
     tint: w.map((v) => 0.5 + 0.5 * (v / peak)),
+    sky: false, // flat water fog, no sky pass (decided in #620)
   };
+}
+
+/**
+ * Inputs of the sky pass and of the fog's sky colour: `base` is the colour to
+ * pass as `skyColor`'s base (the fog colour), or null when the sky pass is
+ * skipped and fog stays flat (under water). `right`, `up` and `fwd` are the
+ * camera basis and `scale` is [tan(fovY / 2) * aspect, tan(fovY / 2)].
+ */
+export function skyInputs(v, yaw, pitch, fovY, aspect) {
+  if (!v.sky) return null;
+  const { r, u, f } = basis(yaw, pitch);
+  const t = Math.tan(fovY / 2);
+  return { base: v.fogColor, sunDir: SUN_DIR, right: r, up: u, fwd: f, scale: [t * aspect, t] };
 }
 
 /** Fog amount 0..1 at eye distance `dist`: mirrors the fragment shader. */

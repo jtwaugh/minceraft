@@ -29,8 +29,9 @@ import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { padRegion } from './regionpad.js';
 import { REGION_SIZE } from './stream.js';
-import { NEAR, farPlane, look } from './view.js';
+import { NEAR, farPlane, look, skyInputs } from './view.js';
 import { FOG_GLSL } from '../viewer/fog.js';
+import { SKY_GLSL } from '../viewer/sky.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
 import { sceneById } from './scenes.js';
@@ -87,7 +88,7 @@ function program(cut) {
     uniform vec3 offset;
     uniform vec3 eye; uniform vec2 plantFade; // start, range (blocks)
     uniform float waterFrame;
-    out vec3 vuv; out float vshade; out float vdist; out vec3 vtint;
+    out vec3 vuv; out float vshade; out float vdist; out vec3 vtint; out vec3 vdir;
     void main() {
       vec3 w = pos * unpack.x + offset;
       ${cut ? `// mirrors plantScale in plantfade.js: top vertices sink one block to the base
@@ -99,15 +100,17 @@ function program(cut) {
       vshade = shade * unpack.z * AO_SHADE[int(ao)];
       vtint = tint;
       vdist = distance(w, eye);
+      vdir = w - eye;
     }`));
   gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
     precision mediump sampler2DArray;
-    in vec3 vuv; in float vshade; in float vdist; in vec3 vtint;
+    in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir;
     out vec4 o;
     ${FOG_GLSL}
+    ${SKY_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
       vec2 px = vuv.xy * ${TEX_SIZE}.0;
@@ -119,13 +122,47 @@ function program(cut) {
       float g = texture(tintTex, vuv).r;
       vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint;
       float f = fogFar > 0.0 ? fogAmount(vdist, fogFar) : clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
-      o = vec4(mix(c, fogColor, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'alpha'});
+      // above water fog fades toward the sky in the view direction; under water it is flat
+      vec3 fc = fogFar > 0.0 ? skyColor(fogColor, normalize(vdir), sunDir) : fogColor;
+      o = vec4(mix(c, fc, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'alpha'});
     }`));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
   p.u = (name) => gl.getUniformLocation(p, name);
   return p;
 }
+
+// Full-screen sky pass: one triangle, each pixel's direction rebuilt from the
+// camera basis (view.js skyInputs), coloured by the same skyColor the fog mixes toward.
+const skyProg = (() => {
+  const sh = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, `#version 300 es
+    uniform vec3 camRight; uniform vec3 camUp; uniform vec3 camFwd; uniform vec2 skyScale;
+    out vec3 vdir;
+    void main() {
+      vec2 p = vec2((gl_VertexID & 1) * 4 - 1, (gl_VertexID >> 1) * 4 - 1);
+      vdir = camFwd + camRight * p.x * skyScale.x + camUp * p.y * skyScale.y;
+      gl_Position = vec4(p, 1.0, 1.0);
+    }`));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `#version 300 es
+    precision mediump float;
+    in vec3 vdir;
+    uniform vec3 fogColor; uniform vec3 sunDir;
+    out vec4 o;
+    ${SKY_GLSL}
+    void main() { o = vec4(skyColor(fogColor, normalize(vdir), sunDir), 1.0); }`));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  p.u = (name) => gl.getUniformLocation(p, name);
+  return p;
+})();
+const skyVao = gl.createVertexArray(); // attribute-less: the vertex shader uses gl_VertexID
 
 // Selection outline and entity highlight: a unit cube drawn as lines or as a
 // translucent fill, placed and scaled by uniforms.
@@ -424,6 +461,20 @@ function render(now) {
   const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const sky = skyInputs(view, yaw, pitch, sampler.fov_degrees * Math.PI / 180, w / h);
+  if (sky) {
+    gl.useProgram(skyProg);
+    gl.uniform3fv(skyProg.u('camRight'), sky.right);
+    gl.uniform3fv(skyProg.u('camUp'), sky.up);
+    gl.uniform3fv(skyProg.u('camFwd'), sky.fwd);
+    gl.uniform2fv(skyProg.u('skyScale'), sky.scale);
+    gl.uniform3fv(skyProg.u('fogColor'), sky.base);
+    gl.uniform3fv(skyProg.u('sunDir'), sky.sunDir);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
+    gl.bindVertexArray(skyVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+  }
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
 
   const mvp = new Float32Array(mul(
@@ -437,6 +488,7 @@ function render(now) {
     gl.uniformMatrix4fv(prog.u('mvp'), false, mvp);
     gl.uniform3fv(prog.u('unpack'), [POS_SCALE, UV_SCALE, SHADE_SCALE]);
     gl.uniform3fv(prog.u('fogColor'), view.fogColor);
+    gl.uniform3fv(prog.u('sunDir'), sky ? sky.sunDir : [0, 1, 0]);
     gl.uniform1f(prog.u('fogStart'), view.fogStart);
     gl.uniform1f(prog.u('fogEnd'), view.fogEnd);
     gl.uniform1f(prog.u('fogFar'), view.fogFar);
