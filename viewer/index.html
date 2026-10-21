@@ -184,7 +184,7 @@
 <details id="dev"><summary>stats</summary><dl id="devgrid"></dl></details>
 <script type="module">
 import init, * as wasm from './pkg/terrain_web.js';
-import { VERTEX_BYTES, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, quadIndices, columnTints, meshBlocks } from './mesh.js';
+import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW, BIOME, SNOWY } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
@@ -628,6 +628,8 @@ function program(cut) {
     layout(location=2) in float layer;
     layout(location=3) in float shade;
     layout(location=4) in vec3 tint;
+    layout(location=6) in float ao; // AO level 0-3; unset (0) on float meshes
+    const float AO_SHADE[4] = float[4](${AO_SHADE.map((v) => v.toFixed(3)).join(', ')});
     uniform mat4 mvp;
     uniform float waterFrame;
     // packed meshes (mesh.js): position, uv and shade scales, and the mesh's offset
@@ -645,7 +647,7 @@ function program(cut) {
       // at ANIM_FIRST; offset by the current frame
       bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
-      vshade = shade * unpack.z;
+      vshade = shade * unpack.z * AO_SHADE[int(ao)];
       vtint = tint;
       vdist = distance(wp, camPos);
     }`));
@@ -953,7 +955,7 @@ function uploadPacked({ verts, faces }) {
     gl.vertexAttribPointer(loc, size, type, normalized, VERTEX_BYTES, off);
   };
   attr(0, 3, gl.SHORT, false, 0); attr(1, 2, gl.UNSIGNED_BYTE, false, 6); attr(2, 1, gl.UNSIGNED_BYTE, false, 8);
-  attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10);
+  attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10); attr(6, 1, gl.UNSIGNED_BYTE, false, 13);
   gl.bindVertexArray(null);
   return { vao, n: faces * 6, faces, packed: true, bufs: [vb] };
 }

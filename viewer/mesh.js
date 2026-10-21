@@ -9,7 +9,7 @@
 //   bytes 10-12 tint rgb          uint8, normalized
 //   byte  13    ambient occlusion level 0-3 (AO_SHADE): the opaque blocks among
 //               the corner's two side neighbours and diagonal on the open side
-//               of full-cube faces; 0 elsewhere. No shader reads it yet.
+//               of full-cube faces; 0 elsewhere. The viewer shader reads it.
 //   byte  14    plant top weight  uint8: 255 on the top vertices of cross
 //               plants, 0 at their base and on every other face (the client
 //               fades and sways with it; the viewer ignores it)
