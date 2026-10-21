@@ -688,6 +688,9 @@ A column is navigable if:
 - Every cell from `SEA_LEVEL` to `SEA_LEVEL + 3` is air (Beta overhangs make this check necessary), and
 - It is not frozen, unless the level explicitly allows ice.
 
+Navigability is measured on decorated terrain, and any non-air block in the
+band blocks, leaves, plants and `snow_layer` included. (Decided in #630.)
+
 To account for raft size, erode the navigable set by the raft's half-width (default 2) before pathfinding. Use 8-connected A* with diagonal cost of sqrt 2.
 
 > **Reconciler:** "every cell is air" will fail on trees whose leaves hang
