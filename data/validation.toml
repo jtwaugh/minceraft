@@ -21,6 +21,13 @@ raft_clearance = 4
 # height, counted on undecorated terrain (design Decision 4).
 min_flat_grass_tiles = 6
 
+# Decorated terrain (design 6.1, Phase G). Flat grass tiles with no tree,
+# plant or cactus above them, at least this many.
+min_clear_flat_tiles = 6
+
+# Trees on the island: 1 if at least one log stands on an island column.
+min_trees = 1
+
 # Navigability (docs/design/world-layout.md 6.2, decorated terrain): water
 # depth from SEA_LEVEL - 1 must be at least this.
 min_navigable_depth = 2

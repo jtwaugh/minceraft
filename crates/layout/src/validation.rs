@@ -29,6 +29,14 @@ pub struct Thresholds {
     pub min_raft_water_depth: u32,
     pub raft_clearance: i32,
     pub min_flat_grass_tiles: u32,
+    /// Decorated terrain (design 6.1, Phase G): least flat grass tiles with
+    /// no decoration above them.
+    #[cfg_attr(feature = "toml-io", serde(default = "default_min_clear_flat_tiles"))]
+    pub min_clear_flat_tiles: u32,
+    /// Decorated terrain: least trees on the island (1 if any log stands on
+    /// an island column).
+    #[cfg_attr(feature = "toml-io", serde(default = "default_min_trees"))]
+    pub min_trees: u32,
     /// Navigability (design 6.2): least water depth of a navigable column.
     #[cfg_attr(feature = "toml-io", serde(default = "default_min_navigable_depth"))]
     pub min_navigable_depth: u32,
@@ -42,6 +50,16 @@ pub struct Thresholds {
     /// Retry loop cap (`find_level`).
     #[cfg_attr(feature = "toml-io", serde(default = "default_max_attempts"))]
     pub max_attempts: u32,
+}
+
+#[cfg(feature = "toml-io")]
+fn default_min_clear_flat_tiles() -> u32 {
+    6
+}
+
+#[cfg(feature = "toml-io")]
+fn default_min_trees() -> u32 {
+    1
 }
 
 #[cfg(feature = "toml-io")]
@@ -122,6 +140,8 @@ pub const CHECK_SPAWN_CLEAR: &str = "island_clear_of_spawn_zone";
 pub const CHECK_RAFT_WATER: &str = "raft_water_depth";
 pub const CHECK_RAFT_CLEAR: &str = "raft_footprint_clear";
 pub const CHECK_FLAT_GRASS: &str = "flat_grass_tiles";
+pub const CHECK_CLEAR_FLAT: &str = "clear_flat_grass_tiles";
+pub const CHECK_TREES: &str = "island_trees";
 
 /// World-coordinate window `(x0, z0, w, d)` a level's checks need.
 pub fn window(level: &Level, t: &Thresholds) -> (i32, i32, u32, u32) {
@@ -148,6 +168,15 @@ pub(crate) fn is_land(region: &Region, x: u32, z: u32) -> bool {
 /// World columns `(x, z)` of the island: land 4-connected to the island
 /// centre inside `region`. Empty if the centre is not land (or outside).
 pub(crate) fn island_columns(region: &Region, centre: [i32; 2]) -> Vec<(i32, i32)> {
+    island_columns_with(region, centre, is_land)
+}
+
+/// [`island_columns`] with a custom land test on local `(x, z)`.
+pub(crate) fn island_columns_with(
+    region: &Region,
+    centre: [i32; 2],
+    is_land: impl Fn(&Region, u32, u32) -> bool,
+) -> Vec<(i32, i32)> {
     let (w, d) = (region.width as i64, region.depth as i64);
     let local = |x: i32, z: i32| (x as i64 - region.x0 as i64, z as i64 - region.z0 as i64);
     let (cx, cz) = local(centre[0], centre[1]);
@@ -208,7 +237,7 @@ pub fn validate_island(region: &Region, level: &Level, t: &Thresholds) -> Valida
 }
 
 /// Block at world `(x, y, z)`, or `None` outside the region.
-fn block_at(region: &Region, x: i32, y: i32, z: i32) -> Option<u8> {
+pub(crate) fn block_at(region: &Region, x: i32, y: i32, z: i32) -> Option<u8> {
     let (lx, lz) = (x as i64 - region.x0 as i64, z as i64 - region.z0 as i64);
     if lx < 0 || lz < 0 || lx >= region.width as i64 || lz >= region.depth as i64 {
         return None;
@@ -329,15 +358,30 @@ pub fn validate_flat_grass(region: &Region, level: &Level, t: &Thresholds) -> Va
 
 /// Flat grass tiles among `island` columns (see [`validate_flat_grass`]).
 pub(crate) fn flat_grass_tiles(region: &Region, island: &[(i32, i32)]) -> usize {
+    flat_grass_tiles_with(region, island, ground, |_, _| true)
+}
+
+/// [`flat_grass_tiles`] with the ground finder chosen by the caller:
+/// `ground_of` finds a column's ground block (the decorated check looks
+/// through decoration); `keep` drops tiles, but not their neighbours.
+pub(crate) fn flat_grass_tiles_with(
+    region: &Region,
+    island: &[(i32, i32)],
+    ground_of: impl Fn(&Region, i32, i32) -> Option<(u8, i32)>,
+    keep: impl Fn(i32, i32) -> bool,
+) -> usize {
     island
         .iter()
         .filter(|&&(x, z)| {
-            let Some((b, y)) = ground(region, x, z) else {
+            if !keep(x, z) {
+                return false;
+            }
+            let Some((b, y)) = ground_of(region, x, z) else {
                 return false;
             };
             b == Block::Grass as u8
                 && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().all(|&(dx, dz)| {
-                    ground(region, x + dx, z + dz).is_some_and(|(_, ny)| (ny - y).abs() <= 1)
+                    ground_of(region, x + dx, z + dz).is_some_and(|(_, ny)| (ny - y).abs() <= 1)
                 })
         })
         .count()
