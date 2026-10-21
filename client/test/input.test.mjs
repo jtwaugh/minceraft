@@ -184,3 +184,39 @@ test('closing after submit relocks the pointer; plain close does not', () => {
   s.input.closeConsole({ submitted: true });
   assert.equal(s.canvas.locks, 2);
 });
+
+test('Tab opens the inventory without debug, releasing held W and the pointer', () => {
+  const s = setup(false);
+  s.lock();
+  key(s, 'KeyW');
+  key(s, 'Tab');
+  assert.equal(s.input.inventory, true);
+  assert.equal(s.document.exits, 1);
+  assert.equal(s.input.tick().move_forward, 0);
+});
+
+test('Tab needs a locked pointer and a closed console', () => {
+  const s = setup();
+  key(s, 'Tab');
+  assert.equal(s.input.inventory, false);
+  s.lock();
+  key(s, 'Backquote');
+  key(s, 'Tab');
+  assert.equal(s.input.inventory, false);
+});
+
+test('Tab closes and relocks; Escape closes without relocking', () => {
+  const s = setup();
+  s.lock();
+  key(s, 'Tab');
+  s.unlock();
+  key(s, 'Tab');
+  assert.equal(s.input.inventory, false);
+  assert.equal(s.canvas.locks, 2); // the click, then the close
+  s.lock(); // clicks once more
+  key(s, 'Tab');
+  s.unlock();
+  key(s, 'Escape');
+  assert.equal(s.input.inventory, false);
+  assert.equal(s.canvas.locks, 3);
+});

@@ -1,0 +1,109 @@
+# The inventory mode (docs/design/ui-art-and-inventory.md, Phase C and note 8).
+# Tab opens it from a locked pointer, with or without debug; the same key or
+# Escape closes it. The sim keeps ticking with neutral input while it is open.
+
+case Tab opens the inventory and releases held W
+start walk
+click
+lock
+frame 50 x2
+down KeyW
+frame 50 x4
+press Tab
+expect mode = inventory
+expect locked = false
+frame 50 x60
+mark
+frame 50 x10
+expect moved.x ~ 0
+expect moved.z ~ 0
+up KeyW
+
+case the sim keeps ticking while it is open
+start walk
+click
+lock
+press Tab
+frame 50
+mark
+frame 50 x10
+expect moved ~ 0
+expect ticks > 0
+
+case Tab again closes it and asks for the pointer
+start walk
+click
+lock
+expect lock_requests = 1
+press Tab
+press Tab
+expect mode = walk
+expect lock_requests = 2
+
+case Escape closes it and leaves the pointer alone
+start walk
+click
+lock
+press Tab
+press Escape
+expect mode = walk
+expect locked = false
+expect lock_requests = 1
+
+case keys and mouse are not sampled while open
+start walk
+click
+lock
+press Tab
+down KeyW
+mouse 50 0
+frame 50 x10
+mark
+frame 50 x10
+expect moved ~ 0
+expect yaw = 0
+up KeyW
+
+case F does not toggle fly while open
+start walk
+click
+lock
+press Tab
+press KeyF
+expect mode = inventory
+press Tab
+expect mode = walk
+
+case Tab does nothing while the pointer is unlocked
+start walk
+press Tab
+expect mode = walk
+click
+lock
+press Tab
+expect mode = inventory
+
+case Tab does nothing in the console, and Backquote nothing in the inventory
+start walk debug
+click
+lock
+press Backquote
+expect mode = console
+press Tab
+expect mode = console
+press Escape
+expect mode = walk
+lock
+press Tab
+expect mode = inventory
+press Backquote
+expect mode = inventory
+
+case fly mode opens it too, and closing returns to fly
+start fly
+click
+lock
+press Tab
+expect mode = inventory
+press Tab
+expect mode = fly
