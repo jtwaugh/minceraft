@@ -51,6 +51,14 @@ What exists today that this doc relies on or overlaps (checked against the code)
   (`status`, `scope`, `phases`) in `.github/workflows/ci.yml`;
   `plan_targets.py` skips docs with no phases; PR size is enforced by
   `pr_size.py`; the `review-verdict` status is `review_gate.py`.
+- **Phase A progress (plan #570, closed).** The tick exists:
+  `factory_tick.py` with the invariant, stall, report, ready-ticket,
+  plan-closing and board passes (PRs #600, #603, #605, #608, #610, #611,
+  #602, #614, #617, #674, #678), the replay test (#617), `factory-tick.yml`
+  (#754, #757), the retirement of the old workflows (#785) and the
+  once-per-head-commit re-run of failed checks (`factory_rerun.py`, #786).
+  The Blocked fix attempts, nits pass, retry budget and question issues of
+  Phase A are not built (see Reconciliation note 13).
 - **Not present:** any state store, any `factory-state` branch, a
   `factory-tick` workflow, file leases, per-transition history, a "needs
   you" queue, a GitHub App identity, self-hosted runners, or any reference
@@ -140,6 +148,15 @@ What exists today that this doc relies on or overlaps (checked against the code)
     minimum cron interval; scheduled runs can be delayed and only run from
     the default branch. Webhook-triggered runs (`workflow_dispatch` or
     `repository_dispatch`) are what make this feel fast.
+13. **Phase A is incomplete (plan #570).** The plan's tickets all closed, but
+    none covered the part of Phase A that follows the re-run step of
+    section 3, "Blocked tickets": a fix attempt per Blocked cause (conflict,
+    failed check that fails again, reviewer block), the retry budget with
+    `fix_attempt` transitions, one `needs-you` question issue when the budget
+    is spent or the fix needs the maintainer, and the single nits pass with
+    at most one question. `.github/scripts/factory_*.py` has no such code, and
+    `resolve-conflicts.yml`, which the nits and fix steps should replace, is
+    still present. Phase A stays `todo` so the planner plans these.
 
 ---
 
