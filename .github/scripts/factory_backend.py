@@ -165,6 +165,6 @@ class GhBackend(Backend):
             self._gh("issue", "comment", n, "--repo", r, "--body", START_MARKER)
             self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}")
         elif k == "request_phase_done":
-            self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"path={p['file']}")
+            self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
         elif k != "report":  # a report is only remembered; the report pass writes the issue
             raise ValueError(f"unhandled action {k} on {t}")

@@ -1,0 +1,71 @@
+# Factory tick: one pass of the orchestrator (.github/scripts/factory_tick.py,
+# docs/design/factory-orchestrator.md Phase A).
+#
+# The tick is level-triggered: it re-reads everything and writes only what
+# differs, so a second tick straight after does nothing. The schedule is
+# the heartbeat; events only make the next tick sooner. Runs alongside the
+# old workflows until #581 retires them.
+#
+# Run by hand without writing anything:
+#   gh workflow run factory-tick.yml -f dry-run=true
+name: Factory tick
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Print the actions without applying them"
+        required: false
+        default: false
+        type: boolean
+  issues:
+    types: [opened, edited, labeled, unlabeled, closed, reopened]
+  issue_comment:
+    types: [created]
+  # PR activity arrives through the PR workflows finishing, never through
+  # pull_request events: those run the PR's own copy of this file, so an
+  # unmerged change would tick live. workflow_run always uses master's.
+  workflow_run:
+    workflows: ["CI", "Claude reviewer", "Review gate", "PR size"]
+    types: [completed]
+
+# Ticks never overlap. A trigger during a run waits; GitHub keeps only the
+# newest waiting run, which is fine since any tick re-reads everything.
+concurrency:
+  group: factory-tick
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  actions: write # dispatches the implementer and the docs updater
+
+jobs:
+  tick:
+    # For comments, only trusted accounts (the tick ignores the rest
+    # anyway, so they needn't spend a run).
+    if: github.event_name != 'issue_comment' || contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.comment.user.login)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Always master's scripts, whatever the event.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+      - name: Tick
+        env:
+          # Reads use the project token's own budget, as in project-sync.yml;
+          # repo writes and dispatches use the workflow token (WRITE_TOKEN).
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN || github.token }}
+          WRITE_TOKEN: ${{ github.token }}
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
+          DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
+        run: |
+          set -o pipefail  # so a failure isn't hidden by tee
+          python3 -B .github/scripts/factory_tick.py $DRY_RUN | tee -a "$GITHUB_STEP_SUMMARY"
