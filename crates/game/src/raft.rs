@@ -309,6 +309,34 @@ impl Raft {
             }
         }
     }
+
+    /// Move the raft by a swell frame and a drive frame. The swell always
+    /// applies, as in `advance`. The drive frame applies only if the raft's
+    /// boxes at the pose it would reach overlap no solid block of `base`;
+    /// otherwise it is dropped whole, so the raft neither moves nor turns and
+    /// no turn is stored up. The raft's rest cells read as air in `base`.
+    pub fn advance_driven(
+        &mut self,
+        swell: &RaftFrame,
+        drive: &RaftFrame,
+        riders: &mut [&mut Player],
+        physics: &PlayerPhysics,
+        base: &impl CollisionWorld,
+    ) {
+        self.advance(swell, riders, physics);
+        let mut trial = self.clone();
+        trial.advance(drive, &mut [], physics);
+        let world = RaftWorld::new(base, self);
+        let mut solid = Vec::new();
+        let blocked = trial.boxes().any(|b| {
+            solid.clear();
+            block_boxes_in(&world, &b, &mut solid);
+            !solid.is_empty()
+        });
+        if !blocked {
+            self.advance(drive, riders, physics);
+        }
+    }
 }
 
 /// The base world with the raft laid over it. The raft's rest-pose cells are
@@ -372,6 +400,86 @@ mod tests {
             }
         }
         (w, Raft::new(&cells))
+    }
+
+    /// A solid block at deck height beside the deck, over open water.
+    fn drive_east(dx: f64) -> RaftFrame {
+        slide(dx)
+    }
+
+    #[test]
+    fn driving_into_a_block_stops_at_the_cell_edge() {
+        let (mut base, mut raft) = deck();
+        for z in 0..4 {
+            base.set(6, 64, z, Block::Stone);
+        }
+        let p = phys();
+        for _ in 0..40 {
+            raft.advance_driven(&RaftFrame::default(), &drive_east(0.25), &mut [], &p, &base);
+        }
+        assert_eq!(raft.offset()[0], 2.0);
+        assert!(raft.boxes().all(|b| b.max[0] <= 6.0));
+        // Driving away afterwards works.
+        raft.advance_driven(
+            &RaftFrame::default(),
+            &drive_east(-0.25),
+            &mut [],
+            &p,
+            &base,
+        );
+        assert_eq!(raft.offset()[0], 1.75);
+    }
+
+    #[test]
+    fn a_turn_that_swings_a_corner_into_a_block_is_dropped() {
+        // A 4x1 strip turns about (2, 0.5) and sweeps across cell (1, 2).
+        let mut base = MemoryWorld::new();
+        let cells: Vec<[i32; 3]> = (0..4).map(|x| [x, 64, 0]).collect();
+        let mut raft = Raft::new(&cells);
+        base.set(1, 64, 2, Block::Stone);
+        let p = phys();
+        let turn = RaftFrame {
+            yaw_delta: FRAC_PI_2,
+            ..RaftFrame::default()
+        };
+        for _ in 0..3 {
+            raft.advance_driven(&RaftFrame::default(), &turn, &mut [], &p, &base);
+        }
+        assert_eq!(raft.quarter_turns(), 0);
+        assert_eq!(raft.heading(), 0.0);
+        base.set(1, 64, 2, Block::Air);
+        raft.advance_driven(&RaftFrame::default(), &turn, &mut [], &p, &base);
+        assert_eq!(raft.quarter_turns(), 1);
+    }
+
+    #[test]
+    fn open_water_and_shallows_do_not_stop_the_raft() {
+        let (mut base, mut raft) = deck();
+        for x in 4..10 {
+            for z in 0..4 {
+                base.set(x, 64, z, Block::Water);
+                base.set(x, 63, z, Block::Sand);
+            }
+        }
+        let p = phys();
+        for _ in 0..20 {
+            raft.advance_driven(&RaftFrame::default(), &drive_east(0.25), &mut [], &p, &base);
+        }
+        assert_eq!(raft.offset()[0], 5.0);
+    }
+
+    #[test]
+    fn swell_applies_while_the_drive_is_blocked() {
+        let (mut base, mut raft) = deck();
+        base.set(4, 64, 1, Block::Stone);
+        let p = phys();
+        let swell = RaftFrame {
+            displacement: [0.0, 0.1, 0.0],
+            ..RaftFrame::default()
+        };
+        raft.advance_driven(&swell, &drive_east(0.5), &mut [], &p, &base);
+        assert_eq!(raft.offset()[0], 0.0);
+        assert!((raft.offset()[1] - 0.1).abs() < 1e-12);
     }
 
     fn settle(pl: &mut Player, p: &PlayerPhysics, w: &impl CollisionWorld) {
