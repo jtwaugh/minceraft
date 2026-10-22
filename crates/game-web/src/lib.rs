@@ -264,6 +264,7 @@ fn describe_event(e: &GameEvent) -> String {
         GameEvent::SteppedOntoRaft { player } => format!("stepped_onto_raft player={player}"),
         GameEvent::SteppedOffRaft { player } => format!("stepped_off_raft player={player}"),
         GameEvent::Landed { fall_distance } => format!("landed fall_distance={fall_distance}"),
+        GameEvent::PlayerDied { cause } => format!("player_died cause={cause}"),
     }
 }
 

@@ -69,4 +69,7 @@ pub enum GameEvent {
     /// The player landed on the ground after `fall_distance` blocks of
     /// falling (the distance fall damage used). Water landings emit nothing.
     Landed { fall_distance: f64 },
+    /// The player's health reached 0, once, after that tick's `Landed`.
+    /// `cause` is `"fall"` (the only way to die so far).
+    PlayerDied { cause: String },
 }
