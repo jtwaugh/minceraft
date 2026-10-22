@@ -192,8 +192,11 @@ impl Player {
         self.pos = [m.aabb.min[0] + half, m.aabb.min[1], m.aabb.min[2] + half];
         let pushed = input.move_forward != 0.0 || input.move_strafe != 0.0;
         let blocked_sideways = m.applied[0] != self.vel[0] || m.applied[2] != self.vel[2];
-        // A blocked-forward collision ends the sprint.
-        if blocked_sideways && input.move_forward > 0.0 {
+        // A collision that removes velocity along the facing direction ends
+        // the sprint; a strafe-only block does not.
+        let lost_along_facing =
+            (self.vel[0] - m.applied[0]) * sin - (self.vel[2] - m.applied[2]) * cos;
+        if lost_along_facing > 1e-6 && input.move_forward > 0.0 {
             self.sprinting = false;
         }
         for i in 0..3 {
