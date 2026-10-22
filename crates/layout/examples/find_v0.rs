@@ -16,6 +16,7 @@ fn main() {
             world: WorldConfig { seed: f.seed },
             levels: vec![f.level],
             route: None,
+            climate: None,
         };
         print!("{}", file.to_toml().unwrap());
         return;

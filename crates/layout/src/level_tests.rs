@@ -126,3 +126,33 @@ fn rejects_route_point_count() {
     );
     assert!(e.to_string().contains("points"));
 }
+
+#[test]
+fn climate_loads_and_round_trips() {
+    let f = LevelFile::from_toml(EXAMPLE).unwrap();
+    assert_eq!(
+        f.climate,
+        Some(Climate {
+            temp_start: -0.25,
+            temp_end: 0.15
+        })
+    );
+    assert!(f.to_toml().unwrap().contains("[climate]"));
+}
+
+#[test]
+fn missing_climate_loads() {
+    let t = EXAMPLE.split("[climate]").next().unwrap();
+    let f = LevelFile::from_toml(t).unwrap();
+    assert_eq!(f.climate, None);
+    assert!(!f.to_toml().unwrap().contains("climate"));
+}
+
+#[test]
+fn mistyped_climate_field_is_named() {
+    let t = EXAMPLE.replace("temp_end = 0.15", "temp_end = \"warm\"");
+    match LevelFile::from_toml(&t) {
+        Err(LevelFileError::Parse(m)) => assert!(m.contains("temp_end"), "{m}"),
+        other => panic!("{other:?}"),
+    }
+}
