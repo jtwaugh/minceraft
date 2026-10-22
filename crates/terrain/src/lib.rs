@@ -163,6 +163,29 @@ impl<F: Fn(i32, i32, i32, f64) -> f64> DensityClamp for F {
 }
 
 // ===========================================================================
+// EXTENSION POINT: open water (SPEC 13 sea ice)
+// ===========================================================================
+//
+// Every query receives WORLD block coordinates (x, z). Where it returns
+// true, the sea-ice step places water instead of ice at y = SEA_LEVEL - 1.
+// The column's climate is unchanged, so biomes, decoration and snow are not
+// affected. Default: none (the sea-ice rule applies everywhere).
+//
+// Any `Fn(i32, i32) -> bool` closure implements `OpenWater`.
+
+/// Columns the sea-ice step leaves as open water, in world block coordinates.
+pub trait OpenWater {
+    fn open(&self, x: i32, z: i32) -> bool;
+}
+
+impl<F: Fn(i32, i32) -> bool> OpenWater for F {
+    #[inline]
+    fn open(&self, x: i32, z: i32) -> bool {
+        self(x, z)
+    }
+}
+
+// ===========================================================================
 // Public API
 // ===========================================================================
 
@@ -181,6 +204,8 @@ impl<F: Fn(i32, i32, i32, f64) -> f64> DensityClamp for F {
 ///   order after `density` and before the `rho > 0` test.
 /// - `protected`: cells decoration must never modify (raft mask, spawn
 ///   water). Terrain itself is not affected by the mask.
+/// - `open_water`: columns the sea-ice step leaves as water (route
+///   channels). Climate is not affected.
 #[derive(Clone, Copy, Default)]
 pub struct Biases<'a> {
     pub density: &'a [&'a dyn DensityBias],
@@ -189,6 +214,7 @@ pub struct Biases<'a> {
     pub base_height: &'a [&'a dyn BaseHeightBias],
     pub clamp: &'a [&'a dyn DensityClamp],
     pub protected: Option<&'a dyn ProtectedMask>,
+    pub open_water: Option<&'a dyn OpenWater>,
 }
 
 /// Generate a `w x d` region of **terrain only** (Part I plus biome surfaces
@@ -882,6 +908,7 @@ impl Generator {
                 }
 
                 let (t, h) = clim[cx as usize];
+                let frozen = t < 0.5 && !biases.open_water.is_some_and(|o| o.open(wx, wz));
                 // Solid / water / air / sea ice (SPEC 3.6, 13).
                 for y in 0..HEIGHT {
                     let l = y >> 3;
@@ -896,7 +923,7 @@ impl Generator {
                     }
                     col[y] = if rho > 0.0 {
                         STONE
-                    } else if (y as i32) == SEA_LEVEL - 1 && t < 0.5 {
+                    } else if (y as i32) == SEA_LEVEL - 1 && frozen {
                         ICE
                     } else if (y as i32) < SEA_LEVEL {
                         WATER
@@ -907,7 +934,7 @@ impl Generator {
 
                 let ci = cx as usize;
                 let biome = biome_for(t, h);
-                self.surface(wx, wz, sn[ci], gn[ci], dn[ci], biome, t < 0.5, &mut col);
+                self.surface(wx, wz, sn[ci], gn[ci], dn[ci], biome, frozen, &mut col);
                 f(cx, cz, &col, t, h);
             }
         }
@@ -915,8 +942,9 @@ impl Generator {
 
     /// Surface pass for one column (SPEC 4).
     ///
-    /// `frozen`: the column's T < 0.5, so a water top placed at y = 63 by the
-    /// beach/stone-patch rule becomes ice like the sea fill does.
+    /// `frozen`: the column's T < 0.5 and it is not open water, so a water
+    /// top placed at y = 63 by the beach/stone-patch rule becomes ice like
+    /// the sea fill does.
     #[allow(clippy::too_many_arguments)]
     fn surface(
         &self,

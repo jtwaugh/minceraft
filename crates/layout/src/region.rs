@@ -6,7 +6,7 @@ use crate::{
 };
 use terrain::{
     generate_region_with_biases, BaseHeightBias, Biases, Block, DensityClamp, HumidityBias,
-    ProtectedMask, Region, TemperatureBias, HEIGHT,
+    OpenWater, ProtectedMask, Region, TemperatureBias, HEIGHT,
 };
 
 /// Blocks added around a region when testing term bounds. Generous on
@@ -265,6 +265,9 @@ impl Layout {
             .flatten()
             .map(|c| c as &dyn DensityClamp)
             .collect();
+        // Route channels stay free of sea ice wherever they shape the terrain
+        // (world-layout Phase G, decided in #867).
+        let open = |x: i32, z: i32| channels.iter().flatten().any(|c| c.weight(x, z) > 0.0);
         let temp = TemperatureTerms(&climate);
         let humid = HumidityTerms(&climate);
         let temperature: [&dyn TemperatureBias; 1] = [&temp];
@@ -282,6 +285,11 @@ impl Layout {
                 None
             } else {
                 Some(&exclusions as &dyn ProtectedMask)
+            },
+            open_water: if clamp.is_empty() {
+                None
+            } else {
+                Some(&open as &dyn OpenWater)
             },
             ..Biases::default()
         };
