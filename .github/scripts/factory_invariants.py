@@ -16,7 +16,7 @@ from dataclasses import dataclass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_tick import Snapshot  # noqa: E402
 os.environ.setdefault("GITHUB_REPOSITORY", "unused/unused")  # tickets.py reads it at import
-from tickets import depends_error  # noqa: E402
+from tickets import depends_error, ticket_numbers  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,16 @@ def decision_phase(issue):
     return (f.group(1), p.group(1)) if f and p else None
 
 
+def prs_by_ticket(snap):
+    """Ticket number -> sorted numbers of the open PRs for it."""
+    out = {}
+    for pr in snap.prs:
+        if pr.get("state", "open") == "open" and not pr.get("merged"):
+            for n in ticket_numbers(pr["head"], pr.get("body")):
+                out.setdefault(n, []).append(pr["number"])
+    return {n: sorted(v) for n, v in out.items()}
+
+
 def check(snap):
     by = {i["number"]: i for i in snap.issues}
     plans = {p["number"] for p in snap.plans}
@@ -54,6 +64,10 @@ def check(snap):
         bad = i.get("state") == "open" and depends_error(i.get("body") or i.get("body_excerpt"))
         if bad:
             out.add(Violation("unreadable-depends", n, f"{bad}; not started until it is"))
+    for n, prs in sorted(prs_by_ticket(snap).items()):
+        if len(prs) > 1 and by.get(n, {}).get("state") == "open":
+            out.add(Violation("duplicate-prs", f"issue#{n}",
+                              f"open PRs {', '.join(f'#{p}' for p in prs)}; close all but one"))
     for doc in snap.docs:
         if doc.get("status") == "accepted" and not doc.get("phases"):
             out.add(Violation("accepted-doc-without-phases", doc["file"]))

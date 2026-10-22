@@ -2,7 +2,7 @@
 
 `ready(snapshot) -> [Action("start_ticket", "issue#n")]`, over a `Snapshot`
 and no live calls. The rules are the ones `tickets.py` documents (its pure
-helpers are reused), with one change: a ticket that depends on a plan, or
+helpers are reused; a `local` ticket is never started), with one change: a ticket that depends on a plan, or
 whose "Depends on" line can't be read, is never started, and is left for
 the invariants report.
 
@@ -74,7 +74,8 @@ def ready(snap):
         n = t["number"]
         open_, plans = _waiting_on(t, by_number)
         if (open_ or plans or tickets.depends_error(_body(t))
-                or tickets.has_open_pr(n, prs) or _auto_started(t)):
+                or tickets.has_open_pr(n, prs) or _auto_started(t)
+                or tickets.LOCAL in t.get("labels", [])):
             continue
         preds = tickets.predicted_files(_body(t))
         if preds and any(not tickets.is_pr_for(n, p) and tickets.overlap(preds, p["files"])

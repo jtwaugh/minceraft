@@ -63,6 +63,15 @@ class Pass(unittest.TestCase):
         s.codeowners = None
         self.assertEqual(auto_merge(s), [])
 
+    def test_two_prs_for_one_ticket_both_wait(self):
+        """#903 and #905 both built #900 and both got Ready: merge neither."""
+        twin = pr(number=10, head="claude/issue-7-sea-ice")
+        self.assertEqual(auto_merge(snap(pr(), twin)), [])
+        local = pr(number=10, head="jtwaugh/sea-ice", body="Closes #7")
+        self.assertEqual(why_not(snap(pr(), local), pr()), "another open PR is for the same ticket (#10)")
+        self.assertEqual([a.target for a in auto_merge(snap(pr(), pr(number=10, head="claude/issue-8-x")))],
+                         ["pr#9"])
+
     def test_only_ticket_prs(self):
         self.assertEqual(auto_merge(snap(pr(head="jtwaugh/some-fix"))), [])
         self.assertEqual(auto_merge(snap(pr(head="claude/issue-8-20260101-0000"))), [])  # not a factory ticket

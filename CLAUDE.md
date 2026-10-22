@@ -144,6 +144,11 @@ or `preview.mjs` shows; `viewer/pkg/` is stale until you do.
 Keep PRs to one issue. Don't reformat or refactor code you weren't asked
 to touch.
 
+Working on a ticket outside the factory (a local session)? Label it
+`local` before you start (`gh issue edit <n> --add-label local`), and run
+`python3 .github/scripts/tickets.py claimed <n> <your branch>` before
+opening the PR: if it prints anything, someone else is already building it.
+
 ## Answering a review
 
 When you're asked to fix a review's blockers or nits:

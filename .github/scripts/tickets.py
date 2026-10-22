@@ -9,8 +9,14 @@
                            request (or other ticket in the list) is editing.
   tickets.py check <n>     Print true if ticket #n would be in `ready` now,
                            else false.
-  tickets.py has-pr <n>    Print true if ticket #n has an open pull request
-                           (claude.yml's check on a run the tick dispatched).
+  tickets.py has-pr <n>    Print true if ticket #n has an open pull request.
+  tickets.py claimed <n> [<branch>]
+                           Print why ticket #n must not be started (or get
+                           another PR), or nothing: an open PR, the `local`
+                           label, or a `claude/issue-<n>-` branch other than
+                           <branch> with unmerged work and no PR. claude.yml
+                           checks it before starting, and the implementer
+                           again before opening its PR.
 
 The factory tick decides what to start (factory_ready.py, which reuses the
 pure helpers here); `ready` and `check` print the same rules from the API.
@@ -34,6 +40,9 @@ Files every feature touches (lib.rs, mod.rs, Cargo.toml, Cargo.lock) don't
 count; conflicts there are trivial and resolved after each merge
 (resolve-conflicts.yml). When that pull request merges, the next factory
 tick starts the ticket.
+
+A ticket labelled `local` is never started: label it before working on it in
+a local session, so the factory doesn't build it a second time.
 """
 import json
 import os
@@ -165,6 +174,46 @@ def busy_prs(ticket, prs):
     return out
 
 
+CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?) #(\d+)\b", re.I)
+LOCAL = "local"  # label: someone is working on the ticket outside the factory
+
+
+def ticket_numbers(ref, body):
+    """Tickets a PR is for: the number in a `claude/issue-<n>-` branch, else
+    every "Closes #n" in its body."""
+    m = re.match(r"claude/issue-(\d+)-", ref or "")
+    return {int(m.group(1))} if m else {int(n) for n in CLOSES.findall(body or "")}
+
+
+def stray_branches(n, mine=""):
+    """`claude/issue-<n>-` branches (other than `mine`) with commits master
+    lacks and no pull request, open or closed: work in progress elsewhere."""
+    owner = REPO.split("/")[0]
+    out = []
+    for ref in gh(f"repos/{REPO}/git/matching-refs/heads/claude/issue-{n}-"):
+        branch = ref["ref"].removeprefix("refs/heads/")
+        if branch == mine or gh(f"repos/{REPO}/pulls?state=all&head={owner}:{branch}"):
+            continue
+        if gh(f"repos/{REPO}/compare/master...{branch}")["ahead_by"] > 0:
+            out.append(branch)
+    return out
+
+
+def claimed(n, mine=""):
+    """Why ticket #n must not be started (or get a second PR), or None: an
+    open PR for it, the `local` label, or a branch for it with unmerged work
+    and no PR (a local session that hasn't opened its PR yet)."""
+    if has_open_pr(n, open_prs()):
+        return f"#{n} already has an open pull request"
+    if LOCAL in {lb["name"] for lb in fetch(n).get("labels", [])}:
+        return f"#{n} is labelled `{LOCAL}`: someone is working on it outside the factory"
+    stray = stray_branches(n, mine)
+    if stray:
+        return (f"branch `{stray[0]}` has work for #{n} and no pull request; "
+                "open its PR, or delete the branch to let the factory start")
+    return None
+
+
 def has_open_pr(n, prs):
     pat = re.compile(rf"\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #{n}\b", re.I)
     return any(pr["head"]["ref"].startswith(f"claude/issue-{n}-") or pat.search(pr.get("body") or "")
@@ -204,6 +253,10 @@ def ready_tickets(prs):
         if has_open_pr(n, prs):
             print(f"#{n}: already has an open PR", file=sys.stderr)
             continue
+        if LOCAL in {lb["name"] for lb in t.get("labels", [])}:
+            print(f"#{n}: labelled {LOCAL}; someone is working on it outside the factory",
+                  file=sys.stderr)
+            continue
         if auto_started(n):
             print(f"#{n}: already started automatically once; relabel or @claude to retry",
                   file=sys.stderr)
@@ -235,6 +288,8 @@ def main():
         print(json.dumps(ready_tickets(open_prs())))
     elif mode == "has-pr":
         print("true" if has_open_pr(int(sys.argv[2]), open_prs()) else "false")
+    elif mode == "claimed":  # claimed <n> [<my branch>]: print why not to start, or nothing
+        print(claimed(int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else "") or "")
     elif mode == "check":
         n = int(sys.argv[2])
         print("true" if n in ready_tickets(open_prs()) else "false")
