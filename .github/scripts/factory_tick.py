@@ -248,6 +248,10 @@ class FakeBackend(Backend):
         elif action.kind == "merge_pr":
             pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
             pr["merged"] = True
+        elif action.kind == "supersede_pr":
+            pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
+            pr["labels"] = [*pr.get("labels", []), "superseded"]
+            pr["draft"] = True
         elif action.kind == "close_issue" and issue is not None:
             issue["state"] = "closed"
             if "reason" in action.payload:
@@ -302,7 +306,8 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, stalls, rerun, report, plans, ready, merge, board."""
+    """The fixed order: invariants, supersede, stalls, rerun, report, plans, ready,
+    merge, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
@@ -310,10 +315,12 @@ def passes():
     from factory_report import report
     from factory_rerun import rerun_failed
     from factory_stalls import stalls
+    from factory_supersede import superseded
+
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, stalls, rerun_failed, report, close_finished_plans, ready, auto_merge, board_pass]
+    return [invariants, superseded, stalls, rerun_failed, report, close_finished_plans, ready, auto_merge, board_pass]
 
 
 def main(argv):

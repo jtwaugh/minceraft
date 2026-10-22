@@ -73,7 +73,23 @@ jobs:
       issues: write
       id-token: write
     steps:
+      # This job may have queued behind another run on the same PR (each
+      # merge starts a `find`), so check again: same head, not superseded,
+      # and nobody stopped on it in the meantime.
       - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          path: gate
+      - name: Still worth resolving?
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY_PR: ${{ inputs.pr }}
+        run: |
+          go=$(python3 -B gate/.github/scripts/conflicts.py still ${{ matrix.pr.number }} ${{ matrix.pr.sha }})
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.gate.outputs.go == 'true'
         with:
           ref: ${{ matrix.pr.branch }}
           fetch-depth: 0
@@ -83,12 +99,16 @@ jobs:
           persist-credentials: false
       - name: Note the start time
         id: start
+        if: steps.gate.outputs.go == 'true'
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/toolchain
+        if: steps.gate.outputs.go == 'true'
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
+        if: steps.gate.outputs.go == 'true'
         uses: ./.github/actions/claude-deps
       - id: claude
+        if: steps.gate.outputs.go == 'true'
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         with:
           path_to_bun_executable: ${{ steps.claude-deps.outputs.bun }}
@@ -136,12 +156,12 @@ jobs:
       # Did the branch move (merge pushed), or did Claude say why it stopped?
       - name: Check the run left its result
         id: check
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.go == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -B .github/scripts/expect.py conflict "${{ matrix.pr.number }}@${{ matrix.pr.sha }}" "${{ steps.start.outputs.at }}"
       - name: Report the run
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gate.outputs.go == 'true' }}
         uses: ./.github/actions/claude-report
         with:
           execution-file: ${{ steps.claude.outputs.execution_file }}
