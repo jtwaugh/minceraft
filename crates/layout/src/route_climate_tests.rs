@@ -38,9 +38,7 @@ fn one_along_path_over_the_route_with_data_file_values() {
     };
     let expect: Vec<_> = route.points.iter().map(|p| (p[0], p[1])).collect();
     assert_eq!(points, &expect);
-    assert_eq!((*d_temp_start, *d_temp_end), (-0.55, 0.55));
     assert_eq!((*d_humid_start, *d_humid_end), (0.0, 0.0));
-    assert_eq!((*half_width, *falloff), (64.0, 64.0));
     assert_eq!(
         (*d_temp_start, *d_temp_end, *half_width, *falloff),
         (
