@@ -117,6 +117,12 @@ class Snapshot:
                 pr["runs"] = [{"id": r["id"], "name": r["name"], "conclusion": r["conclusion"],
                                "run_attempt": r["run_attempt"]}
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
+                raw = paged(f"repos/{repo}/issues/{pr['number']}/comments")
+                from factory_fix import verdict
+                pr["verdict"] = verdict(raw)
+                pr["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
+                                   "created_at": c["created_at"]}
+                                  for c in raw if c["user"]["login"] in tickets.TRUSTED]
         # Only docs/ branches matter (the stalls pass); reading just those is
         # one call however many claude/ branches pile up.
         refs = get(f"repos/{repo}/git/matching-refs/heads/docs")  # every match, unpaged
@@ -180,6 +186,20 @@ class FakeBackend(Backend):
             pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
             run = next(r for r in pr["runs"] if r["id"] == action.payload["run_id"])
             run["run_attempt"], run["conclusion"] = run["run_attempt"] + 1, None
+        elif action.kind == "start_fix":
+            from factory_fix import marker
+            pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
+            pr.setdefault("comments", []).append({
+                "user": "github-actions[bot]",
+                "body": marker(action.payload["kind"], action.payload["head"]),
+                "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        elif action.kind == "open_question":
+            if not any(action.payload["key"] in i["body"] for i in snapshot.issues):
+                snapshot.issues.append({
+                    "number": max([i["number"] for i in snapshot.issues], default=0) + 1,
+                    "title": action.payload["title"], "state": "open",
+                    "labels": [action.payload["label"]], "kind": "question",
+                    "body": action.payload["body"]})
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         elif action.kind == "create_issue":
@@ -224,9 +244,10 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, stalls, rerun, report, plans, ready, board."""
+    """The fixed order: invariants, stalls, rerun, nits, report, plans, ready, board."""
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
+    from factory_nits import nits
     from factory_ready import ready
     from factory_report import report
     from factory_rerun import rerun_failed
@@ -234,7 +255,7 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, stalls, rerun_failed, report, close_finished_plans, ready, board_pass]
+    return [invariants, stalls, rerun_failed, nits, report, close_finished_plans, ready, board_pass]
 
 
 def main(argv):

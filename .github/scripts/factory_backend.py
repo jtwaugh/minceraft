@@ -168,5 +168,7 @@ class GhBackend(Backend):
             self._gh("api", "-X", "POST", f"repos/{r}/actions/runs/{p['run_id']}/rerun-failed-jobs")
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
-        elif k != "report":  # a report is only remembered; the report pass writes the issue
+        elif k not in ("report", "start_fix", "open_question"):
+            # A report is only remembered; the report pass writes the issue.
+            # start_fix and open_question have no live write yet (later ticket).
             raise ValueError(f"unhandled action {k} on {t}")
