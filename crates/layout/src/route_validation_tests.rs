@@ -131,3 +131,54 @@ fn route_without_channel_term_fails_channel_clear() {
     let r = validate_route(&l, &levels(), &route(), &Thresholds::shipped());
     assert!(!check(&r, CHECK_CHANNEL_CLEAR).passed);
 }
+
+fn named<'a>(r: &'a ValidationReport, name: &str) -> Vec<&'a CheckResult> {
+    r.checks.iter().filter(|c| c.name == name).collect()
+}
+
+#[test]
+fn treeless_island_fails_the_tree_check_naming_the_level() {
+    // Sea over the islands' windows too: no island at all, so no trees.
+    let mut l = layout(false, Some(0.0));
+    l.density.push(radial((50.0, 400.0), 300.0, -60.0));
+    let r = validate_route(&l, &levels(), &route(), &Thresholds::shipped());
+    let trees = named(&r, CHECK_TREES);
+    assert_eq!(trees.len(), 2, "{r:?}");
+    assert!(trees.iter().all(|c| !c.passed));
+    assert!(trees[0].required.starts_with("one:") && trees[1].required.starts_with("two:"));
+}
+
+#[test]
+fn both_decorated_checks_are_reported_per_level() {
+    let r = validate_route(
+        &layout(false, Some(0.0)),
+        &levels(),
+        &route(),
+        &Thresholds::shipped(),
+    );
+    assert_eq!(named(&r, CHECK_TREES).len(), 2);
+    assert_eq!(named(&r, CHECK_CLEAR_FLAT).len(), 2);
+}
+
+#[test]
+fn decorated_results_do_not_depend_on_window_origin() {
+    // Shifting the whole world (layout density, levels, route) is not the
+    // same world, so compare overlapping windows of one layout instead.
+    let l = layout(false, Some(0.0));
+    let t = Thresholds::shipped();
+    let (x0, z0, w, d) = crate::window(&levels()[0], &t);
+    let big = l.generate_region(x0 - 17, z0 - 9, w + 40, d + 25, true);
+    let small = l.generate_region(x0, z0, w, d, true);
+    for z in 0..d {
+        for x in 0..w {
+            let (bi, si) = (big.index(x + 17, 0, z + 9), small.index(x, 0, z));
+            assert_eq!(
+                big.blocks[bi..bi + terrain::HEIGHT],
+                small.blocks[si..si + terrain::HEIGHT]
+            );
+        }
+    }
+    let a = validate_route(&l, &levels(), &route(), &t);
+    let b = validate_route(&l, &levels(), &route(), &t);
+    assert_eq!(format!("{a:?}"), format!("{b:?}"));
+}
