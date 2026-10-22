@@ -61,6 +61,15 @@ class Test(unittest.TestCase):
         self.assertEqual(run(s), [])
         self.assertEqual(len([i for i in s.issues if "needs-you" in i["labels"]]), 1)
 
+    def test_moved_head_does_not_ask_again(self):
+        s = snap()
+        run(s)
+        for sha in (H2, "c" * 40):
+            s.prs[0]["sha"] = sha
+            s.prs[0]["verdict"]["commit"] = sha[:7]
+            run(s)
+        self.assertEqual(len([i for i in s.issues if "needs-you" in i["labels"]]), 1)
+
     def test_ready_after_fix_is_quiet(self):
         s = snap(sha=H2, kind="ready", comments=[
             {"user": "github-actions[bot]", "body": marker(9, H1, "nits")}])

@@ -20,14 +20,14 @@ from factory_tick import Action  # noqa: E402
 LABEL = "needs-you"
 
 
-def question_key(pr_number, head):
-    return f"<!-- factory-question pr={pr_number} cause=nits head={head} -->"
+def question_key(pr_number):
+    return f"<!-- factory-question pr={pr_number} cause=nits -->"
 
 
 def question_body(pr, nits):
     items = "\n".join(f"{n}. {t}\n   - fix it, leave it, or make it a follow-up ticket?"
                       for n, t in enumerate(nits, 1))
-    return (f"{question_key(pr['number'], pr['sha'])}\n"
+    return (f"{question_key(pr['number'])}\n"
             f"PR #{pr['number']} was fixed once for the reviewer's nits, and the re-review of "
             f"`{pr['sha'][:7]}` still says \"Ready, with nits\". Decide each remaining nit:\n\n"
             f"{items}\n")
@@ -46,7 +46,7 @@ def nits(snap):
         if pr["sha"] in started:
             continue
         if started:  # a fix on an earlier head, and nits remain
-            key = question_key(pr["number"], pr["sha"])
+            key = question_key(pr["number"])  # per PR, not per head: one question ever
             if not any(key in i["body"] for i in snap.issues):
                 out.append(Action("open_question", f"issue#{ticket_of(snap, pr)}", {
                     "label": LABEL, "key": key,

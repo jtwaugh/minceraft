@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from factory_fix import marker  # noqa: E402
 
 
 REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
@@ -181,7 +182,6 @@ class FakeBackend(Backend):
             run = next(r for r in pr["runs"] if r["id"] == action.payload["run_id"])
             run["run_attempt"], run["conclusion"] = run["run_attempt"] + 1, None
         elif action.kind == "start_fix":
-            from factory_fix import marker
             pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
             pr.setdefault("comments", []).append({
                 "user": "github-actions[bot]",
