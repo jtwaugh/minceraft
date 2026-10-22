@@ -6,7 +6,7 @@ use crate::{
 };
 use terrain::{
     generate_region_with_biases, BaseHeightBias, Biases, Block, DensityClamp, HumidityBias,
-    ProtectedMask, Region, TemperatureBias, HEIGHT,
+    OpenWater, ProtectedMask, Region, TemperatureBias, HEIGHT,
 };
 
 /// Blocks added around a region when testing term bounds. Generous on
@@ -108,6 +108,15 @@ fn intersects(bounds: Option<Bounds>, region: Bounds) -> bool {
             && b.1 <= region.3 + BOUNDS_PAD
             && b.3 >= region.1 - BOUNDS_PAD
     })
+}
+
+/// Columns inside any channel's reach (weight above 0) stay free of sea ice.
+struct ChannelsOpen<'a>(&'a [Option<ChannelEval>]);
+
+impl OpenWater for ChannelsOpen<'_> {
+    fn open(&self, x: i32, z: i32) -> bool {
+        self.0.iter().flatten().any(|c| c.weight(x, z) > 0.0)
+    }
 }
 
 impl Layout {
@@ -269,6 +278,7 @@ impl Layout {
         let humid = HumidityTerms(&climate);
         let temperature: [&dyn TemperatureBias; 1] = [&temp];
         let humidity: [&dyn HumidityBias; 1] = [&humid];
+        let open = ChannelsOpen(&channels);
         let biases = Biases {
             temperature: if climate.is_empty() {
                 &[]
@@ -283,6 +293,7 @@ impl Layout {
             } else {
                 Some(&exclusions as &dyn ProtectedMask)
             },
+            open_water: if clamp.is_empty() { None } else { Some(&open) },
             ..Biases::default()
         };
         f(&biases)
