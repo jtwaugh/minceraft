@@ -312,6 +312,10 @@ mod route_validation;
 pub use route_validation::{
     anchorage_paths, validate_route, CHECK_ANCHORAGE_REACHABLE, CHECK_CHANNEL_CLEAR,
 };
+mod route_biome;
+pub use route_biome::{
+    anchorage_temperature, is_cold, is_warm, island_biome, island_is_cold, island_is_warm,
+};
 mod route_layout;
 pub use route_layout::build_route_layout;
 mod route_retry;
@@ -374,6 +378,10 @@ mod region_coord_tests;
 mod region_tests;
 #[cfg(test)]
 mod retry_tests;
+#[cfg(test)]
+mod route_biome_tests;
+#[cfg(test)]
+mod route_climate_tests;
 #[cfg(test)]
 mod route_layout_tests;
 #[cfg(test)]

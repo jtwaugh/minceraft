@@ -35,6 +35,9 @@
 //   stand planter               the same, on the islet's first planter
 //   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
 //                               looks at after `stand field`; `place tall_grass` puts tall grass there
+//   runway <n>                  raft scene: stone ground n blocks long running ahead (-z) from the field's
+//                               back edge, a 2-high stone wall across its end, and the player on its
+//                               start facing along it (pitch level)
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye, for `moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
@@ -52,7 +55,7 @@
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
-// sprinting (true|false: the player is sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -104,6 +107,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   const fly = stream ? new FlyCamera(50.5, 110, 40.5) : new FlyCamera(32, 94, 32);
   const controller = createController({
     input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly', stream: stream ? { budget: 1 } : null,
+    sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds },
   });
   const seen = [];
   const frame = controller.frame;
@@ -169,7 +173,7 @@ function read(w, path) {
   if (path === 'locked') return w.input.locked;
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
-  if (['ticks', 'alpha', 'yaw', 'pitch', 'underwater'].includes(path)) return s[path];
+  if (['ticks', 'alpha', 'yaw', 'pitch', 'fov', 'underwater'].includes(path)) return s[path];
   if (path === 'belt.selected') return s.belt.selected;
   if (/^belt\.slot\.[1-9]$/.test(path)) return s.belt.slots[+path.slice(-1) - 1] ?? 'none';
   if (path === 'hands') return s.belt.hands ?? 'none';
@@ -284,6 +288,24 @@ function step(w, { op, args }) {
       w.walk.teleport(fx + m + 0.5, w.scene.field_y + 1, fz + m + 0.5);
       // far more than a quarter turn, so the pitch clamps at straight down
       fire(document, 'mousemove', { movementX: 0, movementY: 2000 });
+      w.controller.frame(0.05);
+      return;
+    }
+    case 'runway': {
+      const n = Number(args[0]);
+      if (!w.scene || !(n >= 1)) throw new Error('runway <n> (raft scene only)');
+      const [fx, fz] = w.scene.field, y = w.scene.field_y;
+      for (let dz = 0; dz <= n; dz++) {
+        for (let dx = 0; dx < w.scene.field_size; dx++) {
+          const wall = dz === n;
+          for (const h of wall ? [1, 2] : [0]) {
+            if (!w.walk.place_block(fx + dx, y + h, fz + 2 - dz, B.stone)) throw new Error('cannot build runway');
+          }
+        }
+      }
+      w.walk.teleport(fx + 1.5, y + 1, fz + 2.5);
+      fire(document, 'mousemove', { movementX: 0, movementY: -2000 });
+      fire(document, 'mousemove', { movementX: 0, movementY: 0 });
       w.controller.frame(0.05);
       return;
     }

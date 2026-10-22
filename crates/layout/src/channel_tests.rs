@@ -252,3 +252,40 @@ fn channel_open_water_agrees_across_regions() {
         }
     }
 }
+
+#[test]
+fn channel_columns_stay_free_of_sea_ice() {
+    let seed = 4242;
+    let mut l = layout(seed);
+    l.climate.push(ClimateBias::AlongPath {
+        points: vec![(-60.0, 0.0), (60.0, 0.0)],
+        d_temp_start: -1.0,
+        d_temp_end: -1.0,
+        d_humid_start: 0.0,
+        d_humid_end: 0.0,
+        half_width: 100.0,
+        falloff: 10.0,
+    });
+    let ice = Block::Ice as u8;
+    let big = l.generate_region(-50, -40, 100, 80, true);
+    let mut ice_outside = 0;
+    for wz in -40..40 {
+        for wx in -50..50 {
+            let has_ice = column(&big, wx, wz).contains(&ice);
+            if wz.abs() < (HALF + FALL) as i32 {
+                assert!(!has_ice, "ice in the channel at ({wx},{wz})");
+            }
+            ice_outside += has_ice as u32;
+        }
+    }
+    assert!(ice_outside > 100, "cold sea not frozen: {ice_outside}");
+    for decorate in [false, true] {
+        let big = l.generate_region(-50, -40, 100, 80, decorate);
+        let small = l.generate_region(-17, -9, 40, 30, decorate);
+        for wz in -9..21 {
+            for wx in -17..23 {
+                assert_eq!(column(&small, wx, wz), column(&big, wx, wz));
+            }
+        }
+    }
+}

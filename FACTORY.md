@@ -91,7 +91,10 @@ decides what should happen next (decision 14).
 7. **Review.** CI runs the checks, including PR size. A separate reviewer
    agent, which did not write the code, reviews it and posts "Ready",
    "Ready, with nits" or "Blocked", naming the commit it reviewed. A failed
-   check is re-run once by the tick before anyone looks at it.
+   check is re-run once by the tick before anyone looks at it. A PR whose
+   CI failed only because `master` was red at the time gets its branch
+   updated by the tick once `master` is green again
+   (`factory_refresh.py`), so it is tested and reviewed afresh.
 8. **Merge.** A ticket PR the reviewer called "Ready", with every
    required check green, is merged by the factory tick on the exact commit
    that was reviewed (`factory_automerge.py`). Everything else (nits,

@@ -101,6 +101,9 @@ class GhBackend(Backend):
         if k == "merge_pr":
             pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
             return pr is None or pr.get("merged", False)
+        if k == "update_branch":
+            pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
+            return pr is None or pr["sha"] != p["sha"]
         if k == "supersede_pr":
             pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
             return pr is None or "superseded" in pr.get("labels", [])
@@ -186,6 +189,15 @@ class GhBackend(Backend):
             except RuntimeError as e:  # e.g. a push or a new check since the read
                 self.failed.append((action, str(e)))
                 return True  # not merged: don't mirror it
+        elif k == "update_branch":
+            # As the maintainer (PROJECT_TOKEN): a merge pushed with the workflow
+            # token starts no workflows, so CI and the reviewer would never run.
+            try:
+                self._gh("api", "-X", "PUT", f"repos/{r}/pulls/{n}/update-branch",
+                         "-f", f"expected_head_sha={p['sha']}", project=True)
+            except RuntimeError as e:  # a conflict, or a push since the read
+                self.failed.append((action, str(e)))
+                return True  # not updated: don't mirror it
         elif k == "supersede_pr":
             self._gh("pr", "comment", n, "--repo", r, "--body", p["comment"])
             # REST creates the label if it doesn't exist yet; `gh pr edit` wouldn't.
