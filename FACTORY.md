@@ -48,12 +48,15 @@ with its own instructions and its own narrow set of allowed tools.
 | Reconciler | [`claude-idea.yml`](.github/workflows/claude-idea.yml) | An issue is labelled `idea` | Checks the idea against the code, SPEC.md and other docs; opens a PR adding it as a design doc | Change anything but that one doc |
 | Planner | [`claude-plan.yml`](.github/workflows/claude-plan.yml) | SPEC.md or a design doc changes on `master` | Breaks the next phase or changed sections into small tickets and questions | Write code, or add the `factory` label |
 | Spec editor | [`claude-spec.yml`](.github/workflows/claude-spec.yml) | The maintainer comments `/decide <option>` on a question | Records the answer in the spec or doc it's about | Add facts about the original game; touch any other file |
-| Implementer | [`claude.yml`](.github/workflows/claude.yml) | A ticket is labelled `factory` and its dependencies are closed; any issue closing (it starts tickets that just became unblocked); `@claude` in a comment | Writes the code and tests, runs every check, opens a PR | Edit SPEC.md, design docs or workflows; rebase or force-push |
-| Reviewer | [`claude-review.yml`](.github/workflows/claude-review.yml) | A PR opens or changes | Reviews it against the spec, the rules in CLAUDE.md, and determinism; its verdict is a required check ([`review-gate.yml`](.github/workflows/review-gate.yml)) | Approve, merge, or override its own block |
-| Docs updater | [`claude-docs.yml`](.github/workflows/claude-docs.yml) | A phase's last ticket closes; every Monday | Marks finished phases done; re-checks docs against the code | Change anything but design docs |
+| Implementer | [`claude.yml`](.github/workflows/claude.yml) | The factory tick starts a `factory` ticket whose dependencies are closed and whose files no open PR is editing; `@claude` in a comment | Writes the code and tests, runs every check, opens a PR | Edit SPEC.md, design docs or workflows; rebase or force-push |
+| Reviewer | [`claude-review.yml`](.github/workflows/claude-review.yml) | A PR opens or changes | Reviews it against the spec, the rules in CLAUDE.md, and determinism; a re-review checks its earlier points and the new commits only. Its verdict is the `review-verdict` check ([`review-gate.yml`](.github/workflows/review-gate.yml)) | Approve, merge, or override its own block |
+| Conflict resolver | [`resolve-conflicts.yml`](.github/workflows/resolve-conflicts.yml) | A PR merges | Merges `master` into each `claude/` PR that now conflicts, keeping both sides, and runs the checks; stops and says so when a conflict needs a decision | Touch PRs not opened by the factory |
+| Docs updater | [`claude-docs.yml`](.github/workflows/claude-docs.yml) | The tick asks for a closed plan's phase-done PR; every Monday | Marks finished phases done; re-checks docs against the code | Change anything but design docs |
 
-Plus [`ci.yml`](.github/workflows/ci.yml), which is not an agent: plain
-checks that every PR must pass.
+Plus two that are not agents: [`ci.yml`](.github/workflows/ci.yml), plain
+checks that every PR must pass, and the factory tick
+([`factory-tick.yml`](.github/workflows/factory-tick.yml)), a script that
+decides what should happen next (decision 14).
 
 ## The loop, step by step
 
@@ -77,19 +80,20 @@ checks that every PR must pass.
    `/decide B`, and the spec editor opens a PR writing that answer into the
    document, marked "(Decided in #N)".
 6. **Build.** The maintainer labels tickets `factory`, all at once if they
-   like. A ticket whose dependencies are still open says what it's waiting
-   on; whenever an issue closes, every approved ticket that has just become
-   unblocked starts by itself. The implementer writes the code, runs the
+   like. The factory tick starts each one once its dependencies are closed
+   and no open PR is editing the files it names, and shows on the project
+   board what the rest are waiting on. The implementer writes the code, runs the
    same checks as CI, and opens a PR that cites the spec sections it
    implements and says whether generated worlds change.
 7. **Review.** CI runs the checks, including PR size. A separate reviewer
    agent, which did not write the code, reviews it and posts "Ready",
-   "Ready, with nits" or "Blocked", naming the commit it reviewed.
+   "Ready, with nits" or "Blocked", naming the commit it reviewed. A failed
+   check is re-run once by the tick before anyone looks at it.
 8. **Merge.** Only the maintainer can merge, and only when the
    `review-verdict` check is green: the reviewer said Ready about the
    latest commit, or the maintainer overrode its block with a reason.
-9. **Next phase.** When a phase's last ticket closes, the docs updater
-   closes the plan and opens a PR marking the phase done. Merging that PR
+9. **Next phase.** When a phase's last ticket closes, the tick closes the
+   plan and the docs updater opens a PR marking the phase done. Merging that PR
    changes the doc, which starts the planner on the next phase.
 10. **Drift.** Every Monday the docs updater re-checks every accepted doc
     against the code and opens a PR for any that no longer match.
@@ -103,8 +107,10 @@ whether a change is good. Everything mechanical is automated. To keep that
 split real:
 
 - agents can't approve or merge pull requests;
-- `master` is protected: every change goes through a PR with passing checks,
-  including the required `review-verdict` and `PR size` checks;
+- `master` is protected: every change goes through a PR with passing checks.
+  `review-verdict` and `PR size` must be listed as required checks in the
+  branch protection settings for the reviewer's blocks, `/override` and
+  `oversize-ok` to mean anything; until they are, both only advise;
 - [`CODEOWNERS`](.github/CODEOWNERS) requires the maintainer's review for
   the files that steer the agents: SPEC.md, CLAUDE.md, design docs,
   workflows, the art brief;
@@ -198,8 +204,16 @@ noise. Now:
 
 - **Three verdicts.** "Ready", "Ready, with nits" (never blocks) and
   "Blocked". A blocker must be a clean-room or world-output problem, a
-  concrete defect with file, line, trigger and expected behaviour, or an
-  unchecked claim. Everything else is a nit.
+  concrete defect with file, line, trigger and expected behaviour, an
+  unchecked claim, or a test meant to guard a fix that still passes with
+  the fix undone. Everything else is a nit, and a point that needs no
+  change is a **note**, which never affects the verdict.
+- **Re-reviews converge.** After a push, the reviewer checks off its
+  earlier points and reviews only the new commits, so it doesn't turn up a
+  fresh set of nits on every round. Before this, asking for nits to be
+  fixed took a median of two extra rounds, and up to five, because each
+  re-review started from scratch, repeated points it had said needed no
+  change, and found nits in the comments written to answer the last ones.
 - **Evidence.** The reviewer has the CI toolchain and proves a defect
   with a test that fails on the PR, pasted into its comment.
 - **A required check.** [`review_gate.py`](.github/scripts/review_gate.py)
@@ -312,6 +326,27 @@ billing. Each agent has a turn limit, workflows for the same issue queue
 instead of running in parallel, and Actions minutes are free on public
 repositories.
 
+### 14. One tick decides what happens next
+
+Until #754 the factory was a dozen workflows, each reacting to its own
+slice of issue, label and PR events. It stalled in ways none of them
+noticed, and on 2026-10-20 a project-sync storm used up the API budget
+(see [`factory-orchestrator.md`](docs/design/factory-orchestrator.md)).
+Now one workflow, the factory tick, re-reads the issues, PRs, plans and
+board and does whatever differs from what should be true: it starts ready
+tickets, re-runs a failed check once per commit, closes finished plans and
+asks for their phase-done PRs, keeps the project board in step, and keeps
+one "Factory: stalled work" issue listing anything stuck or inconsistent.
+It is level-triggered, so a second tick straight after does nothing and a
+missed event costs one tick, not a stuck phase. Events make it run within
+a minute; a five-minute schedule is the heartbeat. The passes are plain,
+tested scripts (`.github/scripts/factory_*.py`).
+
+Not built yet (Phase A of the orchestrator doc): a fix attempt for a
+blocked PR without anyone asking, one nits pass per PR followed by a single
+question instead of open-ended rounds, and a queue of what waits on the
+maintainer.
+
 ## Using it
 
 | To | Do |
@@ -327,7 +362,10 @@ repositories.
 | Allow a PR over 200 lines | Add the `oversize-ok` label |
 | Measure a branch like CI does | `python3 .github/scripts/pr_size.py origin/master HEAD` |
 | Bring a stuck PR up to date | Click "Update branch", or comment `@claude merge master into this branch and resolve the conflicts` |
-| See what's waiting | `gh issue list -l planned` |
+| See what's waiting | The project board, or `gh issue list -l planned` |
+| See what's stuck | The "Factory: stalled work" issue |
+| Run a tick by hand | `gh workflow run factory-tick.yml` (add `-f dry-run=true` to only print what it would do) |
+| Resolve conflicts on one PR | `gh workflow run resolve-conflicts.yml -f pr=<n>` |
 
 ## Map of the files
 
@@ -344,6 +382,9 @@ docs/design/                    design docs (README.md: format and lifecycle)
 .github/scripts/tickets.py      which approved tickets are unblocked
 .github/scripts/review_gate.py  the reviewer's verdict as the review-verdict status
 .github/scripts/pr_size.py      reviewable lines in a change
+.github/scripts/factory_tick.py the tick: snapshot, passes, backend
+.github/scripts/factory_*.py    the tick's passes (ready, rerun, plans, board, stalls, invariants, report)
+.github/scripts/planner_issue.py  the only way agents file plans, tickets and questions
 .github/workflows/
   ci.yml                        checks on every PR
   claude-idea.yml               reconciler
@@ -353,6 +394,8 @@ docs/design/                    design docs (README.md: format and lifecycle)
   claude-review.yml             reviewer
   review-gate.yml               review-verdict status (verdicts, /override)
   pr-size.yml                   PR size check
+  factory-tick.yml              the factory tick
+  resolve-conflicts.yml         conflict resolver
   claude-docs.yml               docs updater
 ```
 
@@ -363,3 +406,5 @@ docs/design/                    design docs (README.md: format and lifecycle)
 - **Preview deploys:** a live viewer link on every PR.
 - **Plan-level approval:** labelling a whole plan to build its tickets in
   order, instead of labelling each ticket.
+- **The rest of the tick's Phase A:** fix attempts for blocked PRs, the
+  one-pass nits cap, and the needs-you queue (decision 14).
