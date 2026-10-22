@@ -84,7 +84,10 @@ decides what should happen next (decision 14).
    and no open PR is editing the files it names, and shows on the project
    board what the rest are waiting on. The implementer writes the code, runs the
    same checks as CI, and opens a PR that cites the spec sections it
-   implements and says whether generated worlds change.
+   implements and says whether generated worlds change. A ticket is never
+   built twice: it isn't started while an open PR, the `local` label or a
+   pushed `claude/issue-<n>-` branch with no PR says someone else is on it,
+   and the implementer checks again before opening its PR.
 7. **Review.** CI runs the checks, including PR size. A separate reviewer
    agent, which did not write the code, reviews it and posts "Ready",
    "Ready, with nits" or "Blocked", naming the commit it reviewed. A failed
@@ -96,6 +99,10 @@ decides what should happen next (decision 14).
    the maintainer's own PRs) the maintainer merges, and only when the
    `review-verdict` check is green: the reviewer said Ready about the
    latest commit, or the maintainer overrode its block with a reason.
+   Two open PRs for one ticket are never merged automatically; the tick
+   reports them. When a PR closes a ticket, any other open PR for it is
+   turned into a draft and labelled `superseded`, and the conflict
+   resolver leaves it alone.
 9. **Next phase.** When a phase's last ticket closes, the tick closes the
    plan and the docs updater opens a PR marking the phase done. Merging that PR
    changes the doc, which starts the planner on the next phase.
@@ -363,6 +370,7 @@ maintainer.
 | Answer a question | Comment `/decide B` on it, with reasoning on the next lines |
 | Build tickets | Label them `factory`; each starts once its dependencies are closed |
 | Ask for a fix on a PR | Comment `@claude <what to change>` |
+| Work on a ticket yourself (or in a local session) | Label it `local` first, so the factory doesn't build it too |
 | Stop a ticket PR merging by itself | Add the `hold` label |
 | Merge past a reviewer block | Comment `/override <reason>` on the PR |
 | Skip the agent review of a trivial PR | Comment `/override <reason>` before it reviews |

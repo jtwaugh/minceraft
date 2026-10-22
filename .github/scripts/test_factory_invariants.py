@@ -29,6 +29,18 @@ def phase_done(snap, f, phase):
 
 
 class Test(unittest.TestCase):
+    def test_duplicate_prs(self):
+        s = Snapshot(issues=[{"number": 900, "title": "t", "state": "open", "kind": "ticket",
+                              "labels": [], "body": "", "parent": None}],
+                     prs=[{"number": 903, "head": "claude/issue-900-sea-ice", "body": "Closes #900"},
+                          {"number": 905, "head": "claude/issue-900-20261022-0243", "body": ""},
+                          {"number": 906, "head": "claude/issue-901-x", "body": ""}])
+        dup = [v for v in check(s) if v.kind == "duplicate-prs"]
+        self.assertEqual([(v.subject, v.detail) for v in dup],
+                         [("issue#900", "open PRs #903, #905; close all but one")])
+        s.issues[0]["state"] = "closed"  # then it's the supersede pass's
+        self.assertEqual([v for v in check(s) if v.kind == "duplicate-prs"], [])
+
     def test_orphan_tickets(self):
         k = keys(load())
         for n in (452, 500, 521):
