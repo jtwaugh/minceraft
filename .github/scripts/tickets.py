@@ -38,17 +38,17 @@ tick starts the ticket.
 import json
 import os
 import re
-import subprocess
 import sys
 
 REPO = os.environ["GITHUB_REPOSITORY"]
 
 
 def gh(path):
-    """GitHub REST call. Lists use per_page=100, enough for this repo."""
-    out = subprocess.run(["gh", "api", path],
-                         check=True, capture_output=True, text=True).stdout
-    return json.loads(out)
+    """GitHub REST GET, through gh_cache (one network read per path per run,
+    free when unchanged). Lists use per_page=100, enough for this repo."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gh_cache
+    return gh_cache.get(path)
 
 
 TRUSTED = {"jtwaugh", "claude[bot]", "github-actions[bot]"}

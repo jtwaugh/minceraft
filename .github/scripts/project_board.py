@@ -35,6 +35,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gh_cache  # noqa: E402  (cached, deduplicated REST reads)
 import review_gate  # noqa: E402  (verdict parsing and the merge-gate decision)
 import tickets  # noqa: E402  (dependency and file-overlap rules)
 
@@ -51,12 +52,12 @@ READ_ENV = dict(os.environ, GH_TOKEN=os.environ.get("PROJECT_TOKEN") or os.envir
 
 
 def rest(path):
-    out = subprocess.run(["gh", "api", "--paginate", "--slurp", path],
-                         check=True, capture_output=True, text=True, env=READ_ENV).stdout
-    pages = json.loads(out)
-    if pages and isinstance(pages[0], list):
-        return [item for page in pages for item in page]
-    return pages[0] if pages else []
+    """GET through gh_cache (free when unchanged, once per run); a full page
+    of a list means there may be more, so read them all."""
+    data = gh_cache.get(path, env=READ_ENV)
+    if isinstance(data, list) and len(data) >= 100:
+        return gh_cache.get_all(path, env=READ_ENV)
+    return data
 
 
 def graphql(query, **variables):
@@ -94,10 +95,8 @@ def ticket_of(pr):
 
 def checks_state(sha):
     """'failed', 'running' or 'passed' over the code checks on a commit."""
-    out = subprocess.run(["gh", "api", "--paginate", "--slurp",
-                          f"repos/{REPO}/commits/{sha}/check-runs?per_page=100"],
-                         check=True, capture_output=True, text=True, env=READ_ENV).stdout
-    runs = [r for page in json.loads(out) for r in page.get("check_runs", [])]
+    runs = gh_cache.get(f"repos/{REPO}/commits/{sha}/check-runs?per_page=100",
+                        env=READ_ENV).get("check_runs", [])
     state = "passed"
     for r in runs:
         if r["name"] in AGENT_JOBS:
