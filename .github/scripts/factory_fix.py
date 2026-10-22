@@ -4,6 +4,8 @@ a fix was started on a head commit, and the task text a fix run is given.
     marker(9, sha, "nits") -> "<!-- factory-fix pr=9 sha=<sha> cause=nits -->"
     markers(comments)      -> [(pr, sha, cause)] from trusted accounts' comments
     nits_task(nits)       -> the task for a nits fix run
+    parse_nits(body)      -> the items under a review's **Nits** heading
+    verdict(comments, head) -> the reviewer's newest verdict, with its nits
 
 The task comes from the tick, never from a comment (design rule 5; #463).
 (docs/design/factory-orchestrator.md Phase A, section 3 "Nits")
@@ -24,6 +26,46 @@ def marker(pr, sha, cause):
 def markers(comments):
     """(pr, sha, cause) for each fix marker in the given (already trusted) comments."""
     return [(int(m[1]), m[2], m[3]) for c in comments for m in MARKER.finditer(c.get("body") or "")]
+
+
+HEADING = re.compile(r"^\s*(?:#+\s*)?\**\s*([A-Za-z][A-Za-z ]*?)\s*:?\s*\**:?\s*$")
+ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)")
+
+
+def parse_nits(body):
+    """The bullet or numbered items under the **Nits** heading, wrapped lines joined."""
+    items, inside = [], False
+    for line in (body or "").splitlines():
+        h = HEADING.match(line)
+        if h and not ITEM.match(line):
+            if inside:
+                break
+            inside = h.group(1).lower() == "nits"
+            continue
+        if not inside:
+            continue
+        m = ITEM.match(line)
+        if m:
+            items.append(m.group(1).strip())
+        elif line.strip() and items:
+            items[-1] += " " + line.strip()
+    return items
+
+
+def verdict(comments, head):
+    """{kind: nits|ready|blocked, commit, nits, current} from the reviewer's
+    newest verdict comment (`review_gate.latest_verdict`), or None. `commit` is
+    the reviewed commit as written; `current` says whether it names `head`."""
+    import review_gate
+    found = review_gate.latest_verdict(comments)
+    if found is None:
+        return None
+    kind, commit, c = found
+    body = c.get("body") or ""
+    if kind == "ready" and "nits" in review_gate.VERDICT.search(body).group(1).lower():
+        kind = "nits"
+    return {"kind": kind, "commit": commit, "nits": parse_nits(body) if kind == "nits" else [],
+            "current": bool(commit and head.startswith(commit))}
 
 
 def nits_task(nits):
