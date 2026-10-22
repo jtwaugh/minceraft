@@ -5,12 +5,16 @@
 // F swaps walking and flying while the pointer is locked, keeping the position.
 //
 //   const c = createController({ input, walk, fly, clock, document, flying });
-//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, flying, aim, belt, hud, underwater, events }
+//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, fov, flying, aim, belt, hud, underwater, events }
 //                          (aim and belt as in overlay.js; the walking player's, stale while flying)
 //   c.submitConsole(line)  queue the line on the walk, close the console, relock the pointer
 //   c.closeConsole()       close the console without submitting; the pointer stays unlocked
 //   state.inventory        true while the inventory view is open; the sim ticks on with neutral input
 //   c.detach()          remove the F listener
+//
+// `fov` is the vertical field of view in degrees. It starts at `sprintFov.base` (look.fov_degrees) and,
+// while the walking player sprints, eases toward base + `sprintFov.extra` and back, covering `extra`
+// degrees per `sprintFov.seconds` of frame time (SPEC Sprinting, Camera). Flying never widens it.
 //
 // `hud` is hudModel (hud.js) for the walking player, filled from the belt and health.
 //
@@ -35,10 +39,10 @@ import { readAim, readBelt } from './overlay.js';
 import { hudModel } from './hud.js';
 import { createStream, regionOf } from './stream.js';
 
-export function createController({ input, walk, fly, clock, document, flying = false, stream = null }) {
+export function createController({ input, walk, fly, clock, document, flying = false, stream = null, sprintFov = { base: 70, extra: 0, seconds: 1 } }) {
   const regions = stream && createStream(stream);
   let followed = null;
-  const state = { flying, inventory: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, aim: null, belt: null, hud: null, underwater: false, events: [] };
+  const state = { flying, inventory: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, events: [] };
 
   const onKey = (e) => {
     if (e.code !== 'KeyF' || e.repeat || !input.locked || input.console || input.inventory) return;
@@ -84,10 +88,13 @@ export function createController({ input, walk, fly, clock, document, flying = f
         eye = stepWalk(walk, ticks, alpha, () => input.drain());
       }
       if (regions) state.regions = streamRegions(eye);
+      const goal = sprintFov.base + (!state.flying && walk.sprinting() ? sprintFov.extra : 0);
+      const step = (sprintFov.extra * dt) / sprintFov.seconds;
+      const fov = state.fov < goal ? Math.min(goal, state.fov + step) : Math.max(goal, state.fov - step);
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
       const belt = readBelt(walk);
       const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
-      Object.assign(state, { inventory: input.inventory, ticks, alpha, eye, yaw, pitch, aim: readAim(walk, alpha), belt, hud, underwater, events: Array.from(walk.drain_events()) });
+      Object.assign(state, { inventory: input.inventory, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, events: Array.from(walk.drain_events()) });
       return state;
     },
     submitConsole(line) {

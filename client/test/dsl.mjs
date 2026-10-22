@@ -52,7 +52,7 @@
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
-// sprinting (true|false: the player is sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -104,6 +104,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   const fly = stream ? new FlyCamera(50.5, 110, 40.5) : new FlyCamera(32, 94, 32);
   const controller = createController({
     input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly', stream: stream ? { budget: 1 } : null,
+    sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds },
   });
   const seen = [];
   const frame = controller.frame;
@@ -169,7 +170,7 @@ function read(w, path) {
   if (path === 'locked') return w.input.locked;
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
-  if (['ticks', 'alpha', 'yaw', 'pitch', 'underwater'].includes(path)) return s[path];
+  if (['ticks', 'alpha', 'yaw', 'pitch', 'fov', 'underwater'].includes(path)) return s[path];
   if (path === 'belt.selected') return s.belt.selected;
   if (/^belt\.slot\.[1-9]$/.test(path)) return s.belt.slots[+path.slice(-1) - 1] ?? 'none';
   if (path === 'hands') return s.belt.hands ?? 'none';
