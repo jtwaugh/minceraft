@@ -448,3 +448,76 @@ fn coarse_density_honours_biases() {
     .0;
     assert!(none.iter().all(|&s| !s) && ny == 5);
 }
+
+// ---- open water (sea-ice mask) ----
+
+fn cold(_x: i32, _z: i32) -> f64 {
+    -1.0
+}
+
+fn in_mask(x: i32, z: i32) -> bool {
+    (10..50).contains(&x) && (-20..30).contains(&z)
+}
+
+#[test]
+fn open_water_replaces_ice_only_on_masked_columns() {
+    let t: [&dyn TemperatureBias; 1] = [&cold];
+    let open: &dyn OpenWater = &in_mask;
+    let plain = Biases {
+        temperature: &t,
+        ..Biases::default()
+    };
+    let masked = Biases {
+        open_water: Some(open),
+        ..plain
+    };
+    let ice = Block::Ice as u8;
+    let water = Block::Water as u8;
+    for seed in [1u64, 12345, 987654321] {
+        for decorate in [false, true] {
+            let a = generate_region_with_biases(seed, -30, -40, 120, 90, &plain, decorate);
+            let b = generate_region_with_biases(seed, -30, -40, 120, 90, &masked, decorate);
+            let mut ice_seen = 0;
+            for z in -40..50 {
+                for x in -30..90 {
+                    let i = a.index((x + 30) as u32, 0, (z + 40) as u32);
+                    let (ca, cb) = (&a.blocks[i..i + HEIGHT], &b.blocks[i..i + HEIGHT]);
+                    if in_mask(x, z) {
+                        assert!(!cb.contains(&ice), "seed {seed} ({x},{z})");
+                        if !decorate {
+                            let swapped: Vec<u8> = ca
+                                .iter()
+                                .map(|&v| if v == ice { water } else { v })
+                                .collect();
+                            assert_eq!(swapped, cb, "seed {seed} ({x},{z})");
+                        }
+                        ice_seen += ca.contains(&ice) as u32;
+                    } else {
+                        assert_eq!(ca, cb, "seed {seed} ({x},{z})");
+                    }
+                }
+            }
+            if !decorate {
+                eprintln!("seed {seed}: {ice_seen} masked columns had ice");
+            }
+        }
+    }
+}
+
+#[test]
+fn no_open_water_mask_is_identical() {
+    let t: [&dyn TemperatureBias; 1] = [&cold];
+    let b = Biases {
+        temperature: &t,
+        ..Biases::default()
+    };
+    let none = |_: i32, _: i32| false;
+    let m = Biases {
+        open_water: Some(&none),
+        ..b
+    };
+    assert_eq!(
+        generate_region_with_biases(7, -20, -20, 60, 60, &b, true).blocks,
+        generate_region_with_biases(7, -20, -20, 60, 60, &m, true).blocks
+    );
+}
