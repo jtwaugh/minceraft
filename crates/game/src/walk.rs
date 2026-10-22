@@ -482,6 +482,11 @@ impl Walker {
         &self.player
     }
 
+    /// Whether the player is sprinting.
+    pub fn sprinting(&self) -> bool {
+        self.player.sprinting
+    }
+
     /// The player's health in half-hearts.
     pub fn health(&self) -> u32 {
         self.player.health

@@ -52,7 +52,7 @@
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
-// health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// sprinting (true|false: the player is sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -164,6 +164,7 @@ function read(w, path) {
   }
   if (path === 'events') return w.events.length;
   if (path === 'sim_tick') return w.walk.sim_tick();
+  if (path === 'sprinting') return w.walk.sprinting();
   if (path === 'paused') return w.walk.paused();
   if (path === 'locked') return w.input.locked;
   if (path === 'lock_requests') return w.canvas.lockRequests;

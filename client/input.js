@@ -26,7 +26,7 @@
 const MOUSE_KEYS = ['MouseLeft', null, 'MouseRight']; // MouseEvent.button 0, 1, 2
 
 const TICK_FIELDS = [
-  'move_forward', 'move_strafe', 'yaw', 'pitch', 'jump', 'sneak', 'primary',
+  'move_forward', 'move_strafe', 'yaw', 'pitch', 'jump', 'sneak', 'sprint', 'primary',
   'secondary', 'secondary_held', 'interact', 'drop', 'tool_slot',
 ];
 
