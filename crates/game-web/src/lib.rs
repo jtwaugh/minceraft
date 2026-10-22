@@ -50,6 +50,10 @@ impl Tick {
         self.0.sneak
     }
     #[wasm_bindgen(getter)]
+    pub fn sprint(&self) -> bool {
+        self.0.sprint
+    }
+    #[wasm_bindgen(getter)]
     pub fn primary(&self) -> bool {
         self.0.primary
     }
@@ -393,6 +397,11 @@ impl Walk {
     /// Whole seconds left in the day phase.
     pub fn phase_seconds_left(&self) -> u32 {
         self.0.phase().1
+    }
+
+    /// Whether the player is sprinting.
+    pub fn sprinting(&self) -> bool {
+        self.0.sprinting()
     }
 
     /// The player's health in half-hearts.
