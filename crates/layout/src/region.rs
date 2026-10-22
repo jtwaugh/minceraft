@@ -110,6 +110,15 @@ fn intersects(bounds: Option<Bounds>, region: Bounds) -> bool {
     })
 }
 
+/// Columns inside any channel's reach (weight above 0) stay free of sea ice.
+struct ChannelsOpen<'a>(&'a [Option<ChannelEval>]);
+
+impl OpenWater for ChannelsOpen<'_> {
+    fn open(&self, x: i32, z: i32) -> bool {
+        self.0.iter().flatten().any(|c| c.weight(x, z) > 0.0)
+    }
+}
+
 impl Layout {
     /// A layout with no terms: generates exactly what `terrain` does.
     pub fn new(seed: u64) -> Layout {
@@ -265,13 +274,11 @@ impl Layout {
             .flatten()
             .map(|c| c as &dyn DensityClamp)
             .collect();
-        // Route channels stay free of sea ice wherever they shape the terrain
-        // (world-layout Phase G, decided in #867).
-        let open = |x: i32, z: i32| channels.iter().flatten().any(|c| c.weight(x, z) > 0.0);
         let temp = TemperatureTerms(&climate);
         let humid = HumidityTerms(&climate);
         let temperature: [&dyn TemperatureBias; 1] = [&temp];
         let humidity: [&dyn HumidityBias; 1] = [&humid];
+        let open = ChannelsOpen(&channels);
         let biases = Biases {
             temperature: if climate.is_empty() {
                 &[]
@@ -286,11 +293,7 @@ impl Layout {
             } else {
                 Some(&exclusions as &dyn ProtectedMask)
             },
-            open_water: if clamp.is_empty() {
-                None
-            } else {
-                Some(&open as &dyn OpenWater)
-            },
+            open_water: if clamp.is_empty() { None } else { Some(&open) },
             ..Biases::default()
         };
         f(&biases)

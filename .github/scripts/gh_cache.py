@@ -14,6 +14,8 @@ is read from the network at most once, so the loader, `tickets.py` and
     get_all(path)       a list endpoint, every page of 100
     save()              write the file (does nothing without the variable)
     stats               {"requests": n, "not_modified": n} since begin()
+    state               a dict the caller keeps between runs in the same file
+                        (the tick's issue list and whether its last run was clean)
 
 Without $FACTORY_HTTP_CACHE it still dedupes within the run, which is all a
 one-off command needs.
@@ -26,6 +28,7 @@ import subprocess
 _file = None
 _etags = {}   # path -> [etag, body], kept between runs
 _memo = {}    # path -> body, this run only
+state = {}    # caller's own data, kept between runs
 stats = {"requests": 0, "not_modified": 0}
 
 
@@ -33,15 +36,21 @@ def begin():
     """Start a run: forget this run's reads and (re)load the ETag file."""
     global _file, _etags
     _memo.clear()
+    state.clear()
     stats.update(requests=0, not_modified=0)
     _file = os.environ.get("FACTORY_HTTP_CACHE") or None
     _etags = {}
     if _file and os.path.exists(_file):
         try:
             with open(_file, encoding="utf-8") as f:
-                _etags = json.load(f)
+                data = json.load(f)
         except (OSError, ValueError):
-            _etags = {}  # a damaged cache only costs full reads
+            data = {}  # a damaged cache only costs full reads
+        if isinstance(data, dict) and "etags" in data:
+            _etags, saved = data["etags"], data.get("state") or {}
+            state.update(saved)
+        elif isinstance(data, dict):
+            _etags = data  # the first format: ETags only
 
 
 def save():
@@ -53,7 +62,7 @@ def save():
     os.makedirs(os.path.dirname(os.path.abspath(_file)), exist_ok=True)
     tmp = _file + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(keep, f)
+        json.dump({"etags": keep, "state": state}, f)
     os.replace(tmp, _file)
 
 

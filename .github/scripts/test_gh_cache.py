@@ -88,7 +88,22 @@ class GhCacheTest(unittest.TestCase):
         self.run_with(fake, lambda: gh_cache.get("a"))
         gh_cache.save()
         with open(self.file) as f:
-            self.assertEqual(list(json.load(f)), ["a"])
+            self.assertEqual(list(json.load(f)["etags"]), ["a"])
+
+    def test_state_is_kept_between_runs(self):
+        gh_cache.begin()
+        gh_cache.state["x"] = 1
+        gh_cache.save()
+        gh_cache.begin()
+        self.assertEqual(gh_cache.state, {"x": 1})
+
+    def test_the_first_format_still_loads(self):
+        with open(self.file, "w") as f:
+            json.dump({"a": ["W/\"1\"", [1]]}, f)
+        gh_cache.begin()
+        fake = Fake({"a": [1]})
+        self.run_with(fake, lambda: gh_cache.get("a"))
+        self.assertEqual(fake.calls[0][1], 'If-None-Match: W/"1"')
 
     def test_a_damaged_file_only_costs_full_reads(self):
         with open(self.file, "w") as f:
@@ -129,6 +144,84 @@ class LoaderTest(unittest.TestCase):
         self.assertIn("repos/o/r/git/matching-refs/heads/docs", seen)
         self.assertFalse(any("/branches" in p for p in seen))
         self.assertEqual(snap.requests, len(seen))
+
+
+class IncrementalTest(unittest.TestCase):
+    def issue(self, n, at, title="t"):
+        return {"number": n, "title": title, "state": "open", "labels": [], "body": "",
+                "updated_at": at, "user": {"login": "x"}}
+
+    def test_full_then_since_then_full_again_after_an_hour(self):
+        from datetime import datetime, timedelta, timezone
+        import factory_tick
+        asked = []
+
+        def paged(path):
+            asked.append(path)
+            if "since=" in path:
+                return [self.issue(2, "2026-10-21T10:05:00Z", "renamed"), self.issue(3, "2026-10-21T10:06:00Z")]
+            return [self.issue(1, "2026-10-21T09:00:00Z"), self.issue(2, "2026-10-21T10:00:00Z")]
+        state, t0 = {}, datetime(2026, 10, 21, 10, 0, tzinfo=timezone.utc)
+        with mock.patch.dict(os.environ, {"GITHUB_EVENT_NAME": "workflow_run"}):
+            first = factory_tick.read_issues("o/r", state, paged, t0)
+            second = factory_tick.read_issues("o/r", state, paged, t0 + timedelta(minutes=10))
+            self.assertEqual(state["issues_since"], "2026-10-21T10:06:00Z")
+            factory_tick.read_issues("o/r", state, paged, t0 + timedelta(minutes=70))
+        self.assertEqual([i["number"] for i in first], [1, 2])
+        self.assertEqual(asked[1], "repos/o/r/issues?state=all&sort=updated&direction=asc"
+                                   "&since=2026-10-21T10:00:00Z")
+        self.assertEqual([(i["number"], i["title"]) for i in second], [(1, "t"), (2, "renamed"), (3, "t")])
+        self.assertNotIn("user", second[0])  # only the fields the loader reads are kept
+        self.assertNotIn("since=", asked[2])  # the hourly full re-read
+
+    def test_scheduled_and_hand_started_ticks_read_everything(self):
+        import factory_tick
+        state = {"issues": {"1": self.issue(1, "x")}, "issues_since": "x",
+                 "issues_full_at": "2999-01-01T00:00:00+00:00"}
+        for event in factory_tick.FULL_EVENTS:
+            asked = []
+            with mock.patch.dict(os.environ, {"GITHUB_EVENT_NAME": event}):
+                factory_tick.read_issues("o/r", dict(state), lambda p: asked.append(p) or [])
+            self.assertNotIn("since=", asked[0])
+
+    def test_unchanged_needs_all_304s_a_clean_last_tick_and_an_event(self):
+        import factory_tick
+        clean, free = {"last_tick_clean": True}, {"requests": 9, "not_modified": 9}
+        with mock.patch.dict(os.environ, {"GITHUB_EVENT_NAME": "workflow_run"}):
+            self.assertTrue(factory_tick.unchanged(free, clean))
+            self.assertFalse(factory_tick.unchanged({"requests": 9, "not_modified": 8}, clean))
+            self.assertFalse(factory_tick.unchanged(free, {"last_tick_clean": False}))
+            self.assertFalse(factory_tick.unchanged(free, {}))
+        for event in factory_tick.FULL_EVENTS:
+            with mock.patch.dict(os.environ, {"GITHUB_EVENT_NAME": event}):
+                self.assertFalse(factory_tick.unchanged(free, clean))
+
+
+class SkipTest(unittest.TestCase):
+    def test_an_unchanged_repo_after_a_clean_tick_skips_the_board(self):
+        import factory_tick
+        import tickets
+        d = tempfile.mkdtemp()
+        env = {"GITHUB_REPOSITORY": "o/r", "GITHUB_EVENT_NAME": "workflow_run",
+               "FACTORY_HTTP_CACHE": os.path.join(d, "c.json"), "PROJECT_TOKEN": "p", "PROJECT_NUMBER": "1"}
+        fake = Fake({"repos/o/r/issues?state=all&sort=created&direction=asc&per_page=100": [],
+                     "repos/o/r/pulls?state=open&per_page=100": [],
+                     "repos/o/r/contents/.github/CODEOWNERS": {},
+                     "repos/o/r/actions/workflows/ci.yml/runs?branch=master&event=push&status=completed&per_page=1": {},
+                     "repos/o/r/git/matching-refs/heads/docs": []})
+        boards = []
+        with mock.patch.dict(os.environ, env), mock.patch.object(tickets, "REPO", "o/r"), \
+                mock.patch("gh_cache.subprocess.run", fake), \
+                mock.patch("factory_board.load_board", lambda *a: boards.append(a)):
+            first = factory_tick.Snapshot.from_github("o/r")   # cold: full read, board read
+            gh_cache.state["last_tick_clean"] = True
+            gh_cache.save()
+            second = factory_tick.Snapshot.from_github("o/r")  # all 304: skip
+        self.assertFalse(first.unchanged)
+        self.assertTrue(second.unchanged)
+        self.assertEqual(len(boards), 1)
+        self.assertEqual(second.requests, second.not_modified)
+        self.assertGreater(second.requests, 0)
 
 
 if __name__ == "__main__":
