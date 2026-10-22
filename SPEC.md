@@ -1180,3 +1180,23 @@ Beta 1.7.3 has no sprinting. These rules are this project's own choices, not fac
 - **Camera.** While sprinting the view gets a slight fisheye effect: the field of view widens a little. The amount and how quickly it eases in and out are this game's own tunables in `data/input.toml`.
 
 Not yet decided: whether any horizontal contact with a wall counts or only a head-on hit, and whether a sprint ended by sneaking or water resumes without a fresh double-tap.
+
+#### Sprinting in the reference version
+
+Facts about sprinting in the reference version (Java Edition 26.3, decided in #821), from local research on #819. Speeds are in blocks per tick unless marked otherwise. Where the project choices above differ, they win: in this game sneaking and water end a sprint, though the reference version lets a sprint continue while sneaking.
+
+- **Speed.** Sprinting multiplies movement acceleration by 1.3, on the ground and in the air. Each value below is the base value times 0.98 for a held movement key.
+
+  | | Walking | Sprinting |
+  |---|---|---|
+  | Ground acceleration per tick (base 0.1, sprint 0.13) | 0.098 | 0.1274 |
+  | Air acceleration per tick (base 0.02, sprint 0.026) | 0.0196 | 0.02548 |
+
+  Horizontal drag per tick is ×0.546 on ordinary ground and ×0.91 in the air. Top speed is about 0.2159 walking and 0.2806 sprinting on the ground (4.317 and 5.612 blocks/s), and about 0.2178 and 0.2831 in the air.
+- **Double-tap window.** 7 ticks by default; a setting from 0 to 10 ticks, where 0 turns double-tap sprinting off. The window counts from the first forward press. With a window of *n* the second press must come at most *n* − 1 ticks after the first (6 at the default), and forward must be released in between, so the earliest second press is 2 ticks after the first. (The *n* − 1 and 2-tick figures were worked out from the per-tick countdown, not tested in-game.)
+- **Holding forward.** A sprint ends on the first tick with no forward input, and that tick already moves at walking values. Holding forward and back together, or strafing with no forward key, counts as no forward input. Forward plus a strafe key keeps the sprint.
+- **Walls.** Colliding with a solid block at more than 8° ends a sprint at once; shallower contact does not.
+- **Sneaking.** Sneaking does not end a sprint; the ×0.3 sneak scale stacks with the ×1.3 sprint scale. Sneaking does stop a sprint from starting, by double-tap or the sprint key, unless underwater. Holding sneak, holding back, or using a slowing item cancels a double-tap waiting for its second press.
+- **Other end conditions.** Attacking a mob and blocking with a shield end a sprint. Eating or drinking pauses it, and the sprint key can't start one meanwhile. (Hunger and Blindness also block sprinting; this game has neither.)
+- **In the air.** A player stays sprinting while airborne as long as forward is held.
+- **Sprint-jump.** Jump height is unchanged (upward speed 0.42, about 1.2522 blocks). On the tick the jump starts, if the player is sprinting on that tick, 0.2 of horizontal speed is added along the horizontal facing, ignoring pitch and which movement keys are held. Sprint state is updated before the jump within a tick, so releasing forward on the jump tick gives no push. On the jump tick the player still counts as on the ground: they get the ground sprint acceleration (0.1274) as well as the push, move the full 0.2 of the push that tick, and ground drag (×0.546) applies at the end of the tick, with air drag (×0.91) from the next tick on. A sprint-jump covers up to about 4.225 blocks and averages about 7.127 blocks/s on flat ground.
