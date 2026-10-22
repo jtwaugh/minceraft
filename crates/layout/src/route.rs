@@ -31,6 +31,9 @@ pub struct RouteParams {
     pub d_humid_end: f64,
     pub climate_half_width: f64,
     pub climate_falloff: f64,
+    /// Cold is `T < cold_below`, warm is `T > warm_above` (decided in #844).
+    pub cold_below: f64,
+    pub warm_above: f64,
 }
 
 include!(concat!(env!("OUT_DIR"), "/route.rs"));
