@@ -44,6 +44,8 @@ class Snapshot:
     requests: int = 0  # API requests the loader made
     not_modified: int = 0  # of those, 304s (free against the rate limit)
     reported: set = field(default_factory=set)  # (target, reason) already reported
+    codeowners: list = field(default_factory=list)  # CODEOWNERS patterns; None if unreadable
+    master_ci: str = ""  # conclusion of the newest finished CI run on master
 
     @classmethod
     def from_dict(cls, d):
@@ -108,15 +110,34 @@ class Snapshot:
                                  for c in paged(f"repos/{repo}/issues/{i['number']}/comments")
                                  if c["user"]["login"] in tickets.TRUSTED]
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"],
-                     "sha": p["head"]["sha"], "body": p.get("body") or ""}
+                     "sha": p["head"]["sha"], "body": p.get("body") or "",
+                     "labels": [lb["name"] for lb in p.get("labels") or []],
+                     "draft": bool(p.get("draft"))}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
+        from factory_automerge import codeowner_patterns, verdict_of
         from factory_rerun import is_ticket_pr
-        for pr in snap.prs:  # runs on the head commit, for ticket PRs only
+        for pr in snap.prs:  # for ticket PRs only: runs, verdict, files, mergeability
             if is_ticket_pr(snap, pr):
+                n = pr["number"]
                 runs = get(f"repos/{repo}/actions/runs?head_sha={pr['sha']}&per_page=100")
                 pr["runs"] = [{"id": r["id"], "name": r["name"], "conclusion": r["conclusion"],
                                "run_attempt": r["run_attempt"]}
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
+                # Same paths the board loader reads, so these cost nothing extra.
+                pr["verdict"] = verdict_of(paged(f"repos/{repo}/issues/{n}/comments"), pr["sha"])
+                pr["files"] = [f["filename"] for f in paged(f"repos/{repo}/pulls/{n}/files")]
+                full = get(f"repos/{repo}/pulls/{n}")
+                pr["mergeable_state"] = full.get("mergeable_state") if isinstance(full, dict) else None
+        try:
+            import base64
+            owners = get(f"repos/{repo}/contents/.github/CODEOWNERS")
+            snap.codeowners = codeowner_patterns(base64.b64decode(owners["content"]).decode())
+        except (RuntimeError, KeyError, TypeError, ValueError):
+            snap.codeowners = None  # unknown owners: merge nothing automatically
+        ci = get(f"repos/{repo}/actions/workflows/ci.yml/runs?branch=master&event=push"
+                 "&status=completed&per_page=1")
+        ci_runs = ci.get("workflow_runs") if isinstance(ci, dict) else None
+        snap.master_ci = (ci_runs or [{}])[0].get("conclusion") or ""
         # Only docs/ branches matter (the stalls pass); reading just those is
         # one call however many claude/ branches pile up.
         refs = get(f"repos/{repo}/git/matching-refs/heads/docs")  # every match, unpaged
@@ -170,6 +191,9 @@ class FakeBackend(Backend):
             issue.setdefault("comments", []).append({
                 "user": "github-actions[bot]", "body": "<!-- factory-auto-start -->",
                 "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        elif action.kind == "merge_pr":
+            pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
+            pr["merged"] = True
         elif action.kind == "close_issue" and issue is not None:
             issue["state"] = "closed"
             if "reason" in action.payload:
@@ -224,7 +248,8 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, stalls, rerun, report, plans, ready, board."""
+    """The fixed order: invariants, stalls, rerun, report, plans, ready, merge, board."""
+    from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
     from factory_ready import ready
@@ -234,7 +259,7 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, stalls, rerun_failed, report, close_finished_plans, ready, board_pass]
+    return [invariants, stalls, rerun_failed, report, close_finished_plans, ready, auto_merge, board_pass]
 
 
 def main(argv):
@@ -264,6 +289,8 @@ def _main(argv):
         print(f"{a.kind} {a.target}: {a.reason}")
     for a in getattr(backend, "refused", []):
         print(f"refused {a.kind} {a.target}: actor {a.payload['actor']} is not trusted")
+    for a, err in getattr(backend, "failed", []):
+        print(f"failed {a.kind} {a.target}: {err}")
     written = isinstance(backend, FakeBackend) and "nothing written" or "applied"
     print(f"{len(actions)} action(s), {written}; "
           f"{snap.requests + getattr(backend, 'requests', 0)} API requests")
