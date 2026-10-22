@@ -1,0 +1,52 @@
+# Sprinting extras (SPEC Sprinting: Camera, Sneaking). FOV is data/input.toml's
+# fov_degrees (70) widening by fov_extra_degrees (10) over fov_ease_seconds (0.15).
+# The water rule (no sprint start in water, entering water ends it) has no case
+# here: the walking player can't reach the raft scene's water, so the Rust tests
+# for it (#862) cover it.
+
+case the FOV widens during a sprint and eases back after it
+start walk raft
+click
+lock
+runway 12
+frame 50 x2
+expect fov ~ 70
+press KeyW
+down KeyW
+frame 50 x2
+expect sprinting = true
+expect fov > 70
+frame 50 x6
+expect fov ~ 80
+up KeyW
+frame 50 x6
+expect sprinting = false
+expect fov ~ 70
+
+case starting to sneak during a sprint ends it and the FOV eases back
+start walk raft
+click
+lock
+runway 12
+press KeyW
+down KeyW
+frame 50 x6
+expect sprinting = true
+expect fov ~ 80
+down ShiftLeft
+frame 50 x6
+expect sprinting = false
+expect fov ~ 70
+
+case a double-tap while sneaking does not start a sprint
+start walk raft
+click
+lock
+runway 12
+down ShiftLeft
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x6
+expect sprinting = false
+expect fov ~ 70
