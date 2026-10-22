@@ -72,4 +72,7 @@ pub enum GameEvent {
     /// The player's health reached 0, once, after that tick's `Landed`.
     /// `cause` is `"fall"` (the only way to die so far).
     PlayerDied { cause: String },
+    /// A dead player came back at `position` (the start spawn) with full
+    /// health.
+    PlayerRespawned { position: [f64; 3] },
 }

@@ -165,6 +165,8 @@ struct Floating {
 /// The player plus the eye positions of the last two ticks.
 pub struct Walker {
     player: Player,
+    /// Where `respawn` puts the player: the feet the walker started at.
+    spawn: [f64; 3],
     physics: PlayerPhysics,
     pub(crate) world: FarmWorld<RegionSet>,
     floating: Option<Floating>,
@@ -221,6 +223,7 @@ impl Walker {
             .map_err(|e| PhysicsError::Invalid(e.to_string()))?;
         Ok(Walker {
             player,
+            spawn: feet,
             physics,
             world: FarmWorld::new(RegionSet::default()),
             floating: None,
@@ -1091,6 +1094,20 @@ impl Walker {
         let feet = [cx, top as f64 + 1.0, cz];
         self.teleport(feet);
         Ok(feet)
+    }
+
+    /// Bring a dead player back at the start spawn with full health, no
+    /// velocity and no fall distance. Items and the phase clock are left
+    /// alone. Errors if the player is alive.
+    pub fn respawn(&mut self) -> Result<[f64; 3], String> {
+        if !self.player.dead {
+            return Err("you are not dead".into());
+        }
+        let spawn = self.spawn;
+        self.teleport(spawn);
+        self.events
+            .push(GameEvent::PlayerRespawned { position: spawn });
+        Ok(spawn)
     }
 
     /// Put the player at `feet` with no velocity, e.g. when leaving fly mode.
@@ -3257,5 +3274,42 @@ mod tests {
         let mut dead = settled();
         dead.player.dead = true;
         assert_ne!(alive.world_hash(), dead.world_hash());
+    }
+
+    #[test]
+    fn respawn_restores_the_dead_player_at_the_start_spawn() {
+        let mut w = fatal_fall();
+        for _ in 0..200 {
+            w.tick(&TickInput::default());
+        }
+        assert!(w.dead());
+        let belt = w.player_state().tool_belt.clone();
+        let hands = w.player_state().hands.clone();
+        let phase = w.phases.at(w.sim_tick);
+        w.drain_events();
+        let spawn = w.spawn;
+        assert_eq!(w.respawn(), Ok(spawn));
+        assert!(!w.dead());
+        assert_eq!(w.health(), w.max_health());
+        assert_eq!(w.player().pos, spawn);
+        assert_eq!(w.player().vel, [0.0; 3]);
+        assert_eq!(w.player().fall_distance, 0.0);
+        assert_eq!(
+            w.drain_events(),
+            vec![GameEvent::PlayerRespawned { position: spawn }]
+        );
+        assert_eq!(w.player_state().tool_belt, belt);
+        assert_eq!(w.player_state().hands, hands);
+        assert_eq!(w.phases.at(w.sim_tick), phase);
+    }
+
+    #[test]
+    fn respawn_while_alive_changes_nothing() {
+        let mut w = settled();
+        w.drain_events();
+        let pos = w.player().pos;
+        assert!(w.respawn().is_err());
+        assert_eq!(w.player().pos, pos);
+        assert!(w.drain_events().is_empty());
     }
 }
