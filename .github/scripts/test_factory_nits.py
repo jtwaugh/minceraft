@@ -47,11 +47,23 @@ class Test(unittest.TestCase):
         for nit in NITS:
             self.assertIn(nit, qs[0]["body"])
         self.assertIn("follow-up", qs[0]["body"])
-        self.assertEqual([m for m in markers(s.prs[0]["comments"])], [("nits", H1)])
+        self.assertEqual([m for m in markers(s.prs[0]["comments"])], [(9, H1, "nits")])
+
+    def test_answered_question_is_not_reopened(self):
+        s = snap()
+        run(s)
+        s.prs[0]["sha"] = H2
+        s.prs[0]["verdict"]["commit"] = H2[:7]
+        run(s)
+        for i in s.issues:
+            if "needs-you" in i["labels"]:
+                i["state"] = "closed"
+        self.assertEqual(run(s), [])
+        self.assertEqual(len([i for i in s.issues if "needs-you" in i["labels"]]), 1)
 
     def test_ready_after_fix_is_quiet(self):
         s = snap(sha=H2, kind="ready", comments=[
-            {"user": "github-actions[bot]", "body": marker("nits", H1)}])
+            {"user": "github-actions[bot]", "body": marker(9, H1, "nits")}])
         self.assertEqual(run(s), [])
 
     def test_stale_verdict_waits(self):

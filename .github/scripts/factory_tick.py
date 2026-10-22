@@ -185,7 +185,7 @@ class FakeBackend(Backend):
             pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
             pr.setdefault("comments", []).append({
                 "user": "github-actions[bot]",
-                "body": marker(action.payload["kind"], action.payload["head"]),
+                "body": marker(pr["number"], action.payload["head"], action.payload["kind"]),
                 "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
         elif action.kind == "open_question":
             if not any(action.payload["key"] in i["body"] for i in snapshot.issues):

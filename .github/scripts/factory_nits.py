@@ -10,12 +10,11 @@ one `needs-you` question instead and never starts a second fix.
 (docs/design/factory-orchestrator.md Phase A, section 3 "Nits"; rule 5)
 """
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_fix import markers, nits_task  # noqa: E402
-from factory_rerun import CLOSES, is_ticket_pr  # noqa: E402
+from factory_rerun import is_ticket_pr, ticket_of  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
 LABEL = "needs-you"
@@ -23,13 +22,6 @@ LABEL = "needs-you"
 
 def question_key(pr_number, head):
     return f"<!-- factory-question pr={pr_number} cause=nits head={head} -->"
-
-
-def ticket_number(snap, pr):
-    m = re.match(r"claude/issue-(\d+)-", pr["head"])
-    numbers = [int(m.group(1))] if m else [int(n) for n in CLOSES.findall(pr.get("body") or "")]
-    return next(i["number"] for i in snap.issues
-                if i["number"] in numbers and i["state"] == "open" and "factory" in i["labels"])
 
 
 def question_body(pr, nits):
@@ -48,14 +40,15 @@ def nits(snap):
         if not (is_ticket_pr(snap, pr) and v and v["kind"] == "nits"
                 and v["commit"] and pr["sha"].startswith(v["commit"])):
             continue
-        started = [head for kind, head in markers(pr.get("comments", [])) if kind == "nits"]
+        started = [sha for n, sha, cause in markers(pr.get("comments", []))
+                   if n == pr["number"] and cause == "nits"]
         target = f"pr#{pr['number']}"
         if pr["sha"] in started:
             continue
         if started:  # a fix on an earlier head, and nits remain
             key = question_key(pr["number"], pr["sha"])
-            if not any(key in i["body"] for i in snap.issues if i["state"] == "open"):
-                out.append(Action("open_question", f"issue#{ticket_number(snap, pr)}", {
+            if not any(key in i["body"] for i in snap.issues):
+                out.append(Action("open_question", f"issue#{ticket_of(snap, pr)}", {
                     "label": LABEL, "key": key,
                     "title": f"PR #{pr['number']}: nits remain after the fix",
                     "body": question_body(pr, v["nits"])},

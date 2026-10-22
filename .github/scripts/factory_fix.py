@@ -1,8 +1,8 @@
 """Shared pieces of the fix runs the tick starts: the marker comment that says
 a fix was started on a head commit, and the task text a fix run is given.
 
-    marker("nits", sha)   -> "<!-- factory-fix kind=nits head=<sha> -->"
-    markers(comments)     -> [(kind, head)] from trusted accounts' comments
+    marker(9, sha, "nits") -> "<!-- factory-fix pr=9 sha=<sha> cause=nits -->"
+    markers(comments)      -> [(pr, sha, cause)] from trusted accounts' comments
     nits_task(nits)       -> the task for a nits fix run
 
 The task comes from the tick, never from a comment (design rule 5; #463).
@@ -14,16 +14,16 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-MARKER = re.compile(r"<!-- factory-fix kind=(\w+) head=([0-9a-f]+) -->")
+MARKER = re.compile(r"<!-- factory-fix pr=(\d+) sha=([0-9a-f]+) cause=(\w+) -->")
 
 
-def marker(kind, head):
-    return f"<!-- factory-fix kind={kind} head={head} -->"
+def marker(pr, sha, cause):
+    return f"<!-- factory-fix pr={pr} sha={sha} cause={cause} -->"
 
 
 def markers(comments):
-    """(kind, head) for each fix marker in the given (already trusted) comments."""
-    return [m.groups() for c in comments for m in MARKER.finditer(c.get("body") or "")]
+    """(pr, sha, cause) for each fix marker in the given (already trusted) comments."""
+    return [(int(m[1]), m[2], m[3]) for c in comments for m in MARKER.finditer(c.get("body") or "")]
 
 
 def nits_task(nits):
