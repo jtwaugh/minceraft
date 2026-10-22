@@ -44,6 +44,8 @@ class GhBackend(Backend):
     def __init__(self, repo, run=gh_run):
         self.repo, self.run, self.requests = repo, run, 0
         self.refused = []
+        self.failed = []  # (action, error) for writes that may fail without stopping the tick
+        self.applied = 0  # actions that needed a write (not already satisfied)
         self.mirror = FakeBackend()
 
     def _gh(self, *args, project=False):
@@ -57,6 +59,7 @@ class GhBackend(Backend):
             return
         if self._satisfied(snapshot, action):
             return
+        self.applied += 1
         if self._write(snapshot, action) is None:
             self.mirror.apply(snapshot, action)
 
@@ -95,6 +98,9 @@ class GhBackend(Backend):
                 return False
             return card.get("status") == p["status"] if k == "set_status" \
                 else (card.get("waiting") or "") == p["text"]
+        if k == "merge_pr":
+            pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
+            return pr is None or pr.get("merged", False)
         if k in ("report", "request_phase_done"):
             return (action.target, action.reason if k == "report" else k) in snapshot.reported
         return False
@@ -166,6 +172,17 @@ class GhBackend(Backend):
             self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}")
         elif k == "rerun_jobs":
             self._gh("api", "-X", "POST", f"repos/{r}/actions/runs/{p['run_id']}/rerun-failed-jobs")
+        elif k == "merge_pr":
+            # As the maintainer (PROJECT_TOKEN), so the merge and the ticket it
+            # closes trigger the planner, the conflict resolver and the tick, which
+            # events from the workflow token don't. --match-head-commit: only the
+            # commit the reviewer called Ready.
+            try:
+                self._gh("pr", "merge", n, "--repo", r, "--merge",
+                         "--match-head-commit", p["sha"], project=True)
+            except RuntimeError as e:  # e.g. a push or a new check since the read
+                self.failed.append((action, str(e)))
+                return True  # not merged: don't mirror it
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
         elif k != "report":  # a report is only remembered; the report pass writes the issue

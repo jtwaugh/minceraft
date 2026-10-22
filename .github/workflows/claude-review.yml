@@ -1,8 +1,10 @@
 # Reviewer: a fresh Claude session reviews each PR against SPEC.md and
 # CLAUDE.md. It comments; it can't approve or merge. Its verdict ("Ready",
-# "Ready, with nits" or "Blocked") becomes the required review-verdict
-# status (review-gate.yml), so a block stops the merge until it is fixed and
-# re-reviewed, or the maintainer comments /override <reason>.
+# "Ready, with nits" or "Blocked") becomes the review-verdict status
+# (review-gate.yml), so a block stops the merge until it is fixed and
+# re-reviewed, or the maintainer comments /override <reason>. A re-review
+# checks its earlier points and the new commits only, so fixing nits
+# converges instead of turning up new ones on every push.
 name: Claude reviewer
 
 on:
@@ -38,9 +40,11 @@ jobs:
       id-token: write
       actions: read
     steps:
+      # Full history, so a re-review can diff from the commit it last
+      # reviewed to the new head (git diff <old> <new>).
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       # The same toolchain as CI, so the reviewer can prove a defect with a
       # failing test instead of describing it.
@@ -77,12 +81,36 @@ jobs:
             You are reviewing this pull request. You did not write it. Read
             CLAUDE.md first, then the linked issue, then the diff.
 
-            This may be a re-review after new commits. Earlier comments
-            (`gh pr view --comments`) are context only: requests addressed
-            to @claude are for the implementer, not you. Never edit code;
-            your only output is the review.
+            Earlier comments (`gh pr view --comments`) are context only:
+            requests addressed to @claude are for the implementer, not you.
+            You can't commit or push. Change files only to run a test, and
+            put them back; your only output is the review.
 
-            Use `gh pr diff` for the diff. The checkout is shallow, so `git diff origin/master...HEAD` fails with "no merge base".
+            Use `gh pr diff` for the whole PR's diff.
+
+            ## Re-reviews
+
+            If you already posted a verdict on this PR (look for
+            "Reviewed commit:" in `gh pr view --comments`), this is a
+            re-review, and it works differently from a first review:
+
+            - Start from your last verdict. For each blocker and nit in it,
+              say in one line whether the new commits fixed it. If the
+              maintainer or the implementer answered a point instead of
+              changing the code ("leave it", "it's disclosed", "follow-up
+              ticket #n"), drop it.
+            - Review only what changed since the commit your last verdict
+              names: `git diff <that commit> ${{ github.event.pull_request.head.sha }} -- <files>`,
+              with the files `gh pr diff --name-only` lists, so a merge of
+              master doesn't count as new work. Raise a new nit only about
+              lines those commits added or changed.
+            - A new blocker can be about anything in the PR, with evidence.
+            - Never repeat a point you put under Notes, or said needed no
+              change.
+
+            A re-review that finds the old points fixed and nothing new is
+            "Ready". That is the expected outcome, not a sign you missed
+            something.
 
             Check, in this order:
 
@@ -118,13 +146,14 @@ jobs:
 
             ## Your verdict gates the merge
 
-            "Blocked" turns a required check red, and the maintainer has to
-            fix the code or override you on the record. So block rarely and
-            only with evidence; when you do block, it must be worth stopping
-            for. Use exactly one verdict:
+            "Blocked" turns the review-verdict check red; the maintainer then
+            fixes the code or overrides you on the record. Block whenever a
+            point meets the blocker bar below, and never otherwise. Don't
+            soften a blocker into a nit to avoid stopping the merge, and don't
+            promote a nit to make it heard. Use exactly one verdict:
 
-            - Ready: nothing to fix.
-            - Ready, with nits: only minor points. Nits never block.
+            - Ready: nothing to fix. Notes are allowed.
+            - Ready, with nits: only minor fixes. Nits never block.
             - Blocked: at least one blocker.
 
             A blocker is one of these, and nothing else:
@@ -134,7 +163,11 @@ jobs:
             - a concrete defect: the file and line, the input or situation
               that triggers it, what happens, and what should happen;
             - something the PR claims or depends on that nobody has checked,
-              such as a test it says it didn't run.
+              such as a test it says it didn't run;
+            - a test that is meant to guard a fix or a behaviour but still
+              passes when that fix or behaviour is removed. Show it: undo the
+              line, run the test, report that it passed, and restore the
+              line.
 
             Everything else is a nit, however strongly you feel: naming, structure,
             taste, docs, test style. A nit must name something wrong or fragile in
@@ -143,6 +176,12 @@ jobs:
             observations. If a point is a question about intent, ask it in one line
             or leave it out. When in doubt, leave it out: "Ready" with no nits is
             a normal verdict.
+
+            A point that needs no change is a note, not a nit: a disclosed
+            shortcut, a deliberate choice, an assumption the PR states, a
+            number the maintainer should know. So is any nit whose only fix
+            would be a comment or a label explaining something. Notes never
+            affect the verdict.
 
             Prove a defect when you can. Write a small test that fails on
             this PR (a file under crates/<crate>/tests/review_*.rs, or one
@@ -159,12 +198,14 @@ jobs:
             Verdict: <Ready | Ready, with nits | Blocked>
             Reviewed commit: `${{ github.event.pull_request.head.sha }}`
 
-            Then, if Blocked, a numbered **Blockers** list, each with its
-            file and line and its evidence; then **Nits**, if any. Keep
-            the checks you passed to one short line.
+            Then, on a re-review, a **Since last review** list (one line per
+            earlier point: fixed, answered, or still open). Then, if
+            Blocked, a numbered **Blockers** list, each with its file and
+            line and its evidence; then **Nits**, if any; then **Notes**, if
+            any. Keep the checks you passed to one short line.
           claude_args: |
             --max-turns 60
-            --allowedTools "Write,Edit,Bash(cargo test:*),Bash(./build.sh:*),Bash(node --test:*),mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --allowedTools "Write,Edit,Bash(cargo test:*),Bash(./build.sh:*),Bash(node --test:*),mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
             --append-system-prompt "Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message."
 
       # Claude exits "successfully" even when it gives up, so check for the

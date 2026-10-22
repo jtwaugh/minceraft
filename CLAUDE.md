@@ -84,14 +84,19 @@ done, superseded). When a ticket comes from a design doc:
    attached as sub-issues of a "Plan:" issue. It runs by itself when SPEC.md
    or a design doc changes on `master`: changed SPEC sections, or a design
    doc's next `todo` phase (one phase at a time, in header order).
-3. The maintainer labels tickets `factory`; the implementer (`claude.yml`)
-   opens a PR; CI and the reviewer (`claude-review.yml`) check it.
+3. The maintainer labels tickets `factory`. The factory tick
+   (`factory-tick.yml`) starts each one when its dependencies are closed
+   and no open PR is editing the same files; the implementer (`claude.yml`)
+   opens a PR; CI and the reviewer (`claude-review.yml`) check it. After
+   each merge, `resolve-conflicts.yml` merges `master` into factory PRs
+   that now conflict.
 4. The maintainer answers `decision` questions with `/decide <option>`; the
    spec editor (`claude-spec.yml`) opens a PR changing only the file the
    question is about.
-5. When a plan's last ticket closes, the docs updater (`claude-docs.yml`)
-   closes the plan and marks the design-doc phase done. Every Monday it
-   re-reconciles accepted docs against the code.
+5. When a plan's last ticket closes, the tick closes the plan and asks the
+   docs updater (`claude-docs.yml`) for the PR marking the design-doc phase
+   done. Every Monday the docs updater re-reconciles accepted docs against
+   the code.
 
 ## Commands
 
@@ -138,6 +143,22 @@ or `preview.mjs` shows; `viewer/pkg/` is stale until you do.
 
 Keep PRs to one issue. Don't reformat or refactor code you weren't asked
 to touch.
+
+## Answering a review
+
+When you're asked to fix a review's blockers or nits:
+
+- Fix each blocker. If you think one is wrong, reply saying why and leave
+  the code; the maintainer decides.
+- For each nit, change the code, or reply in one line saying why not.
+  Don't add a comment, a log line or an output label only to answer a
+  review point.
+- Leave the review's **Notes** alone. They need no change.
+- Stay within the ticket's scope and the 200-line limit. A nit that asks
+  for more than the ticket covers becomes a follow-up ticket (step 7
+  above), not more code in this PR.
+- After pushing, comment with each point and what you did about it, so the
+  re-review can check them off.
 
 ## Invariants
 
