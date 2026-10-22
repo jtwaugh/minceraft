@@ -45,6 +45,7 @@ class GhBackend(Backend):
         self.repo, self.run, self.requests = repo, run, 0
         self.refused = []
         self.failed = []  # (action, error) for writes that may fail without stopping the tick
+        self.applied = 0  # actions that needed a write (not already satisfied)
         self.mirror = FakeBackend()
 
     def _gh(self, *args, project=False):
@@ -58,6 +59,7 @@ class GhBackend(Backend):
             return
         if self._satisfied(snapshot, action):
             return
+        self.applied += 1
         if self._write(snapshot, action) is None:
             self.mirror.apply(snapshot, action)
 

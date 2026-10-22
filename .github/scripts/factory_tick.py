@@ -46,6 +46,7 @@ class Snapshot:
     reported: set = field(default_factory=set)  # (target, reason) already reported
     codeowners: list = field(default_factory=list)  # CODEOWNERS patterns; None if unreadable
     master_ci: str = ""  # conclusion of the newest finished CI run on master
+    unchanged: bool = False  # every read was a 304 after a clean tick: nothing to do
 
     @classmethod
     def from_dict(cls, d):
@@ -72,16 +73,17 @@ class Snapshot:
     def from_github(cls, repo):
         """Read the repo through gh_cache: conditional requests whose ETags
         outlive the run when $FACTORY_HTTP_CACHE is set (a 304 is free), and
-        one network read per path per run. Issues are listed oldest first, so
-        a new issue changes only the last page. The board is read when
-        PROJECT_TOKEN and PROJECT_NUMBER are set. Docs: later."""
+        one network read per path per run. Issues are read incrementally
+        (`read_issues`). The board is read when PROJECT_TOKEN and
+        PROJECT_NUMBER are set, unless every read came back unchanged after
+        a clean tick (`unchanged`). Docs: later."""
         import gh_cache
         snap = cls()
         gh_cache.begin()
         get, paged = gh_cache.get, gh_cache.get_all
 
-        for i in paged(f"repos/{repo}/issues?state=all&sort=created&direction=asc"):
-            if "pull_request" in i:
+        for i in read_issues(repo, gh_cache.state, paged):
+            if i.get("pull_request"):
                 continue
             labels = [lb["name"] for lb in i["labels"]]
             snap.issues.append({
@@ -138,6 +140,10 @@ class Snapshot:
                  "&status=completed&per_page=1")
         ci_runs = ci.get("workflow_runs") if isinstance(ci, dict) else None
         snap.master_ci = (ci_runs or [{}])[0].get("conclusion") or ""
+        if unchanged(gh_cache.stats, gh_cache.state):
+            snap.unchanged = True
+            snap.requests, snap.not_modified = gh_cache.stats["requests"], gh_cache.stats["not_modified"]
+            return snap  # nothing to do: skip the board (GraphQL, never free)
         # Only docs/ branches matter (the stalls pass); reading just those is
         # one call however many claude/ branches pile up.
         refs = get(f"repos/{repo}/git/matching-refs/heads/docs")  # every match, unpaged
@@ -152,6 +158,54 @@ class Snapshot:
         snap.requests = gh_cache.stats["requests"]
         snap.not_modified = gh_cache.stats["not_modified"]
         return snap
+
+
+FULL_EVENTS = ("schedule", "workflow_dispatch")  # these ticks always read everything
+FULL_EVERY = 3600  # seconds between full re-reads of the issue list
+
+
+def read_issues(repo, state, paged, now=None):
+    """Every issue and PR in the repo, as the issues API gives them, read
+    incrementally. The list is kept in `state` (gh_cache keeps it between
+    ticks); a tick asks only for what was updated since the newest
+    `updated_at` it has seen, which is one free 304 when nothing changed. A
+    full re-read happens with no saved list, on scheduled or hand-started
+    ticks, and at least hourly, so anything `since` can miss (a deleted or
+    transferred issue) is corrected within the hour."""
+    now = now or datetime.now(timezone.utc)
+    saved = state.get("issues")
+    full_at = state.get("issues_full_at", "")
+    full = (not saved or os.environ.get("GITHUB_EVENT_NAME") in FULL_EVENTS
+            or not full_at
+            or (now - datetime.fromisoformat(full_at)).total_seconds() > FULL_EVERY)
+    if full:
+        issues = {}
+        fetched = paged(f"repos/{repo}/issues?state=all&sort=created&direction=asc")
+        state["issues_full_at"] = now.isoformat()
+    else:
+        issues = dict(saved)
+        fetched = paged(f"repos/{repo}/issues?state=all&sort=updated&direction=asc"
+                        f"&since={state['issues_since']}")
+    for i in fetched:
+        issues[str(i["number"])] = {k: i.get(k) for k in KEEP}
+    stamps = [i["updated_at"] for i in issues.values() if i.get("updated_at")]
+    state["issues"], state["issues_since"] = issues, max(stamps, default=state.get("issues_since", ""))
+    return sorted(issues.values(), key=lambda i: i["number"])
+
+
+# The issue fields the loader reads, kept between ticks.
+KEEP = ("number", "title", "state", "labels", "body", "parent_issue_url", "pull_request", "updated_at")
+
+
+def unchanged(stats, state):
+    """True when this tick can stop after reading: every read came back 304,
+    the last tick applied nothing and failed nothing, and this isn't a
+    scheduled or hand-started tick (those always run in full, as a safety
+    net). The passes are level-triggered and none reads the clock, so the
+    same input gives the same (empty) result."""
+    return (os.environ.get("GITHUB_EVENT_NAME") not in FULL_EVENTS
+            and stats["requests"] > 0 and stats["requests"] == stats["not_modified"]
+            and state.get("last_tick_clean") is True)
 
 
 class Backend:
@@ -277,14 +331,23 @@ def _main(argv):
         snap = Snapshot.from_fixture(args[args.index("--fixture") + 1])
     else:
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
+    if snap.unchanged:
+        print(f"Nothing changed since the last clean tick: {snap.requests} reads, "
+              f"all 304 (free). Skipped the board and the passes.")
+        return
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} docs branches; {snap.requests} API requests, "
           f"{snap.not_modified} of them 304 (free)")
     backend = FakeBackend()
-    if not (dry or "--fixture" in args):
+    live = not (dry or "--fixture" in args)
+    if live:
+        import gh_cache
         from factory_backend import GhBackend
         backend = GhBackend(os.environ["GITHUB_REPOSITORY"])
+        gh_cache.state["last_tick_clean"] = False  # until this tick finishes with nothing to do
     actions = tick(snap, passes(), backend)
+    if live:
+        gh_cache.state["last_tick_clean"] = not (backend.applied or backend.failed or backend.refused)
     for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
     for a in getattr(backend, "refused", []):
