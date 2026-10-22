@@ -207,7 +207,7 @@ class SkipTest(unittest.TestCase):
         fake = Fake({"repos/o/r/issues?state=all&sort=created&direction=asc&per_page=100": [],
                      "repos/o/r/pulls?state=open&per_page=100": [],
                      "repos/o/r/contents/.github/CODEOWNERS": {},
-                     "repos/o/r/actions/workflows/ci.yml/runs?branch=master&event=push&status=completed&per_page=1": {},
+                     "repos/o/r/actions/workflows/ci.yml/runs?branch=master&event=push&status=completed&per_page=30": {},
                      "repos/o/r/git/matching-refs/heads/docs": []})
         boards = []
         with mock.patch.dict(os.environ, env), mock.patch.object(tickets, "REPO", "o/r"), \
