@@ -22,11 +22,16 @@ FAILED = {"failure", "timed_out", "startup_failure"}
 CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?) #(\d+)\b", re.I)
 
 
-def is_ticket_pr(snap, pr):
+def ticket_of(snap, pr):
+    """The open `factory` ticket number a PR belongs to, or None."""
     m = re.match(r"claude/issue-(\d+)-", pr["head"])
     numbers = {int(m.group(1))} if m else {int(n) for n in CLOSES.findall(pr.get("body") or "")}
-    return any(i["number"] in numbers and i["state"] == "open" and "factory" in i["labels"]
-               for i in snap.issues)
+    return next((i["number"] for i in snap.issues if i["number"] in numbers
+                 and i["state"] == "open" and "factory" in i["labels"]), None)
+
+
+def is_ticket_pr(snap, pr):
+    return ticket_of(snap, pr) is not None
 
 
 def failed_runs(snap):

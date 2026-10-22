@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from factory_fix import marker  # noqa: E402
 
 
 REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
@@ -269,6 +270,19 @@ class FakeBackend(Backend):
             pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
             run = next(r for r in pr["runs"] if r["id"] == action.payload["run_id"])
             run["run_attempt"], run["conclusion"] = run["run_attempt"] + 1, None
+        elif action.kind == "start_fix":
+            pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
+            pr.setdefault("comments", []).append({
+                "user": "github-actions[bot]",
+                "body": marker(pr["number"], action.payload["head"], action.payload["kind"]),
+                "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        elif action.kind == "open_question":
+            if not any(action.payload["key"] in i["body"] for i in snapshot.issues):
+                snapshot.issues.append({
+                    "number": max([i["number"] for i in snapshot.issues], default=0) + 1,
+                    "title": action.payload["title"], "state": "open",
+                    "labels": [action.payload["label"]], "kind": "question",
+                    "body": action.payload["body"]})
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         elif action.kind == "create_issue":
@@ -313,11 +327,12 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, supersede, refresh, stalls, rerun, report, plans,
+    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, report, plans,
     ready, merge, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
+    from factory_nits import nits
     from factory_refresh import refresh_after_red_master
     from factory_ready import ready
     from factory_report import report
@@ -328,7 +343,7 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, report, close_finished_plans, ready, auto_merge, board_pass]
+    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, report, close_finished_plans, ready, auto_merge, board_pass]
 
 
 def main(argv):
