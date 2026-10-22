@@ -33,7 +33,19 @@ Checked against the code:
   expectation yet.
 - `SPEC.md` has no player physics or sprinting.
 
-Nothing in this doc is built yet.
+Phase A plan #815 closed (PRs #842, #868, #876, #877, #902, #908):
+
+- Tunables: `sprint_scale` in `data/player.toml`, `[sprint]` `double_tap_ticks`
+  in `data/input.toml` (`crates/game/src/bindings.rs`, `physics.rs`).
+- Double-tap in ticks: `crates/game/src/input.rs` sets `TickInput.sprint`;
+  replay bit 7 in `crates/game/src/replay.rs`.
+- State: `Player.sprinting` in `crates/game/src/player.rs`; ends on forward
+  release, sneak, water and a blocked-forward hit (unit tests cover each).
+- Client: `walk.rs` exposes `sprinting()`; `client/test/scripts/sprint.input`
+  covers speed, double-tap, slow tap, release, sneak and wall.
+- `[sprint]` also has `fov_extra_degrees` and `fov_ease_seconds` in
+  `bindings.rs` (Phase B, question 2).
+- Research spec-questions #819 and #820 and decisions #821 and #822 are closed.
 
 ## Reconciliation notes
 
@@ -123,6 +135,16 @@ the reference version in section 3). (Decided in #822.)
 (question 2), raft and water behaviour (question 3), and a configurable window
 (question 4), plus replacing placeholder values with researched ones once
 `SPEC.md` has them. Done when each decided behaviour has an input script.
+
+## Reconciliation notes (phase-done, Phase A)
+
+9. **Phase A still incomplete.** Phase A is done when input scripts show every
+   listed end condition ending a sprint. `client/test/scripts/sprint.input`
+   has cases for release, sneak and wall, but none for water; the water rule
+   (`player.rs`, decided placeholder in #822) is covered only by Rust unit
+   tests. Add a water case to the input scripts (extend the DSL if it cannot
+   place the player in water), then mark Phase A `done`. Plan #815 noted its
+   tickets assumed water does not end a sprint, which is why none covers it.
 
 ## Open questions
 
