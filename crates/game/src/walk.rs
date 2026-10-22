@@ -496,7 +496,7 @@ impl Walker {
         let now = f.raft.heading();
         let delta = (now - f.prev_heading + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
             - std::f64::consts::PI;
-        f.prev_heading + delta * alpha
+        f.prev_heading + delta * alpha.clamp(0.0, 1.0)
     }
 
     pub fn has_world(&self) -> bool {
@@ -644,10 +644,13 @@ impl Walker {
                     self.cur_eye,
                     input,
                 );
+                let events_before = self.events.len();
                 self.take_aim(aim, input);
-                // An interact that picked something up does not also toggle.
-                let picked_up = hands_were_empty && self.state.hands.is_some();
-                if input.interact && !picked_up {
+                // An interact that did something else (picked up, planted,
+                // picked or harvested a crop or flower) does not also toggle.
+                let acted = self.events.len() != events_before
+                    || hands_were_empty != self.state.hands.is_none();
+                if input.interact && !acted {
                     if let Some(f) = &mut self.floating {
                         let on_helm = f.raft.on_helm(&self.player.aabb(&self.physics));
                         f.driving = !f.driving && on_helm;
@@ -2639,6 +2642,21 @@ mod tests {
         w.tick(&TickInput::default());
         assert_eq!(w.raft_offset(1.0), off);
         assert_eq!(w.raft_heading(1.0), h2);
+    }
+
+    #[test]
+    fn raft_heading_turns_the_short_way_over_the_seam_and_clamps_alpha() {
+        let mut w = at_the_helm();
+        let tau = std::f64::consts::TAU;
+        let now = w.raft_heading(1.0);
+        // The previous heading is a full turn behind, less 0.1 rad: the short
+        // way round is 0.1 rad backwards, not almost a full turn forwards.
+        w.floating.as_mut().unwrap().prev_heading = now - tau + 0.1;
+        let prev = now - tau + 0.1;
+        let mid = w.raft_heading(0.5);
+        assert!((mid - (prev - 0.05)).abs() < 1e-9, "{mid}");
+        assert_eq!(w.raft_heading(2.0), w.raft_heading(1.0));
+        assert_eq!(w.raft_heading(-1.0), w.raft_heading(0.0));
     }
 
     #[test]
