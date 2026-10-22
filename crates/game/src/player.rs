@@ -135,8 +135,10 @@ impl Player {
         let neutral = TickInput::default();
         let input = if self.dead { &neutral } else { input };
         // Sprint state: a double-tap starts it only while walking forward and
-        // not sneaking; releasing forward or sneaking ends it.
-        if input.move_forward <= 0.0 || input.sneak {
+        // not sneaking or in water; releasing forward, sneaking or entering
+        // water ends it.
+        let in_water = world.body_in_water(&self.aabb(physics));
+        if input.move_forward <= 0.0 || input.sneak || in_water {
             self.sprinting = false;
         } else if input.sprint {
             self.sprinting = true;
@@ -156,7 +158,6 @@ impl Player {
 
         // 2. Choose acceleration.
         let f = (physics.slipperiness * physics.friction) as f64;
-        let in_water = world.body_in_water(&self.aabb(physics));
         let accel = if in_water {
             physics.water_accel as f64
         } else if self.on_ground {
@@ -424,6 +425,28 @@ mod tests {
             &w,
         );
         assert!(!pl.sprinting);
+    }
+
+    #[test]
+    fn sprint_request_in_water_does_not_start() {
+        let p = phys();
+        let w = Deep(floor());
+        let mut pl = Player::new([0.5, 1.0, 0.5], &p);
+        pl.tick(&sprint_tick(), &p, &w);
+        assert!(!pl.sprinting);
+    }
+
+    #[test]
+    fn entering_water_ends_sprint_and_needs_new_tap() {
+        let (p, w) = (phys(), floor());
+        let mut pl = sprinter(&p, &w);
+        pl.tick(&walk(), &p, &Deep(floor()));
+        assert!(!pl.sprinting);
+        for _ in 0..50 {
+            pl.tick(&walk(), &p, &w);
+        }
+        assert!(!pl.sprinting);
+        close(run(&mut pl, &walk(), &p, &w), 4.3);
     }
 
     #[test]

@@ -25,7 +25,7 @@ use crate::physics::{PhysicsError, PlayerPhysics};
 use crate::pick::{pick_crop, pick_flower};
 use crate::plant::{crop_for_item, plant};
 use crate::player::Player;
-use crate::raft::{Raft, RaftWorld, Swell};
+use crate::raft::{Drive, Raft, RaftWorld, Swell};
 use crate::replay::Fnv;
 use crate::rng::Rng;
 use crate::scene::RaftScene;
@@ -160,6 +160,10 @@ struct Floating {
     swell: Swell,
     tick: u64,
     prev_offset: [f64; 3],
+    drive: Drive,
+    /// The player is at the helm and the move keys steer the raft.
+    driving: bool,
+    prev_heading: f64,
 }
 
 /// The player plus the eye positions of the last two ticks.
@@ -459,6 +463,9 @@ impl Walker {
             swell: Swell::default_from_data()?,
             tick: 0,
             prev_offset: [0.0; 3],
+            drive: Drive::default_from_data()?,
+            driving: false,
+            prev_heading: 0.0,
         });
         w.add_region(scene.sea);
         w.entities = scene.entities;
@@ -474,12 +481,35 @@ impl Walker {
         between_ticks(f.prev_offset, f.raft.offset(), alpha)
     }
 
+    /// Whether the player is steering the raft from the helm.
+    pub fn driving(&self) -> bool {
+        self.floating.as_ref().is_some_and(|f| f.driving)
+    }
+
+    /// The raft's heading in radians (0 faces -z, positive turns towards
+    /// +x), `alpha` of the way between the last two ticks along the shorter
+    /// way round. Zero when there is no raft.
+    pub fn raft_heading(&self, alpha: f64) -> f64 {
+        let Some(f) = &self.floating else {
+            return 0.0;
+        };
+        let now = f.raft.heading();
+        let delta = (now - f.prev_heading + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
+            - std::f64::consts::PI;
+        f.prev_heading + delta * alpha.clamp(0.0, 1.0)
+    }
+
     pub fn has_world(&self) -> bool {
         !self.world.base().is_empty()
     }
 
     pub fn player(&self) -> &Player {
         &self.player
+    }
+
+    /// Whether the player is sprinting.
+    pub fn sprinting(&self) -> bool {
+        self.player.sprinting
     }
 
     /// The player's health in half-hearts.
@@ -575,6 +605,7 @@ impl Walker {
         if let Some(slot) = input.tool_slot {
             self.state.select(slot);
         }
+        let hands_were_empty = self.state.hands.is_none();
         match &mut self.floating {
             Some(f) => {
                 // The raft moves (carrying the player), then the player's own
@@ -582,10 +613,29 @@ impl Walker {
                 let frame = f.swell.frame(f.tick);
                 f.tick += 1;
                 f.prev_offset = f.raft.offset();
-                f.raft
-                    .advance(&frame, &mut [&mut self.player], &self.physics);
+                f.prev_heading = f.raft.heading();
+                if f.driving && !f.raft.on_helm(&self.player.aabb(&self.physics)) {
+                    f.driving = false;
+                }
+                let mut walk_input = *input;
+                if f.driving {
+                    let (forward, turn) = input.movement();
+                    let steer = f.drive.frame(forward, turn, f.raft.heading());
+                    f.raft.advance_driven(
+                        &frame,
+                        &steer,
+                        &mut [&mut self.player],
+                        &self.physics,
+                        &self.world,
+                    );
+                    walk_input.move_forward = 0.0;
+                    walk_input.move_strafe = 0.0;
+                } else {
+                    f.raft
+                        .advance(&frame, &mut [&mut self.player], &self.physics);
+                }
                 let world = RaftWorld::new(&self.world, &f.raft);
-                self.player.tick(input, &self.physics, &world);
+                self.player.tick(&walk_input, &self.physics, &world);
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&world);
@@ -599,7 +649,18 @@ impl Walker {
                     self.cur_eye,
                     input,
                 );
+                let events_before = self.events.len();
                 self.take_aim(aim, input);
+                // An interact that did something else (picked up, planted,
+                // picked or harvested a crop or flower) does not also toggle.
+                let acted = self.events.len() != events_before
+                    || hands_were_empty != self.state.hands.is_none();
+                if input.interact && !acted {
+                    if let Some(f) = &mut self.floating {
+                        let on_helm = f.raft.on_helm(&self.player.aabb(&self.physics));
+                        f.driving = !f.driving && on_helm;
+                    }
+                }
             }
             None => {
                 self.player.tick(input, &self.physics, &self.world);
@@ -2490,6 +2551,155 @@ mod tests {
         assert_eq!(w.raft_offset(0.0), [0.0; 3]);
         let mid = w.raft_offset(0.5);
         assert!((mid[0] - end[0] / 2.0).abs() < 1e-12);
+    }
+
+    /// A walker standing on the raft's helm, with the swell stilled so only
+    /// the drive moves the raft.
+    fn at_the_helm() -> Walker {
+        let mut w = scene_walker();
+        let f = w.floating.as_mut().unwrap();
+        f.swell.sway_amplitude = 0.0;
+        f.swell.tilt_amplitude = 0.0;
+        let h = f.raft.helm().unwrap();
+        w.player.pos = [h[0] as f64 + 0.5, h[1] as f64 + 1.0, h[2] as f64 + 0.5];
+        for _ in 0..5 {
+            w.tick(&TickInput::default());
+        }
+        assert!(w
+            .floating
+            .as_ref()
+            .unwrap()
+            .raft
+            .on_helm(&w.player.aabb(&w.physics)));
+        w
+    }
+
+    fn steer(forward: f32, strafe: f32) -> TickInput {
+        TickInput {
+            move_forward: forward,
+            move_strafe: strafe,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn interact_on_the_helm_enters_and_leaves_driving() {
+        let mut w = at_the_helm();
+        assert!(!w.driving());
+        w.tick(&interact());
+        assert!(w.driving());
+        w.tick(&TickInput::default());
+        assert!(w.driving());
+        w.tick(&interact());
+        assert!(!w.driving());
+    }
+
+    #[test]
+    fn interact_off_the_helm_does_not_enter_driving() {
+        let mut w = at_the_helm();
+        w.player.pos[0] += 2.0;
+        w.tick(&interact());
+        assert!(!w.driving());
+    }
+
+    #[test]
+    fn driving_moves_the_raft_along_its_heading_and_holds_the_player() {
+        let mut w = at_the_helm();
+        w.tick(&interact());
+        let start = w.raft_offset(1.0);
+        let rel = |w: &Walker| {
+            let c = w.floating.as_ref().unwrap().raft.centre();
+            [w.player().pos[0] - c[0], w.player().pos[2] - c[1]]
+        };
+        let r0 = rel(&w);
+        for _ in 0..10 {
+            w.tick(&steer(1.0, 0.0));
+        }
+        let moved = w.raft_offset(1.0);
+        assert!(moved[2] < start[2] - 0.1, "{start:?} -> {moved:?}");
+        assert!(moved[0].abs() < 1e-9);
+        let r1 = rel(&w);
+        assert!((r1[0] - r0[0]).hypot(r1[1] - r0[1]) < 1e-6);
+        assert!(w
+            .floating
+            .as_ref()
+            .unwrap()
+            .raft
+            .on_helm(&w.player.aabb(&w.physics)));
+        assert!(w.driving());
+    }
+
+    #[test]
+    fn strafe_turns_the_raft_clockwise_and_releasing_stops_it() {
+        let mut w = at_the_helm();
+        w.tick(&interact());
+        let h0 = w.raft_heading(1.0);
+        for _ in 0..5 {
+            w.tick(&steer(0.0, 1.0));
+        }
+        let h1 = w.raft_heading(1.0);
+        assert!(h1 > h0 + 0.01, "{h0} -> {h1}");
+        let mid = w.raft_heading(0.5);
+        assert!(mid < h1 && mid > w.raft_heading(0.0));
+        w.tick(&TickInput::default());
+        let off = w.raft_offset(1.0);
+        let h2 = w.raft_heading(1.0);
+        w.tick(&TickInput::default());
+        assert_eq!(w.raft_offset(1.0), off);
+        assert_eq!(w.raft_heading(1.0), h2);
+    }
+
+    #[test]
+    fn raft_heading_turns_the_short_way_over_the_seam_and_clamps_alpha() {
+        let mut w = at_the_helm();
+        let tau = std::f64::consts::TAU;
+        let now = w.raft_heading(1.0);
+        // The previous heading is a full turn behind, less 0.1 rad: the short
+        // way round is 0.1 rad backwards, not almost a full turn forwards.
+        w.floating.as_mut().unwrap().prev_heading = now - tau + 0.1;
+        let prev = now - tau + 0.1;
+        let mid = w.raft_heading(0.5);
+        assert!((mid - (prev - 0.05)).abs() < 1e-9, "{mid}");
+        assert_eq!(w.raft_heading(2.0), w.raft_heading(1.0));
+        assert_eq!(w.raft_heading(-1.0), w.raft_heading(0.0));
+    }
+
+    #[test]
+    fn the_driven_raft_stops_at_a_solid_block() {
+        let mut w = at_the_helm();
+        w.tick(&interact());
+        let c = w.floating.as_ref().unwrap().raft.centre();
+        for x in -12..12 {
+            for y in 62..68 {
+                w.set_block(c[0] as i32 + x, y, c[1] as i32 - 14, Block::Stone);
+            }
+        }
+        let mut last = w.raft_offset(1.0);
+        let mut stopped = false;
+        for _ in 0..300 {
+            w.tick(&steer(1.0, 0.0));
+            let now = w.raft_offset(1.0);
+            if now == last {
+                stopped = true;
+                break;
+            }
+            last = now;
+        }
+        // Whatever it ran into, it stopped, and keeps holding still.
+        assert!(stopped, "still moving at {last:?}");
+        for _ in 0..5 {
+            w.tick(&steer(1.0, 0.0));
+            assert_eq!(w.raft_offset(1.0), last);
+        }
+    }
+
+    #[test]
+    fn stepping_off_the_helm_ends_driving() {
+        let mut w = at_the_helm();
+        w.tick(&interact());
+        w.player.pos[0] += 2.0;
+        w.tick(&steer(1.0, 0.0));
+        assert!(!w.driving());
     }
 
     fn grass_floor_walker(chance: u32) -> Walker {

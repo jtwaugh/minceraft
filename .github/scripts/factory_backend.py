@@ -101,6 +101,9 @@ class GhBackend(Backend):
         if k == "merge_pr":
             pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
             return pr is None or pr.get("merged", False)
+        if k == "supersede_pr":
+            pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
+            return pr is None or "superseded" in pr.get("labels", [])
         if k in ("report", "request_phase_done"):
             return (action.target, action.reason if k == "report" else k) in snapshot.reported
         return False
@@ -183,6 +186,14 @@ class GhBackend(Backend):
             except RuntimeError as e:  # e.g. a push or a new check since the read
                 self.failed.append((action, str(e)))
                 return True  # not merged: don't mirror it
+        elif k == "supersede_pr":
+            self._gh("pr", "comment", n, "--repo", r, "--body", p["comment"])
+            # REST creates the label if it doesn't exist yet; `gh pr edit` wouldn't.
+            self._gh("api", "-X", "POST", f"repos/{r}/issues/{n}/labels", "-f", "labels[]=superseded")
+            try:
+                self._gh("pr", "ready", n, "--repo", r, "--undo")
+            except RuntimeError as e:  # labelled and commented: still parked for the tick
+                self.failed.append((action, str(e)))
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
         elif k not in ("report", "start_fix", "open_question"):

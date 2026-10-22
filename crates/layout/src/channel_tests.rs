@@ -197,3 +197,58 @@ fn far_channel_is_skipped_invisibly() {
         Layout::new(5).generate_region(0, 0, 50, 50, false).blocks
     );
 }
+
+fn cold_layout(seed: u64) -> Layout {
+    Layout {
+        climate: vec![ClimateBias::Radial {
+            center: (0.0, 0.0),
+            r_inner: 1000.0,
+            r_outer: 2000.0,
+            d_temp: -1.0,
+            d_humid: 0.0,
+        }],
+        ..layout(seed)
+    }
+}
+
+#[test]
+fn channel_columns_have_no_sea_ice() {
+    let reach = (HALF + FALL) as i32;
+    let ice = Block::Ice as u8;
+    let mut ice_outside = 0;
+    for seed in SEEDS {
+        for decorate in [false, true] {
+            let r = cold_layout(seed).generate_region(-70, -40, 140, 80, decorate);
+            for wz in -40..40 {
+                for wx in -70..70 {
+                    let has_ice = column(&r, wx, wz).contains(&ice);
+                    // Strictly inside the reach (weight > 0) in x and z.
+                    if wz.abs() < reach && (-60..=60).contains(&wx) {
+                        assert!(!has_ice, "seed {seed} ({wx},{wz})");
+                    } else if wz.abs() > reach + 8 {
+                        ice_outside += has_ice as u32;
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        ice_outside > 0,
+        "cold climate should still freeze elsewhere"
+    );
+}
+
+#[test]
+fn channel_open_water_agrees_across_regions() {
+    for seed in [1u64, 5] {
+        for decorate in [false, true] {
+            let big = cold_layout(seed).generate_region(-70, -40, 140, 80, decorate);
+            let small = cold_layout(seed).generate_region(-20, -15, 50, 30, decorate);
+            for wz in -15..15 {
+                for wx in -20..30 {
+                    assert_eq!(column(&big, wx, wz), column(&small, wx, wz), "seed {seed}");
+                }
+            }
+        }
+    }
+}
