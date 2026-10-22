@@ -679,3 +679,40 @@ fn undecorated_regions_agree_with_decorated_where_undecorated() {
         }
     }
 }
+
+#[test]
+fn open_water_skips_sea_ice_only_on_its_columns() {
+    let (x0, z0, w, d) = (-200, 50, 160, 160);
+    let cold = |_x: i32, _z: i32| -0.8;
+    let tb: [&dyn TemperatureBias; 1] = [&cold];
+    let open = |x: i32, _z: i32| x < -120;
+    let plain = Biases {
+        temperature: &tb,
+        ..Biases::default()
+    };
+    let masked = Biases {
+        open_water: Some(&open),
+        ..plain
+    };
+    for decorate in [false, true] {
+        let a = generate_region_with_biases(12345, x0, z0, w, d, &plain, decorate);
+        let b = generate_region_with_biases(12345, x0, z0, w, d, &masked, decorate);
+        let mut opened = 0;
+        for z in 0..d {
+            for x in 0..w {
+                let (ca, cb) = (col(&a, x, z), col(&b, x, z));
+                if x0 + (x as i32) < -120 {
+                    assert!(!cb.contains(&ICE), "ice at ({x},{z})");
+                    for y in 0..HEIGHT {
+                        let want = if ca[y] == ICE { WATER } else { ca[y] };
+                        assert_eq!(cb[y], want, "({x},{y},{z})");
+                    }
+                    opened += ca.contains(&ICE) as usize;
+                } else {
+                    assert_eq!(ca, cb, "({x},{z})");
+                }
+            }
+        }
+        assert!(opened > 100, "too few frozen columns opened: {opened}");
+    }
+}
