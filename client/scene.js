@@ -415,7 +415,8 @@ if (scene) {
   const [x, y, z] = walk.eye(1);
   fly.teleport(x, y + 24, z);
 }
-const controller = createController({ input, walk, fly, clock, document, flying, stream: scene ? null : { budget: 1 } });
+const controller = createController({ input, walk, fly, clock, document, flying, stream: scene ? null : { budget: 1 },
+  sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds } });
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 const outputBuffer = new OutputBuffer();
@@ -449,7 +450,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 function render(now) {
   remeshFarm();
 
-  const { alpha, eye, yaw, pitch, flying, aim, underwater, regions } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  const { alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
   if (regions) {
     regions.free.forEach(freeRegion);
     regions.mesh.forEach((r) => meshRegion(r));
@@ -474,7 +475,7 @@ function render(now) {
   const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  const sky = skyInputs(view, yaw, pitch, sampler.fov_degrees * Math.PI / 180, w / h);
+  const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h);
   if (sky) {
     gl.useProgram(skyProg);
     gl.uniform3fv(skyProg.u('camRight'), sky.right);
@@ -491,7 +492,7 @@ function render(now) {
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
 
   const mvp = new Float32Array(mul(
-    perspective(sampler.fov_degrees * Math.PI / 180, w / h, NEAR, farPlane(fogFar)),
+    perspective(fov * Math.PI / 180, w / h, NEAR, farPlane(fogFar)),
     view_matrix(eye[0], eye[1], eye[2], yaw, pitch),
   ));
   const bind = (prog, a) => {
