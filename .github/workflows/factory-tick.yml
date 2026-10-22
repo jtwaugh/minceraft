@@ -3,7 +3,10 @@
 #
 # The tick is level-triggered: it re-reads everything and writes only what
 # differs, so a second tick straight after does nothing. The schedule is
-# the heartbeat; events only make the next tick sooner. It starts ready
+# the heartbeat; events only make the next tick sooner, after a 60-second
+# pause that lets a burst of them collapse into one tick. Reads go through
+# .github/scripts/gh_cache.py, whose ETags are kept between ticks so an
+# unchanged read is a free 304 (the reads use the maintainer's own token). It starts ready
 # tickets (claude.yml), closes finished plans and asks for their phase-done
 # PRs (claude-docs.yml), keeps the project board in step and keeps the
 # "Factory: stalled work" issue up to date.
@@ -53,13 +56,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Let a burst settle before reading. Checks on a PR finish together,
+      # and each finish is a trigger; while this tick waits they queue in
+      # the concurrency group, which keeps only the newest, so a burst costs
+      # one tick instead of five. Hand-started and scheduled ticks don't wait.
+      - name: Let a burst of events settle
+        if: github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
+        run: sleep 60
       # Always master's scripts, whatever the event.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/scripts
+      # ETags from earlier ticks (.github/scripts/gh_cache.py): an unchanged
+      # read comes back 304, which doesn't count against the rate limit.
+      - name: Restore the read cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .factory-cache
+          key: factory-http-none
+          restore-keys: factory-http-
       - name: Tick
         env:
+          FACTORY_HTTP_CACHE: .factory-cache/etags.json
           # Reads use the project token's own budget; repo writes and
           # dispatches use the workflow token (WRITE_TOKEN).
           GH_TOKEN: ${{ secrets.PROJECT_TOKEN || github.token }}
@@ -71,3 +90,11 @@ jobs:
         run: |
           set -o pipefail  # so a failure isn't hidden by tee
           python3 -B .github/scripts/factory_tick.py $DRY_RUN | tee -a "$GITHUB_STEP_SUMMARY"
+      # Keyed by content, so a tick that read nothing new adds no cache entry
+      # (and doesn't crowd CI's Rust caches out of the repo's cache budget).
+      - name: Save the read cache
+        if: ${{ !cancelled() && hashFiles('.factory-cache/etags.json') != '' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .factory-cache
+          key: factory-http-${{ hashFiles('.factory-cache/etags.json') }}

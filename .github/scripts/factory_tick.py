@@ -13,7 +13,7 @@ The passes themselves live in later tickets.
 import json
 import os
 import re
-import subprocess
+import subprocess  # noqa: F401  (gh_cache calls it; the tests patch factory_tick.subprocess.run)
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -42,6 +42,7 @@ class Snapshot:
     board: list = field(default_factory=list)  # project board items
     board_meta: dict = field(default_factory=dict)  # Status options, "Waiting on" field
     requests: int = 0  # API requests the loader made
+    not_modified: int = 0  # of those, 304s (free against the rate limit)
     reported: set = field(default_factory=set)  # (target, reason) already reported
 
     @classmethod
@@ -66,40 +67,18 @@ class Snapshot:
         return cls.from_dict(json.load(open(path)))
 
     @classmethod
-    def from_github(cls, repo, etags=None):
-        """Paginated reads; `etags` (path -> (etag, body)) is sent as
-        If-None-Match and a 304 reuses the body. The board is read when
+    def from_github(cls, repo):
+        """Read the repo through gh_cache: conditional requests whose ETags
+        outlive the run when $FACTORY_HTTP_CACHE is set (a 304 is free), and
+        one network read per path per run. Issues are listed oldest first, so
+        a new issue changes only the last page. The board is read when
         PROJECT_TOKEN and PROJECT_NUMBER are set. Docs: later."""
+        import gh_cache
         snap = cls()
-        etags = {} if etags is None else etags
+        gh_cache.begin()
+        get, paged = gh_cache.get, gh_cache.get_all
 
-        def get(path):
-            snap.requests += 1
-            cached = etags.get(path)
-            cmd = ["gh", "api", "-i", "--method", "GET", path]
-            if cached:
-                cmd += ["-H", f"If-None-Match: {cached[0]}"]
-            p = subprocess.run(cmd, capture_output=True, text=True)
-            # text=True has already turned the \r\n line ends into \n
-            head, _, body = p.stdout.replace("\r\n", "\n").partition("\n\n")
-            if "304" in head.split("\n", 1)[0] and cached:
-                return cached[1]
-            if p.returncode:
-                raise RuntimeError(f"gh api {path}: {p.stderr.strip()}")
-            data = json.loads(body)
-            for h in head.split("\n"):
-                if h.lower().startswith("etag:"):
-                    etags[path] = (h.split(":", 1)[1].strip(), data)
-            return data
-
-        def paged(path):
-            out, page = [], 1
-            while len(out) == 100 * (page - 1):
-                out += get(f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}")
-                page += 1
-            return out
-
-        for i in paged(f"repos/{repo}/issues?state=all"):
+        for i in paged(f"repos/{repo}/issues?state=all&sort=created&direction=asc"):
             if "pull_request" in i:
                 continue
             labels = [lb["name"] for lb in i["labels"]]
@@ -138,13 +117,19 @@ class Snapshot:
                 pr["runs"] = [{"id": r["id"], "name": r["name"], "conclusion": r["conclusion"],
                                "run_attempt": r["run_attempt"]}
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
-        snap.branches = [b["name"] for b in paged(f"repos/{repo}/branches")]
+        # Only docs/ branches matter (the stalls pass); reading just those is
+        # one call however many claude/ branches pile up.
+        refs = get(f"repos/{repo}/git/matching-refs/heads/docs")  # every match, unpaged
+        snap.branches = [r["ref"][len("refs/heads/"):] for r in refs
+                         if r["ref"].startswith("refs/heads/docs/")]
         number = os.environ.get("PROJECT_NUMBER", "").strip()
         if os.environ.get("PROJECT_TOKEN") and number:
             import factory_board  # here: factory_board imports this module
             factory_board.load_board(
                 snap, os.environ.get("PROJECT_OWNER") or repo.split("/")[0], int(number))
         snap.mark_reported()
+        snap.requests = gh_cache.stats["requests"]
+        snap.not_modified = gh_cache.stats["not_modified"]
         return snap
 
 
@@ -253,6 +238,14 @@ def passes():
 
 
 def main(argv):
+    try:
+        _main(argv)
+    finally:
+        import gh_cache
+        gh_cache.save()  # even after a failed read: what was read still saves calls next time
+
+
+def _main(argv):
     args = argv[1:]
     dry = "--dry-run" in args
     if "--fixture" in args:
@@ -260,7 +253,8 @@ def main(argv):
     else:
         snap = Snapshot.from_github(os.environ["GITHUB_REPOSITORY"])
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
-          f"{len(snap.branches)} branches; {snap.requests} API requests")
+          f"{len(snap.branches)} docs branches; {snap.requests} API requests, "
+          f"{snap.not_modified} of them 304 (free)")
     backend = FakeBackend()
     if not (dry or "--fixture" in args):
         from factory_backend import GhBackend
