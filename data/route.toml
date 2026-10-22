@@ -18,3 +18,15 @@ channel_clear_above = 4
 # The corridor is every region within this many regions (Chebyshev) of a
 # region the route passes through (design: world-layout Decision 5).
 corridor_margin = 2
+
+# Climate bias along the route (ClimateBias::AlongPath; decided in #846).
+# Temperature offset at the first and last anchorage, interpolated by arc
+# length: the trip moves from cold water to warm. Same for every seed.
+temp_start = -0.55
+temp_end = 0.55
+d_humid_start = 0.0
+d_humid_end = 0.0
+# Full effect within climate_half_width blocks of the route, fading to none
+# over a further climate_falloff blocks.
+climate_half_width = 64.0
+climate_falloff = 64.0

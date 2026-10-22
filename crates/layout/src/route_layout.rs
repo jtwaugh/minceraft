@@ -15,7 +15,9 @@
 
 use crate::builder::{V0_ISLAND_DIST_MAX, V0_ISLAND_DIST_MIN, V0_SPAWN_WATER_RADIUS};
 use crate::route::unit;
-use crate::{build_layout, DensityTerm, Layout, Level, Route, RouteParams, WorldConfig};
+use crate::{
+    build_layout, ClimateBias, DensityTerm, Layout, Level, Route, RouteParams, WorldConfig,
+};
 
 /// Hash stream for island distances, clear of the route builder's streams.
 const ISLAND_STREAM: u64 = 1 << 32;
@@ -81,5 +83,14 @@ pub fn build_route_layout(world: &WorldConfig, route: &Route) -> (Layout, Vec<Le
             clear_above: params.channel_clear_above,
         });
     }
+    layout.climate.push(ClimateBias::AlongPath {
+        points: points.iter().map(|p| (p[0], p[1])).collect(),
+        d_temp_start: params.temp_start,
+        d_temp_end: params.temp_end,
+        d_humid_start: params.d_humid_start,
+        d_humid_end: params.d_humid_end,
+        half_width: params.climate_half_width,
+        falloff: params.climate_falloff,
+    });
     (layout, levels)
 }

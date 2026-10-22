@@ -22,6 +22,15 @@ pub struct RouteParams {
     pub channel_clear_above: i32,
     /// Corridor width in regions (Chebyshev) around the route's regions.
     pub corridor_margin: u32,
+    /// `ClimateBias::AlongPath` over the route (decided in #846): temperature
+    /// offset at the first and last anchorage, humidity change likewise, and
+    /// the bias half-width and falloff in blocks.
+    pub temp_start: f64,
+    pub temp_end: f64,
+    pub d_humid_start: f64,
+    pub d_humid_end: f64,
+    pub climate_half_width: f64,
+    pub climate_falloff: f64,
 }
 
 include!(concat!(env!("OUT_DIR"), "/route.rs"));
