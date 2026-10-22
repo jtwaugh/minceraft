@@ -98,6 +98,54 @@ impl Swell {
     }
 }
 
+/// Driving tunables from `[drive]` in `data/raft.toml`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Drive {
+    /// Blocks per tick with forward held fully.
+    pub speed: f64,
+    /// Radians per tick with the turn axis held fully.
+    pub turn_rate: f64,
+}
+
+impl Drive {
+    /// The shipped defaults from `data/raft.toml`.
+    pub fn default_from_data() -> Result<Drive, String> {
+        Drive::parse(DEFAULT_RAFT)
+    }
+
+    pub fn parse(text: &str) -> Result<Drive, String> {
+        let root: toml::Value = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
+        let get = |key: &str| -> Result<f64, String> {
+            let n = match root.get("drive").and_then(|t| t.get(key)) {
+                Some(toml::Value::Float(f)) => *f,
+                Some(toml::Value::Integer(i)) => *i as f64,
+                Some(_) => return Err(format!("drive.{key} must be a number")),
+                None => return Err(format!("missing drive.{key}")),
+            };
+            if !n.is_finite() || n <= 0.0 {
+                return Err(format!("drive.{key} must be a positive number"));
+            }
+            Ok(n)
+        };
+        Ok(Drive {
+            speed: get("speed")?,
+            turn_rate: get("turn_rate")?,
+        })
+    }
+
+    /// One tick of driving with `forward` and `turn` in -1..1 (clamped), from
+    /// continuous `heading` (see `Raft::heading`). Heading 0 faces -z and
+    /// positive turns towards +x, like `RaftFrame::yaw_delta`.
+    pub fn frame(&self, forward: f64, turn: f64, heading: f64) -> RaftFrame {
+        let step = forward.clamp(-1.0, 1.0) * self.speed;
+        RaftFrame {
+            displacement: [step * heading.sin(), 0.0, -step * heading.cos()],
+            yaw_delta: turn.clamp(-1.0, 1.0) * self.turn_rate,
+            tilt: [0.0, 0.0],
+        }
+    }
+}
+
 /// Rotate `p` by `turns` quarter turns (same sense as positive yaw) about
 /// the point `c`, in the xz plane.
 fn rotate(p: [f64; 3], c: [f64; 2], turns: i32) -> [f64; 3] {
@@ -183,6 +231,12 @@ impl Raft {
         self.turns
     }
 
+    /// Continuous yaw in radians: the quarter turns applied plus the yaw not
+    /// yet turned into one. Collision still uses `quarter_turns`.
+    pub fn heading(&self) -> f64 {
+        self.turns as f64 * FRAC_PI_2 + self.yaw
+    }
+
     /// The collision box of every cell at the current pose.
     pub fn boxes(&self) -> impl Iterator<Item = Aabb> + '_ {
         self.cells.iter().map(|c| self.cell_box(c))
@@ -255,6 +309,34 @@ impl Raft {
             }
         }
     }
+
+    /// Move the raft by a swell frame and a drive frame. The swell always
+    /// applies, as in `advance`. The drive frame applies only if the raft's
+    /// boxes at the pose it would reach overlap no solid block of `base`;
+    /// otherwise it is dropped whole, so the raft neither moves nor turns and
+    /// no turn is stored up. The raft's rest cells read as air in `base`.
+    pub fn advance_driven(
+        &mut self,
+        swell: &RaftFrame,
+        drive: &RaftFrame,
+        riders: &mut [&mut Player],
+        physics: &PlayerPhysics,
+        base: &impl CollisionWorld,
+    ) {
+        self.advance(swell, riders, physics);
+        let mut trial = self.clone();
+        trial.advance(drive, &mut [], physics);
+        let world = RaftWorld::new(base, self);
+        let mut solid = Vec::new();
+        let blocked = trial.boxes().any(|b| {
+            solid.clear();
+            block_boxes_in(&world, &b, &mut solid);
+            !solid.is_empty()
+        });
+        if !blocked {
+            self.advance(drive, riders, physics);
+        }
+    }
 }
 
 /// The base world with the raft laid over it. The raft's rest-pose cells are
@@ -318,6 +400,86 @@ mod tests {
             }
         }
         (w, Raft::new(&cells))
+    }
+
+    /// A solid block at deck height beside the deck, over open water.
+    fn drive_east(dx: f64) -> RaftFrame {
+        slide(dx)
+    }
+
+    #[test]
+    fn driving_into_a_block_stops_at_the_cell_edge() {
+        let (mut base, mut raft) = deck();
+        for z in 0..4 {
+            base.set(6, 64, z, Block::Stone);
+        }
+        let p = phys();
+        for _ in 0..40 {
+            raft.advance_driven(&RaftFrame::default(), &drive_east(0.25), &mut [], &p, &base);
+        }
+        assert_eq!(raft.offset()[0], 2.0);
+        assert!(raft.boxes().all(|b| b.max[0] <= 6.0));
+        // Driving away afterwards works.
+        raft.advance_driven(
+            &RaftFrame::default(),
+            &drive_east(-0.25),
+            &mut [],
+            &p,
+            &base,
+        );
+        assert_eq!(raft.offset()[0], 1.75);
+    }
+
+    #[test]
+    fn a_turn_that_swings_a_corner_into_a_block_is_dropped() {
+        // A 4x1 strip turns about (2, 0.5) and sweeps across cell (1, 2).
+        let mut base = MemoryWorld::new();
+        let cells: Vec<[i32; 3]> = (0..4).map(|x| [x, 64, 0]).collect();
+        let mut raft = Raft::new(&cells);
+        base.set(1, 64, 2, Block::Stone);
+        let p = phys();
+        let turn = RaftFrame {
+            yaw_delta: FRAC_PI_2,
+            ..RaftFrame::default()
+        };
+        for _ in 0..3 {
+            raft.advance_driven(&RaftFrame::default(), &turn, &mut [], &p, &base);
+        }
+        assert_eq!(raft.quarter_turns(), 0);
+        assert_eq!(raft.heading(), 0.0);
+        base.set(1, 64, 2, Block::Air);
+        raft.advance_driven(&RaftFrame::default(), &turn, &mut [], &p, &base);
+        assert_eq!(raft.quarter_turns(), 1);
+    }
+
+    #[test]
+    fn open_water_and_shallows_do_not_stop_the_raft() {
+        let (mut base, mut raft) = deck();
+        for x in 4..10 {
+            for z in 0..4 {
+                base.set(x, 64, z, Block::Water);
+                base.set(x, 63, z, Block::Sand);
+            }
+        }
+        let p = phys();
+        for _ in 0..20 {
+            raft.advance_driven(&RaftFrame::default(), &drive_east(0.25), &mut [], &p, &base);
+        }
+        assert_eq!(raft.offset()[0], 5.0);
+    }
+
+    #[test]
+    fn swell_applies_while_the_drive_is_blocked() {
+        let (mut base, mut raft) = deck();
+        base.set(4, 64, 1, Block::Stone);
+        let p = phys();
+        let swell = RaftFrame {
+            displacement: [0.0, 0.1, 0.0],
+            ..RaftFrame::default()
+        };
+        raft.advance_driven(&swell, &drive_east(0.5), &mut [], &p, &base);
+        assert_eq!(raft.offset()[0], 0.0);
+        assert!((raft.offset()[1] - 0.1).abs() < 1e-12);
     }
 
     fn settle(pl: &mut Player, p: &PlayerPhysics, w: &impl CollisionWorld) {
@@ -527,6 +689,57 @@ mod tests {
             .map(|t| sw.frame(t).tilt[0].hypot(sw.frame(t).tilt[1]))
             .fold(0.0, f64::max);
         assert!((peak - sw.tilt_amplitude).abs() < 0.05, "{peak}");
+    }
+
+    #[test]
+    fn drive_loads_and_rejects_bad_data() {
+        let d = Drive::default_from_data().unwrap();
+        assert!(d.speed > 0.0 && d.turn_rate > 0.0);
+        assert_err_contains(Drive::parse("[drive]\n"), "missing drive.");
+        assert_err_contains(
+            Drive::parse("[drive]\nspeed=\"x\"\nturn_rate=0.1\n"),
+            "drive.speed must be a number",
+        );
+        assert_err_contains(
+            Drive::parse("[drive]\nspeed=0.1\nturn_rate=0.0\n"),
+            "drive.turn_rate must be",
+        );
+    }
+
+    #[test]
+    fn drive_frame_is_zero_linear_clamped_and_along_heading() {
+        let d = Drive {
+            speed: 0.2,
+            turn_rate: 0.05,
+        };
+        assert_eq!(d.frame(0.0, 0.0, 1.3), RaftFrame::default());
+        let f = d.frame(0.5, -0.5, 0.0);
+        assert!((f.displacement[2] + 0.1).abs() < 1e-12 && f.displacement[0].abs() < 1e-12);
+        assert!((f.yaw_delta + 0.025).abs() < 1e-12);
+        assert_eq!(d.frame(7.0, 7.0, 0.4), d.frame(1.0, 1.0, 0.4));
+        // A quarter turn faces +x; backwards reverses.
+        let f = d.frame(1.0, 0.0, FRAC_PI_2);
+        assert!((f.displacement[0] - 0.2).abs() < 1e-12 && f.displacement[2].abs() < 1e-12);
+        let b = d.frame(-1.0, 0.0, FRAC_PI_2);
+        assert!((b.displacement[0] + 0.2).abs() < 1e-12);
+    }
+
+    #[test]
+    fn heading_is_continuous_across_quarter_turn_boundary() {
+        let mut raft = Raft::new(&[[0, 64, 0]]);
+        let step = RaftFrame {
+            yaw_delta: FRAC_PI_2 / 10.0,
+            ..RaftFrame::default()
+        };
+        let mut prev = raft.heading();
+        for i in 1..=25 {
+            raft.advance(&step, &mut [], &phys());
+            let h = raft.heading();
+            assert!((h - prev - step.yaw_delta).abs() < 1e-9, "step {i}");
+            prev = h;
+        }
+        assert_eq!(raft.quarter_turns(), 3);
+        assert!((prev - 2.5 * FRAC_PI_2).abs() < 1e-9);
     }
 
     #[test]

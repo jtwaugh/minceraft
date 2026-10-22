@@ -28,6 +28,9 @@ pub struct TickInput {
     /// Pressed since last tick.
     pub drop: bool,
     pub tool_slot: Option<u8>,
+    /// Edge: a second forward press arrived within the double-tap window and
+    /// forward is still held. The sim owns the sprint state.
+    pub sprint: bool,
 }
 
 impl TickInput {
@@ -83,6 +86,9 @@ pub struct InputAccumulator {
     interact: Latch,
     drop: Latch,
     tool_slot: Option<u8>,
+    /// Ticks drained since the last forward press edge; `None` before the first.
+    since_forward_press: Option<u32>,
+    double_tap: bool,
 }
 
 fn axis(v: f32) -> f32 {
@@ -144,6 +150,16 @@ impl InputAccumulator {
         self.drop.press();
     }
 
+    /// Forward key went down (not a repeat). A second press within `window`
+    /// ticks of the previous one arms a sprint, reported by the next drain if
+    /// forward is still held then.
+    pub fn press_forward(&mut self, window: u32) {
+        if self.since_forward_press.is_some_and(|t| t <= window) {
+            self.double_tap = true;
+        }
+        self.since_forward_press = Some(0);
+    }
+
     /// Select a tool slot; the latest selection before the tick wins.
     pub fn select_tool(&mut self, slot: u8) {
         self.tool_slot = Some(slot);
@@ -151,7 +167,10 @@ impl InputAccumulator {
 
     /// Produce this tick's input. Held values stay; edges are consumed.
     pub fn drain(&mut self) -> TickInput {
+        let sprint = std::mem::take(&mut self.double_tap) && self.move_forward > 0.0;
+        self.since_forward_press = self.since_forward_press.map(|t| t.saturating_add(1));
         TickInput {
+            sprint,
             move_forward: self.move_forward,
             move_strafe: self.move_strafe,
             yaw: self.yaw,
@@ -242,6 +261,73 @@ mod tests {
         let t = a.drain();
         assert!(!t.interact && !t.drop);
         assert_eq!(t.tool_slot, None);
+    }
+
+    /// Forward held (or not) as the sampler would set it, then a press.
+    fn tap(a: &mut InputAccumulator, window: u32) {
+        a.set_move(1.0, 0.0);
+        a.press_forward(window);
+    }
+
+    #[test]
+    fn double_tap_within_window_sprints_on_one_tick() {
+        let mut a = InputAccumulator::new();
+        tap(&mut a, 3);
+        assert!(!a.drain().sprint);
+        a.set_move(0.0, 0.0);
+        a.drain();
+        tap(&mut a, 3);
+        assert!(a.drain().sprint);
+        assert!(!a.drain().sprint);
+    }
+
+    #[test]
+    fn double_tap_window_is_inclusive_and_late_press_does_not_sprint() {
+        let mut a = InputAccumulator::new();
+        tap(&mut a, 3);
+        for _ in 0..3 {
+            a.drain();
+        }
+        tap(&mut a, 3);
+        assert!(a.drain().sprint);
+        let mut a = InputAccumulator::new();
+        tap(&mut a, 3);
+        for _ in 0..4 {
+            a.drain();
+        }
+        tap(&mut a, 3);
+        assert!(!a.drain().sprint);
+    }
+
+    #[test]
+    fn double_tap_released_before_drain_does_not_sprint() {
+        let mut a = InputAccumulator::new();
+        tap(&mut a, 3);
+        a.drain();
+        tap(&mut a, 3);
+        a.set_move(0.0, 0.0);
+        assert!(!a.drain().sprint);
+        assert!(!a.drain().sprint);
+    }
+
+    #[test]
+    fn same_double_taps_give_same_ticks() {
+        let run = || {
+            let mut a = InputAccumulator::new();
+            let mut out = Vec::new();
+            for i in 0..30u32 {
+                if i % 3 == 0 {
+                    tap(&mut a, 3);
+                }
+                if i % 9 == 0 {
+                    a.set_move(0.0, 0.0);
+                }
+                out.push(a.drain());
+            }
+            out
+        };
+        assert_eq!(run(), run());
+        assert!(run().iter().any(|t| t.sprint));
     }
 
     fn run() -> Vec<TickInput> {

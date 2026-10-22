@@ -20,3 +20,10 @@ direction_degrees = 30.0
 [travel]
 # Blocks per tick (20 ticks per second).
 speed = 0.15
+
+# Player driving from the helm (raft-scene-feedback.md Phase D).
+[drive]
+# Blocks per tick with forward held fully.
+speed = 0.12
+# Radians per tick with the turn axis held fully (about 1.7 degrees).
+turn_rate = 0.03

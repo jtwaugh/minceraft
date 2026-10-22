@@ -1176,10 +1176,8 @@ Beta 1.7.3 has no sprinting. These rules are this project's own choices, not fac
 
 - **Sneaking.** Sprinting is disabled while sneaking: a sprint can't start while sneaking, and starting to sneak ends a sprint.
 - **Water.** Sprinting is disabled in water: a sprint can't start in water, and entering water ends a sprint.
-- **Walls.** Hitting a wall ends the sprint.
+- **Walls.** Only a head-on hit ends the sprint: being blocked in the facing direction. Sliding along a wall does not. (Decided in #861.)
 - **Camera.** While sprinting the view gets a slight fisheye effect: the field of view widens a little. The amount and how quickly it eases in and out are this game's own tunables in `data/input.toml`.
-
-Not yet decided: whether any horizontal contact with a wall counts or only a head-on hit, and whether a sprint ended by sneaking or water resumes without a fresh double-tap.
 
 #### Sprinting in the reference version
 
@@ -1200,3 +1198,4 @@ Facts about sprinting in the reference version (Java Edition 26.3, decided in #8
 - **Other end conditions.** Attacking a mob and blocking with a shield end a sprint. Eating or drinking pauses it, and the sprint key can't start one meanwhile. (Hunger and Blindness also block sprinting; this game has neither.)
 - **In the air.** A player stays sprinting while airborne as long as forward is held.
 - **Sprint-jump.** Jump height is unchanged (upward speed 0.42, about 1.2522 blocks). On the tick the jump starts, if the player is sprinting on that tick, 0.2 of horizontal speed is added along the horizontal facing, ignoring pitch and which movement keys are held. Sprint state is updated before the jump within a tick, so releasing forward on the jump tick gives no push. On the jump tick the player still counts as on the ground: they get the ground sprint acceleration (0.1274) as well as the push, move the full 0.2 of the push that tick, and ground drag (×0.546) applies at the end of the tick, with air drag (×0.91) from the next tick on. A sprint-jump covers up to about 4.225 blocks and averages about 7.127 blocks/s on flat ground.
+A sprint ended by sneaking or water does not resume by itself when the condition clears, even with forward still held; it needs a fresh double-tap to start again. (Decided in #861.)

@@ -9,6 +9,9 @@
 //!   raft does not block its own anchorage. The window is the box of the two
 //!   anchorages and the segment's two route points, grown by
 //!   `window_margin + raft_half_width` plus the channel's half-width.
+//! - Each level also gets the decorated checks of `validate_decorated`
+//!   (Phase G) on its `window(level, t)` generated with decoration on; their
+//!   `required` text starts with the level id.
 //! - `anchorage_reachable` is one check per consecutive pair: A* over the
 //!   eroded navigable set from one anchorage to the next. Its `name` is the
 //!   shared constant; the pair is named in `required`.
@@ -25,8 +28,8 @@ use terrain::{Block, HEIGHT, SEA_LEVEL};
 
 use crate::validation::{CheckResult, ValidationReport};
 use crate::{
-    erode, find_path, nearest_on_segment, validate_level, DensityTerm, Layout, Level, NavMap,
-    Route, Thresholds,
+    erode, find_path, nearest_on_segment, validate_decorated, validate_level, window, DensityTerm,
+    Layout, Level, NavMap, Route, Thresholds,
 };
 
 pub const CHECK_ANCHORAGE_REACHABLE: &str = "anchorage_reachable";
@@ -96,6 +99,22 @@ pub fn anchorage_paths(
         .collect()
 }
 
+/// The Phase G checks for one level, on the decorated `window(level, t)`
+/// without the layout's structures. `required` is prefixed with the level id.
+fn decorated_checks(layout: &Layout, level: &Level, t: &Thresholds) -> Vec<CheckResult> {
+    let (x0, z0, w, d) = window(level, t);
+    let bare = Layout {
+        structures: Vec::new(),
+        ..layout.clone()
+    };
+    let region = bare.generate_region(x0, z0, w, d, true);
+    let mut checks = validate_decorated(&region, level, t).checks;
+    for c in &mut checks {
+        c.required = format!("{}: {}", level.id, c.required);
+    }
+    checks
+}
+
 /// Validate every level, every consecutive anchorage pair and the channel
 /// along `route`.
 pub fn validate_route(
@@ -107,6 +126,7 @@ pub fn validate_route(
     let mut checks = Vec::new();
     for level in levels {
         checks.extend(validate_level(layout, level, t).checks);
+        checks.extend(decorated_checks(layout, level, t));
     }
     let channel = layout.density.iter().find_map(|d| match d {
         DensityTerm::Channel {

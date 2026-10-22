@@ -20,6 +20,11 @@ fov_degrees = 70.0
 # Placeholder (docs/design/sprinting.md): the double-tap window, in sim ticks,
 # pending research question #820. Must be a whole number of at least 1.
 double_tap_ticks = 7
+# This game's own tunables (SPEC Sprinting, Camera), not facts about Beta. While
+# sprinting the field of view widens by fov_extra_degrees, easing in and out over
+# fov_ease_seconds. Both must be positive numbers.
+fov_extra_degrees = 10.0
+fov_ease_seconds = 0.15
 
 [actions.move_forward]
 keys = ["KeyW"]

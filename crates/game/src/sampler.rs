@@ -87,6 +87,10 @@ impl Sampler {
                     }
                 }
             }
+            Action::MoveForward => {
+                self.acc.press_forward(self.bindings.double_tap_ticks);
+                self.refresh_held();
+            }
             _ => self.refresh_held(),
         }
     }

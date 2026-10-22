@@ -358,9 +358,11 @@ spawn_water_radius = 8.0
 points = [[0, 0], [80, 25], [162, 41]]
 
 [climate]
-temp_start = -0.25
-temp_end = 0.15
+temp_start = -0.55
+temp_end = 0.55
 ```
+
+The route's `AlongPath` climate bias takes its values from shipped defaults in `data/route.toml`, identical for every seed: `temp_start = -0.55`, `temp_end = 0.55`, `d_humid_start = 0`, `d_humid_end = 0`, `half_width = 64` and `falloff = 64` (blocks). The level file's `[climate]` table is read and written but only records what was used. (Decided in #846.)
 
 > **Reconciler:** `sea_level` in the file duplicates the compile-time
 > `SEA_LEVEL`. Suggest the loader reject a mismatch instead of honouring it.
@@ -649,13 +651,26 @@ Adds:
 
 Done when:
 - Over 100 searched worlds, the first anchorage is in a cold biome and the last in a warm one in at least 90 percent.
-- No two consecutive islands share the same biome in the top-scored worlds, unless the route is shorter than the climate noise scale.
+- In the top-scored worlds, at least 75 percent of consecutive anchorage pairs have islands in different biomes. There is no exemption for short routes. (Decided in #845.)
 
 > **Reconciler:** the biome and vegetation work this depends on is done, so
-> Phase G's dependency on it is met. "Cold" and "warm" biome need a definition
-> (for example, a list of biomes in `data/biomes.toml` terms, or T thresholds).
+> Phase G's dependency on it is met. "Cold" and "warm" biome are defined in
+> the next paragraph.
 > "The climate noise scale" is a number from SPEC 7 (frequency 0.025 for T);
 > state it as a distance. Fish habitat following is a consequence, not work.
+>
+> **Cold, warm, and an anchorage's biome.** Cold and warm are temperature
+> thresholds on the biased T at the sample column: cold is T < 0.5 and warm is
+> T > 0.984 (62/63). An anchorage's island is cold or warm when most of its
+> land columns are cold or warm. Its biome, for the variety score and the
+> "no two consecutive islands share the same biome" rule, is the most common
+> biome among its land columns. (Decided in #844.)
+>
+> **Sea ice in the route's channels.** The whole route channel stays open
+> water, including the spawn water zone. Add a layout-only rule that skips
+> the sea-ice step on columns inside the route's channels, as a new hook into
+> the terrain sea-ice step; the sea-ice rule is unchanged everywhere else.
+> (Decided in #867.)
 
 ---
 
@@ -709,7 +724,7 @@ To account for raft size, erode the navigable set by the raft's half-width (defa
 
 ### 6.3 Seed scoring
 
-Each term is normalized to 0..1 and weighted. Weights live in `data/scoring.toml`. Normalization is linear against a cap, and the caps live in `data/scoring.toml` too. Each term is averaged over the levels. Spacing regularity is `1 - min(|gap - spacing| / spacing_spread, 1)` per gap, averaged, with `spacing` and `spacing_spread` from the route. Path directness is the mean over segments of straight-line distance over path length, clamped to 0..1. Island quality is the mean of `min(area / (cap_area_factor * min_area), 1)` and the same for flat tiles, with the `cap_*_factor` values in the file. Coastline interest is `min(ratio / cap_ratio, 1)`. (Decided in #742.)
+Each term is normalized to 0..1 and weighted. Weights live in `data/scoring.toml`. Normalization is linear against a cap, and the caps live in `data/scoring.toml` too. Each term is averaged over the levels. Spacing regularity is `1 - min(|gap - spacing| / spacing_spread, 1)` per gap, averaged, with `spacing` and `spacing_spread` from the route. Path directness is the mean over segments of straight-line distance over path length, clamped to 0..1. Island quality is the mean of `min(area / (cap_area_factor * min_area), 1)` and the same for flat tiles, with the `cap_*_factor` values in the file. Coastline interest is `min(ratio / cap_ratio, 1)`. (Decided in #742.) Climate gradient (Phase G), with `T_i` the biased temperature at anchorage `i`, is the mean of two parts: `min((T_last - T_first) / cap_temp_change, 1)` clamped to 0..1, and the share of consecutive steps with `T_{i+1} >= T_i`. Biome variety (Phase G) is `min(B / cap_biomes, 1)`, with `B` the number of distinct biomes across the anchorage islands. In `data/scoring.toml`, `cap_temp_change` is 0.5 and `cap_biomes` is 4. (Decided in #847.)
 
 | Term | Meaning | Weight |
 |---|---|---|

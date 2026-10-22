@@ -330,11 +330,13 @@ mod structure_error;
 mod structure_rules;
 pub use structure::{Structure, StructureError};
 mod validation;
+mod validation_decorated;
 pub use validation::{
     raft_footprint, validate_flat_grass, validate_island, validate_level, validate_raft, window,
-    CheckResult, Thresholds, ValidationReport, CHECK_FLAT_GRASS, CHECK_ISLAND_AREA,
-    CHECK_RAFT_CLEAR, CHECK_RAFT_WATER, CHECK_SPAWN_CLEAR,
+    CheckResult, Thresholds, ValidationReport, CHECK_CLEAR_FLAT, CHECK_FLAT_GRASS,
+    CHECK_ISLAND_AREA, CHECK_RAFT_CLEAR, CHECK_RAFT_WATER, CHECK_SPAWN_CLEAR, CHECK_TREES,
 };
+pub use validation_decorated::validate_decorated;
 
 #[cfg(test)]
 mod builder_tests;
@@ -394,5 +396,7 @@ mod seed_output_tests;
 mod structure_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod validation_decorated_tests;
 #[cfg(test)]
 mod validation_tests;
