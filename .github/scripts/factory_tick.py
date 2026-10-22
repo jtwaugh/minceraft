@@ -46,6 +46,7 @@ class Snapshot:
     reported: set = field(default_factory=set)  # (target, reason) already reported
     codeowners: list = field(default_factory=list)  # CODEOWNERS patterns; None if unreadable
     master_ci: str = ""  # conclusion of the newest finished CI run on master
+    master_runs: list = field(default_factory=list)  # finished master CI runs: created_at, conclusion
     unchanged: bool = False  # every read was a 304 after a clean tick: nothing to do
 
     @classmethod
@@ -123,7 +124,7 @@ class Snapshot:
                 n = pr["number"]
                 runs = get(f"repos/{repo}/actions/runs?head_sha={pr['sha']}&per_page=100")
                 pr["runs"] = [{"id": r["id"], "name": r["name"], "conclusion": r["conclusion"],
-                               "run_attempt": r["run_attempt"]}
+                               "run_attempt": r["run_attempt"], "created_at": r["created_at"]}
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
                 # Same paths the board loader reads, so these cost nothing extra.
                 pr["verdict"] = verdict_of(paged(f"repos/{repo}/issues/{n}/comments"), pr["sha"])
@@ -137,9 +138,11 @@ class Snapshot:
         except (RuntimeError, KeyError, TypeError, ValueError):
             snap.codeowners = None  # unknown owners: merge nothing automatically
         ci = get(f"repos/{repo}/actions/workflows/ci.yml/runs?branch=master&event=push"
-                 "&status=completed&per_page=1")
+                 "&status=completed&per_page=30")
         ci_runs = ci.get("workflow_runs") if isinstance(ci, dict) else None
         snap.master_ci = (ci_runs or [{}])[0].get("conclusion") or ""
+        snap.master_runs = [{"created_at": r["created_at"], "conclusion": r["conclusion"]}
+                            for r in ci_runs or []]
         if unchanged(gh_cache.stats, gh_cache.state):
             snap.unchanged = True
             snap.requests, snap.not_modified = gh_cache.stats["requests"], gh_cache.stats["not_modified"]
@@ -248,6 +251,10 @@ class FakeBackend(Backend):
         elif action.kind == "merge_pr":
             pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
             pr["merged"] = True
+        elif action.kind == "update_branch":
+            pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
+            # A new head is on its way: nothing about the old one counts any more.
+            pr["sha"], pr["runs"], pr["verdict"] = "", [], None
         elif action.kind == "supersede_pr":
             pr = next(p for p in snapshot.prs if f"pr#{p['number']}" == action.target)
             pr["labels"] = [*pr.get("labels", []), "superseded"]
@@ -306,11 +313,12 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, supersede, stalls, rerun, report, plans, ready,
-    merge, board."""
+    """The fixed order: invariants, supersede, refresh, stalls, rerun, report, plans,
+    ready, merge, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
+    from factory_refresh import refresh_after_red_master
     from factory_ready import ready
     from factory_report import report
     from factory_rerun import rerun_failed
@@ -320,7 +328,7 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, superseded, stalls, rerun_failed, report, close_finished_plans, ready, auto_merge, board_pass]
+    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, report, close_finished_plans, ready, auto_merge, board_pass]
 
 
 def main(argv):

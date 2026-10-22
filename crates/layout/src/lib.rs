@@ -375,6 +375,8 @@ mod region_tests;
 #[cfg(test)]
 mod retry_tests;
 #[cfg(test)]
+mod route_climate_tests;
+#[cfg(test)]
 mod route_layout_tests;
 #[cfg(test)]
 mod route_retry_tests;

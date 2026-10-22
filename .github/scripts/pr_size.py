@@ -7,7 +7,8 @@ Diffs BASE...HEAD (the merge base, as a pull request does) and counts
 added plus deleted lines, leaving out:
 
 - tests: files under a tests/ or test/ folder, Rust files named tests.rs,
-  *_tests.rs or tests_*.rs, files named *_test.* or *.test.*, and Rust #[cfg(test)] modules inside source files;
+  *_tests.rs or tests_*.rs, files named *_test.* or *.test.*, Python files
+  named test_*.py, and Rust #[cfg(test)] modules inside source files;
 - prose: Markdown and .txt files, and anything under docs/;
 - generated files: lockfiles, images, wasm, and the art batch JSON.
 
@@ -26,6 +27,7 @@ LIMIT = 200
 
 TEST_PATH = re.compile(
     r"(^|/)tests?/|(^|/)(tests?|tests?_[^/]*|[^/]*_tests?)\.rs$|_test\.[a-z]+$|\.test\.[a-z]+$"
+    r"|(^|/)test_[^/]*\.py$"
 )
 PROSE = re.compile(r"\.(md|txt)$|^docs/|^LICENSE")
 GENERATED = re.compile(

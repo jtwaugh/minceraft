@@ -126,6 +126,16 @@ impl InputSampler {
     pub fn fov_degrees(&self) -> f32 {
         self.0.bindings().fov_degrees
     }
+    /// Degrees added to the field of view at full sprint (`sprint.fov_extra_degrees`).
+    #[wasm_bindgen(getter)]
+    pub fn sprint_fov_extra_degrees(&self) -> f32 {
+        self.0.bindings().sprint_fov_extra_degrees
+    }
+    /// Seconds the widening takes to ease in or out (`sprint.fov_ease_seconds`).
+    #[wasm_bindgen(getter)]
+    pub fn sprint_fov_ease_seconds(&self) -> f32 {
+        self.0.bindings().sprint_fov_ease_seconds
+    }
     pub fn drain(&mut self) -> Tick {
         Tick(self.0.drain())
     }

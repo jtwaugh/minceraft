@@ -58,6 +58,12 @@ struct RouteParams {
     channel_depth_below_sea: f64,
     channel_clear_above: i32,
     corridor_margin: u32,
+    temp_start: f64,
+    temp_end: f64,
+    d_humid_start: f64,
+    d_humid_end: f64,
+    climate_half_width: f64,
+    climate_falloff: f64,
 }
 
 /// Mirrors `ScoringConfig` in `src/scoring.rs`.
@@ -212,7 +218,9 @@ fn main() {
         "static SHIPPED_ROUTE: RouteParams = RouteParams {{ spacing: {:?}, \
          spacing_spread: {:?}, max_turn_degrees: {:?}, channel_half_width: {:?}, \
          channel_falloff: {:?}, channel_depth_below_sea: {:?}, channel_clear_above: {:?}, \
-         corridor_margin: {:?} }};\n",
+         corridor_margin: {:?}, temp_start: {:?}, temp_end: {:?}, \
+         d_humid_start: {:?}, d_humid_end: {:?}, climate_half_width: {:?}, \
+         climate_falloff: {:?} }};\n",
         r.spacing,
         r.spacing_spread,
         r.max_turn_degrees,
@@ -220,7 +228,13 @@ fn main() {
         r.channel_falloff,
         r.channel_depth_below_sea,
         r.channel_clear_above,
-        r.corridor_margin
+        r.corridor_margin,
+        r.temp_start,
+        r.temp_end,
+        r.d_humid_start,
+        r.d_humid_end,
+        r.climate_half_width,
+        r.climate_falloff
     );
     std::fs::write(out_dir.join("route.rs"), out).unwrap();
 
