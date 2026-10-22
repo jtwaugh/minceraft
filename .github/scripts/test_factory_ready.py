@@ -47,6 +47,9 @@ class Test(unittest.TestCase):
         pr = {"number": 9, "head": "claude/issue-1-2026", "files": []}
         self.assertEqual(started(snap([issue(1)], [pr])), [])
 
+    def test_local_label(self):
+        self.assertEqual(started(snap([issue(1, labels=("factory", "local"))])), [])
+
     def test_batch_file_overlap(self):
         s = snap([issue(1, "`a.rs`"), issue(2, "`a.rs`"), issue(3, "`b.rs`")])
         self.assertEqual(started(s), ["issue#1", "issue#3"])
