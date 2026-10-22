@@ -8,6 +8,8 @@ weight_path_directness = 1.0
 weight_island_quality = 1.0
 weight_coastline_interest = 0.5
 weight_extra_islands = 0.5
+weight_climate_gradient = 1.0
+weight_biome_variety = 1.0
 
 # Island quality: area and flat tiles reach 1.0 at this multiple of the
 # validation minimums (min_island_columns, min_flat_grass_tiles).
@@ -22,3 +24,10 @@ cap_ratio = 6.0
 # viewpoint on the route is this many blocks above sea level.
 cap_extra_islands = 3.0
 eye_height = 2.0
+
+# Climate gradient: a rise in temperature from the first to the last
+# anchorage of this much reaches 1.0.
+cap_temp_change = 0.5
+
+# Biome variety: this many distinct biomes across anchorage islands reach 1.0.
+cap_biomes = 4.0

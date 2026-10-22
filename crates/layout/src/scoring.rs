@@ -21,6 +21,8 @@ pub struct ScoringConfig {
     pub weight_island_quality: f64,
     pub weight_coastline_interest: f64,
     pub weight_extra_islands: f64,
+    pub weight_climate_gradient: f64,
+    pub weight_biome_variety: f64,
     /// Island quality: area reaches 1.0 at this multiple of the minimum.
     pub cap_area_factor: f64,
     /// Island quality: flat tiles reach 1.0 at this multiple of the minimum.
@@ -31,6 +33,10 @@ pub struct ScoringConfig {
     pub cap_extra_islands: f64,
     /// Extra islands: height above `SEA_LEVEL` of the viewpoint on the route.
     pub eye_height: f64,
+    /// Climate gradient: the first-to-last temperature rise that reaches 1.0.
+    pub cap_temp_change: f64,
+    /// Biome variety: the distinct-biome count that reaches 1.0.
+    pub cap_biomes: f64,
 }
 
 include!(concat!(env!("OUT_DIR"), "/scoring.rs"));

@@ -77,11 +77,15 @@ struct ScoringConfig {
     weight_island_quality: f64,
     weight_coastline_interest: f64,
     weight_extra_islands: f64,
+    weight_climate_gradient: f64,
+    weight_biome_variety: f64,
     cap_area_factor: f64,
     cap_flat_factor: f64,
     cap_ratio: f64,
     cap_extra_islands: f64,
     eye_height: f64,
+    cap_temp_change: f64,
+    cap_biomes: f64,
 }
 
 fn opt<T: std::fmt::Debug>(v: &Option<T>) -> String {
@@ -249,18 +253,23 @@ fn main() {
         "static SHIPPED_SCORING: ScoringConfig = ScoringConfig {{ \
          weight_spacing_regularity: {:?}, weight_path_directness: {:?}, \
          weight_island_quality: {:?}, weight_coastline_interest: {:?}, \
-         weight_extra_islands: {:?}, cap_area_factor: {:?}, cap_flat_factor: {:?}, \
-         cap_ratio: {:?}, cap_extra_islands: {:?}, eye_height: {:?} }};\n",
+         weight_extra_islands: {:?}, weight_climate_gradient: {:?}, \
+         weight_biome_variety: {:?}, cap_area_factor: {:?}, cap_flat_factor: {:?}, \
+         cap_ratio: {:?}, cap_extra_islands: {:?}, eye_height: {:?}, cap_temp_change: {:?}, cap_biomes: {:?} }};\n",
         c.weight_spacing_regularity,
         c.weight_path_directness,
         c.weight_island_quality,
         c.weight_coastline_interest,
         c.weight_extra_islands,
+        c.weight_climate_gradient,
+        c.weight_biome_variety,
         c.cap_area_factor,
         c.cap_flat_factor,
         c.cap_ratio,
         c.cap_extra_islands,
-        c.eye_height
+        c.eye_height,
+        c.cap_temp_change,
+        c.cap_biomes
     );
     std::fs::write(out_dir.join("scoring.rs"), out).unwrap();
 
