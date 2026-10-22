@@ -30,3 +30,9 @@ d_humid_end = 0.0
 # over a further climate_falloff blocks.
 climate_half_width = 64.0
 climate_falloff = 64.0
+
+# Cold and warm water (decided in #844): thresholds on the biased
+# temperature T at a column. Cold is T < cold_below; warm is
+# T > warm_above (62/63).
+cold_below = 0.5
+warm_above = 0.9841269841269841
