@@ -265,6 +265,12 @@ fn describe_event(e: &GameEvent) -> String {
         GameEvent::SteppedOffRaft { player } => format!("stepped_off_raft player={player}"),
         GameEvent::Landed { fall_distance } => format!("landed fall_distance={fall_distance}"),
         GameEvent::PlayerDied { cause } => format!("player_died cause={cause}"),
+        GameEvent::PlayerRespawned { position } => {
+            format!(
+                "player_respawned position={}",
+                position.map(|c| c.to_string()).join(",")
+            )
+        }
     }
 }
 

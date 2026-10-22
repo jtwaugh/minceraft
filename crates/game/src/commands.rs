@@ -406,7 +406,27 @@ pub fn default_registry() -> Result<Registry<Walker>, RegistryError> {
         pause_command(),
         resume_command(),
         step_command(),
+        respawn_command(),
     ])
+}
+
+/// `respawn`: after dying, return to the start spawn with full health
+/// (docs/design/player-death.md Phase A). Not a cheat.
+pub fn respawn_command() -> Command<Walker> {
+    Command {
+        name: "respawn",
+        aliases: &[],
+        args: &[],
+        help: "after dying, return to the start spawn with full health",
+        states: ALL_STATES,
+        cheat: false,
+        handler: respawn,
+    }
+}
+
+fn respawn(ctx: &mut Ctx<'_, Walker>, _args: &[Arg]) -> Result<Vec<String>, String> {
+    ctx.world.respawn()?;
+    Ok(vec!["respawned".into()])
 }
 
 /// `help` lists every command; `help <name>` describes one.
@@ -949,12 +969,12 @@ mod default_registry_tests {
     use super::*;
 
     #[test]
-    fn default_registry_has_exactly_the_eight_commands() {
+    fn default_registry_has_exactly_the_nine_commands() {
         let reg = default_registry().unwrap();
         let names: Vec<&str> = reg.iter().map(|c| c.name).collect();
         assert_eq!(
             names,
-            vec!["help", "give", "spawn", "clear", "tp", "pause", "resume", "step"]
+            vec!["help", "give", "spawn", "clear", "tp", "pause", "resume", "step", "respawn"]
         );
         assert!(!reg.get("help").unwrap().cheat);
     }
@@ -1365,5 +1385,28 @@ mod pause_tests {
         assert_eq!(w.sim_tick(), 0, "commands never advance the sim");
         w.tick(&TickInput::default());
         assert_eq!(w.sim_tick(), 1, "tick itself never checks the flag");
+    }
+}
+
+#[cfg(test)]
+mod respawn_tests {
+    use super::*;
+    use crate::events::GameEvent;
+    use crate::input::TickInput;
+
+    #[test]
+    fn respawn_command_errors_while_alive_and_emits_nothing() {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(Registry::new(vec![respawn_command()]).unwrap());
+        w.submit_command("respawn");
+        w.tick(&TickInput::default());
+        let out = w.drain_command_output();
+        assert_eq!(out.len(), 1);
+        assert!(out[0].contains("not dead"), "{out:?}");
+        assert!(!w
+            .drain_events()
+            .iter()
+            .any(|e| matches!(e, GameEvent::PlayerRespawned { .. })));
+        assert!(!w.cheated());
     }
 }
