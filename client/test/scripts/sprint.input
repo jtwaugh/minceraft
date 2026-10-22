@@ -1,0 +1,84 @@
+# Sprinting (docs/design/sprinting.md Phase A, section 4). The double-tap window
+# is data/input.toml's sprint.double_tap_ticks (7); a sim tick is 50 ms, so
+# `frame 50 xN` steps are N ticks apart. `runway` gives a straight stone path
+# with a wall at the end; the sprint scale is data/player.toml's movement.sprint_scale.
+
+case walking covers less distance than a sprint over the same frames
+start walk raft
+click
+lock
+runway 12
+mark
+down KeyW
+frame 50 x8
+expect sprinting = false
+expect moved.z > -1.2
+up KeyW
+runway 12
+press KeyW
+down KeyW
+mark
+frame 50 x8
+expect sprinting = true
+expect moved.z < -1.3
+
+case a double-tap held after the second press starts a sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x3
+down KeyW
+frame 50 x2
+expect sprinting = true
+
+case a second tap after the window does not sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x9
+down KeyW
+frame 50 x2
+expect sprinting = false
+
+case releasing forward ends the sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+down KeyW
+frame 50 x2
+expect sprinting = true
+up KeyW
+frame 50
+expect sprinting = false
+
+case sneaking ends the sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+down KeyW
+frame 50 x2
+expect sprinting = true
+down ShiftLeft
+frame 50
+expect sprinting = false
+
+case walking into a wall ends the sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+down KeyW
+frame 50 x2
+expect sprinting = true
+until sprinting = false
+expect sprinting = false
+expect moved.z < -5

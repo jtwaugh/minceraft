@@ -23,7 +23,7 @@ test('Tick.sprint is set on the drain after a double-tap of forward', () => {
 });
 
 test('a double-tap makes expect sprinting = true hold', () => {
-  run(script('expect sprinting = false\npress KeyW\ndown KeyW\nframe 100\nexpect sprinting = true'));
+  run(script('runway 12\nexpect sprinting = false\npress KeyW\ndown KeyW\nframe 100\nexpect sprinting = true'));
 });
 
 test('a single press does not sprint, and the expectation can fail', () => {
