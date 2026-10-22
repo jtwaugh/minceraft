@@ -51,6 +51,39 @@ test('malformed JSON, unknown requests and use before start are errors', () => {
   } finally { s.session.close(); }
 });
 
+test('player mode refuses debug reads without changing the session', () => {
+  const state = started();
+  try {
+    handle(state, { exec: 'frame 50' });
+    const before = handle(state, { transcript: true }).transcript;
+    for (const exec of ['expect rule.primary = none', 'until sim_tick > 5', 'expect event x', 'expect no event x', 'mark', 'expect eye.y > 0', 'frame 50\nexpect moved < 1']) {
+      const r = handle(state, { exec });
+      assert.equal(r.ok, false, exec);
+      assert.match(r.error, /debug/, exec);
+    }
+    assert.equal(handle(state, { observe: 'debug' }).ok, false);
+    assert.equal(handle(state, { transcript: true }).transcript, before);
+    for (const exec of ['expect mode = walk', 'expect locked = false', 'expect hud.selected = 0']) {
+      assert.equal(handle(state, { exec }).ok, true, exec);
+    }
+  } finally { state.session.close(); }
+});
+
+test('verify mode runs debug reads and serves the debug observation', () => {
+  const state = newState();
+  assert.equal(handle(state, { start: ['walk', 'raft'], debug: true }).ok, true);
+  try {
+    for (const exec of ['expect rule.primary = none', 'until sim_tick > 5', 'expect no event x', 'mark', 'expect moved < 1']) {
+      const r = handle(state, { exec });
+      assert.equal(r.ok, true, `${exec}: ${r.error}`);
+    }
+    const r = handle(state, { observe: 'debug' });
+    assert.equal(r.ok, true);
+    assert.ok('sim_tick' in r.observation);
+    assert.equal(handle(newState(), { start: ['walk'], debug: 'yes' }).ok, false);
+  } finally { state.session.close(); }
+});
+
 test('the transcript is a script that replays through parse and run', () => {
   const state = started();
   try {
