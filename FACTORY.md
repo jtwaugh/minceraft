@@ -89,7 +89,11 @@ decides what should happen next (decision 14).
    agent, which did not write the code, reviews it and posts "Ready",
    "Ready, with nits" or "Blocked", naming the commit it reviewed. A failed
    check is re-run once by the tick before anyone looks at it.
-8. **Merge.** Only the maintainer can merge, and only when the
+8. **Merge.** A ticket PR the reviewer called "Ready", with every
+   required check green, is merged by the factory tick on the exact commit
+   that was reviewed (`factory_automerge.py`). Everything else (nits,
+   overrides, spec and design PRs, anything touching a CODEOWNERS path,
+   the maintainer's own PRs) the maintainer merges, and only when the
    `review-verdict` check is green: the reviewer said Ready about the
    latest commit, or the maintainer overrode its block with a reason.
 9. **Next phase.** When a phase's last ticket closes, the tick closes the
@@ -106,11 +110,13 @@ The maintainer's job is judgment: what to build, which option to take,
 whether a change is good. Everything mechanical is automated. To keep that
 split real:
 
-- agents can't approve or merge pull requests;
-- `master` is protected: every change goes through a PR with passing checks.
-  `review-verdict` and `PR size` must be listed as required checks in the
-  branch protection settings for the reviewer's blocks, `/override` and
-  `oversize-ok` to mean anything; until they are, both only advise;
+- agents can't approve or merge pull requests. The factory tick, a plain
+  script, merges a ticket PR only when the reviewer said "Ready" about its
+  head commit, every required check passed, it touches no CODEOWNERS path,
+  it has no `hold` label and `master`'s CI is green; anything else waits
+  for the maintainer;
+- `master` is protected: every change goes through a PR with passing checks,
+  including the required `review-verdict` and `PR size` checks;
 - [`CODEOWNERS`](.github/CODEOWNERS) requires the maintainer's review for
   the files that steer the agents: SPEC.md, CLAUDE.md, design docs,
   workflows, the art brief;
@@ -357,6 +363,7 @@ maintainer.
 | Answer a question | Comment `/decide B` on it, with reasoning on the next lines |
 | Build tickets | Label them `factory`; each starts once its dependencies are closed |
 | Ask for a fix on a PR | Comment `@claude <what to change>` |
+| Stop a ticket PR merging by itself | Add the `hold` label |
 | Merge past a reviewer block | Comment `/override <reason>` on the PR |
 | Skip the agent review of a trivial PR | Comment `/override <reason>` before it reviews |
 | Allow a PR over 200 lines | Add the `oversize-ok` label |
