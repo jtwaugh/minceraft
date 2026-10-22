@@ -425,6 +425,22 @@ impl Walk {
         self.0.raft_offset(alpha).to_vec()
     }
 
+    /// Whether the player is steering the raft.
+    pub fn driving(&self) -> bool {
+        self.0.driving()
+    }
+
+    /// The raft's yaw in radians, `alpha` of the way between the last two
+    /// ticks, the short way round a quarter-turn step.
+    pub fn raft_heading(&self, alpha: f64) -> f64 {
+        self.0.raft_heading(alpha)
+    }
+
+    /// The raft's rest-pose centre `[x, z]`, the point it turns about.
+    pub fn raft_pivot(&self) -> Vec<f64> {
+        self.0.raft_pivot().to_vec()
+    }
+
     pub fn has_world(&self) -> bool {
         self.0.has_world()
     }
@@ -658,6 +674,24 @@ mod tests {
 
     fn walk() -> Walk {
         with_default_commands(Walker::new([0.5, 5.0, 0.5]).unwrap()).unwrap_or_else(|_| panic!())
+    }
+
+    #[test]
+    fn raft_driving_state_is_neutral_without_a_raft() {
+        let w = walk();
+        assert!(!w.driving());
+        assert_eq!(w.raft_heading(0.5), 0.0);
+        assert_eq!(w.raft_pivot(), vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn raft_scene_reports_its_pivot_and_heading() {
+        let scene = Scene::new();
+        let w = Walk::in_scene(&scene).unwrap_or_else(|_| panic!());
+        let p = w.raft_pivot();
+        assert!(p[0] != 0.0 || p[1] != 0.0);
+        assert!(!w.driving());
+        assert_eq!(w.raft_heading(1.0), w.0.raft_heading(1.0));
     }
 
     #[test]
