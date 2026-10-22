@@ -45,7 +45,7 @@ concurrency:
 permissions:
   contents: read
   issues: write
-  pull-requests: read
+  pull-requests: write # drafts PRs whose ticket another PR closed (factory_supersede.py)
   actions: write # dispatches the implementer and the docs updater
 
 jobs:

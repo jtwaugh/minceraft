@@ -13,6 +13,8 @@ all of these hold:
 - it touches no path in CODEOWNERS (SPEC.md, CLAUDE.md, .github/, design
   docs: those are the maintainer's to accept);
 - it has no `hold` label, and isn't a draft;
+- no other open PR is for the same ticket (two builds of one ticket wait for
+  the maintainer to pick one; the invariants pass reports them);
 - the newest CI run on master didn't fail (merging onto a broken master
   hides which change broke it).
 
@@ -29,6 +31,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_rerun import is_ticket_pr  # noqa: E402
 from factory_tick import Action  # noqa: E402
+os.environ.setdefault("GITHUB_REPOSITORY", "unused/unused")  # tickets.py reads it at import
+from tickets import ticket_numbers  # noqa: E402
 
 HOLD = "hold"
 BOT = "claude[bot]"
@@ -93,6 +97,11 @@ def why_not(snap, pr):
         return "no verdict on the head commit"
     if v["kind"] != "ready":
         return f"verdict is {v['kind']}"
+    mine = ticket_numbers(pr["head"], pr.get("body"))
+    twins = [p["number"] for p in snap.prs if p["number"] != pr["number"] and not p.get("merged")
+             and mine & ticket_numbers(p["head"], p.get("body"))]
+    if twins:
+        return f"another open PR is for the same ticket (#{twins[0]})"
     if pr.get("mergeable_state") != "clean":
         return f"not clean ({pr.get('mergeable_state') or 'unknown'})"
     if snap.codeowners is None:
