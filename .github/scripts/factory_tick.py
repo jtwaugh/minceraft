@@ -117,12 +117,6 @@ class Snapshot:
                 pr["runs"] = [{"id": r["id"], "name": r["name"], "conclusion": r["conclusion"],
                                "run_attempt": r["run_attempt"]}
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
-                raw = paged(f"repos/{repo}/issues/{pr['number']}/comments")
-                from factory_fix import verdict
-                pr["verdict"] = verdict(raw)
-                pr["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
-                                   "created_at": c["created_at"]}
-                                  for c in raw if c["user"]["login"] in tickets.TRUSTED]
         # Only docs/ branches matter (the stalls pass); reading just those is
         # one call however many claude/ branches pile up.
         refs = get(f"repos/{repo}/git/matching-refs/heads/docs")  # every match, unpaged

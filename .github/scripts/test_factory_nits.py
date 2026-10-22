@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
-from factory_fix import marker, markers, parse_nits, verdict  # noqa: E402
+from factory_fix import marker, markers  # noqa: E402
 from factory_nits import nits  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, passes, tick  # noqa: E402
 
@@ -62,12 +62,6 @@ class Test(unittest.TestCase):
         s = snap()
         s.issues[0]["labels"] = []
         self.assertEqual(run(s), [])
-
-    def test_parse(self):
-        body = "Verdict: Ready, with nits\nReviewed commit: `abc1234`\n\n**Nits**\n1. one\n   wrapped\n- two\n"
-        self.assertEqual(parse_nits(body), ["one wrapped", "two"])
-        v = verdict([{"user": {"login": "claude[bot]"}, "body": body, "updated_at": "1"}])
-        self.assertEqual(v, {"kind": "nits", "commit": "abc1234", "nits": ["one wrapped", "two"]})
 
     def test_registered_after_rerun(self):
         names = [p.__name__ for p in passes()]
