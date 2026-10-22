@@ -8,7 +8,9 @@ import { initSync, InputSampler } from '../pkg/game_web.js';
 
 initSync({ module: readFileSync(new URL('../pkg/game_web_bg.wasm', import.meta.url)) });
 
-const script = (body) => parse(`case sprint dsl\nstart walk raft\nlock\n${body}`)[0];
+// On the field: the raft scene starts the player in the water, where sprinting
+// can't start (#894).
+const script = (body) => parse(`case sprint dsl\nstart walk raft\nlock\nstand field\n${body}`)[0];
 
 test('Tick.sprint is set on the drain after a double-tap of forward', () => {
   const s = new InputSampler();
