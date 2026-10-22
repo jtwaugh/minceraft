@@ -321,6 +321,8 @@ pub use route_layout::build_route_layout;
 mod route_retry;
 pub use route_retry::{find_route, RouteFound};
 mod scoring;
+mod scoring_climate;
+pub use scoring_climate::{biome_variety, climate_gradient};
 mod scoring_island;
 pub use scoring::{path_directness, spacing_regularity, ScoringConfig};
 pub use scoring_island::{coastline_interest, island_quality, score_island};
@@ -390,6 +392,8 @@ mod route_retry_tests;
 mod route_tests;
 #[cfg(test)]
 mod route_validation_tests;
+#[cfg(test)]
+mod scoring_climate_tests;
 #[cfg(test)]
 mod scoring_extra_tests;
 #[cfg(test)]
