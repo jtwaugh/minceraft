@@ -16,6 +16,9 @@ pub struct Player {
     pub pos: [f64; 3],
     pub vel: [f64; 3],
     pub on_ground: bool,
+    /// Sprinting (docs/design/sprinting.md section 2). Started by
+    /// `input.sprint`, ended in `tick`.
+    pub sprinting: bool,
     pub health: u32,
     /// Blocks fallen since last on the ground or in water.
     pub fall_distance: f64,
@@ -36,6 +39,7 @@ impl Player {
             pos,
             vel: [0.0; 3],
             on_ground: false,
+            sprinting: false,
             health: physics.max_health,
             fall_distance: 0.0,
             last_landing: None,
@@ -130,12 +134,22 @@ impl Player {
         // A dead player is pushed by gravity and collision only.
         let neutral = TickInput::default();
         let input = if self.dead { &neutral } else { input };
+        // Sprint state: a double-tap starts it only while walking forward and
+        // not sneaking; releasing forward or sneaking ends it.
+        if input.move_forward <= 0.0 || input.sneak {
+            self.sprinting = false;
+        } else if input.sprint {
+            self.sprinting = true;
+        }
         // 1. Read input and scale it. Over-long raw input (diagonals) is
         // normalised first so no direction is faster than straight ahead.
         let (mut fwd, mut strafe) = input.movement();
         let mut scale = physics.input_scale as f64;
         if input.sneak {
             scale *= physics.sneak_scale as f64;
+        }
+        if self.sprinting {
+            scale *= physics.sprint_scale as f64;
         }
         fwd *= scale;
         strafe *= scale;
@@ -178,6 +192,13 @@ impl Player {
         self.pos = [m.aabb.min[0] + half, m.aabb.min[1], m.aabb.min[2] + half];
         let pushed = input.move_forward != 0.0 || input.move_strafe != 0.0;
         let blocked_sideways = m.applied[0] != self.vel[0] || m.applied[2] != self.vel[2];
+        // A collision that removes velocity along the facing direction ends
+        // the sprint; a strafe-only block does not.
+        let lost_along_facing =
+            (self.vel[0] - m.applied[0]) * sin - (self.vel[2] - m.applied[2]) * cos;
+        if lost_along_facing > 1e-6 && input.move_forward > 0.0 {
+            self.sprinting = false;
+        }
         for i in 0..3 {
             if m.applied[i] != self.vel[i] {
                 self.vel[i] = 0.0;
@@ -296,6 +317,113 @@ mod tests {
             }),
             1.3,
         );
+    }
+
+    fn sprint_tick() -> TickInput {
+        TickInput {
+            sprint: true,
+            ..walk()
+        }
+    }
+
+    /// A grounded player who has been walking, then double-tapped.
+    fn sprinter(p: &PlayerPhysics, w: &MemoryWorld) -> Player {
+        let mut pl = grounded(p, w);
+        pl.tick(&sprint_tick(), p, w);
+        assert!(pl.sprinting);
+        pl
+    }
+
+    /// Distance covered over 20 ticks of `input`, from the current state.
+    fn run(pl: &mut Player, input: &TickInput, p: &PlayerPhysics, w: &MemoryWorld) -> f64 {
+        let start = pl.pos;
+        for _ in 0..20 {
+            pl.tick(input, p, w);
+        }
+        dist(start, pl.pos)
+    }
+
+    #[test]
+    fn sprint_starts_and_is_faster() {
+        let (p, w) = (phys(), floor());
+        let mut pl = sprinter(&p, &w);
+        run(&mut pl, &walk(), &p, &w);
+        assert!(pl.sprinting);
+        let fast = run(&mut pl, &walk(), &p, &w);
+        let mut slow = grounded(&p, &w);
+        run(&mut slow, &walk(), &p, &w);
+        let normal = run(&mut slow, &walk(), &p, &w);
+        close(fast, normal * p.sprint_scale as f64);
+    }
+
+    #[test]
+    fn releasing_forward_ends_sprint() {
+        let (p, w) = (phys(), floor());
+        let mut pl = sprinter(&p, &w);
+        pl.tick(&TickInput::default(), &p, &w);
+        assert!(!pl.sprinting);
+        for _ in 0..50 {
+            pl.tick(&walk(), &p, &w);
+        }
+        assert!(!pl.sprinting);
+        close(run(&mut pl, &walk(), &p, &w), 4.3);
+    }
+
+    #[test]
+    fn sneaking_ends_sprint() {
+        let (p, w) = (phys(), floor());
+        let mut pl = sprinter(&p, &w);
+        let sneak = TickInput {
+            sneak: true,
+            ..walk()
+        };
+        pl.tick(&sneak, &p, &w);
+        assert!(!pl.sprinting);
+        for _ in 0..50 {
+            pl.tick(&walk(), &p, &w);
+        }
+        assert!(!pl.sprinting);
+        close(run(&mut pl, &walk(), &p, &w), 4.3);
+    }
+
+    #[test]
+    fn hitting_a_wall_ends_sprint() {
+        let (p, mut w) = (phys(), floor());
+        for x in -2..3 {
+            for y in 1..3 {
+                w.set(x, y, -3, Block::Stone);
+            }
+        }
+        let mut pl = sprinter(&p, &w);
+        for _ in 0..60 {
+            pl.tick(&walk(), &p, &w);
+        }
+        assert!(!pl.sprinting);
+        assert!(pl.pos[2] > -2.9);
+    }
+
+    #[test]
+    fn sprint_request_needs_forward_and_no_sneak() {
+        let (p, w) = (phys(), floor());
+        let mut pl = grounded(&p, &w);
+        pl.tick(
+            &TickInput {
+                sprint: true,
+                ..TickInput::default()
+            },
+            &p,
+            &w,
+        );
+        assert!(!pl.sprinting);
+        pl.tick(
+            &TickInput {
+                sneak: true,
+                ..sprint_tick()
+            },
+            &p,
+            &w,
+        );
+        assert!(!pl.sprinting);
     }
 
     #[test]
