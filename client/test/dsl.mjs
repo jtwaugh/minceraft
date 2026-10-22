@@ -35,6 +35,9 @@
 //   stand planter               the same, on the islet's first planter
 //   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
 //                               looks at after `stand field`; `place tall_grass` puts tall grass there
+//   runway <n>                  raft scene: stone ground n blocks long running ahead (-z) from the field's
+//                               back edge, a 2-high stone wall across its end, and the player on its
+//                               start facing along it (pitch level)
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye, for `moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
@@ -285,6 +288,24 @@ function step(w, { op, args }) {
       w.walk.teleport(fx + m + 0.5, w.scene.field_y + 1, fz + m + 0.5);
       // far more than a quarter turn, so the pitch clamps at straight down
       fire(document, 'mousemove', { movementX: 0, movementY: 2000 });
+      w.controller.frame(0.05);
+      return;
+    }
+    case 'runway': {
+      const n = Number(args[0]);
+      if (!w.scene || !(n >= 1)) throw new Error('runway <n> (raft scene only)');
+      const [fx, fz] = w.scene.field, y = w.scene.field_y;
+      for (let dz = 0; dz <= n; dz++) {
+        for (let dx = 0; dx < w.scene.field_size; dx++) {
+          const wall = dz === n;
+          for (const h of wall ? [1, 2] : [0]) {
+            if (!w.walk.place_block(fx + dx, y + h, fz + 2 - dz, B.stone)) throw new Error('cannot build runway');
+          }
+        }
+      }
+      w.walk.teleport(fx + 1.5, y + 1, fz + 2.5);
+      fire(document, 'mousemove', { movementX: 0, movementY: -2000 });
+      fire(document, 'mousemove', { movementX: 0, movementY: 0 });
       w.controller.frame(0.05);
       return;
     }
