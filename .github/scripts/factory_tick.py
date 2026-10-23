@@ -314,7 +314,8 @@ class FakeBackend(Backend):
                 snapshot.issues.append({
                     "number": max([i["number"] for i in snapshot.issues], default=0) + 1,
                     "title": action.payload["title"], "state": "open",
-                    "labels": [action.payload["label"]], "kind": "question",
+                    "labels": action.payload.get("labels", [action.payload["label"]]),
+                    "kind": "question",
                     "body": action.payload["body"]})
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
@@ -395,13 +396,14 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, blocked, report, plans,
+    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, questions, blocked, report, plans,
     ready, merge, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
     from factory_blocked import blocked
     from factory_nits import nits
+    from factory_questions import questions
     from factory_refresh import refresh_after_red_master
     from factory_ready import ready
     from factory_report import report
@@ -412,7 +414,7 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, blocked, report, close_finished_plans, ready, auto_merge, board_pass]
+    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, questions, blocked, report, close_finished_plans, ready, auto_merge, board_pass]
 
 
 def main(argv):
