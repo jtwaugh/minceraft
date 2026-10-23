@@ -19,6 +19,8 @@ Checked against the code:
 
 - **Phase B done** (plan #625): the block-edit layer (#682), flower items and the pickable block table (#689), the `pick_flower` function (#696), flower icons (#672), the `pick` rule for flowers with the item going to the hands (#728), picked flowers shown in streamed regions (#736), the input script `client/test/scripts/pick_flower.input` (#737), and edits kept for the session (#662). Bullets below about flowers, items and the missing `pick` rule predate Phase B.
 
+- **Phase C partly done** (plan #758): `client/test/scripts/forage.input` (#981); `[forage]` `chance = 3` with the one-minute cooldown kept, and `GameEvent::ForageMissed` exposed to the client as `forage_missed` (#983). The client particle cue is not built. The bullets below on foraging data and events predate this.
+
 - **Interaction rules** are in `data/interactions.toml`: `till`, `plant` (`item:seeds` on `block:farmland`, top face, air above), `harvest` (empty hands or any tool, `block:crop`, `require_state = "mature"`), `forage` (empty hands, `block:tall_grass`) and `attack`. The first match wins. There is no `pick` action and no rule targeting `block:dandelion` or `block:rose`.
 - **Actions** live in `crates/game/src/`: `plant.rs`, `harvest.rs` (resets the crop to stage 0 and returns the yields from `data/crops.toml`), `forage.rs` (`Forager`, per-block cooldown), `till.rs`, `farm.rs`.
 - **Foraging data** is `[forage]` in `data/items.toml`: item `seeds`, `chance = 6`, `cooldown_ticks = 1200` (one minute at 20 Hz). A forage inside the cooldown does nothing and rolls nothing; any other forage starts the cooldown, hit or miss. Tilling grass uses `[till]` `chance = 8`. The forage cooldown is one minute; basic-gameplay 9.5, which says one day by default, should be reworded to match (that doc is not edited here). (Decided in #760.)
@@ -41,6 +43,7 @@ Checked against the code:
 9. **[manual check]** "I want the farming loop to feel natural" has no test; the loop script (forage, plant, grow, harvest) is the closest measurable check.
 10. **Phases.** One phase per section of the author's text: Phase A is section 1 (the `pick` action for crops, loosening rule 2), Phase B is section 2 (flowers: items, icons, overlay), Phase C is section 3 (foraging) and Phase D is section 4 (seed planting script). (Decided in #510.)
 11. **Foraging odds and feedback.** Foraging keeps the cooldown and gets better odds than 1 in 6 (the option's example is 1 in 3), plus a `forage_missed` event so the client can show a cue when a forage drops nothing. The client cue is particle effects that make clear the forage happened. (Decided in #759.)
+12. **Phase C incomplete.** Note 11 asks for a client cue (particle effects) when a forage drops nothing. #983 added the `forage_missed` event but left the cue out of scope, and nothing under `client/` handles `forage_missed` or draws particles. Phase C stays `todo` until a ticket adds the cue, with an input script checking the client receives the event.
 
 ---
 
