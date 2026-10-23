@@ -98,3 +98,36 @@ jobs:
         with:
           path: .factory-cache
           key: factory-http-${{ hashFiles('.factory-cache/etags.json') }}
+      # The alarm. A failed tick opens one "Factory: tick is failing" issue
+      # assigned to the maintainer (so GitHub notifies them); the next good
+      # tick closes it. This runs outside factory_tick.py, so it fires even
+      # when the script can't start. Issues opened with the workflow token
+      # trigger no workflows, so the alarm can't set off more ticks.
+      # It can't catch ticks that never run at all: for that, run
+      # .github/scripts/factory_health.py from outside GitHub (FACTORY.md).
+      - name: Raise the alarm
+        if: failure() && !inputs.dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "Factory: tick is failing"' --json number -q '.[0].number')
+          if [ -z "$open" ]; then
+            gh issue create -R "$GITHUB_REPOSITORY" --assignee jtwaugh \
+              --title "Factory: tick is failing" \
+              --body "The factory tick failed: $RUN_URL
+
+          Nothing is being started, merged or reported until it passes again. This issue closes itself on the next good tick.
+
+          To see when it broke and why: \`python3 .github/scripts/factory_health.py\` (add \`--repro\` to run a dry tick locally)."
+          fi
+      - name: Clear the alarm
+        if: success() && !inputs.dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "Factory: tick is failing"' --json number -q '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue close -R "$GITHUB_REPOSITORY" "$open" --comment "Recovered: $RUN_URL"
+          fi
