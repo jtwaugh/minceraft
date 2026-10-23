@@ -48,7 +48,7 @@ class Replay(unittest.TestCase):
         self.assertEqual(self.second, [])
 
 
-BLOCKED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "blocked_prs.json")
+BLOCKED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "tests", "blocked_prs.json")
 LOOP = {"rerun_jobs", "start_fix", "open_question"}
 
 
