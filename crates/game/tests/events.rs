@@ -364,12 +364,15 @@ fn foraging_emits_foraged_with_the_yields_and_the_drops() {
                 .all(|d| matches!(d, GameEvent::ItemDropped { source, .. } if source == "forage")));
             return;
         }
-        assert!(got.is_empty(), "a miss emits nothing: {got:?}");
+        assert!(
+            matches!(got.as_slice(), [GameEvent::ForageMissed { .. }]),
+            "a miss emits only forage_missed: {got:?}"
+        );
         // Wait out the one-minute cooldown.
         s.ticks(&idle(), 1200);
         s.take();
     }
-    panic!("1 in 6 over 60 tries");
+    panic!("1 in 3 over 60 tries");
 }
 
 /// Till, plant, grow to maturity, and harvest; returns the events of each

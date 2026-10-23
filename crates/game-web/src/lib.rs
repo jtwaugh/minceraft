@@ -226,6 +226,9 @@ fn describe_event(e: &GameEvent) -> String {
                 yields.join(",")
             )
         }
+        GameEvent::ForageMissed { position } => {
+            format!("forage_missed position={}", pos(position))
+        }
         GameEvent::EntityHurt {
             entity,
             attacker,

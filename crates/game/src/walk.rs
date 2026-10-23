@@ -10,7 +10,7 @@ use crate::commands::{run_line, GameState, Registry};
 use crate::crops::Crops;
 use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
-use crate::forage::{ForageConfig, Forager};
+use crate::forage::{Forage, ForageConfig, Forager};
 use crate::growth::grow_crops;
 use crate::harvest::{crop_name, tile_crop_state};
 use crate::input::TickInput;
@@ -903,7 +903,11 @@ impl Walker {
             .dispatcher
             .dispatch(&self.rules, &pressed, &ctx, damage);
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
-            if let Some(item) = self.forager.forage(pos, self.sim_tick) {
+            let outcome = self.forager.forage(pos, self.sim_tick);
+            if outcome == Forage::Miss {
+                self.events.push(GameEvent::ForageMissed { position: pos });
+            }
+            if let Forage::Drop(item) = outcome {
                 let item = item.to_string();
                 let at = pos.map(|c| f64::from(c) + 0.5);
                 Self::drop_loose(
@@ -1831,7 +1835,7 @@ mod tests {
     }
 
     #[test]
-    fn forage_emits_foraged_only_on_success() {
+    fn forage_emits_foraged_on_success_and_forage_missed_on_a_miss() {
         let mut w = grass_walker(1);
         w.tick(&look(0.0, false));
         assert!(w.drain_events().is_empty());
@@ -1851,7 +1855,15 @@ mod tests {
         w.tick(&look(0.0, false));
         w.tick(&press_secondary());
         assert_eq!(w.items().len(), 0);
-        assert!(w.drain_events().is_empty(), "failed roll");
+        assert_eq!(
+            w.drain_events(),
+            vec![GameEvent::ForageMissed {
+                position: [0, 5, -2]
+            }],
+            "failed roll"
+        );
+        w.tick(&press_secondary());
+        assert!(w.drain_events().is_empty(), "miss started the cooldown");
     }
 
     #[test]
@@ -1868,7 +1880,13 @@ mod tests {
         };
         let (a, n) = run();
         assert!(!a.is_empty());
-        assert_eq!(a.len(), 2 * n, "a drop and a foraged event per forage");
+        let missed = |e: &&GameEvent| matches!(e, GameEvent::ForageMissed { .. });
+        let misses = a.iter().filter(missed).count();
+        assert_eq!(
+            a.len() - misses,
+            2 * n,
+            "a drop and a foraged event per forage"
+        );
         assert_eq!((a, n), run());
     }
 
