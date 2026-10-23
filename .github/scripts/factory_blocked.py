@@ -26,6 +26,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_config import RETRY_BUDGET  # noqa: E402
 from factory_fix import blockers_task, check_task, conflict_task, markers  # noqa: E402
+from factory_questions import has_open_question  # noqa: E402
 from factory_rerun import failed_runs, is_ticket_pr, ticket_of  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
@@ -98,7 +99,7 @@ def blocked(snap):
         if not (pr["head"].startswith("claude/") and is_ticket_pr(snap, pr)) or maintainer_working(pr):
             continue
         found = cause_of(snap, pr)
-        if found is None:
+        if found is None or has_open_question(snap, pr):
             continue
         cause, task, quote = found
         tried = attempts(pr)

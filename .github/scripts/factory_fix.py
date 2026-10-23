@@ -3,6 +3,7 @@ a fix was started on a head commit, and the task text a fix run is given.
 
     marker(9, sha, "nits") -> "<!-- factory-fix pr=9 sha=<sha> cause=nits -->"
     markers(comments)      -> [(pr, sha, cause)] from trusted accounts' comments
+    stop_marker(pr, sha, kind), stops(comments) -> the marker a fix run posts when it stops
     nits_task(nits)       -> the task for a nits fix run
     parse_nits(body)      -> the items under a review's **Nits** heading
     verdict(comments, head) -> the reviewer's newest verdict, with its nits
@@ -27,6 +28,19 @@ def marker(pr, sha, cause):
 def markers(comments):
     """(pr, sha, cause) for each fix marker in the given (already trusted) comments."""
     return [(int(m[1]), m[2], m[3]) for c in comments for m in MARKER.finditer(c.get("body") or "")]
+
+
+STOP = re.compile(r"<!-- factory-fix-stop pr=(\d+) sha=([0-9a-f]+) kind=(decision|research|needs-you) -->(.*?)(?=<!-- factory-fix|\Z)", re.S)
+
+
+def stop_marker(pr, sha, kind):
+    return f"<!-- factory-fix-stop pr={pr} sha={sha} kind={kind} -->"
+
+
+def stops(comments):
+    """(pr, sha, kind, text) for each stop marker in the given (already trusted)
+    comments; `text` is the question and options that follow the marker."""
+    return [(int(m[1]), m[2], m[3], m[4].strip()) for c in comments for m in STOP.finditer(c.get("body") or "")]
 
 
 HEADING = re.compile(r"^\s*(?:#+\s*\**|\*\*)\s*([A-Za-z][A-Za-z ]*?)\s*:?\s*\**:?\s*$")
