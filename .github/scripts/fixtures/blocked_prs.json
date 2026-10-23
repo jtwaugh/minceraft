@@ -1,0 +1,267 @@
+{
+ "issues": [
+  {
+   "number": 701,
+   "title": "Fixture ticket: check passes on re-run",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": null,
+   "depends_on": [],
+   "body": "",
+   "comments": []
+  },
+  {
+   "number": 702,
+   "title": "Fixture ticket: check fails again",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": null,
+   "depends_on": [],
+   "body": "",
+   "comments": []
+  },
+  {
+   "number": 703,
+   "title": "Fixture ticket: conflict",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": null,
+   "depends_on": [],
+   "body": "",
+   "comments": []
+  },
+  {
+   "number": 704,
+   "title": "Fixture ticket: reviewer block",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": null,
+   "depends_on": [],
+   "body": "",
+   "comments": []
+  },
+  {
+   "number": 705,
+   "title": "Fixture ticket: nits cleared",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": null,
+   "depends_on": [],
+   "body": "",
+   "comments": []
+  },
+  {
+   "number": 706,
+   "title": "Fixture ticket: nits remain",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": null,
+   "depends_on": [],
+   "body": "",
+   "comments": []
+  }
+ ],
+ "prs": [
+  {
+   "number": 801,
+   "head": "claude/issue-701-20261020-0900",
+   "sha": "a1a1a1a1a1a1",
+   "body": "Closes #701",
+   "labels": [],
+   "draft": false,
+   "comments": [],
+   "files": [
+    "crates/terrain/src/lib.rs"
+   ],
+   "runs": [
+    {
+     "id": 801,
+     "name": "CI",
+     "conclusion": "failure",
+     "run_attempt": 1,
+     "created_at": "t"
+    }
+   ],
+   "verdict": null,
+   "blockers": [],
+   "mergeable_state": "blocked",
+   "head_time": "2026-10-20T09:00:00Z",
+   "head_author": "claude[bot]",
+   "claude_mentions": []
+  },
+  {
+   "number": 802,
+   "head": "claude/issue-702-20261020-0900",
+   "sha": "b2b2b2b2b2b2",
+   "body": "Closes #702",
+   "labels": [],
+   "draft": false,
+   "comments": [],
+   "files": [
+    "crates/terrain/src/lib.rs"
+   ],
+   "runs": [
+    {
+     "id": 802,
+     "name": "CI",
+     "conclusion": "failure",
+     "run_attempt": 1,
+     "created_at": "t"
+    }
+   ],
+   "verdict": null,
+   "blockers": [],
+   "mergeable_state": "blocked",
+   "head_time": "2026-10-20T09:00:00Z",
+   "head_author": "claude[bot]",
+   "claude_mentions": []
+  },
+  {
+   "number": 803,
+   "head": "claude/issue-703-20261020-0900",
+   "sha": "c3c3c3c3c3c3",
+   "body": "Closes #703",
+   "labels": [],
+   "draft": false,
+   "comments": [],
+   "files": [
+    "crates/terrain/src/lib.rs"
+   ],
+   "runs": [
+    {
+     "id": 803,
+     "name": "CI",
+     "conclusion": "success",
+     "run_attempt": 1,
+     "created_at": "t"
+    }
+   ],
+   "verdict": null,
+   "blockers": [],
+   "mergeable_state": "dirty",
+   "head_time": "2026-10-20T09:00:00Z",
+   "head_author": "claude[bot]",
+   "claude_mentions": []
+  },
+  {
+   "number": 804,
+   "head": "claude/issue-704-20261020-0900",
+   "sha": "d4d4d4d4d4d4",
+   "body": "Closes #704",
+   "labels": [],
+   "draft": false,
+   "comments": [],
+   "files": [
+    "crates/terrain/src/lib.rs"
+   ],
+   "runs": [
+    {
+     "id": 804,
+     "name": "CI",
+     "conclusion": "success",
+     "run_attempt": 1,
+     "created_at": "t"
+    }
+   ],
+   "verdict": {
+    "kind": "blocked",
+    "commit": "d4d4d4d",
+    "nits": [],
+    "current": true
+   },
+   "blockers": [
+    "The new test never exercises the bad-seed path."
+   ],
+   "mergeable_state": "blocked",
+   "head_time": "2026-10-20T09:00:00Z",
+   "head_author": "claude[bot]",
+   "claude_mentions": []
+  },
+  {
+   "number": 805,
+   "head": "claude/issue-705-20261020-0900",
+   "sha": "e5e5e5e5e5e5",
+   "body": "Closes #705",
+   "labels": [],
+   "draft": false,
+   "comments": [],
+   "files": [
+    "crates/terrain/src/lib.rs"
+   ],
+   "runs": [
+    {
+     "id": 805,
+     "name": "CI",
+     "conclusion": "success",
+     "run_attempt": 1,
+     "created_at": "t"
+    }
+   ],
+   "verdict": {
+    "kind": "nits",
+    "commit": "e5e5e5e",
+    "nits": [
+     "Rename `tmp` to `height`."
+    ],
+    "current": true
+   },
+   "blockers": [],
+   "mergeable_state": "blocked",
+   "head_time": "2026-10-20T09:00:00Z",
+   "head_author": "claude[bot]",
+   "claude_mentions": []
+  },
+  {
+   "number": 806,
+   "head": "claude/issue-706-20261020-0900",
+   "sha": "f6f6f6f6f6f6",
+   "body": "Closes #706",
+   "labels": [],
+   "draft": false,
+   "comments": [],
+   "files": [
+    "crates/terrain/src/lib.rs"
+   ],
+   "runs": [
+    {
+     "id": 806,
+     "name": "CI",
+     "conclusion": "success",
+     "run_attempt": 1,
+     "created_at": "t"
+    }
+   ],
+   "verdict": {
+    "kind": "nits",
+    "commit": "f6f6f6f",
+    "nits": [
+     "Drop the unused import."
+    ],
+    "current": true
+   },
+   "blockers": [],
+   "mergeable_state": "blocked",
+   "head_time": "2026-10-20T09:00:00Z",
+   "head_author": "claude[bot]",
+   "claude_mentions": []
+  }
+ ]
+}
