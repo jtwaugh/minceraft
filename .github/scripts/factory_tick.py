@@ -258,7 +258,14 @@ class FakeBackend(Backend):
     def apply(self, snapshot, action):
         issue = next((i for i in snapshot.issues
                       if f"issue#{i['number']}" == action.target), None)
-        if action.kind == "add_label" and issue is not None:
+        pr = next((p for p in snapshot.prs if f"pr#{p['number']}" == action.target), None)
+        if action.kind in ("add_label", "remove_label") and pr is not None:
+            labels = pr.setdefault("labels", [])
+            if action.kind == "add_label" and action.payload["label"] not in labels:
+                labels.append(action.payload["label"])
+            elif action.kind == "remove_label" and action.payload["label"] in labels:
+                labels.remove(action.payload["label"])
+        elif action.kind == "add_label" and issue is not None:
             if action.payload["label"] not in issue["labels"]:
                 issue["labels"].append(action.payload["label"])
         elif action.kind == "set_parent" and issue is not None:
@@ -396,12 +403,13 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, questions, blocked, report, plans,
-    ready, merge, board."""
+    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, questions, blocked, report,
+    plans, ready, merge, needs-you, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
     from factory_blocked import blocked
+    from factory_needs_you import needs_you
     from factory_nits import nits
     from factory_questions import questions
     from factory_refresh import refresh_after_red_master
@@ -414,7 +422,8 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, questions, blocked, report, close_finished_plans, ready, auto_merge, board_pass]
+    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, questions,
+            blocked, report, close_finished_plans, ready, auto_merge, needs_you, board_pass]
 
 
 def main(argv):
