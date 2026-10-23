@@ -106,8 +106,8 @@ impl Forager {
         &self.cfg
     }
 
-    /// Forage the grass at `pos` on `tick`. A forage inside the block's cooldown does nothing and rolls
-    /// nothing; any other forage starts the cooldown, success or not.
+    /// Forage the grass at `pos` on `tick`. A forage inside the block's cooldown does nothing
+    /// and rolls nothing; any other forage starts the cooldown, success or not.
     pub fn forage(&mut self, pos: [i32; 3], tick: u64) -> Forage<'_> {
         if self.ready_at.get(&pos).is_some_and(|&t| tick < t) {
             return Forage::Cooldown;
@@ -194,7 +194,7 @@ mod tests {
         let run = || {
             let mut f = Forager::new(cfg(6, 5), 42);
             (0..300u64)
-                .map(|t| f.forage([(t % 7) as i32, 0, 0], t) == Forage::Cooldown)
+                .map(|t| format!("{:?}", f.forage([(t % 7) as i32, 0, 0], t)))
                 .collect::<Vec<_>>()
         };
         assert_eq!(run(), run());
