@@ -101,6 +101,10 @@ class Loading(unittest.TestCase):
         self.assertEqual(parse_nits(body), ["Rename `x` in a.py", "Stale comment"])
         self.assertEqual(parse_nits("### Nits\n* one\n* two"), ["one", "two"])
         self.assertEqual(parse_nits("**Notes**\n- a"), [])
+        self.assertEqual(
+            parse_nits("**Nits**\n- Rename the helper so it\n  reads better everywhere\n- second\n"),
+            ["Rename the helper so it reads better everywhere", "second"])
+        self.assertEqual(parse_nits("**Nits**\n- one\n\nNone of these block.\n"), ["one"])
 
     def test_verdict_kinds(self):
         nit = review("Ready, with nits", "**Nits**\n- fix a\n")

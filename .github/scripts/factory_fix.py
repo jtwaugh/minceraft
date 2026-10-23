@@ -28,15 +28,16 @@ def markers(comments):
     return [(int(m[1]), m[2], m[3]) for c in comments for m in MARKER.finditer(c.get("body") or "")]
 
 
-HEADING = re.compile(r"^\s*(?:#+\s*)?\**\s*([A-Za-z][A-Za-z ]*?)\s*:?\s*\**:?\s*$")
+HEADING = re.compile(r"^\s*(?:#+\s*\**|\*\*)\s*([A-Za-z][A-Za-z ]*?)\s*:?\s*\**:?\s*$")
+PLAIN_HEADING = re.compile(r"^\s*(nits|notes|blockers|since last review)\s*:?\s*$", re.I)
 ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)")
 
 
 def parse_nits(body):
     """The bullet or numbered items under the **Nits** heading, wrapped lines joined."""
-    items, inside = [], False
+    items, inside, gap = [], False, False
     for line in (body or "").splitlines():
-        h = HEADING.match(line)
+        h = HEADING.match(line) or PLAIN_HEADING.match(line)
         if h and not ITEM.match(line):
             if inside:
                 break
@@ -47,7 +48,10 @@ def parse_nits(body):
         m = ITEM.match(line)
         if m:
             items.append(m.group(1).strip())
-        elif line.strip() and items:
+            gap = False
+        elif not line.strip():
+            gap = True
+        elif items and not gap:
             items[-1] += " " + line.strip()
     return items
 
