@@ -214,6 +214,11 @@ impl Raft {
         Raft::new(&merge_masks(masks))
     }
 
+    /// The centre of the raft's rest pose in the xz plane.
+    pub fn rest_centre(&self) -> [f64; 2] {
+        self.centre
+    }
+
     /// The raft's current centre in the xz plane.
     pub fn centre(&self) -> [f64; 2] {
         [
