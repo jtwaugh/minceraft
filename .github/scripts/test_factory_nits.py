@@ -88,6 +88,17 @@ class Test(unittest.TestCase):
         names = [p.__name__ for p in passes()]
         self.assertEqual(names.index("nits"), names.index("rerun_failed") + 1)
 
+    def test_verdict_from_the_real_loader(self):
+        # The pass must accept what factory_automerge.verdict_of actually
+        # returns, not only the hand-built verdicts above. A KeyError here
+        # stopped every tick from 2026-10-22 19:31Z.
+        from factory_automerge import verdict_of
+        comments = [{"user": {"login": "claude[bot]"}, "updated_at": "2026-10-22T00:00:00Z",
+                     "body": f"Verdict: Ready, with nits\nReviewed commit: `{H1[:7]}`\n"}]
+        s = snap()
+        s.prs[0]["verdict"] = verdict_of(comments, H1)
+        run(s)  # must not raise
+
 
 if __name__ == "__main__":
     unittest.main()
