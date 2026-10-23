@@ -5,7 +5,8 @@
 //! Choices made here:
 //! - One attempt per seed (the seed builds route and world), no retry loop.
 //! - Score = sum of term * weight from `data/scoring.toml`; island terms are
-//!   the mean over levels; no Phase G terms.
+//!   the mean over levels; the Phase G terms use the biased temperature at each
+//!   anchorage and each island's biome (`route_biome`).
 //! - Path directness uses `anchorage_paths`, the paths `validate_route` finds.
 //! - Extra islands use an undecorated region around the route points plus
 //!   `VIEW_MARGIN` blocks.
@@ -17,9 +18,10 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::thread;
 
 use crate::{
-    anchorage_paths, build_route, build_route_layout, extra_islands, path_directness,
-    prefilter_layout, score_island, spacing_regularity, validate_route, window, Layout, Level,
-    Route, RouteParams, ScoringConfig, Thresholds, WorldConfig,
+    anchorage_paths, anchorage_temperature, biome_variety, build_route, build_route_layout,
+    climate_gradient, extra_islands, island_biome, path_directness, prefilter_layout, score_island,
+    spacing_regularity, validate_route, window, Layout, Level, Route, RouteParams, ScoringConfig,
+    Thresholds, WorldConfig,
 };
 
 /// Blocks of margin around the route points for the extra-islands region.
@@ -47,6 +49,8 @@ pub struct TermScores {
     pub coastline_interest: f64,
     pub extra_islands: f64,
     pub path_directness: f64,
+    pub climate_gradient: f64,
+    pub biome_variety: f64,
 }
 
 /// A seed that passed validation, with its scores.
@@ -74,6 +78,8 @@ fn weighted(t: &TermScores, c: &ScoringConfig) -> f64 {
         + t.coastline_interest * c.weight_coastline_interest
         + t.extra_islands * c.weight_extra_islands
         + t.path_directness * c.weight_path_directness
+        + t.climate_gradient * c.weight_climate_gradient
+        + t.biome_variety * c.weight_biome_variety
 }
 
 /// Region `(x0, z0, w, d)` boxing `pts` grown by `margin`.
@@ -109,12 +115,19 @@ fn score_seed(
         let centres: Vec<[i32; 2]> = levels.iter().map(|l| l.island_center).collect();
         extra_islands(&region, &centres, &route.points, c).term
     });
+    let temps: Vec<f64> = levels
+        .iter()
+        .map(|l| anchorage_temperature(layout, l))
+        .collect();
+    let biomes: Vec<_> = levels.iter().map(|l| island_biome(layout, l)).collect();
     TermScores {
         spacing_regularity: spacing_regularity(&route.points, &RouteParams::shipped()),
         island_quality: quality / n,
         coastline_interest: coast / n,
         extra_islands: extra,
         path_directness: path_directness(&anchorage_paths(layout, levels, route, t)),
+        climate_gradient: climate_gradient(&temps, c),
+        biome_variety: biome_variety(&biomes, c),
     }
 }
 

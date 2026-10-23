@@ -93,13 +93,16 @@ pub fn render(best: &Scored) -> Result<String, LevelFileError> {
     let t = &best.terms;
     Ok(format!(
         "# mince-seeds: seed {}\n# score {:.4}\n# spacing_regularity {:.4}\n\
-         # island_quality {:.4}\n# coastline_interest {:.4}\n# extra_islands {:.4}\n{}",
+         # island_quality {:.4}\n# coastline_interest {:.4}\n# extra_islands {:.4}\n\
+         # climate_gradient {:.4}\n# biome_variety {:.4}\n{}",
         best.seed,
         best.score,
         t.spacing_regularity,
         t.island_quality,
         t.coastline_interest,
         t.extra_islands,
+        t.climate_gradient,
+        t.biome_variety,
         level_file(best).to_toml()?
     ))
 }
