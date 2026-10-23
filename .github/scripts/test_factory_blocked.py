@@ -2,10 +2,12 @@
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
-from factory_blocked import blocked, parse_blockers  # noqa: E402
+from factory_blocked import attempts, blocked, parse_blockers  # noqa: E402
+from factory_fix import markers  # noqa: E402
 from factory_rerun import rerun_failed  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, passes, tick  # noqa: E402
 
@@ -75,6 +77,60 @@ class Test(unittest.TestCase):
         self.assertEqual(run(snap(head="feature/x", mergeable_state="dirty")), [])
         s = snap(head="feature/x", mergeable_state="dirty", body="Closes #7")
         self.assertEqual(run(s), [])
+
+    def qs(self, s):
+        return [i for i in s.issues if "needs-you" in i["labels"]]
+
+    def test_budget_spent_asks_once_no_third_fix(self):
+        s = snap(mergeable_state="dirty", blockers=[])
+        for sha in ("a" * 40, "b" * 40):  # two attempts, each ends Blocked again
+            s.prs[0]["sha"] = sha
+            self.assertEqual([x.kind for x in run(s)], ["start_fix"])
+        s.prs[0]["sha"] = "c" * 40
+        for _ in range(3):
+            run(s)
+        self.assertEqual(len(self.qs(s)), 1)
+        self.assertEqual([m[2] for m in markers(s.prs[0]["comments"])], ["conflict"] * 2)
+        body = self.qs(s)[0]["body"]
+        for w in ("#7", "PR #9", "conflicts", "A:", "pushed a new head"):
+            self.assertIn(w, body)
+
+    def test_budget_comes_from_config(self):
+        with mock.patch("factory_blocked.RETRY_BUDGET", 1):
+            s = snap(mergeable_state="dirty")
+            run(s)
+            s.prs[0]["sha"] = "b" * 40
+            run(s)
+        self.assertEqual(len(self.qs(s)), 1)
+
+    def test_push_nothing_asks_early(self):
+        s = snap(blockers=["a.py:3 breaks it"])
+        self.assertEqual([x.kind for x in run(s)], ["start_fix"])
+        self.assertEqual(run(s), [])  # still running
+        s.prs[0]["fix_finished"] = [SHA]
+        run(s)
+        self.assertEqual(len(self.qs(s)), 1)
+        self.assertIn("> a.py:3 breaks it", self.qs(s)[0]["body"])
+        self.assertIn("pushed nothing", self.qs(s)[0]["body"])
+        self.assertEqual(run(s), [])
+
+    def test_fix_that_passes_asks_nothing(self):
+        s = snap(mergeable_state="dirty")
+        run(s)
+        s.prs[0].update(sha="b" * 40, mergeable_state="clean")
+        self.assertEqual(run(s), [])
+        self.assertEqual(self.qs(s), [])
+        self.assertEqual(attempts(s.prs[0])[0][2], "pushed a new head")
+
+    def test_question_updated_when_blocker_changes(self):
+        s = snap(blockers=["one"])
+        run(s)
+        s.prs[0]["fix_finished"] = [SHA]
+        run(s)
+        s.prs[0]["blockers"] = ["two"]
+        self.assertEqual([x.kind for x in run(s)], ["update_issue"])
+        self.assertIn("> two", self.qs(s)[0]["body"])
+        self.assertEqual(len(self.qs(s)), 1)
 
     def test_in_pass_list(self):
         self.assertIn(blocked, passes())
