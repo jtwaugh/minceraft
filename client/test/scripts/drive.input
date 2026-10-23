@@ -1,0 +1,61 @@
+# Driving the raft (docs/design/raft-scene-feedback.md Phase D): E at the helm
+# takes the wheel, W/D then steer the raft instead of walking the player.
+
+case KeyW does not move the raft without the helm interaction
+start walk raft
+click
+lock
+stand helm
+mark
+down KeyW
+frame 50 x10
+expect driving = false
+expect raft.moved < 0.5
+
+case E at the helm drives, W moves the raft along its heading
+start walk raft
+click
+lock
+stand helm
+press KeyE
+frame 50 x2
+expect driving = true
+mark
+down KeyW
+frame 50 x10
+expect raft.heading = 0
+expect raft.moved > 0.8
+
+case D turns the raft
+start walk raft
+click
+lock
+stand helm
+press KeyE
+frame 50 x2
+expect driving = true
+down KeyD
+frame 50 x10
+up KeyD
+frame 50 x2
+expect raft.heading != 0
+
+case E again leaves the helm and W walks the player
+start walk raft
+click
+lock
+stand helm
+press KeyE
+frame 50 x2
+expect driving = true
+press KeyE
+frame 50 x2
+expect driving = false
+mark
+down KeyW
+frame 50 x10
+expect raft.moved < 0.5
+expect moved > 0.5
+
+# Not covered here: the raft stopping against a solid block. The DSL has no
+# step for placing a block at the raft's height, and the Rust tests cover the stop.

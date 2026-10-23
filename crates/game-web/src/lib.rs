@@ -188,6 +188,12 @@ impl Scene {
         self.0.planters.iter().flatten().copied().collect()
     }
 
+    /// World x, y and z of the raft's helm cell.
+    #[wasm_bindgen(getter)]
+    pub fn helm(&self) -> Vec<i32> {
+        self.0.helm.to_vec()
+    }
+
     /// Sea floor and water, in `generate_region_decorated` layout.
     pub fn sea_blocks(&self) -> Vec<u8> {
         self.0.sea.blocks.clone()
