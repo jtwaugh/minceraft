@@ -1,0 +1,75 @@
+# Foraging tall grass for seeds on the raft scene's field (docs/design/picking-plants.md
+# phase C, basic-gameplay 9.5): secondary with empty hands forages; a success drops
+# seeds as a loose item and the grass stays; the same grass has a cooldown.
+
+case foraging placed tall grass drops seeds and leaves the grass
+start walk raft
+click
+lock
+stand field
+place tall_grass
+frame 50 x2
+expect held = empty
+expect rule.secondary = forage
+expect items = 3
+forage
+expect event foraged
+expect events.foraged = 1
+expect items = 4
+expect flower.block = tall_grass
+
+case a second forage inside the cooldown emits no new foraged event
+start walk raft
+click
+lock
+stand field
+place tall_grass
+frame 50 x2
+forage
+expect events.foraged = 1
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect events.foraged = 1
+expect items = 4
+expect flower.block = tall_grass
+
+case foraged seeds can be planted on the field's farmland
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+lock
+stand field
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.ground != grass
+# forage needs empty hands, not the hoe
+press Digit1
+place tall_grass
+frame 50 x20
+expect held = empty
+forage
+# the seeds lie inside the grass cell, which the aim hits first: clear the grass
+frame 50 x20
+place air
+frame 50 x2
+expect flower.block = air
+expect target.kind = entity
+press KeyE
+frame 50 x2
+expect hands = seeds
+expect items = 3
+expect rule.secondary = plant
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.crop = wheat_0
+expect hands = none
