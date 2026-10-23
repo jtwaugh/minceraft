@@ -40,9 +40,9 @@ class Test(unittest.TestCase):
         b, calls = backend()
         s = snap()
         b.apply(s, FIX)
-        self.assertEqual(calls, [
-            ["pr", "comment", "9", "--repo", "o/r", "--body", marker(9, "abc1234", "nits")],
-            ["workflow", "run", FIX_WORKFLOW, "--repo", "o/r", "-f", "pr=9", "-f", "task=do it"]])
+        self.assertEqual(calls, [  # dispatch first: a marker without a run reads as "running"
+            ["workflow", "run", FIX_WORKFLOW, "--repo", "o/r", "-f", "pr=9", "-f", "task=do it"],
+            ["pr", "comment", "9", "--repo", "o/r", "--body", marker(9, "abc1234", "nits")]])
         b.apply(s, FIX)
         self.assertEqual(len(calls), 2)
 

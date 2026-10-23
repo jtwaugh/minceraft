@@ -19,6 +19,8 @@
 #
 # Run by hand: gh workflow run claude-fix.yml -f pr=<n> -f task="<what to fix>"
 name: Claude fix
+# The tick matches its fix markers to runs by this name (factory_tick.fix_outcomes).
+run-name: "Claude fix #${{ inputs.pr }}"
 
 on:
   workflow_dispatch:

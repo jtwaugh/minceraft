@@ -6,7 +6,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
-from factory_blocked import attempts, blocked, parse_blockers  # noqa: E402
+from factory_blocked import RETRY_BUDGET, attempts, blocked, parse_blockers  # noqa: E402
 from factory_fix import markers  # noqa: E402
 from factory_rerun import rerun_failed  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, passes, tick  # noqa: E402
@@ -81,19 +81,28 @@ class Test(unittest.TestCase):
     def qs(self, s):
         return [i for i in s.issues if "needs-you" in i["labels"]]
 
-    def test_budget_spent_asks_once_no_third_fix(self):
+    def test_budget_spent_asks_once_no_extra_fix(self):
         s = snap(mergeable_state="dirty", blockers=[])
-        for sha in ("a" * 40, "b" * 40):  # two attempts, each ends Blocked again
+        heads = [c * 40 for c in "abcdef"[:RETRY_BUDGET]]
+        for sha in heads:  # every attempt ends Blocked again
             s.prs[0]["sha"] = sha
             self.assertEqual([x.kind for x in run(s)], ["start_fix"])
-        s.prs[0]["sha"] = "c" * 40
+        s.prs[0]["sha"] = "9" * 40
         for _ in range(3):
             run(s)
         self.assertEqual(len(self.qs(s)), 1)
-        self.assertEqual([m[2] for m in markers(s.prs[0]["comments"])], ["conflict"] * 2)
+        self.assertEqual([m[2] for m in markers(s.prs[0]["comments"])], ["conflict"] * RETRY_BUDGET)
         body = self.qs(s)[0]["body"]
         for w in ("#7", "PR #9", "conflicts", "A:", "pushed a new head"):
             self.assertIn(w, body)
+
+    def test_lost_run_is_retried_and_counts(self):
+        s = snap(mergeable_state="dirty", blockers=[])
+        self.assertEqual([x.kind for x in run(s)], ["start_fix"])
+        self.assertEqual(run(s), [])  # running: wait
+        s.prs[0]["fix_lost"] = [c["created_at"] for c in s.prs[0]["comments"]]
+        self.assertEqual([x.kind for x in run(s)], ["start_fix"])  # lost: try again
+        self.assertEqual(attempts(s.prs[0])[0][2], "run failed")
 
     def test_budget_comes_from_config(self):
         with mock.patch("factory_blocked.RETRY_BUDGET", 1):

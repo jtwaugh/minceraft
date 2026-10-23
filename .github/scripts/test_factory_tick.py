@@ -83,6 +83,36 @@ class Test(unittest.TestCase):
         with self.assertRaises(ZeroDivisionError):
             tick(Snapshot(), [lambda _: [1 / 0]], FakeBackend())
 
+    def test_fix_outcomes_match_markers_to_runs(self):
+        from datetime import datetime, timezone
+        from factory_fix import marker
+        from factory_tick import fix_outcomes
+        now = datetime(2026, 10, 23, 20, 0, tzinfo=timezone.utc)
+
+        def pr(t):
+            return {"number": 9, "comments": [{"user": "github-actions[bot]",
+                                               "body": marker(9, "a" * 40, "review"), "created_at": t}]}
+
+        def run(t, status, conclusion=None, n=9):
+            return {"display_title": f"Claude fix #{n}", "created_at": t, "status": status,
+                    "conclusion": conclusion, "html_url": "u"}
+
+        p = pr("2026-10-23T19:00:00Z")
+        fix_outcomes(p, [run("2026-10-23T18:59:30Z", "completed", "success")], now)
+        self.assertEqual((p["fix_finished"], p["fix_lost"]), (["a" * 40], []))
+        p = pr("2026-10-23T19:00:00Z")
+        fix_outcomes(p, [run("2026-10-23T19:00:05Z", "in_progress")], now)
+        self.assertEqual((p["fix_finished"], p["fix_lost"]), ([], []))
+        for runs in ([run("2026-10-23T19:00:05Z", "completed", "timed_out")],
+                     [run("2026-10-23T19:00:05Z", "completed", "success", n=8)],  # another PR's
+                     [run("2026-10-23T18:40:00Z", "completed", "success")]):  # before the marker
+            p = pr("2026-10-23T19:00:00Z")
+            fix_outcomes(p, runs, now)
+            self.assertEqual((p["fix_finished"], p["fix_lost"]), ([], ["2026-10-23T19:00:00Z"]))
+        p = pr("2026-10-23T19:55:00Z")  # no run yet, but only five minutes old
+        fix_outcomes(p, [], now)
+        self.assertEqual(p["fix_runs"][0][1], "starting")
+
 
 if __name__ == "__main__":
     unittest.main()
