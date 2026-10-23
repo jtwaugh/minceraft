@@ -1,6 +1,6 @@
 ---
 title: Raft scene feedback
-status: accepted
+status: done
 scope: game
 source: "#446"
 superseded_by: ""
