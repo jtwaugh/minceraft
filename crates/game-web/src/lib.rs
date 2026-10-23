@@ -697,11 +697,39 @@ mod tests {
     #[test]
     fn raft_scene_reports_its_pivot_and_heading() {
         let scene = Scene::new();
-        let w = Walk::in_scene(&scene).unwrap_or_else(|_| panic!());
-        let p = w.raft_pivot();
-        assert!(p[0] != 0.0 || p[1] != 0.0);
+        let mut w = Walk::in_scene(&scene).unwrap_or_else(|_| panic!());
+        assert_eq!(
+            w.raft_pivot(),
+            game::raft::Raft::new(&scene.0.cells).rest_centre().to_vec()
+        );
         assert!(!w.driving());
-        assert_eq!(w.raft_heading(1.0), w.0.raft_heading(1.0));
+        assert_eq!(w.raft_heading(1.0), 0.0);
+        let h = scene.0.helm;
+        w.0.teleport([h[0] as f64 + 0.5, h[1] as f64 + 1.0, h[2] as f64 + 0.5]);
+        let tick = |w: &mut Walk, input: TickInput| w.0.tick(&input);
+        for _ in 0..5 {
+            tick(&mut w, TickInput::default());
+        }
+        tick(
+            &mut w,
+            TickInput {
+                interact: true,
+                ..TickInput::default()
+            },
+        );
+        assert!(w.driving());
+        for _ in 0..5 {
+            tick(
+                &mut w,
+                TickInput {
+                    move_strafe: 1.0,
+                    ..TickInput::default()
+                },
+            );
+        }
+        assert!(w.raft_heading(1.0) > 0.01);
+        assert!(w.raft_heading(0.0) < w.raft_heading(0.5));
+        assert!(w.raft_heading(0.5) < w.raft_heading(1.0));
     }
 
     #[test]
