@@ -60,7 +60,7 @@ The player can die, and dying shows a death screen like Minecraft's.
 
 **Phase B.** Client death screen. Covers the second and third bullets (screen, respawn from it) and the last bullet. Expose the dead flag through `game-web`, add a death screen mode to `client/controller.js` (pointer unlock, neutral input, like the inventory view) with a respawn control built from the existing UI styles and the layout decided in Open question 1 (default: title and one respawn button), and return to walking on respawn. Done when new `client/test/scripts/` cases cover: dying switches mode to the death screen and unlocks the pointer, walk input is ignored on it, respawn returns to walk mode with full health, and the DSL gained whatever it needs to force a death.
 
-**Phase C.** Choices that wait on open questions. Covers the answers to questions 2 to 6 once decided: a non-default respawn point, dropping or losing items, a death animation, and any new art. Done when each decided behaviour has a unit test or input script. Skip the parts whose answer is the Phase A default. Death does not reset the phase clock; it keeps running, as in Phase A. (Decided in #958.)
+**Phase C.** Choices that wait on open questions. Covers the answers to questions 2 to 5 once decided: a non-default respawn point, dropping or losing items, a death animation, and a phase clock reset. The death screen uses the existing root-menu and inventory styles, with no new UI art. Done when each decided behaviour has a unit test or input script. Skip the parts whose answer is the Phase A default. (Decided in #959.)
 
 ## Open questions
 
@@ -68,4 +68,4 @@ The player can die, and dying shows a death screen like Minecraft's.
 2. **Where does the player respawn?** A: the scene's start spawn (suggested; smallest). B: on the raft once the main world has one. C: the last safe standing place, tracked by the sim.
 3. **What happens to the belt and hands items on death?** A: kept (suggested; no code). B: dropped where the player died, as item entities. C: lost.
 4. **Is there a death animation, and how long?** A: none, screen appears on the tick of death (suggested). B: a short camera drop and roll, with the length in a data file.
-6. **Does the death screen need new UI art?** A: reuse existing root-menu and inventory styles (suggested). B: new art through `art/PROMPT.md`.
+5. **Does death interact with the phase clock?** A: keeps running (suggested). B: resets to the start of gathering.
