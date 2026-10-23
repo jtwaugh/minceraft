@@ -1,6 +1,6 @@
 ---
 title: Raft scene feedback
-status: accepted
+status: done
 scope: game
 source: "#446"
 superseded_by: ""
@@ -8,7 +8,7 @@ phases:
   A: done
   B: done
   C: done
-  D: todo
+  D: done
 ---
 
 ## Current state
@@ -27,6 +27,8 @@ Phase A (items 3 and 5) is done: animal box models and raft model art (#545, #55
 Phase B (items 1 and 6) is done: the rider's swell push removed (#686), no selection outline on water with the ray still stopping there (#703), loose items stop sliding on the deck (#698) and animals on the deck get no swell push (#707). `[swell_push]` and `SwellPush` no longer exist in the code. Items 2 and 4 are not done.
 
 Phase C (item 2) is done: animals swim at the surface (#726), drown after `drown_ticks` under water (#733), the nearest-support search is `crates/game/src/animal_steer.rs` (#727), swimming animals steer towards support (#767), and `crates/game/tests/animal_swim.rs` covers the end-to-end determinism (#795). Item 4 is not done.
+
+Phase D (item 4) is done: helm cell marker (#840), `[drive]` tunables and drive frame (#857), the raft stops at solid blocks in its footprint (#880), enter and leave the helm and steer in `Walker::tick` (#898), driving state and heading in game-web (#907), the raft drawn at its heading (#935), raft pose and `driving` in the world hash with a replay test (#937), and the driving input script `client/test/scripts/drive.input` (#966, #980, #982). All six items are done.
 
 ## Reconciliation notes
 
