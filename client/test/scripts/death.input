@@ -52,7 +52,10 @@ stand field
 frame 50 x2
 drop 30
 until mode = death
+lock
+expect locked = true
 press Tab
 expect mode = death
+expect locked = true
 press Backquote
 expect mode = death
