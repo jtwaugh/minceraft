@@ -1,4 +1,5 @@
 use super::*;
+use crate::route_climate_stats::cold_then_warm;
 use crate::{build_route, Level, TermScores};
 use terrain::Biome;
 
@@ -59,4 +60,13 @@ fn totals_sum_over_worlds_and_match_the_per_world_counts() {
 fn no_worlds_count_nothing() {
     assert_eq!(cold_first_warm_last(&[]), (0, 0));
     assert_eq!(biome_pair_totals(&[]), (0, 0));
+}
+
+#[test]
+fn cold_then_warm_counts_known_inputs() {
+    assert!(cold_then_warm(Some((true, true))));
+    assert!(!cold_then_warm(Some((true, false))));
+    assert!(!cold_then_warm(Some((false, true))));
+    assert!(!cold_then_warm(Some((false, false))));
+    assert!(!cold_then_warm(None));
 }

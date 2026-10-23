@@ -36,12 +36,19 @@ pub fn different_biome_pairs(biomes: &[Option<Biome>]) -> (usize, usize) {
 /// Whether the world's first island is cold and its last warm.
 pub fn is_cold_first_warm_last(s: &Scored) -> bool {
     let (layout, levels) = build_route_layout(&WorldConfig { seed: s.seed }, &s.route);
-    match (levels.first(), levels.last()) {
-        (Some(first), Some(last)) => {
-            island_is_cold(&layout, first) && island_is_warm(&layout, last)
-        }
-        _ => false,
-    }
+    let ends = match (levels.first(), levels.last()) {
+        (Some(first), Some(last)) => Some((
+            island_is_cold(&layout, first),
+            island_is_warm(&layout, last),
+        )),
+        _ => None,
+    };
+    cold_then_warm(ends)
+}
+
+/// Whether `(first is cold, last is warm)` holds; no islands never counts.
+pub fn cold_then_warm(ends: Option<(bool, bool)>) -> bool {
+    matches!(ends, Some((true, true)))
 }
 
 /// Anchorage island biomes of the world, in route order.
