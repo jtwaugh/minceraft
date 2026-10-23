@@ -19,11 +19,13 @@ os.environ.setdefault("GITHUB_REPOSITORY", "")  # project_board and tickets read
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project_board  # noqa: E402
 import tickets  # noqa: E402
+from factory_fix import marker, markers  # noqa: E402
 from factory_tick import Backend, FakeBackend  # noqa: E402
 
 START_WORKFLOW = "claude.yml"
 START_MARKER = "<!-- factory-auto-start --> Dependencies closed; starting automatically (factory tick)."
 DOCS_WORKFLOW = "claude-docs.yml"
+FIX_WORKFLOW = "claude-fix.yml"
 
 
 def gh_run(args, project=False):
@@ -109,9 +111,21 @@ class GhBackend(Backend):
         if k == "supersede_pr":
             pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
             return pr is None or "superseded" in pr.get("labels", [])
+        if k == "start_fix":
+            pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
+            return pr is None or (pr["number"], p["head"], p["kind"]) in markers(pr.get("comments", []))
+        if k == "open_question":
+            found = self._question(snapshot, action)
+            return found is not None and found.get("body") == p["body"]
         if k in ("report", "request_phase_done"):
             return (action.target, action.reason if k == "report" else k) in snapshot.reported
         return False
+
+    def _question(self, snapshot, action):
+        """The open issue already carrying this question's hidden key, if any."""
+        key = action.payload["key"]
+        return next((i for i in snapshot.issues
+                     if i["state"] == "open" and key in (i.get("body") or "")), None)
 
     # -- the requests
 
@@ -215,7 +229,18 @@ class GhBackend(Backend):
                 self.failed.append((action, str(e)))
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
-        elif k not in ("report", "start_fix", "open_question"):
+        elif k == "start_fix":
+            self._gh("pr", "comment", n, "--repo", r, "--body", marker(int(n), p["head"], p["kind"]))
+            self._gh("workflow", "run", FIX_WORKFLOW, "--repo", r, "-f", f"pr={n}", "-f", f"task={p['task']}")
+        elif k == "open_question":
+            found = self._question(snapshot, action)
+            if found is not None:
+                self._gh("issue", "edit", str(found["number"]), "--repo", r, "--body", p["body"])
+                found["body"] = p["body"]
+                return True  # updated in place: nothing to mirror
+            labels = p.get("labels") or [p["label"]]
+            self._gh("issue", "create", "--repo", r, "--title", p["title"], "--body", p["body"],
+                     *[x for lab in labels for x in ("--label", lab)])
+        elif k != "report":
             # A report is only remembered; the report pass writes the issue.
-            # start_fix and open_question have no live write yet (later ticket).
             raise ValueError(f"unhandled action {k} on {t}")
