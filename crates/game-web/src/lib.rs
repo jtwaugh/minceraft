@@ -424,6 +424,11 @@ impl Walk {
         self.0.max_health()
     }
 
+    /// Whether the player is dead (health reached 0 and not yet respawned).
+    pub fn dead(&self) -> bool {
+        self.0.dead()
+    }
+
     /// Whether a cheat command has run this session.
     pub fn cheated(&self) -> bool {
         self.0.cheated()
@@ -730,6 +735,41 @@ mod tests {
         assert!(w.raft_heading(1.0) > 0.01);
         assert!(w.raft_heading(0.0) < w.raft_heading(0.5));
         assert!(w.raft_heading(0.5) < w.raft_heading(1.0));
+    }
+
+    #[test]
+    fn dead_follows_a_fatal_fall_and_respawn() {
+        let mut w = walk();
+        let mut floor = Region {
+            blocks: Vec::new(),
+            width: 16,
+            depth: 16,
+            height: terrain::HEIGHT as u32,
+            x0: -8,
+            z0: -8,
+        };
+        let mut blocks = vec![0u8; 16 * 16 * terrain::HEIGHT];
+        for z in 0..16 {
+            for x in 0..16 {
+                for y in 0..=3 {
+                    blocks[floor.index(x, y, z)] = 1;
+                }
+            }
+        }
+        floor.blocks = blocks;
+        w.0.add_region(floor);
+        for _ in 0..40 {
+            w.0.tick(&TickInput::default());
+        }
+        assert!(!w.dead());
+        w.0.teleport([0.5, 105.0, 0.5]);
+        for _ in 0..200 {
+            w.0.tick(&TickInput::default());
+        }
+        assert!(w.dead());
+        assert_eq!(w.health(), 0);
+        w.0.respawn().unwrap();
+        assert!(!w.dead());
     }
 
     #[test]
