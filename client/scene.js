@@ -25,6 +25,7 @@ import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
+import { mountDeath } from './deathui.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
@@ -417,6 +418,7 @@ if (scene) {
 }
 const controller = createController({ input, walk, fly, clock, document, flying, stream: scene ? null : { budget: 1 },
   sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds } });
+const deathView = mountDeath(document, tileset, controller);
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 const outputBuffer = new OutputBuffer();
@@ -534,6 +536,7 @@ function render(now) {
   if (scene) drawAnimals(mvp, readAnimals(walk));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
   inventoryView.update(controller.state.inventory, controller.state.belt);
+  deathView.update(controller.state.dead);
   hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
 
   if (lastFrame !== null) frames.push(now - lastFrame);
