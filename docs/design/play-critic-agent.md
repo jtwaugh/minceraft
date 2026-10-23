@@ -84,7 +84,7 @@ If the critic can read `rule.secondary`, raw `events` or `field.crop`, it can't 
 The HUD's layout is done by CSS flex in `mountHud` (`client/hud.js`), so Node can't see it. CLAUDE.md says no screenshots to check behaviour.
 
 - Want: a pure `hudLayout(model, set, viewport)` that returns a rectangle for each HUD element (crosshair, belt, hearts, hands, timer). Everything is integer-scaled pixel art (`hudScale`, `textureSize`), so this can be exact. `mountHud` then places elements at those rectangles.
-- Want: a `layout <w> <h>` command that returns the boxes plus mechanical checks: overlaps, anything off-screen, scale below 2, crosshair clear zone, and how far apart related elements sit (belt vs hands).
+- Want: a `layout <w> <h>` command that returns the boxes plus mechanical checks: overlaps, anything off-screen, scale below 2, crosshair clear zone, and how far apart related elements sit (belt vs hands). The thresholds for the crosshair clear zone and the belt-to-hands distance are left to the implementer: constants in the check module, each with a test, to be tuned later. (Decided in #971.)
 - The critic reviews layout over a sweep of viewports (phone portrait, 1366×768, 1920×1080, ultrawide). The menu (`menuModel`) may get the same treatment later.
 - Screenshots stay a separate pass, only when the maintainer asks for one.
 
