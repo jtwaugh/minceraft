@@ -14,6 +14,7 @@
 //   input.dead  true while the death screen is up (docs/design/player-death.md Phase B)
 //   input.setDead(bool)  enter death mode: drop held inputs, release the pointer, ignore key,
 //                        mouse and wheel events, and do not relock on a click
+//   input.requestLock()  ask for the pointer lock again
 //   input.detach() remove every listener
 //
 // With `debug` on, Backquote (the code, not the character) opens the console
@@ -144,6 +145,9 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
       inventoryOpen = false;
       release();
       document.exitPointerLock?.();
+    },
+    requestLock() {
+      canvas.requestPointerLock();
     },
     get locked() {
       return locked;

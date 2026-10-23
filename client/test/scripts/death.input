@@ -27,7 +27,8 @@ down KeyW
 mark
 mouse 50 0
 frame 50 x10
-expect moved ~ 0
+expect moved.x ~ 0
+expect moved.z ~ 0
 expect yaw ~ 0
 up KeyW
 
@@ -59,3 +60,54 @@ expect mode = death
 expect locked = true
 press Backquote
 expect mode = death
+
+case respawn returns to walking at full health and the start spawn
+start walk raft
+click
+lock
+frame 50 x20
+mark
+stand field
+frame 50 x2
+drop 30
+until mode = death
+expect health = 0
+expect lock_requests = 1
+respawn
+frame 50
+expect mode = walk
+expect health = 20
+expect lock_requests = 2
+expect event player_respawned
+lock
+frame 50 x20
+expect moved.x ~ 0
+expect moved.z ~ 0
+
+case walk input moves the player again after respawning
+start walk raft
+click
+lock
+stand field
+frame 50 x2
+drop 30
+until mode = death
+respawn
+lock
+frame 50 x4
+mark
+down KeyW
+frame 50 x10
+expect moved > 0.1
+up KeyW
+
+case respawn while alive does nothing
+start walk raft
+click
+lock
+frame 50 x2
+respawn
+frame 50 x2
+expect lock_requests = 1
+expect no event player_respawned
+expect mode = walk
