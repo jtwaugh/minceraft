@@ -99,13 +99,14 @@ def blocked(snap):
         if not (pr["head"].startswith("claude/") and is_ticket_pr(snap, pr)) or maintainer_working(pr):
             continue
         found = cause_of(snap, pr)
-        if found is None or has_open_question(snap, pr):
+        if found is None or any(has_open_question(snap, pr, c) for c in ("stop-", "nits")):
             continue
         cause, task, quote = found
         tried = attempts(pr)
         if any(sha == pr["sha"] and o == "running" for _, sha, o in tried):
             continue
-        if len(tried) >= RETRY_BUDGET or any(o == "pushed nothing" for _, _, o in tried):
+        if (has_open_question(snap, pr, f"retry-{cause}") or len(tried) >= RETRY_BUDGET
+                or any(o == "pushed nothing" for _, _, o in tried)):
             q = question(snap, pr, cause, quote, tried)
             if q:
                 out.append(q)

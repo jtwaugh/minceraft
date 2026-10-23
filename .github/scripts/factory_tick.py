@@ -411,7 +411,7 @@ def passes():
     from factory_blocked import blocked
     from factory_needs_you import needs_you
     from factory_nits import nits
-    from factory_questions import questions
+    from factory_questions import link_questions, questions
     from factory_refresh import refresh_after_red_master
     from factory_ready import ready
     from factory_report import report
@@ -423,7 +423,7 @@ def passes():
         return board(snap) if snap.board_meta.get("loaded") else []
 
     return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, questions,
-            blocked, report, close_finished_plans, ready, auto_merge, needs_you, board_pass]
+            link_questions, blocked, report, close_finished_plans, ready, auto_merge, needs_you, board_pass]
 
 
 def main(argv):
