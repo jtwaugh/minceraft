@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
-from factory_fix import marker, markers  # noqa: E402
+from factory_fix import marker, markers, parse_nits, verdict  # noqa: E402
 from factory_nits import nits  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, passes, tick  # noqa: E402
 
@@ -98,6 +98,34 @@ class Test(unittest.TestCase):
         s = snap()
         s.prs[0]["verdict"] = verdict_of(comments, H1)
         run(s)  # must not raise
+
+
+def review(verdict_line, tail="", sha=H1, user="claude[bot]", at="2026-01-01T00:00:00Z"):
+    return {"user": {"login": user}, "updated_at": at, "created_at": at,
+            "body": f"Verdict: **{verdict_line}**\nReviewed commit: `{sha[:7]}`\n\n{tail}"}
+
+
+class Loading(unittest.TestCase):
+    def test_parse_nits(self):
+        body = ("**Blockers**\n1. not this\n\n**Nits**\n- Rename `x`\n  in a.py\n"
+                "2. Stale comment\n\n**Notes**\n- not this either\n")
+        self.assertEqual(parse_nits(body), ["Rename `x` in a.py", "Stale comment"])
+        self.assertEqual(parse_nits("### Nits\n* one\n* two"), ["one", "two"])
+        self.assertEqual(parse_nits("**Notes**\n- a"), [])
+        self.assertEqual(
+            parse_nits("**Nits**\n- Rename the helper so it\n  reads better everywhere\n- second\n"),
+            ["Rename the helper so it reads better everywhere", "second"])
+        self.assertEqual(parse_nits("**Nits**\n- one\n\nNone of these block.\n"), ["one"])
+
+    def test_verdict_kinds(self):
+        nit = review("Ready, with nits", "**Nits**\n- fix a\n")
+        v = verdict([nit], H1)
+        self.assertEqual((v["kind"], v["commit"], v["nits"]), ("nits", H1[:7], ["fix a"]))
+        self.assertEqual(verdict([review("Ready")], H1)["kind"], "ready")
+        self.assertEqual(verdict([review("Blocked")], H1)["kind"], "blocked")
+        self.assertIsNone(verdict([], H1))
+        self.assertIsNone(verdict([review("Ready", user="mallory")], H1))
+        self.assertFalse(verdict([nit], H2)["current"])
 
 
 if __name__ == "__main__":

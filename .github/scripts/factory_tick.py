@@ -118,7 +118,8 @@ class Snapshot:
                      "labels": [lb["name"] for lb in p.get("labels") or []],
                      "draft": bool(p.get("draft"))}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
-        from factory_automerge import codeowner_patterns, verdict_of
+        from factory_automerge import codeowner_patterns
+        from factory_fix import verdict
         from factory_rerun import is_ticket_pr
         for pr in snap.prs:  # for ticket PRs only: runs, verdict, files, mergeability
             if is_ticket_pr(snap, pr):
@@ -129,7 +130,7 @@ class Snapshot:
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
                 # Same paths the board loader reads, so these cost nothing extra.
                 comments = paged(f"repos/{repo}/issues/{n}/comments")
-                pr["verdict"] = verdict_of(comments, pr["sha"])
+                pr["verdict"] = verdict(comments, pr["sha"])
                 pr["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
                                    "created_at": c["created_at"]}
                                   for c in comments if c["user"]["login"] in tickets.TRUSTED]
