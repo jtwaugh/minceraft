@@ -19,7 +19,7 @@ import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendCont
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
-import { raftBoxes, RAFT_TEXTURES } from './raftmodel.js';
+import { raftBoxes, raftMatrix, RAFT_TEXTURES } from './raftmodel.js';
 import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
@@ -517,7 +517,7 @@ function render(now) {
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
-    models.drawModel(mvp, new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, scene.min + dx, dy, scene.min + dz, 1]), raftModel);
+    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel);
   }
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);

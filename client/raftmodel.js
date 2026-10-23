@@ -40,3 +40,25 @@ export function raftBoxes(blocks, size) {
   }
   return boxes;
 }
+
+/**
+ * The raft's 4x4 column-major model matrix. Model coordinates are region-local,
+ * `origin` blocks (x and z) from the sim's world; `offset` is the sim's raft
+ * offset `[dx, dy, dz]`, `pivot` the world `[x, z]` the raft turns about
+ * (Walk.raft_pivot) and `heading` the yaw in radians, as the sim has it: 0 faces
+ * -z and positive turns towards +x.
+ */
+export function raftMatrix(offset, heading, pivot, origin = 0) {
+  const [dx, dy, dz] = offset;
+  if (heading === 0) return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, origin + dx, dy, origin + dz, 1]);
+  const c = Math.cos(heading);
+  const s = Math.sin(heading);
+  const rx = origin - pivot[0];
+  const rz = origin - pivot[1];
+  return new Float32Array([
+    c, 0, s, 0,
+    0, 1, 0, 0,
+    -s, 0, c, 0,
+    pivot[0] + c * rx - s * rz + dx, dy, pivot[1] + s * rx + c * rz + dz, 1,
+  ]);
+}
