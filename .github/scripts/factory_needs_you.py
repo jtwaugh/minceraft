@@ -10,12 +10,14 @@ the snapshot, so a label added by hand is removed on the next tick.
 (docs/design/factory-orchestrator.md rule 7, Phase E: a first queue)
 
 Waits on the maintainer:
-- a ticket PR the reviewer blocked (no automatic fix attempt yet);
+- a ticket PR the reviewer blocked, or whose check failed again after its
+  re-run, once Claude's fix attempts can't help: a question is open, the
+  retry budget is spent, or the fix pushed nothing (factory_blocked.py
+  gets the first try);
 - a ticket PR at "Ready, with nits" while the nits pass can't run on it;
 - a ticket PR that is Ready but can't merge by itself: it touches a
   CODEOWNERS path, or another open PR is for the same ticket;
-- a ticket PR whose check failed again after its re-run, or is over the
-  size limit;
+- a ticket PR over the size limit;
 - an open PR that isn't a factory ticket (design docs, spec, factory
   changes): only the maintainer merges those;
 - an open `spec-question`, and a question the tick opened
@@ -48,16 +50,17 @@ def pr_reason(snap, pr):
         return None
     if not is_ticket_pr(snap, pr):
         return "Not a factory ticket: review and merge it, or close it"
+    fixing = claude_fixing(snap, pr)
     for run in pr.get("runs", []):
         if run["conclusion"] in FAILED and run["name"] == "PR size":
             return "Over 200 reviewable lines: split it, or label it `oversize-ok`"
-        if run["conclusion"] in FAILED and run["run_attempt"] > 1:
-            return f"{run['name']} failed again after a re-run: look at the log"
+        if run["conclusion"] in FAILED and run["run_attempt"] > 1 and not fixing:
+            return f"{run['name']} failed again after a re-run, and Claude couldn't fix it: look at the log"
     v = pr.get("verdict")
     if not v or not v.get("current"):
         return None  # review still running
-    if v["kind"] == "blocked":
-        return "Reviewer blocked it: comment `@claude <what to fix>`, or `/override <reason>`"
+    if v["kind"] == "blocked" and not fixing:
+        return "Reviewer blocked it and Claude couldn't fix it: see the question, or `/override <reason>`"
     if v["kind"] == "nits" and not v.get("nits"):
         return "Ready, with nits: merge it, or comment `@claude fix the nits`"
     if v["kind"] == "ready":
@@ -69,6 +72,23 @@ def pr_reason(snap, pr):
             return f"Two open PRs for one ticket ({why[why.index('#'):-1]} and this): close one"
         return MERGE_YOURSELF.get(why)
     return None
+
+
+def claude_fixing(snap, pr):
+    """True while the Blocked-fix pass has this PR in hand: a fix is running
+    or will start this tick. It isn't once the maintainer is working on it,
+    a question is open, or the retry budget is spent (then the question
+    issue is flagged, and so is the PR)."""
+    from factory_blocked import RETRY_BUDGET, attempts, cause_of, maintainer_working
+    from factory_questions import has_open_question
+    if not pr["head"].startswith("claude/") or cause_of(snap, pr) is None:
+        return False
+    if maintainer_working(pr):
+        return True  # the maintainer pushed or asked @claude: that run is the attempt
+    if has_open_question(snap, pr):
+        return False
+    tried = attempts(pr)
+    return len(tried) < RETRY_BUDGET and not any(o == "pushed nothing" for _, _, o in tried)
 
 
 def issue_reason(i):

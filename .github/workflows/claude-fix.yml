@@ -1,0 +1,165 @@
+# Fix runs: the factory tick's "please fix" for a ticket PR.
+#
+# The tick's Blocked-fix and nits passes (.github/scripts/factory_blocked.py,
+# factory_nits.py) dispatch this with the PR number and a task they wrote
+# from the cause: merge master and resolve the conflicts; fix a check that
+# failed twice; fix the reviewer's blockers; address the nits. The task
+# comes from the tick, never from a comment (orchestrator doc, rule 5).
+# Before dispatching, the tick posts a `<!-- factory-fix pr= sha= cause= -->`
+# marker on the PR, which is how it counts attempts.
+#
+# Claude works on the PR's own branch under the implementer's rules
+# (CLAUDE.md, every check, 200 lines) and pushes, and the push is reviewed
+# again. When it can't go on, it posts a stop marker
+# (`<!-- factory-fix-stop pr= sha= kind= -->`, factory_fix.py) with a
+# question, and the tick turns that into a question issue
+# (factory_questions.py). A run that ends without pushing and without
+# saying why gets a stop marker from this workflow, so the attempt never
+# looks like it's still running.
+#
+# Run by hand: gh workflow run claude-fix.yml -f pr=<n> -f task="<what to fix>"
+name: Claude fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Ticket PR to fix"
+        required: true
+        type: string
+      task:
+        description: "What to fix (the tick writes this)"
+        required: true
+        type: string
+
+jobs:
+  fix:
+    # The tick dispatches as github-actions[bot]; by hand, only the maintainer.
+    if: contains(fromJSON('["jtwaugh", "github-actions[bot]"]'), github.actor)
+    concurrency:
+      # Same group as the implementer and the conflict resolver use for this
+      # PR, so they never push to the branch at the same time.
+      group: claude-${{ inputs.pr }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # lets Claude read CI results on the PR
+    steps:
+      # Only open factory PRs from this repository, never a fork's.
+      - name: Read the PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+        run: |
+          read -r state branch sha repo <<< "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" \
+            --jq '[.state, .head.ref, .head.sha, .head.repo.full_name] | @tsv')"
+          if [ "$state" != open ] || [ "$repo" != "$GITHUB_REPOSITORY" ] || [[ "$branch" != claude/* ]]; then
+            echo "Not fixing #$PR: state $state, branch $branch, from $repo." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          { echo "go=true"; echo "branch=$branch"; echo "sha=$sha"
+            echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.pr.outputs.go == 'true'
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          fetch-depth: 0
+          # Push with the Claude app's token (the action sets the remote), so
+          # the push counts as the Claude app's and triggers CI and the reviewer.
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        if: steps.pr.outputs.go == 'true'
+      # Bun and the Claude CLI from the Actions cache (see the action)
+      - id: claude-deps
+        if: steps.pr.outputs.go == 'true'
+        uses: ./.github/actions/claude-deps
+      - id: claude
+        if: steps.pr.outputs.go == 'true'
+        uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
+        with:
+          path_to_bun_executable: ${{ steps.claude-deps.outputs.bun }}
+          path_to_claude_code_executable: ${{ steps.claude-deps.outputs.claude }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The tick dispatches as github-actions.
+          allowed_bots: claude,github-actions
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR: #${{ inputs.pr }}
+            BRANCH: ${{ steps.pr.outputs.branch }} (checked out, head ${{ steps.pr.outputs.sha }})
+
+            The factory tick asked you to fix this pull request. The task:
+
+            ${{ inputs.task }}
+
+            1. Read the PR and its review: `gh pr view ${{ inputs.pr }} --comments`
+               and `gh pr diff ${{ inputs.pr }}`. Read the ticket it closes.
+            2. Do the task on this branch. Use your judgment: fix what the
+               task names, the way CLAUDE.md's "Answering a review" section
+               says (fix each blocker; if you think one is wrong, say why and
+               leave the code). Make no other changes.
+            3. If you merge master: the Claude action has replaced CLAUDE.md
+               with master's copy (unstaged), which stops a merge. Run
+               `git restore CLAUDE.md` first (also `.claude` or `.mcp.json`
+               if `git status` lists them), then `git fetch origin master`
+               and `git merge origin/master`.
+            4. Run every check in CLAUDE.md's "Before opening a PR" list that
+               the change touches, commit, and
+               `git push origin ${{ steps.pr.outputs.branch }}`. Never rebase,
+               force-push, or push to any other branch.
+            5. Comment on the PR with each point of the task and what you
+               did about it, so the re-review can check them off.
+
+            If you can't go on (the spec is ambiguous, you disagree with a
+            blocker, a conflict needs a real decision, the fix is outside the
+            implementation lane, or it can't fit 200 lines), push nothing.
+            Post one comment with `gh pr comment ${{ inputs.pr }} --body-file <file>`
+            whose first line is exactly
+            `<!-- factory-fix-stop pr=${{ inputs.pr }} sha=${{ steps.pr.outputs.sha }} kind=<kind> -->`,
+            where <kind> is `decision` (a project choice in the spec or a
+            design doc; then add a line `**File:** <that file>`), `research`
+            (needs facts about the original game), or `needs-you` (anything
+            else). After it, state the question and list the options as
+            A, B, ... The tick turns it into a question for the maintainer.
+          claude_args: |
+            --max-turns 80
+            --allowedTools "Edit,Write,Bash(cargo fmt:*),Bash(cargo clippy:*),Bash(cargo test:*),Bash(cargo build:*),Bash(cargo run:*),Bash(./build.sh:*),Bash(node --test:*),Bash(node viewer/flyover/preview.mjs:*),Bash(python3:*),Bash(cd:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git fetch:*),Bash(git merge:*),Bash(git restore CLAUDE.md),Bash(git restore .claude:*),Bash(git restore .mcp.json),Bash(git add:*),Bash(git commit:*),Bash(git push origin claude/*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr checks:*),Bash(gh issue view:*),Bash(gh run view:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --append-system-prompt "Follow CLAUDE.md exactly, above all its clean-room rules: Beta behaviour comes only from SPEC.md, and never edit SPEC.md, docs/design/ or workflow files. Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and comment bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr comment --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, post the stop marker saying exactly what you couldn't do."
+
+      # An attempt must end in a push or a stop marker; otherwise the tick
+      # would count it as still running and never retry or ask.
+      - name: Say so if the run left no result
+        if: ${{ !cancelled() && steps.pr.outputs.go == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          AT: ${{ steps.pr.outputs.at }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)
+          stopped=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?since=$AT&per_page=100" \
+            --jq "[.[] | select(.user.login == \"claude[bot]\" and (.body | contains(\"<!-- factory-fix-stop pr=$PR sha=$SHA\")))] | length")
+          if [ "$head" != "$SHA" ] || [ "$stopped" != 0 ]; then
+            echo "Result: $([ "$head" != "$SHA" ] && echo "pushed ${head:0:7}" || echo "stopped with a question")." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          printf '%s\n' "<!-- factory-fix-stop pr=$PR sha=$SHA kind=needs-you -->" \
+            "The fix run ended without pushing a fix or saying why it stopped: $RUN_URL" "" \
+            "- A: comment \`@claude <what to change>\` on the PR." \
+            "- B: fix it by hand and push to the branch." \
+            "- C: if the blocker is wrong, comment \`/override <reason>\`." > stop.md
+          gh pr comment "$PR" --body-file stop.md
+          echo "Result: nothing pushed and no reason given; posted a stop marker." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - name: Report the run
+        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
+        uses: ./.github/actions/claude-report
+        with:
+          execution-file: ${{ steps.claude.outputs.execution_file }}
