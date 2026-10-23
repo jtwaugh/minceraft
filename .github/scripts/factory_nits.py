@@ -14,6 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_fix import markers, nits_task  # noqa: E402
+from factory_questions import has_open_question  # noqa: E402
 from factory_rerun import is_ticket_pr, ticket_of  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
@@ -41,6 +42,8 @@ def nits(snap):
         # (#895), a verdict has only kind and current, and this pass waits.
         if not (is_ticket_pr(snap, pr) and v and v["kind"] == "nits"
                 and v.get("commit") and v.get("nits") and pr["sha"].startswith(v["commit"])):
+            continue
+        if has_open_question(snap, pr):
             continue
         started = [sha for n, sha, cause in markers(pr.get("comments", []))
                    if n == pr["number"] and cause == "nits"]

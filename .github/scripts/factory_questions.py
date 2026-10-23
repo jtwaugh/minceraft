@@ -10,9 +10,10 @@ the trusted comments for a marker naming the current head and emits one
 `open_question`: `spec-question` plus `decision` or `research` when the spec
 or a design doc is the problem, else `needs-you`. The issue is keyed by
 ticket, PR and kind, so a later tick updates it (and never opens a second).
-While it is open `has_open_question` is true and the Blocked-fix pass starts
-no fix. A decision question starts with `**File:**` (the file named in the
-run's text, else SPEC.md) as `planner_issue.py question` requires.
+While it is open `has_open_question` is true and the Blocked-fix and nits
+passes start nothing; `link_questions` links the ticket as blocked by it.
+A decision question starts with `**File:**` (the file named in the run's text,
+else SPEC.md) as `planner_issue.py question` requires.
 (docs/design/factory-orchestrator.md Phase A, section 3 "Blocked tickets" step 4)
 """
 import os
@@ -24,6 +25,7 @@ from factory_fix import stops  # noqa: E402
 from factory_rerun import is_ticket_pr, ticket_of  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
+ASKED = re.compile(r"<!-- factory-question (?:ticket=(\d+) )?(?:pr=(\d+) )?cause=")
 FILE = re.compile(r"^\*\*File:\*\*\s*(\S.*)$", re.M)
 CLOSING = {
     "decision": ("Answer by commenting `/decide <option>` with any reasoning; the spec editor "
@@ -44,10 +46,11 @@ def current_stop(pr):
     return found[-1] if found else None
 
 
-def has_open_question(snap, pr):
-    """True when a stop question for this PR's ticket is still open."""
-    prefix = f"<!-- factory-question ticket={ticket_of(snap, pr)} pr={pr['number']} cause=stop-"
-    return any(i["state"] == "open" and prefix in (i.get("body") or "") for i in snap.issues)
+def has_open_question(snap, pr, cause=""):
+    """True when a question (stop, retry budget or nits) for this PR is still open;
+    `cause` narrows it to keys starting with that cause."""
+    pattern = re.compile(rf"<!-- factory-question (?:ticket=\d+ )?pr={pr['number']} cause={cause}")
+    return any(i["state"] == "open" and pattern.search(i.get("body") or "") for i in snap.issues)
 
 
 def build(snap, pr, kind, text):
@@ -82,4 +85,27 @@ def questions(snap):
         elif found["state"] == "open" and found["body"] != payload["body"]:
             out.append(Action("update_issue", f"issue#{found['number']}", {"body": payload["body"]},
                               f"updating the stop question for PR #{pr['number']}"))
+    return out
+
+
+def link_questions(snap):
+    """One add_blocked_by per open question whose ticket isn't linked to it yet.
+
+    The question's number exists only after it is opened, so the link follows on
+    a later tick. A ticket without `blocked_by_links` (not loaded) is skipped."""
+    out = []
+    for q in snap.issues:
+        m = ASKED.search(q.get("body") or "")
+        if q["state"] != "open" or not m:
+            continue
+        if m.group(1):
+            number = int(m.group(1))
+        else:
+            pr = next((p for p in snap.prs if p["number"] == int(m.group(2))), None)
+            number = ticket_of(snap, pr) if pr else None
+        ticket = next((i for i in snap.issues if i["number"] == number), None)
+        if ticket is None or q["number"] in ticket.get("blocked_by_links", [q["number"]]):
+            continue
+        out.append(Action("add_blocked_by", f"issue#{number}", {"blocker": q["number"]},
+                          f"linking ticket #{number} as blocked by question #{q['number']}"))
     return out
