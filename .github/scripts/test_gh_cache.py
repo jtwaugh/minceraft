@@ -208,7 +208,9 @@ class SkipTest(unittest.TestCase):
                      "repos/o/r/pulls?state=open&per_page=100": [],
                      "repos/o/r/contents/.github/CODEOWNERS": {},
                      "repos/o/r/actions/workflows/ci.yml/runs?branch=master&event=push&status=completed&per_page=30": {},
-                     "repos/o/r/git/matching-refs/heads/docs": []})
+                     "repos/o/r/git/matching-refs/heads/docs": [],
+                     "repos/o/r/actions/workflows/claude.yml/runs?per_page=100": {},
+                     "repos/o/r/git/matching-refs/heads/claude/issue-": []})
         boards = []
         with mock.patch.dict(os.environ, env), mock.patch.object(tickets, "REPO", "o/r"), \
                 mock.patch("gh_cache.subprocess.run", fake), \
