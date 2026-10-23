@@ -61,12 +61,17 @@ def maintainer_working(pr):
 
 
 def attempts(pr):
-    """The `fix_attempt` records of a PR: (cause, head, outcome) per fix marker."""
-    heads = [(sha, c) for n, sha, c in markers(pr.get("comments", []))
-             if n == pr["number"] and c in CAUSES]
-    return [(c, sha, "pushed a new head" if sha != pr["sha"] or i < len(heads) - 1
+    """The `fix_attempt` records of a PR: (cause, head, outcome) per fix marker.
+    A marker whose run was cancelled, timed out or never started
+    (`pr["fix_lost"]`, by marker time) is "run failed": it counts against the
+    budget but, unlike "pushed nothing", doesn't stop the next attempt."""
+    heads = [(c.get("created_at"), sha, cause) for c in pr.get("comments", [])
+             for n, sha, cause in markers([c]) if n == pr["number"] and cause in CAUSES]
+    lost = pr.get("fix_lost", [])
+    return [(c, sha, "run failed" if t in lost
+             else "pushed a new head" if sha != pr["sha"] or i < len(heads) - 1
              else "pushed nothing" if sha in pr.get("fix_finished", []) else "running")
-            for i, (sha, c) in enumerate(heads)]
+            for i, (t, sha, c) in enumerate(heads)]
 
 
 def question_key(pr_number, cause):

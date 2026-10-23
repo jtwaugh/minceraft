@@ -135,6 +135,7 @@ class Snapshot:
                                    "created_at": c["created_at"]}
                                   for c in comments if c["user"]["login"] in tickets.TRUSTED]
                 load_blocked_facts(repo, pr, comments, get)
+                load_fix_runs(repo, pr, get)
                 pr["files"] = [f["filename"] for f in paged(f"repos/{repo}/pulls/{n}/files")]
                 full = get(f"repos/{repo}/pulls/{n}")
                 pr["mergeable_state"] = full.get("mergeable_state") if isinstance(full, dict) else None
@@ -195,6 +196,48 @@ def load_blocked_facts(repo, pr, comments, get):
             p = subprocess.run(["gh", "run", "view", str(run["id"]), "--repo", repo, "--log-failed"],
                                capture_output=True, text=True)
             run["log"] = "\n".join(p.stdout.splitlines()[-LOG_LINES:])
+
+
+FIX_LOST_AFTER = 20 * 60  # seconds a fix marker may wait for its run to start
+
+
+def fix_outcomes(pr, runs, now=None):
+    """Match each fix marker on the PR to the claude-fix.yml run it started
+    (named "Claude fix #<pr>", created after the marker less two minutes of
+    clock skew; the backend dispatches before it posts the marker). Sets
+    `fix_finished` (heads whose run completed: it pushed or posted a stop
+    marker, and a completed run on an unchanged head pushed nothing) and
+    `fix_lost` (marker times whose run was cancelled, timed out or never
+    started; these attempts count, but don't stop the next one), and
+    `fix_runs` [(marker time, status, url)] for factory_health.py."""
+    from factory_fix import markers
+    now = now or datetime.now(timezone.utc)
+    mine = sorted((r for r in runs if r.get("display_title") == f"Claude fix #{pr['number']}"),
+                  key=lambda r: r["created_at"])
+    pr["fix_finished"], pr["fix_lost"], pr["fix_runs"] = [], [], []
+    for c in pr.get("comments", []):
+        for n, sha, _ in markers([c]):
+            if n != pr["number"]:
+                continue
+            t = datetime.fromisoformat(c["created_at"].replace("Z", "+00:00"))
+            run = next((r for r in mine if datetime.fromisoformat(
+                r["created_at"].replace("Z", "+00:00")).timestamp() >= t.timestamp() - 120), None)
+            if run is None:
+                status = "lost" if (now - t).total_seconds() > FIX_LOST_AFTER else "starting"
+            elif run["status"] != "completed":
+                status = run["status"]
+            else:
+                status = run["conclusion"]
+            if status in ("lost", "cancelled", "timed_out", "startup_failure"):
+                pr["fix_lost"].append(c["created_at"])
+            elif status in ("success", "failure"):
+                pr["fix_finished"].append(sha)
+            pr["fix_runs"].append((c["created_at"], status, run["html_url"] if run else ""))
+
+
+def load_fix_runs(repo, pr, get):
+    found = get(f"repos/{repo}/actions/workflows/claude-fix.yml/runs?per_page=100")
+    fix_outcomes(pr, (found or {}).get("workflow_runs", []) if isinstance(found, dict) else [])
 
 
 FULL_EVENTS = ("schedule", "workflow_dispatch")  # these ticks always read everything

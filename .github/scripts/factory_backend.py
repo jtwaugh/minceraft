@@ -113,7 +113,10 @@ class GhBackend(Backend):
             return pr is None or "superseded" in pr.get("labels", [])
         if k == "start_fix":
             pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
-            return pr is None or (pr["number"], p["head"], p["kind"]) in markers(pr.get("comments", []))
+            lost = pr.get("fix_lost", []) if pr else []
+            return pr is None or any(
+                (pr["number"], p["head"], p["kind"]) in markers([c])
+                for c in pr.get("comments", []) if c.get("created_at") not in lost)
         if k == "open_question":
             found = self._question(snapshot, action)
             return found is not None and found.get("body") == p["body"]
@@ -230,8 +233,9 @@ class GhBackend(Backend):
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
         elif k == "start_fix":
-            self._gh("pr", "comment", n, "--repo", r, "--body", marker(int(n), p["head"], p["kind"]))
+            # Dispatch first: a marker without a run would read as a fix in progress.
             self._gh("workflow", "run", FIX_WORKFLOW, "--repo", r, "-f", f"pr={n}", "-f", f"task={p['task']}")
+            self._gh("pr", "comment", n, "--repo", r, "--body", marker(int(n), p["head"], p["kind"]))
         elif k == "open_question":
             found = self._question(snapshot, action)
             if found is not None:
