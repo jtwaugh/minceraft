@@ -37,8 +37,10 @@ def nits(snap):
     out = []
     for pr in snap.prs:
         v = pr.get("verdict")
+        # .get: until the loader records the reviewed commit and the nits
+        # (#895), a verdict has only kind and current, and this pass waits.
         if not (is_ticket_pr(snap, pr) and v and v["kind"] == "nits"
-                and v["commit"] and pr["sha"].startswith(v["commit"])):
+                and v.get("commit") and v.get("nits") and pr["sha"].startswith(v["commit"])):
             continue
         started = [sha for n, sha, cause in markers(pr.get("comments", []))
                    if n == pr["number"] and cause == "nits"]

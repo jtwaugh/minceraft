@@ -287,7 +287,9 @@ pub use habitat::{classify, HabitatId, HabitatInputs, HabitatRule, Habitats};
 mod habitat_map;
 pub use habitat_map::{HabitatMap, NO_HABITAT};
 mod level;
-pub use level::{Level, LevelFile, LevelFileError, Route as LevelRoute, WorldConfig};
+pub use level::{
+    Climate as LevelClimate, Level, LevelFile, LevelFileError, Route as LevelRoute, WorldConfig,
+};
 #[cfg(feature = "toml-io")]
 mod seed_output;
 #[cfg(feature = "toml-io")]

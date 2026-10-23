@@ -499,6 +499,14 @@ impl Walker {
         f.prev_heading + delta * alpha.clamp(0.0, 1.0)
     }
 
+    /// The raft's rest-pose centre `[x, z]`, the point it turns about. Zero
+    /// when there is no raft.
+    pub fn raft_pivot(&self) -> [f64; 2] {
+        self.floating
+            .as_ref()
+            .map_or([0.0; 2], |f| f.raft.rest_centre())
+    }
+
     pub fn has_world(&self) -> bool {
         !self.world.base().is_empty()
     }

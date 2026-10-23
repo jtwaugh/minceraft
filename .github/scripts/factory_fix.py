@@ -6,6 +6,7 @@ a fix was started on a head commit, and the task text a fix run is given.
     nits_task(nits)       -> the task for a nits fix run
     parse_nits(body)      -> the items under a review's **Nits** heading
     verdict(comments, head) -> the reviewer's newest verdict, with its nits
+    conflict_task(), check_task(name, log), blockers_task(blockers) -> the Blocked-fix tasks
 
 The task comes from the tick, never from a comment (design rule 5; #463).
 (docs/design/factory-orchestrator.md Phase A, section 3 "Nits")
@@ -76,3 +77,21 @@ def nits_task(nits):
     items = "\n".join(f"{n}. {t}" for n, t in enumerate(nits, 1))
     return ("The reviewer approved this PR with nits. Address each one below, or say "
             "briefly why you did not. Make no other changes.\n\n" + items)
+
+
+def conflict_task():
+    return ("This PR conflicts with master. Merge origin/master into the branch "
+            "(git fetch, git merge; never rebase or force-push) and resolve the "
+            "conflicts. Make no other changes.")
+
+
+def check_task(name, excerpt):
+    return (f"The check `{name}` failed on this PR, and failed again after a re-run. "
+            "Fix the cause, run the checks in CLAUDE.md before pushing, and make no "
+            f"other changes.\n\nLog excerpt:\n\n{excerpt}")
+
+
+def blockers_task(blockers):
+    items = "\n".join(f"{n}. {t}" for n, t in enumerate(blockers, 1))
+    return ("The reviewer blocked this PR. Fix each blocker below, or reply saying "
+            "why you think it is wrong and leave the code. Make no other changes.\n\n" + items)

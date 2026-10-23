@@ -129,11 +129,12 @@ class Snapshot:
                                "run_attempt": r["run_attempt"], "created_at": r["created_at"]}
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
                 # Same paths the board loader reads, so these cost nothing extra.
-                comments = paged(f"repos/{repo}/issues/{n}/comments")  # read once
+                comments = paged(f"repos/{repo}/issues/{n}/comments")
                 pr["verdict"] = verdict(comments, pr["sha"])
                 pr["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
                                    "created_at": c["created_at"]}
                                   for c in comments if c["user"]["login"] in tickets.TRUSTED]
+                load_blocked_facts(repo, pr, comments, get)
                 pr["files"] = [f["filename"] for f in paged(f"repos/{repo}/pulls/{n}/files")]
                 full = get(f"repos/{repo}/pulls/{n}")
                 pr["mergeable_state"] = full.get("mergeable_state") if isinstance(full, dict) else None
@@ -167,6 +168,33 @@ class Snapshot:
         snap.requests = gh_cache.stats["requests"]
         snap.not_modified = gh_cache.stats["not_modified"]
         return snap
+
+
+LOG_LINES = 40  # of a failed check's log kept for the fix task
+
+
+def load_blocked_facts(repo, pr, comments, get):
+    """What the Blocked-fix pass reads (factory_blocked.py): the head commit's
+    time and author, the reviewer's blockers while they stand, the maintainer's
+    @claude comments, and a log excerpt for a check that failed again."""
+    import review_gate
+    from factory_blocked import MAINTAINER, parse_blockers
+    from factory_rerun import CHECKS, FAILED
+    head = get(f"repos/{repo}/commits/{pr['sha']}")
+    pr["head_time"] = head["commit"]["committer"]["date"]
+    pr["head_author"] = (head.get("author") or {}).get("login")
+    pr["claude_mentions"] = [c["created_at"] for c in comments
+                             if c["user"]["login"] == MAINTAINER and "@claude" in (c.get("body") or "")]
+    kind, _, verdict = review_gate.latest_verdict(comments) or (None, None, None)
+    pr["blockers"] = []
+    if kind == "blocked" and (pr["verdict"] or {}).get("current") and not any(
+            o[0]["created_at"] > verdict["updated_at"] for o in review_gate.overrides(comments)):
+        pr["blockers"] = parse_blockers(verdict.get("body"))
+    for run in pr["runs"]:
+        if run["name"] in CHECKS and run["conclusion"] in FAILED and run["run_attempt"] > 1:
+            p = subprocess.run(["gh", "run", "view", str(run["id"]), "--repo", repo, "--log-failed"],
+                               capture_output=True, text=True)
+            run["log"] = "\n".join(p.stdout.splitlines()[-LOG_LINES:])
 
 
 FULL_EVENTS = ("schedule", "workflow_dispatch")  # these ticks always read everything
@@ -301,15 +329,50 @@ class FakeBackend(Backend):
             raise ValueError(f"unhandled action {action.kind} on {action.target}")
 
 
-def tick(snapshot, passes, backend):
+# Passes that are skipped once an earlier pass in the same tick has crashed:
+# a merge can't be undone, so it never runs on a snapshot a broken pass left
+# half-read.
+SKIP_AFTER_CRASH = {"auto_merge"}
+
+
+def tick(snapshot, passes, backend, crashed=None):
     """Run the passes in order, applying each one's actions before the next
-    pass reads the snapshot; return every action applied."""
+    pass reads the snapshot; return every action applied.
+
+    A pass that raises is recorded in `crashed` as (pass name, traceback)
+    and the rest still run, so one bad pass stalls only its own work. The
+    tick is level-triggered, so a pass that produced nothing this time loses
+    nothing. Without `crashed` the exception propagates (tests, fixtures).
+    Errors applying an action still propagate either way."""
+    import traceback
     applied = []
     for p in passes:
-        for a in dict.fromkeys(p(snapshot)):
+        name = getattr(p, "__name__", repr(p))
+        if crashed and name in SKIP_AFTER_CRASH:
+            continue
+        try:
+            actions = list(dict.fromkeys(p(snapshot)))
+        except Exception:
+            if crashed is None:
+                raise
+            crashed.append((name, traceback.format_exc()))
+            continue
+        for a in actions:
             backend.apply(snapshot, a)
             applied.append(a)
     return applied
+
+
+def annotate_error(title, text):
+    """A GitHub Actions error annotation. Annotations can be read through
+    the API (check-runs/<job>/annotations), unlike job logs, so
+    factory_health.py can show why a tick failed without downloading logs."""
+    last = [ln for ln in text.strip().splitlines() if ln.strip()][-1:] or [""]
+    body = text.strip().replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+    head = f"{title}: {last[0][:200]}"
+    for ch, esc in (("%", "%25"), ("\r", ""), ("\n", "%0A"), (":", "%3A"), (",", "%2C")):
+        head = head.replace(ch, esc)
+    print(f"::error title={head}::{body}", flush=True)
 
 
 def invariants(snap):
@@ -332,11 +395,12 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, report, plans,
+    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, blocked, report, plans,
     ready, merge, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
+    from factory_blocked import blocked
     from factory_nits import nits
     from factory_refresh import refresh_after_red_master
     from factory_ready import ready
@@ -348,15 +412,23 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, report, close_finished_plans, ready, auto_merge, board_pass]
+    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, blocked, report, close_finished_plans, ready, auto_merge, board_pass]
 
 
 def main(argv):
+    import traceback
     try:
-        _main(argv)
+        crashed = _main(argv)
+    except Exception:
+        annotate_error("Factory tick crashed", traceback.format_exc())
+        raise
     finally:
         import gh_cache
         gh_cache.save()  # even after a failed read: what was read still saves calls next time
+    for name, tb in crashed or []:
+        annotate_error(f"Factory pass {name} crashed", tb)
+    if crashed:
+        sys.exit(1)  # the other passes ran, but the run stays red until this is fixed
 
 
 def _main(argv):
@@ -380,9 +452,11 @@ def _main(argv):
         from factory_backend import GhBackend
         backend = GhBackend(os.environ["GITHUB_REPOSITORY"])
         gh_cache.state["last_tick_clean"] = False  # until this tick finishes with nothing to do
-    actions = tick(snap, passes(), backend)
+    crashed = []
+    actions = tick(snap, passes(), backend, crashed)
     if live:
-        gh_cache.state["last_tick_clean"] = not (backend.applied or backend.failed or backend.refused)
+        gh_cache.state["last_tick_clean"] = not (backend.applied or backend.failed
+                                                 or backend.refused or crashed)
     for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
     for a in getattr(backend, "refused", []):
@@ -392,6 +466,11 @@ def _main(argv):
     written = isinstance(backend, FakeBackend) and "nothing written" or "applied"
     print(f"{len(actions)} action(s), {written}; "
           f"{snap.requests + getattr(backend, 'requests', 0)} API requests")
+    for name, _ in crashed:
+        print(f"crashed pass {name}")
+    if crashed:
+        print("skipped after a crash: " + ", ".join(sorted(SKIP_AFTER_CRASH)))
+    return crashed
 
 
 if __name__ == "__main__":

@@ -382,6 +382,7 @@ maintainer.
 | Bring a stuck PR up to date | Click "Update branch", or comment `@claude merge master into this branch and resolve the conflicts` |
 | See what's waiting | The project board, or `gh issue list -l planned` |
 | See what's stuck | The "Factory: stalled work" issue |
+| See whether the factory is running, when it stopped and why | `python3 .github/scripts/factory_health.py` (exit 0 healthy, 1 failing, 2 not ticking; `--repro` runs a dry tick locally). A failing tick also opens a "Factory: tick is failing" issue assigned to the maintainer, closed by the next good tick |
 | Run a tick by hand | `gh workflow run factory-tick.yml` (add `-f dry-run=true` to only print what it would do) |
 | Resolve conflicts on one PR | `gh workflow run resolve-conflicts.yml -f pr=<n>` |
 
