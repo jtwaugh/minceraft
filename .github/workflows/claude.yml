@@ -14,7 +14,7 @@
 # ticket is ready is the tick's (.github/scripts/factory_ready.py).
 name: Claude implementer
 # The tick finds its own starts by this name (factory_stalled_tickets.py).
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('Claude implementer #{0}', inputs.issue) || github.event.issue.title || github.event.pull_request.title || 'Claude implementer' }}
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('Claude implementer #{0}', inputs.issue) || github.event.issue.title || github.event.pull_request.title || 'Claude implementer' }}"
 
 on:
   issues:
