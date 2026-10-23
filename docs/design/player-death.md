@@ -6,13 +6,14 @@ source: "#807"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
 ---
 
 ## Current state
 
 - Phase A is done: the dead flag, `PlayerDied` / `PlayerRespawned` events, the `respawn` command and the replay state landed in #841, #875, #881 and #897 (plan #817); `crates/game/tests/death.rs` covers death, respawn and replay.
+- Phase B is done: `Walk.dead()` (#936), the death mode in `client/input.js` and `controller.js` with `client/test/scripts/death.input` (#939), `controller.respawn()` (#950) and the death screen panel `client/deathui.js` with a respawn button, mounted in `scene.js` (#951); plan #918. Layout is the Open question 1 default (title and one respawn button). The "like Minecraft's" look stays a `[manual check]`.
 - Player health exists: `crates/game/src/player.rs` has `Player.health` (starts at `physics.max_health`, 20) and fall damage saturates it at 0 (`update_fall`, tested by `drop_from(100.0, &w).health == 0`). Nothing reads a 0 health: no dead flag, no event, input still drives the player.
 - Health reaches the client: `Walker::health` / `max_health` (`crates/game/src/walk.rs`), `Walk.health()` / `max_health()` (`crates/game-web/src/lib.rs`), and `client/hud.js` draws the hearts from `client/controller.js`.
 - Events: `crates/game/src/events.rs` implements the section 11 events of `basic-gameplay.md` (`EntityHurt`, `EntityKilled`, `Swing`, ...). There is no player death or respawn event, and `EntityHurt` / `EntityKilled` are for animals, not the player. The client receives them through `walk.drain_events()`.
