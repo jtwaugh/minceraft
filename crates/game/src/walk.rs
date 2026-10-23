@@ -369,6 +369,12 @@ impl Walker {
             h.f64s(&a.velocity);
             h.f64s(&[a.facing]);
         }
+        if let Some(f) = &self.floating {
+            h.f64s(&f.raft.offset());
+            h.u64(f.raft.quarter_turns() as u64);
+            h.f64s(&[f.raft.heading()]);
+            h.u64(u64::from(f.driving));
+        }
         h.finish()
     }
 
