@@ -1,6 +1,6 @@
 //! Level file (docs/design/world-layout.md 4.2, 4.3): `Level`, `WorldConfig`
-//! and a TOML loader and writer. `[route]` is optional; `[climate]` belongs to
-//! a later phase and is ignored.
+//! and a TOML loader and writer. `[route]` and `[climate]` are optional;
+//! `[climate]` records the temperature bias the levels were built with (#846).
 
 #[cfg(feature = "toml-io")]
 use std::collections::HashSet;
@@ -37,12 +37,22 @@ pub struct Route {
     pub points: Vec<[i32; 2]>,
 }
 
+/// The `[climate]` table: the `AlongPath` temperature offsets at the first and
+/// last anchorage. A record of what the bias used, not an input.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "toml-io", derive(serde::Serialize, serde::Deserialize))]
+pub struct Climate {
+    pub temp_start: f64,
+    pub temp_end: f64,
+}
+
 /// A loaded level file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LevelFile {
     pub world: WorldConfig,
     pub levels: Vec<Level>,
     pub route: Option<Route>,
+    pub climate: Option<Climate>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,7 +110,6 @@ struct RawWorld {
     sea_level: i64,
 }
 
-// Unknown top-level tables (`[climate]`) are ignored by serde.
 #[cfg(feature = "toml-io")]
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Raw {
@@ -109,6 +118,8 @@ struct Raw {
     levels: Vec<Level>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     route: Option<Route>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    climate: Option<Climate>,
 }
 
 #[cfg(feature = "toml-io")]
@@ -155,6 +166,7 @@ impl LevelFile {
             },
             levels: raw.levels,
             route: raw.route,
+            climate: raw.climate,
         })
     }
 
@@ -169,6 +181,7 @@ impl LevelFile {
             },
             levels: self.levels.clone(),
             route: self.route.clone(),
+            climate: self.climate,
         };
         toml::to_string(&raw).map_err(|e| LevelFileError::Write(e.to_string()))
     }

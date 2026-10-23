@@ -424,6 +424,11 @@ impl Walk {
         self.0.max_health()
     }
 
+    /// Whether the player is dead (health reached 0 and not yet respawned).
+    pub fn dead(&self) -> bool {
+        self.0.dead()
+    }
+
     /// Whether a cheat command has run this session.
     pub fn cheated(&self) -> bool {
         self.0.cheated()
@@ -433,6 +438,22 @@ impl Walk {
     /// way between the last two ticks.
     pub fn raft_offset(&self, alpha: f64) -> Vec<f64> {
         self.0.raft_offset(alpha).to_vec()
+    }
+
+    /// Whether the player is steering the raft.
+    pub fn driving(&self) -> bool {
+        self.0.driving()
+    }
+
+    /// The raft's yaw in radians, `alpha` of the way between the last two
+    /// ticks, the short way round a quarter-turn step.
+    pub fn raft_heading(&self, alpha: f64) -> f64 {
+        self.0.raft_heading(alpha)
+    }
+
+    /// The raft's rest-pose centre `[x, z]`, the point it turns about.
+    pub fn raft_pivot(&self) -> Vec<f64> {
+        self.0.raft_pivot().to_vec()
     }
 
     pub fn has_world(&self) -> bool {
@@ -668,6 +689,87 @@ mod tests {
 
     fn walk() -> Walk {
         with_default_commands(Walker::new([0.5, 5.0, 0.5]).unwrap()).unwrap_or_else(|_| panic!())
+    }
+
+    #[test]
+    fn raft_driving_state_is_neutral_without_a_raft() {
+        let w = walk();
+        assert!(!w.driving());
+        assert_eq!(w.raft_heading(0.5), 0.0);
+        assert_eq!(w.raft_pivot(), vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn raft_scene_reports_its_pivot_and_heading() {
+        let scene = Scene::new();
+        let mut w = Walk::in_scene(&scene).unwrap_or_else(|_| panic!());
+        assert_eq!(
+            w.raft_pivot(),
+            game::raft::Raft::new(&scene.0.cells).rest_centre().to_vec()
+        );
+        assert!(!w.driving());
+        assert_eq!(w.raft_heading(1.0), 0.0);
+        let h = scene.0.helm;
+        w.0.teleport([h[0] as f64 + 0.5, h[1] as f64 + 1.0, h[2] as f64 + 0.5]);
+        let tick = |w: &mut Walk, input: TickInput| w.0.tick(&input);
+        for _ in 0..5 {
+            tick(&mut w, TickInput::default());
+        }
+        tick(
+            &mut w,
+            TickInput {
+                interact: true,
+                ..TickInput::default()
+            },
+        );
+        assert!(w.driving());
+        for _ in 0..5 {
+            tick(
+                &mut w,
+                TickInput {
+                    move_strafe: 1.0,
+                    ..TickInput::default()
+                },
+            );
+        }
+        assert!(w.raft_heading(1.0) > 0.01);
+        assert!(w.raft_heading(0.0) < w.raft_heading(0.5));
+        assert!(w.raft_heading(0.5) < w.raft_heading(1.0));
+    }
+
+    #[test]
+    fn dead_follows_a_fatal_fall_and_respawn() {
+        let mut w = walk();
+        let mut floor = Region {
+            blocks: Vec::new(),
+            width: 16,
+            depth: 16,
+            height: terrain::HEIGHT as u32,
+            x0: -8,
+            z0: -8,
+        };
+        let mut blocks = vec![0u8; 16 * 16 * terrain::HEIGHT];
+        for z in 0..16 {
+            for x in 0..16 {
+                for y in 0..=3 {
+                    blocks[floor.index(x, y, z)] = 1;
+                }
+            }
+        }
+        floor.blocks = blocks;
+        w.0.add_region(floor);
+        for _ in 0..40 {
+            w.0.tick(&TickInput::default());
+        }
+        assert!(!w.dead());
+        w.0.teleport([0.5, 105.0, 0.5]);
+        for _ in 0..200 {
+            w.0.tick(&TickInput::default());
+        }
+        assert!(w.dead());
+        assert_eq!(w.health(), 0);
+        w.0.respawn().unwrap();
+        assert!(!w.dead());
     }
 
     #[test]

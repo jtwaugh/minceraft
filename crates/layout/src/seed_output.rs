@@ -2,7 +2,10 @@
 //! Phase F, stage 4; 4.3): argument parsing and the level file text for the
 //! best seed, with the scores as `#` comment lines.
 
-use crate::{LevelFile, LevelFileError, LevelRoute, Scored, SearchParams, WorldConfig};
+use crate::LevelClimate;
+use crate::{
+    LevelFile, LevelFileError, LevelRoute, RouteParams, Scored, SearchParams, WorldConfig,
+};
 
 pub const USAGE: &str =
     "usage: mince-seeds --levels N --candidates N --top N --out PATH [--start SEED]\n  \
@@ -68,13 +71,18 @@ impl Args {
     }
 }
 
-/// The level file for `best`.
+/// The level file for `best`; `[climate]` records the shipped bias.
 pub fn level_file(best: &Scored) -> LevelFile {
+    let params = RouteParams::shipped();
     LevelFile {
         world: WorldConfig { seed: best.seed },
         levels: best.levels.clone(),
         route: Some(LevelRoute {
             points: best.levels.iter().map(|l| l.anchorage).collect(),
+        }),
+        climate: Some(LevelClimate {
+            temp_start: params.temp_start,
+            temp_end: params.temp_end,
         }),
     }
 }

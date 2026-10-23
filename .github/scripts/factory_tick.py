@@ -118,7 +118,8 @@ class Snapshot:
                      "labels": [lb["name"] for lb in p.get("labels") or []],
                      "draft": bool(p.get("draft"))}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
-        from factory_automerge import codeowner_patterns, verdict_of
+        from factory_automerge import codeowner_patterns
+        from factory_fix import verdict
         from factory_rerun import is_ticket_pr
         for pr in snap.prs:  # for ticket PRs only: runs, verdict, files, mergeability
             if is_ticket_pr(snap, pr):
@@ -128,7 +129,12 @@ class Snapshot:
                                "run_attempt": r["run_attempt"], "created_at": r["created_at"]}
                               for r in runs["workflow_runs"] if r["head_sha"] == pr["sha"]]
                 # Same paths the board loader reads, so these cost nothing extra.
-                pr["verdict"] = verdict_of(paged(f"repos/{repo}/issues/{n}/comments"), pr["sha"])
+                comments = paged(f"repos/{repo}/issues/{n}/comments")
+                pr["verdict"] = verdict(comments, pr["sha"])
+                pr["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
+                                   "created_at": c["created_at"]}
+                                  for c in comments if c["user"]["login"] in tickets.TRUSTED]
+                load_blocked_facts(repo, pr, comments, get)
                 pr["files"] = [f["filename"] for f in paged(f"repos/{repo}/pulls/{n}/files")]
                 full = get(f"repos/{repo}/pulls/{n}")
                 pr["mergeable_state"] = full.get("mergeable_state") if isinstance(full, dict) else None
@@ -162,6 +168,33 @@ class Snapshot:
         snap.requests = gh_cache.stats["requests"]
         snap.not_modified = gh_cache.stats["not_modified"]
         return snap
+
+
+LOG_LINES = 40  # of a failed check's log kept for the fix task
+
+
+def load_blocked_facts(repo, pr, comments, get):
+    """What the Blocked-fix pass reads (factory_blocked.py): the head commit's
+    time and author, the reviewer's blockers while they stand, the maintainer's
+    @claude comments, and a log excerpt for a check that failed again."""
+    import review_gate
+    from factory_blocked import MAINTAINER, parse_blockers
+    from factory_rerun import CHECKS, FAILED
+    head = get(f"repos/{repo}/commits/{pr['sha']}")
+    pr["head_time"] = head["commit"]["committer"]["date"]
+    pr["head_author"] = (head.get("author") or {}).get("login")
+    pr["claude_mentions"] = [c["created_at"] for c in comments
+                             if c["user"]["login"] == MAINTAINER and "@claude" in (c.get("body") or "")]
+    kind, _, verdict = review_gate.latest_verdict(comments) or (None, None, None)
+    pr["blockers"] = []
+    if kind == "blocked" and (pr["verdict"] or {}).get("current") and not any(
+            o[0]["created_at"] > verdict["updated_at"] for o in review_gate.overrides(comments)):
+        pr["blockers"] = parse_blockers(verdict.get("body"))
+    for run in pr["runs"]:
+        if run["name"] in CHECKS and run["conclusion"] in FAILED and run["run_attempt"] > 1:
+            p = subprocess.run(["gh", "run", "view", str(run["id"]), "--repo", repo, "--log-failed"],
+                               capture_output=True, text=True)
+            run["log"] = "\n".join(p.stdout.splitlines()[-LOG_LINES:])
 
 
 FULL_EVENTS = ("schedule", "workflow_dispatch")  # these ticks always read everything
@@ -369,11 +402,12 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, report, plans,
-    ready, merge, needs-you, board."""
+    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, blocked, report,
+    plans, ready, merge, needs-you, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
     from factory_plans import close_finished_plans
+    from factory_blocked import blocked
     from factory_needs_you import needs_you
     from factory_nits import nits
     from factory_refresh import refresh_after_red_master
@@ -386,8 +420,8 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, report,
-            close_finished_plans, ready, auto_merge, needs_you, board_pass]
+    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, blocked,
+            report, close_finished_plans, ready, auto_merge, needs_you, board_pass]
 
 
 def main(argv):
