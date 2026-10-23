@@ -11,8 +11,9 @@ the trusted comments for a marker naming the current head and emits one
 or a design doc is the problem, else `needs-you`. The issue is keyed by
 ticket, PR and kind, so a later tick updates it (and never opens a second).
 While it is open `has_open_question` is true and the Blocked-fix and nits
-passes start nothing; `link_questions` links the ticket as blocked by it. A decision question starts with `**File:**` (the file named in the
-run's text, else SPEC.md) as `planner_issue.py question` requires.
+passes start nothing; `link_questions` links the ticket as blocked by it.
+A decision question starts with `**File:**` (the file named in the run's text,
+else SPEC.md) as `planner_issue.py question` requires.
 (docs/design/factory-orchestrator.md Phase A, section 3 "Blocked tickets" step 4)
 """
 import os

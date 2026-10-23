@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
 from factory_blocked import blocked  # noqa: E402
 from factory_fix import stop_marker, stops  # noqa: E402
-from factory_nits import nits
+from factory_nits import nits  # noqa: E402
 from factory_questions import link_questions, questions  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
 
