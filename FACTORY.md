@@ -385,6 +385,7 @@ maintainer.
 | See whether the factory is running, when it stopped and why | `python3 .github/scripts/factory_health.py` (exit 0 healthy, 1 failing, 2 not ticking; `--repro` runs a dry tick locally). A failing tick also opens a "Factory: tick is failing" issue assigned to the maintainer, closed by the next good tick |
 | Run a tick by hand | `gh workflow run factory-tick.yml` (add `-f dry-run=true` to only print what it would do) |
 | Resolve conflicts on one PR | `gh workflow run resolve-conflicts.yml -f pr=<n>` |
+| See what waits on you | The `needs-you` label (filter the board, issues or PRs by `label:needs-you`), and the "Factory: needs you" issue, which gives each item's reason, most-blocking first. The tick keeps both current |
 
 ## Map of the files
 
