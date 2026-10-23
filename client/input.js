@@ -11,6 +11,9 @@
 //   input.closeConsole({ submitted })  leave console mode; submitted re-requests pointer lock
 //   input.inventory  true while the inventory view is open (docs/design/ui-art-and-inventory.md note 8)
 //   input.closeInventory({ relock })  leave inventory mode; relock re-requests pointer lock
+//   input.dead  true while the death screen is up (docs/design/player-death.md Phase B)
+//   input.setDead(bool)  enter death mode: drop held inputs, release the pointer, ignore key,
+//                        mouse and wheel events, and do not relock on a click
 //   input.detach() remove every listener
 //
 // With `debug` on, Backquote (the code, not the character) opens the console
@@ -34,6 +37,7 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
   let locked = false;
   let consoleOpen = false;
   let inventoryOpen = false;
+  let dead = false;
   const cleanups = [];
   const on = (target, type, fn, opts) => {
     target.addEventListener(type, fn, opts);
@@ -44,7 +48,7 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
   const release = () => sampler.clear_held();
 
   on(canvas, 'click', () => {
-    if (!locked && !inventoryOpen) canvas.requestPointerLock();
+    if (!locked && !inventoryOpen && !dead) canvas.requestPointerLock();
   });
 
   // Escape (and any other way out) arrives here, as the browser owns that key.
@@ -64,6 +68,7 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
   };
 
   on(document, 'keydown', (e) => {
+    if (dead) return;
     if (inventoryOpen) {
       // the pointer is already free, so Escape reaches the page
       if (e.code === 'Escape' || sampler.is_inventory_key(e.code)) {
@@ -86,29 +91,29 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
       document.exitPointerLock?.();
       return;
     }
-    if (!locked || consoleOpen || inventoryOpen) return;
+    if (!locked || consoleOpen || inventoryOpen || dead) return;
     e.preventDefault();
     if (!e.repeat) sampler.key_down(e.code);
   });
   on(document, 'keyup', (e) => {
-    if (!locked || consoleOpen || inventoryOpen) return;
+    if (!locked || consoleOpen || inventoryOpen || dead) return;
     e.preventDefault();
     sampler.key_up(e.code);
   });
 
   on(document, 'mousedown', (e) => {
     const key = MOUSE_KEYS[e.button];
-    if (locked && !consoleOpen && !inventoryOpen && key) sampler.key_down(key);
+    if (locked && !consoleOpen && !inventoryOpen && !dead && key) sampler.key_down(key);
   });
   on(document, 'mouseup', (e) => {
     const key = MOUSE_KEYS[e.button];
-    if (locked && !consoleOpen && !inventoryOpen && key) sampler.key_up(key);
+    if (locked && !consoleOpen && !inventoryOpen && !dead && key) sampler.key_up(key);
   });
   on(document, 'mousemove', (e) => {
     if (locked && !consoleOpen && !inventoryOpen) sampler.mouse_move(e.movementX, e.movementY);
   });
   on(document, 'wheel', (e) => {
-    if (!locked || consoleOpen || inventoryOpen) return;
+    if (!locked || consoleOpen || inventoryOpen || dead) return;
     e.preventDefault();
     sampler.wheel(e.deltaY);
   }, { passive: false }); // document wheel listeners default to passive
@@ -128,6 +133,18 @@ export function attachInput({ sampler, canvas, document, window, debug = false }
       return inventoryOpen;
     },
     closeInventory,
+    get dead() {
+      return dead;
+    },
+    setDead(value) {
+      if (value === dead) return;
+      dead = value;
+      if (!dead) return;
+      consoleOpen = false;
+      inventoryOpen = false;
+      release();
+      document.exitPointerLock?.();
+    },
     get locked() {
       return locked;
     },

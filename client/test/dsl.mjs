@@ -45,7 +45,7 @@
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
 // Paths: regions.loaded|freed|pending|x|z (stream only: regions meshed now, regions freed so far,
-// regions waiting to be meshed, and the region under the eye), mode (fly|walk|console|inventory), console.last (last command output line, or none),
+// regions waiting to be meshed, and the region under the eye), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
 // console.lines (output lines so far), console.text (the box), cheated, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
@@ -151,7 +151,7 @@ function read(w, path) {
   const s = w.controller.state;
   const d = s.eye.map((v, i) => v - w.mark[i]);
   const axis = { x: 0, y: 1, z: 2 };
-  if (path === 'mode') return w.input.console ? 'console' : w.input.inventory ? 'inventory' : s.flying ? 'fly' : 'walk';
+  if (path === 'mode') return w.input.dead ? 'death' : w.input.console ? 'console' : w.input.inventory ? 'inventory' : s.flying ? 'fly' : 'walk';
   if (path.startsWith('console.') || path === 'cheated') {
     w.output.push(...w.walk.drain_command_output());
     if (path === 'cheated') return w.walk.cheated();

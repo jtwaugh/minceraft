@@ -10,6 +10,7 @@
 //   c.submitConsole(line)  queue the line on the walk, close the console, relock the pointer
 //   c.closeConsole()       close the console without submitting; the pointer stays unlocked
 //   state.inventory        true while the inventory view is open; the sim ticks on with neutral input
+//   state.dead             true while the player is dead (walk.dead()); input is dropped and ignored
 //   c.detach()          remove the F listener
 //
 // `fov` is the vertical field of view in degrees. It starts at `sprintFov.base` (look.fov_degrees) and,
@@ -42,7 +43,7 @@ import { createStream, regionOf } from './stream.js';
 export function createController({ input, walk, fly, clock, document, flying = false, stream = null, sprintFov = { base: 70, extra: 0, seconds: 1 } }) {
   const regions = stream && createStream(stream);
   let followed = null;
-  const state = { flying, inventory: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, events: [] };
+  const state = { flying, inventory: false, dead: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, events: [] };
 
   const onKey = (e) => {
     if (e.code !== 'KeyF' || e.repeat || !input.locked || input.console || input.inventory) return;
@@ -73,6 +74,8 @@ export function createController({ input, walk, fly, clock, document, flying = f
   return {
     state,
     frame(dt) {
+      const dead = walk.dead();
+      if (dead !== input.dead) input.setDead(dead);
       const ticks = clock.advance(dt);
       const alpha = clock.alpha;
       const { yaw, pitch } = input.look();
@@ -94,7 +97,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
       const belt = readBelt(walk);
       const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
-      Object.assign(state, { inventory: input.inventory, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, events: Array.from(walk.drain_events()) });
+      Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, events: Array.from(walk.drain_events()) });
       return state;
     },
     submitConsole(line) {
