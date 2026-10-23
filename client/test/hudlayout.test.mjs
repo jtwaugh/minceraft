@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { hudLayout, CROSSHAIR_SIZE, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP } from '../hudlayout.js';
+import { hudModel } from '../hud.js';
+
+const grid = (w, h) => Array(h).fill('a'.repeat(w));
+const set = {
+  palette: { a: '#ffffff' },
+  batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9) } } },
+};
+const belt = { slots: [null, 'sword', 'hoe', null, null], selected: 1, hands: null };
+const model = hudModel({ belt, health: 19, maxHealth: 20 });
+
+const sweep = [
+  [390, 844, 'phone portrait'],
+  [1366, 768, 'laptop'],
+  [1920, 1080, 'full hd'],
+  [3440, 1440, 'ultrawide'],
+  [80, 45, 'minimum, scale 1'],
+];
+
+for (const [w, h, name] of sweep) {
+  test(`hudLayout at ${w}x${h} (${name})`, () => {
+    const { scale, rects } = hudLayout(model, set, { w, h });
+    assert.ok(Number.isInteger(scale) && scale >= 1);
+    const all = [rects.crosshair, rects.belt, rects.hearts, ...rects.slots, ...rects.heartIcons];
+    for (const r of all) for (const v of Object.values(r)) assert.ok(Number.isInteger(v));
+    // Sizes are exact multiples of the texture sizes.
+    assert.equal(rects.slots.length, 5);
+    for (const s of rects.slots) assert.deepEqual([s.w, s.h], [10 * scale, 10 * scale]);
+    assert.equal(rects.heartIcons.length, 10);
+    for (const s of rects.heartIcons) assert.deepEqual([s.w, s.h], [9 * scale, 9 * scale]);
+    assert.equal(rects.belt.w, (5 * 10 + 4 * SLOT_GAP) * scale);
+    assert.equal(rects.hearts.w, (10 * 9 + 9 * HEART_GAP) * scale);
+    // Crosshair centred; belt centred at the bottom margin; hearts above the belt.
+    assert.deepEqual(rects.crosshair, { x: Math.floor((w - CROSSHAIR_SIZE) / 2), y: Math.floor((h - CROSSHAIR_SIZE) / 2), w: CROSSHAIR_SIZE, h: CROSSHAIR_SIZE });
+    const colW = Math.max(rects.belt.w, rects.hearts.w);
+    assert.equal(rects.belt.x, Math.floor((w - colW) / 2));
+    assert.equal(rects.belt.y + rects.belt.h, h - BOTTOM_MARGIN);
+    assert.equal(rects.hearts.y + rects.hearts.h + HEARTS_BELT_GAP * scale, rects.belt.y);
+    // Slots tile the belt left to right with the gap between them.
+    assert.equal(rects.slots[0].x, rects.belt.x);
+    rects.slots.slice(1).forEach((s, i) => assert.equal(s.x, rects.slots[i].x + rects.slots[i].w + SLOT_GAP * scale));
+  });
+}
+
+test('minimum viewport has hud scale 1', () => {
+  assert.equal(hudLayout(model, set, { w: 80, h: 45 }).scale, 1);
+  assert.equal(hudLayout(model, set, { w: 10, h: 10 }).scale, 1);
+});
+
+test('layout depends only on model, tileset and viewport', () => {
+  const a = hudLayout(model, set, { w: 1366, h: 768 });
+  assert.deepEqual(hudLayout(model, set, { w: 1366, h: 768 }), a);
+});
