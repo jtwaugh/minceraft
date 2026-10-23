@@ -12,7 +12,7 @@ import { inventoryModel } from './inventory.js';
 import { textureCanvas, textureSize, uiScale } from './uipx.js';
 
 const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
-const PANEL_TEXELS = 4;
+export const PANEL_TEXELS = 4;
 
 /** Pixel scale: whole multiples of a 100x60 texel layout that fits the viewport. */
 export function inventoryScale(viewportW, viewportH) {
@@ -40,7 +40,7 @@ const CSS = `
 .inv-label { text-shadow: 0 0 3px #000; min-height: 1.2em; }
 `;
 
-function panelImage(doc, set) {
+export function panelImage(doc, set) {
   const n = PANEL_TEXELS, canvas = doc.createElement('canvas');
   canvas.width = canvas.height = 3 * n;
   const ctx = canvas.getContext('2d');
