@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hudLayout, CROSSHAIR_SIZE, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP } from '../hudlayout.js';
+import { hudLayout, CROSSHAIR_SIZE, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP, TEXT_CHAR_W, TEXT_H } from '../hudlayout.js';
 import { hudModel } from '../hud.js';
 
 const grid = (w, h) => Array(h).fill('a'.repeat(w));
@@ -88,9 +88,11 @@ for (const [w, h, name] of sweep) {
   });
 }
 
-test('missing label textures take no space', () => {
+test('missing label textures fall back to text rects', () => {
   const { rects } = hudLayout(withTimer(7, 'hoe'), { ...set, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10) } } } }, { w: 800, h: 450 });
   assert.equal(rects.timer.phase, null);
   assert.deepEqual(rects.timer.digits, []);
-  assert.deepEqual([rects.hands.w, rects.hands.icon, rects.hands.label], [0, null, null]);
+  assert.deepEqual([rects.hands.icon, rects.hands.label], [null, null]);
+  assert.equal(rects.timer.text.w, 'gathering'.length * TEXT_CHAR_W);
+  assert.deepEqual([rects.hands.text.w, rects.hands.h], ['hoe'.length * TEXT_CHAR_W, TEXT_H]);
 });
