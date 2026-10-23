@@ -48,6 +48,76 @@ class Replay(unittest.TestCase):
         self.assertEqual(self.second, [])
 
 
+BLOCKED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "tests", "blocked_prs.json")
+LOOP = {"rerun_jobs", "start_fix", "open_question"}
+
+
+def pushed(pr, sha, **changes):
+    """A fix run pushed a new head: its checks pass and nothing is reviewed yet."""
+    pr.update({"sha": sha, "runs": [dict(r, conclusion="success") for r in pr["runs"]],
+               "verdict": None, "blockers": [], "mergeable_state": "blocked", **changes})
+
+
+def finished(pr):
+    """A fix run ended on the current head and pushed nothing."""
+    pr["fix_finished"] = [pr["sha"]]
+
+
+def check(conclusion):
+    return lambda pr: pr["runs"][0].update(conclusion=conclusion)
+
+
+def nits_verdict(kind, nits=()):
+    return lambda pr: pushed(pr, "9" * 12, verdict={"kind": kind, "commit": "9" * 7,
+                                                    "nits": list(nits), "current": True})
+
+
+class BlockedAndNits(unittest.TestCase):
+    """Five ticks over each fixture PR on its own; `events` change the PR between ticks
+    the way CI, a fix run or the reviewer would. Only the loop's actions are compared."""
+
+    def ticks(self, pr_number, events, n=5):
+        snap = Snapshot.from_fixture(BLOCKED)
+        snap.prs = [p for p in snap.prs if p["number"] == pr_number]
+        pr = snap.prs[0]
+        seen = []
+        for t in range(n):
+            if t in events:
+                events[t](pr)
+            seen.append([(a.kind, a.payload.get("kind")) for a in tick(snap, passes(), FakeBackend())
+                         if a.kind in LOOP])
+        return seen
+
+    def test_failed_check_that_passes_on_rerun(self):
+        self.assertEqual(self.ticks(801, {1: check("success")}),
+                         [[("rerun_jobs", None)], [], [], [], []])
+
+    def test_check_that_fails_again_gets_one_fix_then_one_question(self):
+        self.assertEqual(self.ticks(802, {1: check("failure"), 2: finished}),
+                         [[("rerun_jobs", None)], [("start_fix", "check")], [("open_question", None)], [], []])
+
+    def test_conflict_gets_one_fix(self):
+        self.assertEqual(self.ticks(803, {2: lambda pr: pushed(pr, "8" * 12)}),
+                         [[("start_fix", "conflict")], [], [], [], []])
+
+    def test_reviewer_block_gets_one_fix_then_one_question(self):
+        self.assertEqual(self.ticks(804, {2: finished}),
+                         [[("start_fix", "review")], [], [("open_question", None)], [], []])
+
+    def test_nits_that_clear_after_one_pass(self):
+        self.assertEqual(self.ticks(805, {2: nits_verdict("ready")}),
+                         [[("start_fix", "nits")], [], [], [], []])
+
+    def test_nits_that_remain_get_one_question(self):
+        self.assertEqual(self.ticks(806, {2: nits_verdict("nits", ["Still unused."])}),
+                         [[("start_fix", "nits")], [], [("open_question", None)], [], []])
+
+    def test_second_tick_right_after_the_first_does_nothing(self):
+        snap = Snapshot.from_fixture(BLOCKED)
+        self.assertTrue(tick(snap, passes(), FakeBackend()))
+        self.assertEqual(tick(snap, passes(), FakeBackend()), [])
+
+
 class Live(unittest.TestCase):
     """GhBackend with an injected `run` that records requests instead of calling gh."""
 
