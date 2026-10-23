@@ -73,6 +73,17 @@ impl ForageConfig {
     }
 }
 
+/// What a forage did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Forage<'a> {
+    /// Inside the block's cooldown: nothing rolled, nothing happens.
+    Cooldown,
+    /// Rolled and dropped nothing.
+    Miss,
+    /// Rolled and dropped the named item.
+    Drop(&'a str),
+}
+
 /// Per-block cooldowns and the roll.
 #[derive(Clone, Debug)]
 pub struct Forager {
@@ -95,18 +106,19 @@ impl Forager {
         &self.cfg
     }
 
-    /// Forage the grass at `pos` on `tick`. Returns the item name to drop on
-    /// success. A forage inside the block's cooldown does nothing and rolls
-    /// nothing; any other forage starts the cooldown, success or not.
-    pub fn forage(&mut self, pos: [i32; 3], tick: u64) -> Option<&str> {
+    /// Forage the grass at `pos` on `tick`. A forage inside the block's cooldown does nothing
+    /// and rolls nothing; any other forage starts the cooldown, success or not.
+    pub fn forage(&mut self, pos: [i32; 3], tick: u64) -> Forage<'_> {
         if self.ready_at.get(&pos).is_some_and(|&t| tick < t) {
-            return None;
+            return Forage::Cooldown;
         }
         self.ready_at
             .insert(pos, tick.saturating_add(self.cfg.cooldown_ticks));
-        self.rng
-            .chance(self.cfg.chance)
-            .then_some(self.cfg.item.as_str())
+        if self.rng.chance(self.cfg.chance) {
+            Forage::Drop(self.cfg.item.as_str())
+        } else {
+            Forage::Miss
+        }
     }
 }
 
@@ -128,7 +140,7 @@ mod tests {
         let c = ForageConfig::default_from_data();
         assert_eq!(
             (c.item.as_str(), c.chance, c.cooldown_ticks),
-            ("seeds", 6, 1200)
+            ("seeds", 3, 1200)
         );
     }
 
@@ -144,22 +156,37 @@ mod tests {
     #[test]
     fn chance_one_always_drops_and_chance_matches_rng() {
         let mut f = Forager::new(cfg(1, 0), 7);
-        assert!((0..20).all(|t| f.forage([0, 0, 0], t).is_some()));
+        assert!((0..20).all(|t| matches!(f.forage([0, 0, 0], t), Forage::Drop(_))));
         // Distinct blocks, fixed seed: results equal the raw RNG rolls.
         let mut f = Forager::new(cfg(6, 100), 7);
         let mut r = Rng::new(7);
         for i in 0..200 {
-            assert_eq!(f.forage([i, 0, 0], 0).is_some(), r.chance(6));
+            assert_eq!(
+                matches!(f.forage([i, 0, 0], 0), Forage::Drop(_)),
+                r.chance(6)
+            );
         }
     }
 
     #[test]
     fn cooldown_blocks_then_expires() {
         let mut f = Forager::new(cfg(1, 100), 1);
-        assert!(f.forage([1, 2, 3], 10).is_some());
-        assert!(f.forage([1, 2, 3], 109).is_none());
-        assert!(f.forage([4, 2, 3], 109).is_some(), "other block unaffected");
-        assert!(f.forage([1, 2, 3], 110).is_some());
+        assert_eq!(f.forage([1, 2, 3], 10), Forage::Drop("seeds"));
+        assert_eq!(f.forage([1, 2, 3], 109), Forage::Cooldown);
+        assert_eq!(
+            f.forage([4, 2, 3], 109),
+            Forage::Drop("seeds"),
+            "other block"
+        );
+        assert_eq!(f.forage([1, 2, 3], 110), Forage::Drop("seeds"));
+    }
+
+    #[test]
+    fn a_miss_starts_the_cooldown() {
+        let mut f = Forager::new(cfg(u32::MAX, 100), 5);
+        assert_eq!(f.forage([0, 0, 0], 0), Forage::Miss);
+        assert_eq!(f.forage([0, 0, 0], 99), Forage::Cooldown);
+        assert_eq!(f.forage([0, 0, 0], 100), Forage::Miss);
     }
 
     #[test]
@@ -167,7 +194,7 @@ mod tests {
         let run = || {
             let mut f = Forager::new(cfg(6, 5), 42);
             (0..300u64)
-                .map(|t| f.forage([(t % 7) as i32, 0, 0], t).is_some())
+                .map(|t| format!("{:?}", f.forage([(t % 7) as i32, 0, 0], t)))
                 .collect::<Vec<_>>()
         };
         assert_eq!(run(), run());

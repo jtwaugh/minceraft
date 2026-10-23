@@ -19,6 +19,8 @@ pub enum GameEvent {
         position: [i32; 3],
         yields: Vec<String>,
     },
+    /// A forage outside the block's cooldown at `position` dropped nothing.
+    ForageMissed { position: [i32; 3] },
     /// An entity lost `damage` health. `attacker` is `"player"` (there is
     /// one player).
     EntityHurt {

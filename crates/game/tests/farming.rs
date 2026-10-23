@@ -310,7 +310,7 @@ fn foraging_drops_seeds_keeps_the_grass_and_respects_the_cooldown() {
             w.tick(&idle());
         }
     }
-    assert!(found, "1 in 6 over 60 tries");
+    assert!(found, "1 in 3 over 60 tries");
 }
 
 /// The same script every time: till, plant, grow, harvest, forage.
