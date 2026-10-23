@@ -51,7 +51,19 @@ fn results_are_valid_bounded_and_ordered() {
         assert_eq!(s.levels, levels);
         assert!(validate_route(&layout, &levels, &s.route, &t).passed());
         assert!((0.0..=1.0).contains(&s.terms.path_directness));
-        assert!((0.0..=4.0).contains(&s.score));
+        let t = s.terms;
+        assert!((0.0..=1.0).contains(&t.climate_gradient));
+        assert!((0.0..=1.0).contains(&t.biome_variety));
+        let c = ScoringConfig::shipped();
+        let sum = t.spacing_regularity * c.weight_spacing_regularity
+            + t.island_quality * c.weight_island_quality
+            + t.coastline_interest * c.weight_coastline_interest
+            + t.extra_islands * c.weight_extra_islands
+            + t.path_directness * c.weight_path_directness
+            + t.climate_gradient * c.weight_climate_gradient
+            + t.biome_variety * c.weight_biome_variety;
+        assert!((s.score - sum).abs() < 1e-12);
+        assert!((0.0..=6.0).contains(&s.score));
     }
     assert!(found
         .windows(2)

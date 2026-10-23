@@ -60,6 +60,7 @@ fn file_round_trips_validates_and_has_score_comments() {
     let text = render(best).unwrap();
     assert!(text.contains(&format!("# score {:.4}", best.score)));
     assert!(text.contains("# spacing_regularity") && text.contains("# extra_islands"));
+    assert!(text.contains("# climate_gradient") && text.contains("# biome_variety"));
     assert!(text.contains("[climate]") && text.contains("temp_start"));
     let path = std::env::temp_dir().join(format!("mince-seeds-test-{}.toml", std::process::id()));
     std::fs::write(&path, &text).unwrap();
