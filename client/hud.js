@@ -10,6 +10,7 @@
 //
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
+import { hudLayout, LABEL_GAP } from './hudlayout.js';
 import { findTexture, textureCanvas, textureSize, uiScale } from './uipx.js';
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
@@ -48,62 +49,85 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
 
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font: 12px/1.2 ui-monospace, monospace; color: #fff; }
-#hud-cross { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%);
-  background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; mix-blend-mode: difference; }
-#hud-bottom { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-#hud-timer { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); padding: 2px 8px; background: rgba(0, 0, 0, .55); display: flex; align-items: center; gap: 4px; }
-#hud-timer canvas, #hud-hearts canvas { image-rendering: pixelated; }
-#hud-hearts { display: flex; gap: 2px; }
-#hud-belt { display: flex; gap: 2px; }
-.slot { position: relative; image-rendering: pixelated; }
-.slot canvas { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
-#hud-hands { min-height: 1.2em; text-shadow: 0 0 3px #000; display: flex; align-items: center; gap: 4px; }
-#hud-hands canvas { image-rendering: pixelated; }
+#hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt > *, .slot { position: absolute; }
+#hud-cross { background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; mix-blend-mode: difference; }
+#hud-timer { background: rgba(0, 0, 0, .55); }
+#hud canvas { image-rendering: pixelated; }
+#hud-hands { text-shadow: 0 0 3px #000; }
+#hud span { white-space: nowrap; }
 `;
+
+/** Sets a rectangle's position and size as CSS pixels, offset by (ox, oy) when it sits inside a placed parent. */
+function place(el, r, ox = 0, oy = 0) {
+  el.style.left = `${r.x - ox}px`;
+  el.style.top = `${r.y - oy}px`;
+  el.style.width = `${r.w}px`;
+  el.style.height = `${r.h}px`;
+}
 
 export function mountHud(document, set, parent = document.body, view = globalThis) {
   const style = document.createElement('style');
   style.textContent = CSS;
   const root = document.createElement('div');
   root.id = 'hud';
-  root.innerHTML = '<div id="hud-cross"></div><div id="hud-timer"></div><div id="hud-bottom"><div id="hud-hands"></div><div id="hud-hearts"></div><div id="hud-belt"></div></div>';
+  const make = (id) => Object.assign(document.createElement('div'), { id });
+  const cross = make('hud-cross'), timer = make('hud-timer'), hands = make('hud-hands');
+  const hearts = make('hud-hearts'), belt = make('hud-belt');
+  root.append(cross, timer, hands, hearts, belt);
   parent.append(style, root);
-  const cross = root.querySelector('#hud-cross'), timer = root.querySelector('#hud-timer'), hands = root.querySelector('#hud-hands');
-  const hearts = root.querySelector('#hud-hearts'), belt = root.querySelector('#hud-belt');
   let last = '';
   return {
     update(m) {
-      const key = JSON.stringify(m);
+      const viewport = { w: view.innerWidth, h: view.innerHeight };
+      const key = JSON.stringify([m, viewport]);
       if (key === last) return;
       last = key;
       cross.hidden = !m.crosshair;
-      const scale = hudScale(view.innerWidth, view.innerHeight);
-      const icon = (name) => {
+      const { scale, rects } = hudLayout(m, set, viewport);
+      const icon = (name, r, ox, oy) => {
         const c = textureCanvas(set, name, document);
-        if (!c) return null;
-        const { w, h } = textureSize(set, name);
-        c.style.width = `${w * scale}px`;
-        c.style.height = `${h * scale}px`;
+        if (c) place(c, r, ox, oy);
         return c;
       };
-      const hand = m.hands && icon(m.hands);
-      hands.replaceChildren(...(m.hands ? [hand, Object.assign(document.createElement('span'), { textContent: m.hands })].filter(Boolean) : []));
-      const digits = digitNames(m.timer.secondsLeft).map(icon).filter(Boolean);
-      timer.replaceChildren(Object.assign(document.createElement('span'), { textContent: m.timer.phase }), ...digits);
-      hearts.replaceChildren(...heartNames(m.hearts).map(icon).filter(Boolean));
-      belt.replaceChildren(...m.slots.map((slot) => {
+      const text = (str, x, y) => {
+        const el = Object.assign(document.createElement('span'), { textContent: str });
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        return el;
+      };
+      place(cross, rects.crosshair);
+
+      const t = rects.timer;
+      place(timer, t);
+      timer.replaceChildren(
+        t.phase ? icon(`phase_${m.timer.phase}`, t.phase, t.x, t.y) : text(m.timer.phase, 0, 0),
+        ...digitNames(m.timer.secondsLeft).map((n, i) => icon(n, t.digits[i], t.x, t.y)).filter(Boolean),
+      );
+
+      const h = rects.hands;
+      place(hands, h);
+      hands.replaceChildren(...(m.hands ? [
+        h.icon && icon(m.hands, h.icon, h.x, h.y),
+        h.label ? icon(`label_${m.hands}`, h.label, h.x, h.y) : text(m.hands, h.icon ? h.icon.x + h.icon.w + LABEL_GAP * scale - h.x : 0, 0),
+      ].filter(Boolean) : []));
+
+      place(hearts, rects.hearts);
+      hearts.replaceChildren(...heartNames(m.hearts).map((n, i) => icon(n, rects.heartIcons[i], rects.hearts.x, rects.hearts.y)).filter(Boolean));
+
+      place(belt, rects.belt);
+      belt.replaceChildren(...m.slots.map((slot, i) => {
         const v = slotView(set, slot.name, slot.selected);
+        const r = rects.slots[i];
         const el = document.createElement('div');
         el.className = slot.selected ? 'slot selected' : 'slot';
-        const frame = icon(v.frame);
+        place(el, r, rects.belt.x, rects.belt.y);
+        const frame = icon(v.frame, { x: 0, y: 0, w: r.w, h: r.h }, 0, 0);
         if (frame) el.append(frame);
-        const ic = v.icon && icon(v.icon);
-        if (ic) {
+        if (v.icon) {
           // Centre the icon in the frame, on whole texels.
-          const f = textureSize(set, v.frame), t = textureSize(set, v.icon);
-          ic.style.left = `${Math.floor((f.w - t.w) / 2) * scale}px`;
-          ic.style.top = `${Math.floor((f.h - t.h) / 2) * scale}px`;
-          el.append(ic);
+          const f = textureSize(set, v.frame), tx = textureSize(set, v.icon);
+          const ic = icon(v.icon, { x: Math.floor((f.w - tx.w) / 2) * scale, y: Math.floor((f.h - tx.h) / 2) * scale, w: tx.w * scale, h: tx.h * scale }, 0, 0);
+          if (ic) el.append(ic);
         }
         return el;
       }));

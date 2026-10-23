@@ -50,3 +50,42 @@ test('digitNames splits a number into digit textures', async () => {
   assert.deepEqual(digitNames(125), ['digit_1', 'digit_2', 'digit_5']);
   assert.deepEqual(heartNames({ full: 1, half: 1, empty: 1 }), ['heart_full', 'heart_half', 'heart_empty']);
 });
+
+// Just enough DOM for mountHud: elements with children and a canvas stub.
+function fakeDocument() {
+  const make = (tag) => ({
+    tag, style: {}, children: [], hidden: false, id: '', className: '', textContent: '',
+    append(...kids) { this.children.push(...kids); },
+    replaceChildren(...kids) { this.children = kids; },
+    getContext: () => ({ putImageData() {} }),
+  });
+  return { body: make('body'), createElement: make };
+}
+
+test('mountHud places every element from its hudLayout rectangle', async () => {
+  const { mountHud } = await import('../hud.js');
+  const { hudLayout } = await import('../hudlayout.js');
+  globalThis.ImageData = class { constructor(d, w, h) { Object.assign(this, { data: d, width: w, height: h }); } };
+  const grid = (w, h) => Array(h).fill('a'.repeat(w));
+  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), sword: grid(8, 8), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
+  const doc = fakeDocument();
+  const view = { innerWidth: 800, innerHeight: 450 };
+  const hud = mountHud(doc, set, doc.body, view);
+  const m = hudModel({ belt, health: 19, maxHealth: 20, secondsLeft: 42 });
+  const px = (r, ox = 0, oy = 0) => ({ left: `${r.x - ox}px`, top: `${r.y - oy}px`, width: `${r.w}px`, height: `${r.h}px` });
+  const box = (el) => ({ left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height });
+  for (const size of [[800, 450], [390, 844]]) {
+    [view.innerWidth, view.innerHeight] = size;
+    hud.update(m);
+    const { rects } = hudLayout(m, set, { w: size[0], h: size[1] });
+    const [cross, timer, hands, hearts, beltEl] = doc.body.children[1].children;
+    assert.deepEqual(box(cross), px(rects.crosshair));
+    assert.deepEqual(box(timer), px(rects.timer));
+    assert.deepEqual(timer.children.slice(1).map(box), rects.timer.digits.map((r) => px(r, rects.timer.x, rects.timer.y)));
+    assert.deepEqual(box(hands), px(rects.hands));
+    assert.deepEqual(box(hearts), px(rects.hearts));
+    assert.deepEqual(hearts.children.map(box), rects.heartIcons.map((r) => px(r, rects.hearts.x, rects.hearts.y)));
+    assert.deepEqual(box(beltEl), px(rects.belt));
+    assert.deepEqual(beltEl.children.map(box), rects.slots.map((r) => px(r, rects.belt.x, rects.belt.y)));
+  }
+});
