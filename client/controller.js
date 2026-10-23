@@ -11,6 +11,8 @@
 //   c.closeConsole()       close the console without submitting; the pointer stays unlocked
 //   state.inventory        true while the inventory view is open; the sim ticks on with neutral input
 //   state.dead             true while the player is dead (walk.dead()); input is dropped and ignored
+//   c.respawn()            while dead, queue the `respawn` command on the walk, leave the death mode and
+//                          ask for the pointer again; does nothing while alive
 //   c.detach()          remove the F listener
 //
 // `fov` is the vertical field of view in degrees. It starts at `sprintFov.base` (look.fov_degrees) and,
@@ -58,6 +60,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
   };
   document.addEventListener('keydown', onKey);
 
+  let respawning = false; // respawn queued, the sim has not yet run it
   let freed = 0;
   const streamRegions = (eye) => {
     const centre = regionOf(eye[0], eye[2]);
@@ -74,7 +77,8 @@ export function createController({ input, walk, fly, clock, document, flying = f
   return {
     state,
     frame(dt) {
-      const dead = walk.dead();
+      if (!walk.dead()) respawning = false;
+      const dead = walk.dead() && !respawning;
       if (dead !== input.dead) input.setDead(dead);
       const ticks = clock.advance(dt);
       const alpha = clock.alpha;
@@ -107,6 +111,13 @@ export function createController({ input, walk, fly, clock, document, flying = f
     },
     closeConsole() {
       input.closeConsole();
+    },
+    respawn() {
+      if (!input.dead || respawning) return;
+      respawning = true;
+      walk.submit_command('respawn');
+      input.setDead(false);
+      input.requestLock();
     },
     detach() {
       document.removeEventListener('keydown', onKey);

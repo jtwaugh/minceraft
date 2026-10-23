@@ -25,6 +25,7 @@
 //                               With the console open, `press Enter` submits the box, Backspace
 //                               deletes a character, Escape closes it without submitting
 //                               (the browser's exit from pointer lock is faked: it unlocks)
+//   respawn                     the death screen's respawn button: controller.respawn() (nothing while alive)
 //   frame <ms> [xN]             run N frames of ms each (default 1)
 //   spawn animal <kind>         put a cow, pig or chicken on the raft scene's islet
 //   face animal                 turn to look at the first animal (a mousemove)
@@ -229,6 +230,7 @@ function step(w, { op, args }) {
     case 'click': return fire(canvas, 'click');
     case 'lock': document.pointerLockElement = canvas; return fire(document, 'pointerlockchange');
     case 'unlock': document.pointerLockElement = null; return fire(document, 'pointerlockchange');
+    case 'respawn': return w.controller.respawn();
     case 'blur': return fire(window, 'blur');
     case 'down': return key('keydown', args[0]);
     case 'up': return key('keyup', args[0]);
