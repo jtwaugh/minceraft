@@ -296,15 +296,50 @@ class FakeBackend(Backend):
             raise ValueError(f"unhandled action {action.kind} on {action.target}")
 
 
-def tick(snapshot, passes, backend):
+# Passes that are skipped once an earlier pass in the same tick has crashed:
+# a merge can't be undone, so it never runs on a snapshot a broken pass left
+# half-read.
+SKIP_AFTER_CRASH = {"auto_merge"}
+
+
+def tick(snapshot, passes, backend, crashed=None):
     """Run the passes in order, applying each one's actions before the next
-    pass reads the snapshot; return every action applied."""
+    pass reads the snapshot; return every action applied.
+
+    A pass that raises is recorded in `crashed` as (pass name, traceback)
+    and the rest still run, so one bad pass stalls only its own work. The
+    tick is level-triggered, so a pass that produced nothing this time loses
+    nothing. Without `crashed` the exception propagates (tests, fixtures).
+    Errors applying an action still propagate either way."""
+    import traceback
     applied = []
     for p in passes:
-        for a in dict.fromkeys(p(snapshot)):
+        name = getattr(p, "__name__", repr(p))
+        if crashed and name in SKIP_AFTER_CRASH:
+            continue
+        try:
+            actions = list(dict.fromkeys(p(snapshot)))
+        except Exception:
+            if crashed is None:
+                raise
+            crashed.append((name, traceback.format_exc()))
+            continue
+        for a in actions:
             backend.apply(snapshot, a)
             applied.append(a)
     return applied
+
+
+def annotate_error(title, text):
+    """A GitHub Actions error annotation. Annotations can be read through
+    the API (check-runs/<job>/annotations), unlike job logs, so
+    factory_health.py can show why a tick failed without downloading logs."""
+    last = [ln for ln in text.strip().splitlines() if ln.strip()][-1:] or [""]
+    body = text.strip().replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+    head = f"{title}: {last[0][:200]}"
+    for ch, esc in (("%", "%25"), ("\r", ""), ("\n", "%0A"), (":", "%3A"), (",", "%2C")):
+        head = head.replace(ch, esc)
+    print(f"::error title={head}::{body}", flush=True)
 
 
 def invariants(snap):
@@ -347,11 +382,19 @@ def passes():
 
 
 def main(argv):
+    import traceback
     try:
-        _main(argv)
+        crashed = _main(argv)
+    except Exception:
+        annotate_error("Factory tick crashed", traceback.format_exc())
+        raise
     finally:
         import gh_cache
         gh_cache.save()  # even after a failed read: what was read still saves calls next time
+    for name, tb in crashed or []:
+        annotate_error(f"Factory pass {name} crashed", tb)
+    if crashed:
+        sys.exit(1)  # the other passes ran, but the run stays red until this is fixed
 
 
 def _main(argv):
@@ -375,9 +418,11 @@ def _main(argv):
         from factory_backend import GhBackend
         backend = GhBackend(os.environ["GITHUB_REPOSITORY"])
         gh_cache.state["last_tick_clean"] = False  # until this tick finishes with nothing to do
-    actions = tick(snap, passes(), backend)
+    crashed = []
+    actions = tick(snap, passes(), backend, crashed)
     if live:
-        gh_cache.state["last_tick_clean"] = not (backend.applied or backend.failed or backend.refused)
+        gh_cache.state["last_tick_clean"] = not (backend.applied or backend.failed
+                                                 or backend.refused or crashed)
     for a in actions:
         print(f"{a.kind} {a.target}: {a.reason}")
     for a in getattr(backend, "refused", []):
@@ -387,6 +432,11 @@ def _main(argv):
     written = isinstance(backend, FakeBackend) and "nothing written" or "applied"
     print(f"{len(actions)} action(s), {written}; "
           f"{snap.requests + getattr(backend, 'requests', 0)} API requests")
+    for name, _ in crashed:
+        print(f"crashed pass {name}")
+    if crashed:
+        print("skipped after a crash: " + ", ".join(sorted(SKIP_AFTER_CRASH)))
+    return crashed
 
 
 if __name__ == "__main__":

@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Is the factory running? When did it stop, and why?
+
+    python3 .github/scripts/factory_health.py            # status
+    python3 .github/scripts/factory_health.py --repro    # also run a dry tick here
+    python3 .github/scripts/factory_health.py --stale-hours 8
+
+Reads the factory tick's run history through `gh api` (REST only) and
+prints: whether the workflow is enabled, when the last tick succeeded, the
+first failure after it and how many followed, the error each failed tick
+reported (the tick writes its traceback as an error annotation, which the
+API serves without downloading logs), and the longest gap between ticks.
+
+Exit status: 0 healthy, 1 the latest tick failed, 2 no tick has run for
+--stale-hours (default 12) or the workflow is disabled. A watchdog can run
+this and alert on anything but 0.
+"""
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+WORKFLOW = "factory-tick.yml"
+
+
+def repo():
+    if os.environ.get("GITHUB_REPOSITORY"):
+        return os.environ["GITHUB_REPOSITORY"]
+    out = subprocess.run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+                         capture_output=True, text=True)
+    return out.stdout.strip() or "jtwaugh/minceraft"
+
+
+def api(path):
+    out = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+    if out.returncode:
+        raise RuntimeError(f"gh api {path}: {out.stderr.strip()}")
+    return json.loads(out.stdout)
+
+
+def when(s):
+    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def ago(t, now):
+    m = int((now - t).total_seconds() // 60)
+    return f"{m} min ago" if m < 120 else f"{m // 60} h {m % 60} min ago" if m < 2880 \
+        else f"{m // 1440} days ago"
+
+
+def local(t):
+    return t.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+
+
+def finished(runs):
+    """Completed runs that ticked: cancelled ones were superseded in the
+    concurrency group and skipped ones were filtered comments."""
+    return [r for r in runs if r["status"] == "completed"
+            and r["conclusion"] in ("success", "failure", "timed_out", "startup_failure")]
+
+
+def why(r, run):
+    """The failed step and the error annotations of one failed run."""
+    lines = []
+    for job in r(f"actions/runs/{run['id']}/jobs")["jobs"]:
+        steps = [s["name"] for s in job.get("steps", []) if s["conclusion"] == "failure"]
+        if steps:
+            lines.append(f"failed step: {', '.join(steps)}")
+        for a in r(f"check-runs/{job['id']}/annotations"):
+            if a["annotation_level"] != "failure":
+                continue
+            msg = a["message"].strip()
+            if msg.startswith("Process completed with exit code"):
+                continue
+            title = a.get("title") or "error"
+            lines.append(f"{title}\n      " + "\n      ".join(msg.splitlines()[-12:]))
+    if not any("\n" in ln for ln in lines):
+        lines.append(f"no error annotation (ticks before the health check didn't write one); "
+                     f"see `gh run view {run['id']} --log-failed`, or rerun this with --repro")
+    return lines
+
+
+def main(argv):
+    stale_h = float(argv[argv.index("--stale-hours") + 1]) if "--stale-hours" in argv else 12
+    name = repo()
+
+    def r(path):
+        return api(f"repos/{name}/{path}")
+
+    now = datetime.now(timezone.utc)
+    wf = r(f"actions/workflows/{WORKFLOW}")
+    runs = []
+    for page in (1, 2, 3):
+        got = r(f"actions/workflows/{WORKFLOW}/runs?per_page=100&page={page}")["workflow_runs"]
+        runs += got
+        if len(got) < 100:
+            break
+    ticks = finished(runs)  # newest first
+    status = 0
+
+    print(f"Factory tick on {name}: workflow {wf['state']}")
+    if wf["state"] != "active":
+        print(f"  The workflow is {wf['state']}: nothing ticks until it is enabled again "
+              f"(gh workflow enable {WORKFLOW}).")
+        status = 2
+    if not ticks:
+        print("  No finished ticks in the last 300 runs.")
+        return 2
+
+    latest = ticks[0]
+    lt = when(latest["created_at"])
+    print(f"  latest tick:  {latest['conclusion']:8} {local(lt)} ({ago(lt, now)})  "
+          f"{latest['event']}  {latest['html_url']}")
+    if (now - lt).total_seconds() > stale_h * 3600:
+        print(f"  STALE: no tick for over {stale_h:g} h. Scheduled runs may have been dropped "
+              f"or disabled; run one by hand with `gh workflow run {WORKFLOW}`.")
+        status = 2
+
+    ok = next((t for t in ticks if t["conclusion"] == "success"), None)
+    if ok:
+        ot = when(ok["created_at"])
+        print(f"  last success: {local(ot)} ({ago(ot, now)})  {ok['html_url']}")
+    else:
+        print("  last success: none in the runs read")
+
+    failing = [t for t in ticks[:ticks.index(ok) if ok else len(ticks)]]
+    if failing:
+        status = max(status, 1)
+        first = failing[-1]
+        ft = when(first["created_at"])
+        print(f"\n  BROKEN since {local(ft)} ({ago(ft, now)}): "
+              f"{len(failing)} failed tick(s) in a row, none succeeded since.")
+        print(f"  first failure: {first['html_url']}  ({first['event']}"
+              f"{', ' + first['display_title'] if first['event'] != 'schedule' else ''})")
+        for line in why(r, first):
+            print(f"    {line}")
+        if failing[0] is not first:
+            print(f"  latest failure: {failing[0]['html_url']}")
+            for line in why(r, failing[0]):
+                print(f"    {line}")
+    else:
+        print("\n  Healthy: the latest tick succeeded.")
+
+    day = [when(t["created_at"]) for t in ticks if (now - when(t["created_at"])).days < 2]
+    gaps = [(a - b, b) for a, b in zip(day, day[1:])]
+    if gaps:
+        g, start = max(gaps)
+        print(f"\n  {len(day)} ticks in the last 48 h; longest gap {g.total_seconds() / 3600:.1f} h "
+              f"(from {local(start)}). The */5 schedule is best effort: GitHub delays "
+              f"and drops scheduled runs, so events do most of the ticking.")
+
+    if "--repro" in argv:
+        print("\n  Dry tick here (reads GitHub, writes nothing):\n")
+        here = os.path.dirname(os.path.abspath(__file__))
+        env = {**os.environ, "GITHUB_REPOSITORY": name}
+        rc = subprocess.run([sys.executable, "-B", os.path.join(here, "factory_tick.py"),
+                             "--dry-run"], env=env).returncode
+        print(f"\n  dry tick exited {rc}")
+    return status
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

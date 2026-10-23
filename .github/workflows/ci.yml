@@ -127,6 +127,18 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      # The factory's own scripts. A pass that crashes stops the factory, so
+      # their tests run on every PR, not only when someone remembers.
+      - name: Factory script tests
+        env:
+          GITHUB_REPOSITORY: o/r  # the scripts read it on import; the tests use no network
+        run: |
+          fail=0
+          for t in .github/scripts/test_*.py; do
+            python3 -I "$t" > /tmp/out.txt 2>&1 || { echo "::error file=$t::failed"; cat /tmp/out.txt; fail=1; }
+          done
+          exit $fail
+
   rust:
     name: Rust (fmt, clippy, test)
     needs: changes

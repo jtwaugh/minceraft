@@ -51,6 +51,38 @@ class Test(unittest.TestCase):
         with self.assertRaises(ValueError):
             tick(s, [lambda _: [Action("nope", "x")]], FakeBackend())
 
+    def test_crashed_pass_is_recorded_and_the_rest_run(self):
+        s = Snapshot.from_fixture(FIXTURE)
+
+        def broken(_):
+            raise KeyError("commit")
+
+        crashed = []
+        applied = tick(s, [broken, label_orphans], FakeBackend(), crashed)
+        self.assertTrue(applied)  # label_orphans still ran
+        self.assertEqual([n for n, _ in crashed], ["broken"])
+        self.assertIn("KeyError", crashed[0][1])
+
+    def test_auto_merge_skipped_after_a_crash(self):
+        ran = []
+
+        def broken(_):
+            raise RuntimeError("x")
+
+        def auto_merge(_):
+            ran.append("merge")
+            return []
+
+        crashed = []
+        tick(Snapshot(), [broken, auto_merge], FakeBackend(), crashed)
+        self.assertEqual(ran, [])
+        tick(Snapshot(), [auto_merge], FakeBackend(), [])
+        self.assertEqual(ran, ["merge"])
+
+    def test_crash_propagates_without_a_crashed_list(self):
+        with self.assertRaises(ZeroDivisionError):
+            tick(Snapshot(), [lambda _: [1 / 0]], FakeBackend())
+
 
 if __name__ == "__main__":
     unittest.main()
