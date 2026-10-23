@@ -34,13 +34,14 @@
 //   drop <n>                    teleport n blocks up, to fall back and take fall damage
 //   stand field                 teleport onto the raft scene's field and look straight down
 //   stand planter               the same, on the islet's first planter
+//   stand helm                  teleport onto the raft's helm cell, level gaze
 //   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
 //                               looks at after `stand field`; `place tall_grass` puts tall grass there
 //   runway <n>                  raft scene: stone ground n blocks long running ahead (-z) from the field's
 //                               back edge, a 2-high stone wall across its end, and the player on its
 //                               start facing along it (pitch level)
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
-//   mark                        remember the current eye, for `moved`
+//   mark                        remember the current eye (and raft offset), for `moved` and `raft.moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
 //                               since the case began (`expect no event <name>` for the opposite)
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
@@ -56,6 +57,7 @@
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
+// driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
@@ -119,7 +121,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, events: seen, text: '', output: [] };
+  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, text: '', output: [] };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
@@ -169,6 +171,13 @@ function read(w, path) {
   }
   if (path === 'events') return w.events.length;
   if (path === 'sim_tick') return w.walk.sim_tick();
+  if (path === 'raft.moved') {
+    const o = w.walk.raft_offset(s.alpha);
+    return Math.hypot(o[0] - w.markRaft[0], o[2] - w.markRaft[2]);
+  }
+  if (path === 'driving') return w.walk.driving();
+  if (path === 'raft.heading') return w.walk.raft_heading(s.alpha);
+  if (/^raft\.[xz]$/.test(path)) return w.walk.raft_offset(s.alpha)[axis[path[5]]];
   if (path === 'sprinting') return w.walk.sprinting();
   if (path === 'paused') return w.walk.paused();
   if (path === 'locked') return w.input.locked;
@@ -284,7 +293,13 @@ function step(w, { op, args }) {
       return;
     }
     case 'stand': {
-      if (!['field', 'planter'].includes(args[0]) || !w.scene) throw new Error('stand field|planter (raft scene only)');
+      if (!['field', 'planter', 'helm'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm (raft scene only)');
+      if (args[0] === 'helm') {
+        const [hx, hy, hz] = w.scene.helm;
+        w.walk.teleport(hx + 0.5, hy + 1, hz + 0.5);
+        w.controller.frame(0.05);
+        return;
+      }
       const [fx, fz] = args[0] === 'field' ? w.scene.field : w.scene.planters;
       const m = args[0] === 'field' ? Math.floor(w.scene.field_size / 2) : 0;
       w.walk.teleport(fx + m + 0.5, w.scene.field_y + 1, fz + m + 0.5);
@@ -327,7 +342,7 @@ function step(w, { op, args }) {
       return step(w, { op: 'expect', args });
     }
     case 'held': w.walk.set_held(args[0]); return;
-    case 'mark': w.mark = w.controller.state.eye.slice(); return;
+    case 'mark': w.mark = w.controller.state.eye.slice(); w.markRaft = w.walk.raft_offset(w.controller.state.alpha); return;
     case 'expect': {
       const negated = args[0] === 'no' && args[1] === 'event';
       if (negated || args[0] === 'event') {

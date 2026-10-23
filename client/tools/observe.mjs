@@ -32,6 +32,7 @@ const CLASSES = {
     'underwater', 'held', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt',
+    'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
 };
 
