@@ -74,7 +74,7 @@ until mode = death
 expect health = 0
 expect lock_requests = 1
 respawn
-frame 50 x2
+frame 50
 expect mode = walk
 expect health = 20
 expect lock_requests = 2
