@@ -14,7 +14,8 @@ API serves without downloading logs), and the longest gap between ticks.
 It also lists each blocked factory PR and what Claude is doing about it:
 fixing (attempt n of the retry budget, with its run), starts on the next
 tick, waiting on you (a question, or the budget is spent), or STUCK
-(blocked over 30 minutes with no fix started).
+(blocked over 30 minutes with no fix started); and each started ticket that
+has no PR yet (STUCK when the tick hasn't acted on it for an hour).
 
 Exit status: 0 healthy, 1 the latest tick failed or a blocked PR is stuck,
 2 no tick has run for --stale-hours (default 12) or the workflow is disabled. A watchdog can run
@@ -110,7 +111,8 @@ def blocked_report(name, now):
             continue
         runs = pr.get("fix_runs", [])
         last = f" ({runs[-1][1]}{', ' + runs[-1][2] if runs[-1][2] else ''})" if runs else ""
-        since = when(pr["head_time"]) if pr.get("head_time") else now
+        since = max(when(t) for t in (pr.get("head_time"), pr.get("created_at")) if t) \
+            if pr.get("head_time") or pr.get("created_at") else now
         if maintainer_working(pr):
             what = "you're on it (you pushed, or asked @claude)"
         elif has_open_question(snap, pr):
@@ -126,6 +128,29 @@ def blocked_report(name, now):
         lines.append(f"    #{pr['number']} {found[0]}: {what}")
     print("\n  Blocked PRs and Claude's fixes:")
     print("\n".join(lines) if lines else "    none blocked")
+    return max(stuck, started_report(snap, now))
+
+
+def started_report(snap, now):
+    """Print started tickets that have no PR yet; 1 when the tick should have
+    acted on one (open its PR, or start it again) over an hour ago."""
+    from factory_ready import MARKER
+    from factory_stalled_tickets import state_of
+    words = {"running": "Claude is building it", "starting": "just started",
+             "open-pr": "the tick opens its PR on the next tick", "restart": "the tick starts it again",
+             "asked": "WAITING ON YOU: question open", "ask": "WAITING ON YOU: asks on the next tick"}
+    lines, stuck = [], 0
+    for t in sorted(snap.issues, key=lambda i: i["number"]):
+        found = state_of(snap, t, now)
+        if not found:
+            continue
+        last = when(max(c["created_at"] for c in t["comments"] if MARKER in (c.get("body") or "")))
+        what = f"{words[found[0]]} ({found[1]}; last started {ago(last, now)})"
+        if found[0] in ("open-pr", "restart") and (now - last).total_seconds() > 2 * STUCK_AFTER:
+            what, stuck = "STUCK: " + what, 1
+        lines.append(f"    #{t['number']}: {what}")
+    print("\n  Started tickets with no PR yet:")
+    print("\n".join(lines) if lines else "    none")
     return stuck
 
 

@@ -49,6 +49,8 @@ class Snapshot:
     master_ci: str = ""  # conclusion of the newest finished CI run on master
     master_runs: list = field(default_factory=list)  # finished master CI runs: created_at, conclusion
     unchanged: bool = False  # every read was a 304 after a clean tick: nothing to do
+    implementer_runs: list = field(default_factory=list)  # claude.yml runs: display_title, status, created_at
+    stray: dict = field(default_factory=dict)  # ticket -> claude/issue-<n>- branches with work and no PR
 
     @classmethod
     def from_dict(cls, d):
@@ -116,7 +118,7 @@ class Snapshot:
         snap.prs = [{"number": p["number"], "head": p["head"]["ref"],
                      "sha": p["head"]["sha"], "body": p.get("body") or "",
                      "labels": [lb["name"] for lb in p.get("labels") or []],
-                     "draft": bool(p.get("draft"))}
+                     "draft": bool(p.get("draft")), "created_at": p.get("created_at", "")}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
         from factory_automerge import codeowner_patterns
         from factory_fix import verdict
@@ -157,6 +159,7 @@ class Snapshot:
             return snap  # nothing to do: skip the board (GraphQL, never free)
         # Only docs/ branches matter (the stalls pass); reading just those is
         # one call however many claude/ branches pile up.
+        load_started_tickets(snap, repo, get)
         refs = get(f"repos/{repo}/git/matching-refs/heads/docs")  # every match, unpaged
         snap.branches = [r["ref"][len("refs/heads/"):] for r in refs
                          if r["ref"].startswith("refs/heads/docs/")]
@@ -233,6 +236,29 @@ def fix_outcomes(pr, runs, now=None):
             elif status in ("success", "failure"):
                 pr["fix_finished"].append(sha)
             pr["fix_runs"].append((c["created_at"], status, run["html_url"] if run else ""))
+
+
+def load_started_tickets(snap, repo, get):
+    """What the stalled-tickets pass reads: recent implementer runs, and the
+    claude/issue- branches of open factory tickets that have work master
+    lacks and never had a PR (the test tickets.stray_branches makes)."""
+    found = get(f"repos/{repo}/actions/workflows/claude.yml/runs?per_page=100")
+    snap.implementer_runs = [{k: r.get(k) for k in ("display_title", "status", "created_at")}
+                             for r in (found or {}).get("workflow_runs", [])] \
+        if isinstance(found, dict) else []
+    wanted = {i["number"] for i in snap.issues
+              if i["state"] == "open" and "factory" in i["labels"]}
+    heads = {p["head"] for p in snap.prs}
+    owner = repo.split("/")[0]
+    for ref in get(f"repos/{repo}/git/matching-refs/heads/claude/issue-") or []:
+        branch = ref["ref"][len("refs/heads/"):]
+        m = re.match(r"claude/issue-(\d+)-", branch)
+        if not m or int(m.group(1)) not in wanted or branch in heads:
+            continue
+        if get(f"repos/{repo}/pulls?state=all&head={owner}:{branch}"):
+            continue
+        if (get(f"repos/{repo}/compare/master...{branch}") or {}).get("ahead_by", 0) > 0:
+            snap.stray.setdefault(int(m.group(1)), []).append(branch)
 
 
 def load_fix_runs(repo, pr, get):
@@ -359,6 +385,12 @@ class FakeBackend(Backend):
                 "user": "github-actions[bot]",
                 "body": marker(pr["number"], action.payload["head"], action.payload["kind"]),
                 "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        elif action.kind == "open_pr":
+            n = int(action.target[6:])
+            snapshot.prs.append({"number": max([p["number"] for p in snapshot.prs], default=0) + 1,
+                                 "head": action.payload["branch"], "sha": "", "labels": [],
+                                 "body": action.payload["body"], "draft": False})
+            snapshot.stray.pop(n, None)
         elif action.kind == "open_question":
             if not any(action.payload["key"] in i["body"] for i in snapshot.issues):
                 snapshot.issues.append({
@@ -459,6 +491,7 @@ def passes():
     from factory_ready import ready
     from factory_report import report
     from factory_rerun import rerun_failed
+    from factory_stalled_tickets import stalled_tickets
     from factory_stalls import stalls
     from factory_supersede import superseded
 
@@ -466,7 +499,8 @@ def passes():
         return board(snap) if snap.board_meta.get("loaded") else []
 
     return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, questions,
-            link_questions, blocked, report, close_finished_plans, ready, auto_merge, needs_you, board_pass]
+            link_questions, blocked, report, close_finished_plans, ready, stalled_tickets, auto_merge,
+            needs_you, board_pass]
 
 
 def main(argv):

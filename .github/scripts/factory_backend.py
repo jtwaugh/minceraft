@@ -117,6 +117,8 @@ class GhBackend(Backend):
             return pr is None or any(
                 (pr["number"], p["head"], p["kind"]) in markers([c])
                 for c in pr.get("comments", []) if c.get("created_at") not in lost)
+        if k == "open_pr":
+            return any(x["head"] == p["branch"] for x in snapshot.prs)
         if k == "open_question":
             found = self._question(snapshot, action)
             return found is not None and found.get("body") == p["body"]
@@ -198,8 +200,12 @@ class GhBackend(Backend):
         elif k == "update_issue":
             self._gh("issue", "edit", n, "--repo", r, "--body", p["body"])
         elif k == "start_ticket":
-            self._gh("issue", "comment", n, "--repo", r, "--body", START_MARKER)
+            # Dispatch first: a marker without a run would read as a start in progress.
             self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}")
+            self._gh("issue", "comment", n, "--repo", r, "--body", START_MARKER)
+        elif k == "open_pr":
+            self._gh("api", "-X", "POST", f"repos/{r}/pulls", "-f", f"title={p['title']}",
+                     "-f", f"head={p['branch']}", "-f", "base=master", "-f", f"body={p['body']}")
         elif k == "rerun_jobs":
             self._gh("api", "-X", "POST", f"repos/{r}/actions/runs/{p['run_id']}/rerun-failed-jobs")
         elif k == "merge_pr":
