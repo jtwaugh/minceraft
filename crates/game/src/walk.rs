@@ -2588,6 +2588,40 @@ mod tests {
         w
     }
 
+    /// The raft pose and the `driving` flag are in the world hash, each on
+    /// its own with the player and everything else held fixed.
+    #[test]
+    fn world_hash_covers_the_raft_pose_and_driving() {
+        use crate::raft::RaftFrame;
+        let base = at_the_helm();
+        let h = base.world_hash();
+        assert_eq!(h, at_the_helm().world_hash());
+        let nudge = |frame: RaftFrame| {
+            let mut w = at_the_helm();
+            let physics = w.physics.clone();
+            w.floating
+                .as_mut()
+                .unwrap()
+                .raft
+                .advance(&frame, &mut [], &physics);
+            w.world_hash()
+        };
+        let moved = nudge(RaftFrame {
+            displacement: [0.5, 0.0, 0.0],
+            ..RaftFrame::default()
+        });
+        let turned = nudge(RaftFrame {
+            yaw_delta: 0.3,
+            ..RaftFrame::default()
+        });
+        assert_ne!(h, moved);
+        assert_ne!(h, turned);
+        assert_ne!(moved, turned);
+        let mut driving = at_the_helm();
+        driving.floating.as_mut().unwrap().driving = true;
+        assert_ne!(h, driving.world_hash());
+    }
+
     fn steer(forward: f32, strafe: f32) -> TickInput {
         TickInput {
             move_forward: forward,
