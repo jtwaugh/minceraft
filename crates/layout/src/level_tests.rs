@@ -137,7 +137,9 @@ fn climate_loads_and_round_trips() {
             temp_end: 0.15
         })
     );
-    assert!(f.to_toml().unwrap().contains("[climate]"));
+    let text = f.to_toml().unwrap();
+    assert!(text.contains("[climate]"));
+    assert_eq!(LevelFile::from_toml(&text).unwrap(), f);
 }
 
 #[test]
