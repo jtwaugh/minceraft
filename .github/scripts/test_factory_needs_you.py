@@ -49,6 +49,32 @@ class Test(unittest.TestCase):
         self.assertIn("#9: Reviewer blocked it", queue["body"])
         self.assertIn("#7: PR #9: Reviewer blocked it", queue["body"])
 
+    def test_blocked_pr_waits_while_claude_can_fix_it(self):
+        from factory_fix import marker
+        p = pr(9, 7, "blocked", blockers=["a test still passes with the fix undone"])
+        s = snap([ticket(7)], [p])
+        self.assertEqual(run(s), [])  # the Blocked-fix pass has it
+        p["comments"] = [{"user": "github-actions[bot]", "body": marker(9, SHA, "review")}]
+        self.assertEqual(run(s), [])  # a fix is running
+        p["fix_finished"] = [SHA]  # it ended and pushed nothing
+        run(s)
+        self.assertEqual(labelled(s), {"pr#9", "issue#7"})
+
+    def test_blocked_pr_flagged_once_the_budget_is_spent(self):
+        from factory_blocked import RETRY_BUDGET
+        from factory_fix import marker
+        heads = [f"{n:x}" * 40 for n in range(1, RETRY_BUDGET + 1)]
+        p = pr(9, 7, "blocked", blockers=["x"])
+        p["sha"] = heads[-1][:40]
+        p["comments"] = [{"user": "github-actions[bot]", "body": marker(9, h[:40], "review")}
+                         for h in heads[:-1]] + [
+            {"user": "github-actions[bot]", "body": marker(9, p["sha"], "review")}]
+        p["fix_finished"] = []
+        s = snap([ticket(7)], [p])
+        s.prs[0]["verdict"]["current"] = True
+        run(s)
+        self.assertIn("pr#9", labelled(s))
+
     def test_second_tick_does_nothing(self):
         s = snap([ticket(7)], [pr(9, 7, "blocked")])
         run(s)
@@ -75,7 +101,11 @@ class Test(unittest.TestCase):
     def test_check_failed_after_rerun(self):
         runs = [{**OK[0], "conclusion": "failure", "run_attempt": 2}]
         s = snap([ticket(7)], [pr(9, 7, None, runs=runs)])
-        run(s)
+        self.assertEqual(run(s), [])  # failed twice: Claude's fix run goes first
+        s.prs[0]["fix_finished"] = [SHA]
+        s.prs[0]["comments"] = [{"user": "github-actions[bot]",
+                                 "body": f"<!-- factory-fix pr=9 sha={SHA} cause=check -->"}]
+        run(s)  # the fix pushed nothing: now it's yours
         self.assertIn("pr#9", labelled(s))
         s = snap([ticket(7)], [pr(9, 7, None, runs=[{**OK[0], "conclusion": "failure"}])])
         self.assertEqual(run(s), [])  # first failure: the rerun pass has it
