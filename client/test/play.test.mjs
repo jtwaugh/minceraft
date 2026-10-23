@@ -56,7 +56,7 @@ test('player mode refuses debug reads without changing the session', () => {
   try {
     handle(state, { exec: 'frame 50' });
     const before = handle(state, { transcript: true }).transcript;
-    for (const exec of ['expect rule.primary = none', 'until sim_tick > 5', 'expect event x', 'expect no event x', 'mark', 'expect eye.y > 0', 'frame 50\nexpect moved < 1']) {
+    for (const exec of ['expect rule.primary = none', 'until sim_tick > 5', 'expect event x', 'expect no event x', 'mark', 'expect eye.y > 0', 'frame 50\nexpect moved < 1', 'expect\nrule.primary = none', 'until\nsim_tick > 5', 'expect\nevent x']) {
       const r = handle(state, { exec });
       assert.equal(r.ok, false, exec);
       assert.match(r.error, /debug/, exec);

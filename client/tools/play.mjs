@@ -57,7 +57,8 @@ export function handle(state, request) {
     if (known === 'exec') {
       if (typeof request.exec !== 'string') return fail('exec takes a DSL line (string)');
       if (!state.debug) {
-        for (const line of request.exec.split('\n')) {
+        // session.exec does not split on newlines, so check the whole string as it will be run, and each line.
+        for (const line of [request.exec, ...request.exec.split('\n')]) {
           const path = debugRead(line);
           if (path) return fail(`${path} is a debug path; it is not available in player mode`);
         }
