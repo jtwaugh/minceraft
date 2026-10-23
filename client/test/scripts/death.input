@@ -1,0 +1,58 @@
+# The death mode (docs/design/player-death.md Phase B). Dying releases the
+# pointer and drops input; the sim keeps ticking with neutral input.
+
+case a fatal fall switches to death and unlocks
+start walk raft
+click
+lock
+frame 50 x2
+stand field
+frame 50 x2
+drop 30
+until mode = death
+expect mode = death
+expect locked = false
+
+case walk input does nothing while dead
+start walk raft
+click
+lock
+frame 50 x2
+stand field
+frame 50 x2
+drop 30
+until mode = death
+frame 50 x40
+down KeyW
+mark
+mouse 50 0
+frame 50 x10
+expect moved ~ 0
+expect yaw ~ 0
+up KeyW
+
+case a click does not request pointer lock while dead
+start walk raft
+click
+lock
+stand field
+frame 50 x2
+drop 30
+until mode = death
+expect lock_requests = 1
+click
+expect lock_requests = 1
+expect mode = death
+
+case Tab and Backquote do not open the inventory or console while dead
+start walk raft
+click
+lock
+stand field
+frame 50 x2
+drop 30
+until mode = death
+press Tab
+expect mode = death
+press Backquote
+expect mode = death
