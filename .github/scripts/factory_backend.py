@@ -76,10 +76,12 @@ class GhBackend(Backend):
     def _satisfied(self, snapshot, action):
         k, p = action.kind, action.payload
         issue = self._issue(snapshot, action)
-        if k == "add_label":
-            return issue is not None and p["label"] in issue["labels"]
-        if k == "remove_label":
-            return issue is not None and p["label"] not in issue["labels"]
+        if k in ("add_label", "remove_label"):
+            pr = next((x for x in snapshot.prs if f"pr#{x['number']}" == action.target), None)
+            labels = issue["labels"] if issue is not None else pr.get("labels", []) if pr else None
+            if labels is None:
+                return False
+            return (p["label"] in labels) == (k == "add_label")
         if k == "set_parent":
             return issue is not None and issue.get("parent") == p["parent"]
         if k == "add_blocked_by":
@@ -157,8 +159,12 @@ class GhBackend(Backend):
             self._write_board(snapshot, action)
             return True  # already mirrored
         if k in ("add_label", "remove_label"):
-            self._gh("issue", "edit", n, "--repo", r,
-                     "--add-label" if k == "add_label" else "--remove-label", p["label"])
+            # REST: works on PRs too, and creates a missing label (gh issue edit does neither).
+            if k == "add_label":
+                self._gh("api", "-X", "POST", f"repos/{r}/issues/{n}/labels", "-f", f"labels[]={p['label']}")
+            else:
+                from urllib.parse import quote
+                self._gh("api", "-X", "DELETE", f"repos/{r}/issues/{n}/labels/{quote(p['label'], safe='')}")
         elif k == "set_parent":
             self._gh("api", "-X", "POST", f"repos/{r}/issues/{p['parent']}/sub_issues",
                      "-F", f"sub_issue_id={self._id(n)}")
@@ -170,7 +176,8 @@ class GhBackend(Backend):
                     "--reason", p.get("reason", "completed").replace("_", " ")]
             self._gh(*args, *(["--comment", p["comment"]] if p.get("comment") else []))
         elif k == "create_issue":
-            self._gh("issue", "create", "--repo", r, "--title", p["title"], "--body", p["body"])
+            self._gh("issue", "create", "--repo", r, "--title", p["title"], "--body", p["body"],
+                     *(["--assignee", p["assignee"]] if p.get("assignee") else []))
         elif k == "update_issue":
             self._gh("issue", "edit", n, "--repo", r, "--body", p["body"])
         elif k == "start_ticket":
