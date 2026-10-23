@@ -35,7 +35,11 @@
 //   stand field                 teleport onto the raft scene's field and look straight down
 //   stand planter               the same, on the islet's first planter
 //   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
-//                               looks at after `stand field`; `place tall_grass` puts tall grass there
+//                               looks at after `stand field`; `place tall_grass` puts tall grass there,
+//                               `place air` clears it again
+//   forage                      right-click the aimed tall grass (after `stand field`, `place tall_grass`),
+//                               waiting out the cooldown after each miss, until a `foraged` event is seen
+//                               (at most 200 tries)
 //   runway <n>                  raft scene: stone ground n blocks long running ahead (-z) from the field's
 //                               back edge, a 2-high stone wall across its end, and the player on its
 //                               start facing along it (pitch level)
@@ -57,6 +61,7 @@
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// events.foraged (`foraged` events seen since the case began),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -167,6 +172,7 @@ function read(w, path) {
     if (field === undefined) throw new Error(`unknown path '${path}'`);
     return field;
   }
+  if (path === 'events.foraged') return w.events.filter((e) => e.startsWith('foraged ')).length;
   if (path === 'events') return w.events.length;
   if (path === 'sim_tick') return w.walk.sim_tick();
   if (path === 'sprinting') return w.walk.sprinting();
@@ -313,11 +319,24 @@ function step(w, { op, args }) {
     }
     case 'place': {
       const name = args[0] === 'flower' ? args[1] : args[0];
-      if (!w.scene || !['dandelion', 'rose', 'tall_grass'].includes(name)) {
-        throw new Error('place flower dandelion|rose, or place tall_grass (raft scene only)');
+      if (!w.scene || !['dandelion', 'rose', 'tall_grass', 'air'].includes(name)) {
+        throw new Error('place flower dandelion|rose, or place tall_grass|air (raft scene only)');
       }
       const [x, y, z] = flowerCell(w);
       if (!w.walk.place_block(x, y, z, B[name])) throw new Error('cannot place there');
+      return;
+    }
+    case 'forage': {
+      const foraged = () => read(w, 'events.foraged');
+      for (let tries = 0; tries < 200 && !foraged(); tries++) {
+        fire(document, 'mousedown', { button: BUTTONS.right });
+        w.controller.frame(0.1);
+        fire(document, 'mouseup', { button: BUTTONS.right });
+        w.controller.frame(0.1);
+        // a miss starts the 1200-tick cooldown; wait it out (65 s at 20 Hz)
+        if (!foraged()) for (let i = 0; i < 650; i++) w.controller.frame(0.1);
+      }
+      if (!foraged()) throw new Error('no forage succeeded in 200 tries');
       return;
     }
     case 'until': {
