@@ -103,7 +103,9 @@ def decide(pr, files, comments, head_time):
     """Return (state, description, url) for a PR. Pure, so it can be tested."""
     head = pr["head"]["sha"]
     url = pr["html_url"]
-    if files and all(NO_REVIEW.match(f) for f in files):
+    if not files:
+        return "success", "No file changes: nothing to review", url
+    if all(NO_REVIEW.match(f) for f in files):
         return "success", "Spec and design-doc changes: reviewed by the maintainer, not the agent", url
 
     verdict = latest_verdict(comments)
