@@ -58,9 +58,18 @@ What exists today that this doc relies on or overlaps (checked against the code)
   (#754, #757), the retirement of the old workflows (#785) and the
   once-per-head-commit re-run of failed checks (`factory_rerun.py`, #786).
   The Blocked fix attempts, nits pass, retry budget and question issues of
-  Phase A are not built (see Reconciliation note 13).
-- **Not present:** any state store, any `factory-state` branch, a
-  `factory-tick` workflow, file leases, per-transition history, a "needs
+  Phase A are now built too (see Reconciliation note 14).
+- **Phase A remainder built since note 13** (PRs #933, #938, #941, #942,
+  #946, #947, #949): `factory_blocked.py` (Blocked-fix pass),
+  `factory_nits.py`, `factory_fix.py` (attempt markers and the retry
+  budget), `factory_questions.py` (question issues, linked to tickets),
+  `claude-fix.yml` (the fix run), `factory_needs_you.py` (the `needs-you`
+  label, Phase E's start) and the fixtures in `test_factory_replay.py`. The
+  tick's pass order is in `factory_tick.py`. `resolve-conflicts.yml` is
+  still present.
+- **Not present** (the `factory-tick` workflow and the `needs-you` label
+  now exist, see Phase A progress): any state store, any `factory-state`
+  branch, file leases, per-transition history, a "needs
   you" queue, a GitHub App identity, self-hosted runners, or any reference
   to these in `docs/design/`. No other design doc covers the factory;
   `docs/design/README.md` only describes the doc lifecycle the factory runs.
@@ -157,6 +166,15 @@ What exists today that this doc relies on or overlaps (checked against the code)
     at most one question. `.github/scripts/factory_*.py` has no such code, and
     `resolve-conflicts.yml`, which the nits and fix steps should replace, is
     still present. Phase A stays `todo` so the planner plans these.
+
+14. **Phase A is nearly done; one maintainer step is left.** The code that
+    note 13 found missing now exists (Current state). What remains is the
+    "old workflows are removed as the tick covers them" part for the nits
+    and conflict steps: `resolve-conflicts.yml` is still in
+    `.github/workflows/` and `CLAUDE.md` (The loop, step 3) and
+    `.github/scripts/tickets.py` still refer to it. Removing a workflow is
+    maintainer-only (note 2). Phase A stays `todo` until the maintainer
+    removes it; then mark it `done`.
 
 ---
 
