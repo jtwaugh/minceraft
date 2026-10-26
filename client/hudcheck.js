@@ -2,6 +2,13 @@
 // `{ check, elements, detail }`. Only the top-level rectangles are checked; slots, hearts and the
 // timer's parts sit inside their parent row.
 
+/** Thresholds (docs/design/play-critic-agent.md section 3, decided in #970 and #971); to be tuned later. */
+export const MIN_SCALE = 2;
+/** Space kept clear around the crosshair on every side, in CSS pixels. */
+export const CROSSHAIR_CLEAR_MARGIN = 8;
+/** Largest gap between the hands row and the belt, in texels (multiplied by the HUD scale). */
+export const MAX_HANDS_BELT_GAP = 16;
+
 const ELEMENTS = ['crosshair', 'belt', 'hearts', 'timer', 'hands'];
 
 const area = (r) => r.w * r.h;
@@ -36,7 +43,33 @@ export function offscreenChecks(layout, viewport) {
   return found;
 }
 
+/** HUD scale below `MIN_SCALE`: a finding, or advisory (`severity`) on a portrait viewport (height greater than width). */
+export function scaleChecks(layout, viewport) {
+  if (!(layout.scale < MIN_SCALE)) return [];
+  const severity = viewport.h > viewport.w ? 'advisory' : 'finding';
+  return [{ check: 'scale', severity, elements: [], detail: `HUD scale ${layout.scale} is below ${MIN_SCALE}` }];
+}
+
+/** Elements other than the crosshair that enter the space `CROSSHAIR_CLEAR_MARGIN` around it. */
+export function clearZoneChecks(layout) {
+  const c = layout.rects.crosshair;
+  if (!c) return [];
+  const m = CROSSHAIR_CLEAR_MARGIN;
+  const zone = { x: c.x - m, y: c.y - m, w: c.w + 2 * m, h: c.h + 2 * m };
+  return ELEMENTS.filter((name) => name !== 'crosshair' && layout.rects[name] && area(layout.rects[name]) > 0 && overlaps(zone, layout.rects[name]))
+    .map((name) => ({ check: 'clear-zone', elements: [name], detail: `${name} is inside the crosshair clear zone` }));
+}
+
+/** The hands row sitting more than `MAX_HANDS_BELT_GAP` texels above the belt. Skipped when the hands are empty. */
+export function handsDistanceChecks(layout) {
+  const { hands, belt } = layout.rects;
+  if (!hands || !belt || area(hands) === 0) return [];
+  const gap = belt.y - (hands.y + hands.h), limit = MAX_HANDS_BELT_GAP * (layout.scale ?? 1);
+  if (gap <= limit) return [];
+  return [{ check: 'distance', elements: ['hands', 'belt'], detail: `hands are ${gap}px above the belt, more than ${limit}px` }];
+}
+
 /** All mechanical problems in `layout` (a `hudLayout` result) for `viewport`; empty when there are none. */
 export function layoutChecks(layout, viewport) {
-  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport)];
+  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport), ...scaleChecks(layout, viewport), ...clearZoneChecks(layout), ...handsDistanceChecks(layout)];
 }
