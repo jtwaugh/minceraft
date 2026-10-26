@@ -95,3 +95,35 @@ for (const [name, args, lines] of [
     } finally { s.close(); }
   });
 }
+
+test('layout returns rectangles and problems, records a line and leaves the world alone', () => {
+  const s = createSession(['walk']);
+  try {
+    const before = observe(s);
+    const sweep = [[390, 844], [1366, 768], [1920, 1080], [3440, 1440]];
+    for (const [w, h] of sweep) {
+      const r = s.exec(`layout ${w} ${h}`);
+      assert.equal(r.ok, true, r.error);
+      const { scale, rects, problems } = r.value;
+      assert.ok(scale >= 1);
+      for (const k of ['crosshair', 'belt', 'slots', 'hearts', 'heartIcons', 'timer', 'hands']) assert.ok(rects[k], `${w}x${h} has ${k}`);
+      // 1366x768 and 1920x1080 do report off-screen belt and hearts today (see the PR); only the ultrawide is clean
+      if (w >= 3440) assert.deepEqual(problems.filter((p) => p.check === 'offscreen'), [], `${w}x${h}`);
+    }
+    assert.deepEqual(observe(s), before);
+    assert.equal(s.transcript(), `case session\nstart walk\n${sweep.map(([w, h]) => `layout ${w} ${h}\n`).join('')}`);
+    assert.deepEqual(replay(s.transcript()), before);
+  } finally { s.close(); }
+});
+
+test('layout with a bad size is an error result with usage', () => {
+  const s = createSession(['walk']);
+  try {
+    for (const line of ['layout', 'layout 800', 'layout a b', 'layout 800 0', 'layout 1 2 3']) {
+      const r = s.exec(line);
+      assert.equal(r.ok, false, line);
+      assert.match(r.error, /usage: layout <w> <h>/);
+    }
+    assert.equal(s.transcript(), 'case session\nstart walk\n');
+  } finally { s.close(); }
+});

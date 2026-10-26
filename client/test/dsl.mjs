@@ -44,6 +44,9 @@
 //   runway <n>                  raft scene: stone ground n blocks long running ahead (-z) from the field's
 //                               back edge, a 2-high stone wall across its end, and the player on its
 //                               start facing along it (pitch level)
+//   layout <w> <h>              HUD layout for a w x h viewport from the current state: `exec`/`execStep`
+//                               return { ok: true, value: { scale, rects, problems } } (hudLayout and layoutChecks,
+//                               tileset from viewer/textures.json); changes nothing in the world
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye (and raft offset), for `moved` and `raft.moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
@@ -71,6 +74,8 @@ import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg
 import { B } from '../../viewer/mesh.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
+import { hudLayout } from '../hudlayout.js';
+import { layoutChecks } from '../hudcheck.js';
 import { spawnTestItems, readAnimals, faceAnimal, spawnTestAnimals } from '../overlay.js';
 
 let ready = false;
@@ -230,6 +235,17 @@ function read(w, path) {
   throw new Error(`unknown path '${path}'`);
 }
 
+let tileset;
+
+function layout(w, args) {
+  const [vw, vh] = args.map(Number);
+  if (args.length !== 2 || !(vw > 0) || !(vh > 0)) throw new Error('usage: layout <w> <h> (positive viewport size in pixels)');
+  tileset ??= JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url), 'utf8'));
+  const viewport = { w: vw, h: vh };
+  const { scale, rects } = hudLayout(w.controller.state.hud, tileset, viewport);
+  return { scale, rects, problems: layoutChecks({ scale, rects }, viewport) };
+}
+
 function step(w, { op, args }) {
   const { canvas, document, window, fire } = w;
   const key = (type, code, repeat = false) => {
@@ -242,6 +258,7 @@ function step(w, { op, args }) {
     fire(document, type, { code, repeat });
   };
   switch (op) {
+    case 'layout': return layout(w, args);
     case 'click': return fire(canvas, 'click');
     case 'lock': document.pointerLockElement = canvas; return fire(document, 'pointerlockchange');
     case 'unlock': document.pointerLockElement = null; return fire(document, 'pointerlockchange');
@@ -416,11 +433,12 @@ export function createSession(startArgs = [], name = 'session') {
     try {
       if (!open) throw new Error('session is closed');
       if (op === 'start') throw new Error('start is only allowed when the session is created');
+      let value;
       if (op) {
-        step(w, { op, args });
+        value = step(w, { op, args });
         lines.push([op, ...args].join(' '));
       }
-      return { ok: true };
+      return op === 'layout' ? { ok: true, value } : { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
     }
