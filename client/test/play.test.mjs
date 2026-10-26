@@ -69,6 +69,23 @@ test('player mode refuses debug reads without changing the session', () => {
   } finally { state.session.close(); }
 });
 
+test('player mode returns layout results and still refuses debug paths', () => {
+  const state = started();
+  try {
+    const r = handle(state, { exec: 'layout 1366 768' });
+    assert.equal(r.ok, true, r.error);
+    assert.equal(typeof r.layout.scale, 'number');
+    assert.ok(r.layout.rects && Array.isArray(r.layout.problems));
+    assert.equal('value' in r, false);
+    assert.ok(r.observation);
+    assert.equal(handle(state, { exec: 'layout 0 5' }).ok, false);
+    assert.equal('layout' in handle(state, { exec: 'frame 1' }), false);
+    assert.equal(handle(state, { exec: 'layout 800 600\nexpect rule.primary = none' }).ok, false);
+    assert.match(handle(state, { exec: 'expect rule.primary = none' }).error, /debug/);
+    assert.equal(handle(state, { observe: 'debug' }).ok, false);
+  } finally { state.session.close(); }
+});
+
 test('verify mode runs debug reads and serves the debug observation', () => {
   const state = newState();
   assert.equal(handle(state, { start: ['walk', 'raft'], debug: true }).ok, true);
