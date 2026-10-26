@@ -9,7 +9,9 @@
 //   {"exec": "press KeyW"}        run one DSL line; the response carries the player observation
 //   {"observe": "player"}         the player observation, without doing anything
 //   {"transcript": true}          the session so far as a valid `.input` script
-// Responses: { ok, error?, observation?, transcript? }. Bad lines, failed `expect`s,
+//   {"exec": "layout 1366 768"}   also allowed in player mode; the response adds `layout`:
+//                                 { scale, rects, problems }, the HUD geometry for that viewport
+// Responses: { ok, error?, observation?, layout?, transcript? }. Bad lines, failed `expect`s,
 // malformed JSON and unknown requests are `ok: false` results; the process keeps going.
 //
 //   node client/tools/play.mjs        (needs ./build.sh first)
@@ -63,8 +65,10 @@ export function handle(state, request) {
           if (path) return fail(`${path} is a debug path; it is not available in player mode`);
         }
       }
-      const r = s.exec(request.exec);
-      return { ...r, observation: playerObservation(s) };
+      const { value, ...r } = s.exec(request.exec);
+      // `layout <w> <h>` is HUD geometry a player could see, so it is allowed in player mode.
+      const layout = r.ok && value !== undefined && /^\s*layout(\s|$)/.test(request.exec) ? { layout: value } : {};
+      return { ...r, ...layout, observation: playerObservation(s) };
     }
     if (known === 'observe') {
       if (request.observe === 'debug' && state.debug) return { ok: true, observation: debugObservation(s) };
