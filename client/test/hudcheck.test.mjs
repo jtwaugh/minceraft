@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutChecks } from '../hudcheck.js';
+import { layoutChecks, MIN_SCALE, CROSSHAIR_CLEAR_MARGIN, MAX_HANDS_BELT_GAP } from '../hudcheck.js';
 import { hudLayout } from '../hudlayout.js';
 import { hudModel } from '../hud.js';
 
@@ -23,7 +23,7 @@ test('overlapping rectangles name both elements', () => {
 test('the crosshair is checked against every other element', () => {
   const l = clean();
   l.rects.timer = r(40, 40, 20, 20);
-  assert.deepEqual(layoutChecks(l, vp).map((c) => c.elements), [['crosshair', 'timer']]);
+  assert.deepEqual(layoutChecks(l, vp).filter((c) => c.check === 'overlap').map((c) => c.elements), [['crosshair', 'timer']]);
 });
 
 test('touching edges and empty rectangles do not overlap', () => {
@@ -57,3 +57,30 @@ for (const [w, h] of [[390, 844], [1366, 768], [1920, 1080], [3440, 1440]]) {
     assert.deepEqual(layoutChecks(hudLayout(model, set, { w, h }), { w, h }), a);
   });
 }
+
+const only = (l, check) => layoutChecks(l, vp).filter((c) => c.check === check);
+
+test('scale below the minimum is a finding, or advisory on a portrait viewport', () => {
+  const l = { ...clean(), scale: MIN_SCALE - 1 };
+  assert.equal(only({ ...l, scale: MIN_SCALE }, 'scale').length, 0);
+  assert.deepEqual(only(l, 'scale').map((c) => c.severity), ['finding']);
+  assert.deepEqual(layoutChecks(l, { w: 100, h: 101 }).filter((c) => c.check === 'scale').map((c) => c.severity), ['advisory']);
+});
+
+test('clear zone: at, just inside and just outside the margin', () => {
+  const m = CROSSHAIR_CLEAR_MARGIN;
+  for (const [x, expected] of [[58 + m, 0], [58 + m - 1, 1], [58 + m + 1, 0]]) {
+    const l = clean();
+    l.rects.timer = r(x, 42, 10, 10);
+    assert.equal(only(l, 'clear-zone').length, expected, `x=${x}`);
+  }
+});
+
+test('hands to belt distance: just inside, at and just outside the limit', () => {
+  const l = { ...clean(), scale: 2 };
+  const limit = MAX_HANDS_BELT_GAP * 2;
+  for (const [gap, expected] of [[limit - 1, 0], [limit, 0], [limit + 1, 1]]) {
+    l.rects.hands = r(10, 80 - gap - 5, 20, 5);
+    assert.equal(only(l, 'distance').length, expected, `gap=${gap}`);
+  }
+});
