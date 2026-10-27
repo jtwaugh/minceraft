@@ -75,7 +75,7 @@ pub fn humidity_map(seed: u64, x0: i32, z0: i32, w: u32, d: u32) -> Vec<f32> {
 /// Legend JSON (generated at build time from `data/*.toml`):
 /// `{ blocks: [{id, name, color:[r,g,b], opacity, collision, fire:[enc,flam]}],
 ///    biomes: [{id, name, map:[r,g,b], grass:[[r,g,b]x3], leaf:[..x3], sky:[..x3]}],
-///    ramps: {grass:"humidity", leaf:"humidity", sky:"temperature"} }`.
+///    ramps: {grass:"humidity", leaf:"humidity", sky:"temperature"}, blend: {radius} }`.
 /// Ramps have three stops at 0, 0.5 and 1 of the named climate value.
 #[wasm_bindgen]
 pub fn legend() -> String {

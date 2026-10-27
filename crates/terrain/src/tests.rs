@@ -521,3 +521,8 @@ fn no_open_water_mask_is_identical() {
         generate_region_with_biases(7, -20, -20, 60, 60, &m, true).blocks
     );
 }
+
+#[test]
+fn legend_exposes_blend_radius() {
+    assert!(LEGEND_JSON.contains("\"blend\":{\"radius\":3}"));
+}
