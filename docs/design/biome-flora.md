@@ -283,11 +283,12 @@ of its area, as viewer-rendering Phase B.3 also requires.
    - brightness jitter of about ±6% on the tint;
    - bottom two vertices darker (about 0.8), a cheap stand-in for the
      ground occluding the base, which also sells the offset.
-5. **Wind (optional).** Store a sway weight in vertex byte 14 (0 at a
+5. **Wind.** Store a sway weight in vertex byte 14 (0 at a
    plant's base, 255 at its top; byte 13 is planned for AO in
    viewer-rendering Phase C). The vertex shader moves weighted vertices by
-   a small sine of time and world position. Leaves could take a smaller
-   weight. Phase A.5 reuses the same byte to know which vertices are tops.
+   a small sine of time and world position. Leaves sway too, with a
+   smaller weight. Phase A.5 reuses the same byte to know which vertices are
+   tops. (Decided in #1053.)
 
 **Acceptance**
 - Mesh test: a block meshed in two areas with different origins gets the
@@ -398,10 +399,6 @@ shapes leave room for it.
    A. Snow skips columns with flora (plants poke through bare ground).
    B. Snow replaces flora, except `frost_grass`, which stays under or
    beside the snow layer.
-5. **Wind sway.**
-   A. Yes, plants only.
-   B. Yes, plants and leaves.
-   C. No.
 6. **Plant draw distance in the flyover.** Plants beyond about 80 blocks
    add faces without adding much.
    A. Don't mesh cross plants in `fast` chunks.
