@@ -224,7 +224,7 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
     case B.fern: return grass.map((v) => v * 0.88);
     case B.water: return water ?? WHITE;
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return dry ?? WHITE;
-    case B.oak_leaves: case B.leaf_litter: return leaf;
+    case B.oak_leaves: case B.leaf_litter: case B.berry_bush: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
@@ -299,6 +299,8 @@ function pickLayer(ctx, layer, x, y, z) {
 // 128, which the client reads as "not a plant" so leaves never sink with the fade.
 export const LEAF_WEIGHT = 64;
 
+// Berry bush: a cutout cube inset 2/16 on the sides and top (this project's choice).
+const BUSH_INSET = 2 / 16;
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 
 // Growable quad buffer in the packed vertex format.
@@ -399,6 +401,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
   };
   const FULL_LO = [0, 0, 0], FULL_HI = [1, 1, 1];
   const CACTUS_LO = [CACTUS_INSET, 0, CACTUS_INSET], CACTUS_HI = [1 - CACTUS_INSET, 1, 1 - CACTUS_INSET];
+  const BUSH_LO = [BUSH_INSET, 0, BUSH_INSET], BUSH_HI = [1 - BUSH_INSET, 1 - BUSH_INSET, 1 - BUSH_INSET];
   const SNOW_HI = [1, SNOW_H, 1];
   const X1 = [[0.15, 1, 0.15], [0.85, 1, 0.85], [0.85, 0, 0.85], [0.15, 0, 0.15]];
   const X2 = [[0.85, 1, 0.15], [0.15, 1, 0.85], [0.15, 0, 0.85], [0.85, 0, 0.15]];
@@ -461,6 +464,10 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           if (f.d[1] > 0 && n === B.cactus) continue;
           if (f.d[1] < 0 && (n === B.cactus || SOLID_N[n])) continue;
           boxFace(0, x, y, z, f, CACTUS_LO, CACTUS_HI, layer, tint);
+        } else if (b === B.berry_bush) {
+          // leaves-style cutout: inset faces always show, only the bottom hides on solid ground
+          if (f.d[1] < 0 && SOLID_N[n]) continue;
+          boxFace(3, x, y, z, f, BUSH_LO, BUSH_HI, layer, tint, vr, null, LEAF_WEIGHT);
         } else if (b === B.snow_layer) {
           if (f.d[1] < 0 && SOLID_N[n]) continue;
           if (f.d[1] === 0 && (SOLID_N[n] || n === B.snow_layer)) continue;
