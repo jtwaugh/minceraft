@@ -49,6 +49,14 @@ export const OPAQUE = flags(SOLID);
 export const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // With fast leaves, leaves count as solid too.
 const OPAQUE_FAST = flags([...SOLID, B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
+// Flat shapes: one up-facing cutout quad `lift` above the block's floor, tinted
+// by `tint` ('leaf'). `pad` (the same quad on a water surface) is a table
+// entry away; no block uses it yet.
+const SHAPES = {
+  ground_cover: { lift: 1 / 16, tint: 'leaf' },
+  pad: { lift: 1 / 16, tint: 'leaf' },
+};
+const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover };
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
   B.wheat_0, B.wheat_1, B.wheat_2, B.wheat_3, B.wheat_4, B.wheat_5, B.wheat_6, B.wheat_7]);
@@ -207,7 +215,7 @@ function tintFor(ctx, b, grass, leaf, water) {
     case B.grass: case B.tall_grass: return grass;
     case B.fern: return grass.map((v) => v * 0.88);
     case B.water: return water ?? WHITE;
-    case B.oak_leaves: return leaf;
+    case B.oak_leaves: case B.leaf_litter: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
@@ -399,6 +407,15 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]], w && [w[k], w[k + 1], w[k + 2]]);
       };
       const vr = VARIES[b] ? variantAt(origin[0] + x, y, origin[1] + z) : 0;
+      const shape = SHAPE_OF[b];
+      if (shape) {
+        // one up-facing cutout quad, turned and mirrored by the world coordinate
+        const top = FACES[0], vrs = variantAt(origin[0] + x, y, origin[1] + z);
+        const p = top.c.map((v) => [v[0], shape.lift, v[2]]);
+        const t = typeof tint === 'function' ? p.map((v) => tint(v[0], v[2])) : tint;
+        out[3].quad(x, y, z, p, p.map((v) => faceUV(top, [v[0], 0, v[2]], vrs)), layerOf(ctx, b, 1), top.s * (0.75 + y / 256), t);
+        continue;
+      }
       if (CROSS[b]) {
         // two crossed quads, wound both ways so they show from either side
         const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, y, origin[1] + z), k = 0.9 * (0.75 + y / 256);
