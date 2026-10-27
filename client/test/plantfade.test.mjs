@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { plantScale, PLANT_FADE_RANGE } from '../plantfade.js';
-import { B, VERTEX_BYTES, meshBlocks } from '../../viewer/mesh.js';
+import { B, LEAF_WEIGHT, VERTEX_BYTES, meshBlocks } from '../../viewer/mesh.js';
 
 test('plant fade: full inside the start distance, half mid-range, gone at the end', () => {
   assert.equal(plantScale(0), 1);
@@ -31,4 +31,20 @@ test('mesh byte 14: 255 on cross plant tops, 0 at the base and on other faces', 
   const solid = new Uint8Array(m.opaque.verts);
   assert.ok(solid.length > 0);
   for (let v = 0; v < solid.length / VERTEX_BYTES; v++) assert.equal(solid[v * VERTEX_BYTES + 14], 0);
+});
+
+test('mesh byte 14: cutout leaf vertices carry LEAF_WEIGHT, nonzero and below the plant top', () => {
+  const size = 2, blocks = new Uint8Array(size * size * 128);
+  blocks[10] = B.oak_leaves;
+  const ctx = { faceLayer: new Uint8Array(256 * 3 * 2), COLORS: [[0, 0, 0]], NAMES: [] };
+  ctx.COLORS[B.oak_leaves] = [10, 200, 10];
+  const one = [1, 1, 1];
+  const m = meshBlocks(ctx, blocks, { grass: [one, one, one, one], leaf: [one, one, one, one] }, size, 0);
+  const leaf = new Uint8Array(m.cutout.verts);
+  assert.ok(leaf.length > 0);
+  for (let v = 0; v < leaf.length / VERTEX_BYTES; v++) {
+    const w = leaf[v * VERTEX_BYTES + 14];
+    assert.equal(w, LEAF_WEIGHT);
+  }
+  assert.ok(LEAF_WEIGHT > 0 && LEAF_WEIGHT < 128);
 });

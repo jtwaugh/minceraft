@@ -103,7 +103,8 @@ function program(cut) {
       vec3 w = pos * unpack.x + offset;
       ${cut ? `// mirrors plantScale in plantfade.js: top vertices sink one block to the base
       float s = 1.0 - clamp((distance(w, eye) - plantFade.x) / plantFade.y, 0.0, 1.0);
-      w.y -= top * (1.0 - s);
+      // weights below 0.5 are leaves (LEAF_WEIGHT in mesh.js): they sway but never sink
+      w.y -= step(0.5, top) * top * (1.0 - s);
       // mirrors swayOffset in sway.js: tops move sideways, bases stay put
       float k = ${SWAY_WAVE.toFixed(3)};
       w.xz += ${SWAY_AMPLITUDE.toFixed(3)} * top * vec2(sin(swayPhase + (w.x + 0.6 * w.z) * k), cos(swayPhase + (w.z - 0.6 * w.x) * k));` : ''}
