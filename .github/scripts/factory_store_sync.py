@@ -10,10 +10,12 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import factory_store  # noqa: E402
 from factory_ingest import ingest  # noqa: E402
+from factory_store_states import sync_states  # noqa: E402
 
 
 def open_store(path, live):
@@ -35,6 +37,7 @@ def store_sync(snap):
     store, so it never returns actions."""
     if snap.store is not None:
         ingest(snap.store, snap)
+        sync_states(snap, time.time())
     return []
 
 
