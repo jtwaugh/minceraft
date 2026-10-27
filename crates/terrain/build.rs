@@ -24,9 +24,12 @@ fn main() {
     let block_names = gen_blocks(&blocks, &mut out, &mut json);
     json.push_str("],\"biomes\":[");
     gen_biomes(&biomes, &block_names, &mut out, &mut json);
+    let radius = int(&biomes["blend"], "radius");
+    assert!((0..=7).contains(&radius), "[blend] radius must be 0 to 7");
     json.push_str(
-        "],\"ramps\":{\"grass\":\"humidity\",\"leaf\":\"humidity\",\"sky\":\"temperature\"}}",
+        "],\"ramps\":{\"grass\":\"humidity\",\"leaf\":\"humidity\",\"sky\":\"temperature\"}",
     );
+    write!(json, ",\"blend\":{{\"radius\":{radius}}}}}").unwrap();
     gen_lookup(&biomes, &mut out);
     gen_trees(&biomes, &block_names, &mut out);
     writeln!(
