@@ -341,7 +341,9 @@ and after per CLAUDE.md.
    block below, up-facing), `pad` (the same, on a water surface),
    `bush` (an inset leaves-style cube). Plus the Phase C variation.
 4. **Game.** New flora is targetable (Basic gameplay 5), has no collision
-   and doesn't block swimming or walking. Drops are an open question.
+   and doesn't block swimming or walking. New flora drops nothing and is
+   not pickable for now: it is decorative, and gets no `[pickable]` entry
+   in `data/items.toml`. (Decided in #1071.)
 5. **First set**, chosen to give the bare biomes something:
    - Plains: `daisy` (white, `e` with `f` centre), `bluebell` (blue,
      `b`/`a`), `tall_grass_double`.
@@ -393,9 +395,6 @@ shapes leave room for it.
 
 ## Open questions
 
-3. **Do new plants drop anything?**
-   A. Nothing for now (decorative).
-   B. Berries and flowers drop items; feeds later cooking and dyes.
 4. **Snow and flora.** The snow pass (SPEC 13) runs after flora.
    A. Snow skips columns with flora (plants poke through bare ground).
    B. Snow replaces flora, except `frost_grass`, which stays under or
