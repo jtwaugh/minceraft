@@ -13,6 +13,7 @@ export { CHUNK } from './plan.js';
 
 export const OPENING = 10;   // seconds of flight rendered before playback may start
 const LOOKAHEAD = 8;         // keep chunks loading this far ahead of the camera
+const FLYOVER_BLEND = 2;     // biome colour blend radius for flyover chunks (the legend's is 3)
 const BEHIND = 2;            // free chunks this long after they were last in view
 // Job priorities in the shared pool (lower runs sooner). Map tiles use 0.
 export const PRI = { plan: 1, opening: 2, stream: 3 };
@@ -60,7 +61,7 @@ export class ChunkStream {
   }
 
   request(e, k, priority, fast) {
-    const job = this.env.pool.run('chunk', { seed: this.seed, cx: e.cx, cz: e.cz, fast }, priority);
+    const job = this.env.pool.run('chunk', { seed: this.seed, cx: e.cx, cz: e.cz, fast, blend: FLYOVER_BLEND }, priority);
     this.jobs.set(k, job);
     job.promise.then((d) => {
       if (this.jobs.get(k) !== job || this.disposed) return;
