@@ -61,7 +61,7 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 `crates/game/src/item_entities.rs` has loose items with gravity, settling and pickup, and `client/scene.js` spawns test items, but nothing draws them.
 
 - Draw each item entity at its position, sized by `item_entity.box_size` (`data/items.toml`), using the item's icon.
-- Some idle motion (a slow spin or bob) so items stand out from the terrain.
+- Each item entity is drawn as a flat billboarded sprite of its 8x8 icon that always faces the camera. Its idle motion is a bob only (nothing to spin), so items stand out from the terrain. (Decided in #1145.)
 - They show up in streamed regions and in the raft scene alike.
 
 > **Reconciler:** Needs the item accessor in `game-web` (note 1). `scene.js` spawns test items only in `scene` mode; the streamed and raft scenes must call the same draw path. `[manual check]` "stand out from the terrain": the testable part is that every entity in `Walk::items()` yields exactly one draw call at its position, and that spin or bob is a pure function of time and id, so it needs no sim state.
@@ -69,7 +69,6 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 ## Open questions
 
 1. How should a held item be drawn: a flat sprite of the 8x8 icon, or the icon extruded into a thin voxel slab (one cube per opaque texel, so it has depth)?
-2. Item entities: billboarded sprites that always face the camera, or the same extruded mesh as the held item?
 3. Should an empty hand show a hand or arm, or nothing at all?
 4. Does the held item go in the existing model pass (`client/modelgl.js`, the atlas from `client/models.js`) or get its own small pass drawn after the world with a separate depth range?
 
