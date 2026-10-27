@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import factory_store  # noqa: E402
 import plan_targets  # noqa: E402
 from factory_ingest import ingest  # noqa: E402
+from factory_store_records import sync_records  # noqa: E402
 from factory_store_states import sync_states  # noqa: E402
 
 
@@ -71,7 +72,9 @@ def store_sync(snap):
     store, so it never returns actions."""
     if snap.store is not None:
         ingest(snap.store, snap)
-        sync_states(snap, time.time())
+        now = time.time()
+        sync_states(snap, now)
+        sync_records(snap, now)
         sync_docs(snap.store)
     return []
 
