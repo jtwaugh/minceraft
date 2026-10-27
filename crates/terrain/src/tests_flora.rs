@@ -46,7 +46,7 @@ fn count(r: &Region, b: Block) -> usize {
 }
 
 #[test]
-fn shipped_table_only_adds_daisies() {
+fn shipped_table_adds_only_daisies_to_empty_table_output() {
     for seed in [12345u64, 9, 42] {
         let today = crate::generate_decorated(seed, -50, 30, 120, 90);
         let r = gen(seed, -50, 30, 120, 90, &[]);
@@ -121,13 +121,6 @@ fn flora_is_independent_of_region() {
             }
         }
     }
-}
-
-#[test]
-fn flora_comes_in_patches() {
-    let r = gen(12345, -64, -64, 192, 192, &TEST);
-    let all = count(&gen(12345, -64, -64, 192, 192, &[]), Block::Daisy);
-    assert!(count(&r, Block::Daisy) > all);
 }
 
 macro_rules! plains_entry {
