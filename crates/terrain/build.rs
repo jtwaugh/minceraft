@@ -4,6 +4,8 @@
 //! The `toml` crate is only a build-dependency; nothing here reaches the
 //! runtime crate or the wasm output.
 
+mod flora_check;
+
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use toml::Value;
@@ -14,6 +16,9 @@ fn main() {
     let biomes_path = root.join("biomes.toml");
     println!("cargo:rerun-if-changed={}", blocks_path.display());
     println!("cargo:rerun-if-changed={}", biomes_path.display());
+    let flora_path = root.join("flora.toml");
+    println!("cargo:rerun-if-changed={}", flora_path.display());
+    println!("cargo:rerun-if-changed=flora_check.rs");
     println!("cargo:rerun-if-changed=build.rs");
 
     let blocks: Value = read(&blocks_path);
@@ -32,6 +37,7 @@ fn main() {
     write!(json, ",\"blend\":{{\"radius\":{radius}}}}}").unwrap();
     gen_lookup(&biomes, &mut out);
     gen_trees(&biomes, &block_names, &mut out);
+    gen_flora(&flora_path, &block_names, &biome_names(&biomes));
     writeln!(
         out,
         "/// Legend for viewers: blocks and biomes with colours and ramps (JSON)."
@@ -40,6 +46,85 @@ fn main() {
     writeln!(out, "pub const LEGEND_JSON: &str = {:?};", json).unwrap();
 
     let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("data.rs");
+    std::fs::write(dest, out).unwrap();
+}
+
+fn biome_names(doc: &Value) -> Vec<String> {
+    let list = doc["biome"].as_array().expect("[[biome]]");
+    list.iter()
+        .map(|b| b["name"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Validates `flora.toml` and writes `$OUT_DIR/flora.rs`.
+fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
+    let doc = read(path);
+    let strings = |v: &Value| -> Vec<String> {
+        match v {
+            Value::String(s) => vec![s.clone()],
+            Value::Array(a) => a
+                .iter()
+                .map(|e| e.as_str().expect("name string").to_string())
+                .collect(),
+            _ => panic!("flora.toml: expected a name or a list of names"),
+        }
+    };
+    let list = doc["flora"].as_array().expect("[[flora]]");
+    let raw: Vec<flora_check::RawFlora> = list
+        .iter()
+        .map(|f| flora_check::RawFlora {
+            name: f["name"].as_str().expect("flora name").to_string(),
+            block: strings(&f["block"]),
+            ground: strings(&f["ground"]),
+            shape: f["shape"].as_str().expect("flora shape").to_string(),
+            tint: f["tint"].as_str().expect("flora tint").to_string(),
+            salt: int(f, "salt"),
+            biomes: f["biomes"]
+                .as_table()
+                .expect("biomes table")
+                .iter()
+                .map(|(k, v)| (k.clone(), num(v)))
+                .collect(),
+        })
+        .collect();
+    if let Err(e) = flora_check::validate(&raw, blocks, biomes) {
+        panic!("data/flora.toml: {e}");
+    }
+
+    let blk = |n: &String| format!("Block::{}", camel(n));
+    let mut out = String::new();
+    for k in ["patch_noise_salt", "colour_noise_salt"] {
+        let v = int(&doc["settings"], k);
+        writeln!(out, "pub const FLORA_{}: u32 = {v};", k.to_uppercase()).unwrap();
+    }
+    writeln!(out, "pub static FLORA: [Flora; {}] = [", raw.len()).unwrap();
+    for (f, r) in list.iter().zip(&raw) {
+        let ground: Vec<String> = r.ground.iter().map(blk).collect();
+        let chances: Vec<String> = r
+            .biomes
+            .iter()
+            .map(|(b, c)| format!("(Biome::{}, {c:?})", camel(b)))
+            .collect();
+        let upper = r
+            .block
+            .get(1)
+            .map_or("None".into(), |u| format!("Some({})", blk(u)));
+        writeln!(
+            out,
+            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, biomes: &[{}] }},",
+            r.name,
+            blk(&r.block[0]),
+            camel(&r.shape),
+            ground.join(", "),
+            camel(&r.tint),
+            num(&f["cluster_scale"]),
+            r.salt,
+            chances.join(", ")
+        )
+        .unwrap();
+    }
+    writeln!(out, "];").unwrap();
+    let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("flora.rs");
     std::fs::write(dest, out).unwrap();
 }
 

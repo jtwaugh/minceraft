@@ -1,0 +1,21 @@
+# Flora (docs/design/biome-flora.md Phase D.1). build.rs checks every name
+# and generates `FLORA` in crates/terrain/src/flora.rs; nothing reads it yet.
+#   block         block name; tall_cross takes [lower, upper]
+#   shape         cross | tall_cross | ground_cover | pad | bush
+#   tint          none | grass | leaf | dry
+#   cluster_scale blocks per noise cell; salt unique per entry
+#   biomes        biome name -> chance per eligible column (0 to 1)
+
+[settings]
+patch_noise_salt = 7001
+colour_noise_salt = 7002
+
+[[flora]]
+name = "daisy"
+block = "daisy"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 24.0
+salt = 1
+biomes = { Plains = 0.020, Forest = 0.004 }
