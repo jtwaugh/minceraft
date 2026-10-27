@@ -345,11 +345,15 @@ and after per CLAUDE.md.
    block below, up-facing), `pad` (the same, on a water surface),
    `bush` (an inset leaves-style cube). Plus the Phase C variation.
 4. **Game.** New flora is targetable (Basic gameplay 5), has no collision
-   and doesn't block swimming or walking. Drops are an open question.
+   and doesn't block swimming or walking. New flora drops nothing and is
+   not pickable for now: it is decorative, and gets no `[pickable]` entry
+   in `data/items.toml`. (Decided in #1071.)
 5. **First set**, chosen to give the bare biomes something:
    - Plains: `daisy` (white, `e` with `f` centre), `bluebell` (blue,
      `b`/`a`), `tall_grass_double`.
-   - Taiga: ferns (both sizes), `berry_bush` (bush shape, `c` dots).
+   - Taiga: ferns in two sizes, the existing `fern` block as a flora entry
+     and a new two-block `fern_double` (`tall_cross`, lower and upper
+     tiles); `berry_bush` (bush shape, `c` dots). (Decided in #1073.)
    - Savanna and Desert: `dry_grass` and `dry_grass_tall`, tinted by a new
      per-biome `dry_ramp` (tan to straw).
    - Forest and Seasonal Forest: `leaf_litter` (ground cover, tinted with
@@ -397,9 +401,6 @@ shapes leave room for it.
 
 ## Open questions
 
-3. **Do new plants drop anything?**
-   A. Nothing for now (decorative).
-   B. Berries and flowers drop items; feeds later cooking and dyes.
 6. **Plant draw distance in the flyover.** Plants beyond about 80 blocks
    add faces without adding much.
    A. Don't mesh cross plants in `fast` chunks.

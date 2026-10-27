@@ -396,3 +396,84 @@ collision = "full"
 opacity = 255
 opaque_cube = true
 color = "#4a3320"
+
+[[block]]
+id = 42
+name = "daisy"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#f2efe4"
+
+[[block]]
+id = 43
+name = "bluebell"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#6a7fd6"
+
+[[block]]
+id = 44
+name = "tall_grass_double_lower"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#5fa03a"
+
+[[block]]
+id = 45
+name = "tall_grass_double_upper"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#5fa03a"
+
+[[block]]
+id = 46
+name = "berry_bush"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#8a3b5c"
+
+[[block]]
+id = 47
+name = "dry_grass"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#b8a45a"
+
+[[block]]
+id = 48
+name = "dry_grass_tall_lower"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#b0a050"
+
+[[block]]
+id = 49
+name = "dry_grass_tall_upper"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#b0a050"
+
+[[block]]
+id = 50
+name = "leaf_litter"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#8a5a2b"

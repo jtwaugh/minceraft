@@ -166,15 +166,27 @@ mod tests {
     #[test]
     fn plants_never_block() {
         let mut w = floor();
-        for (i, b) in [Block::TallGrass, Block::Dandelion, Block::Rose, Block::Fern]
-            .into_iter()
-            .enumerate()
-        {
+        let plants = [
+            Block::TallGrass,
+            Block::Dandelion,
+            Block::Rose,
+            Block::Fern,
+            Block::Daisy,
+            Block::Bluebell,
+            Block::TallGrassDoubleLower,
+            Block::TallGrassDoubleUpper,
+            Block::BerryBush,
+            Block::DryGrass,
+            Block::DryGrassTallLower,
+            Block::DryGrassTallUpper,
+            Block::LeafLitter,
+        ];
+        for (i, b) in plants.into_iter().enumerate() {
             w.set(i as i32 + 1, 1, 0, b);
             w.set(i as i32 + 1, 2, 0, b);
         }
-        let m = move_box(&w, &player(0.5, 1.0, 0.5), [5.0, 0.0, 0.0]);
-        assert_eq!(m.applied, [5.0, 0.0, 0.0]);
+        let m = move_box(&w, &player(0.5, 1.0, 0.5), [14.0, 0.0, 0.0]);
+        assert_eq!(m.applied, [14.0, 0.0, 0.0]);
         assert!(!m.on_ground);
     }
 

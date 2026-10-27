@@ -36,6 +36,8 @@ export const B = {
   farmland_dry: 29, farmland_wet: 30,
   wheat_0: 31, wheat_1: 32, wheat_2: 33, wheat_3: 34, wheat_4: 35, wheat_5: 36, wheat_6: 37, wheat_7: 38,
   planter_dirt: 39, planter_farmland_dry: 40, planter_farmland_wet: 41,
+  daisy: 42, bluebell: 43, tall_grass_double_lower: 44, tall_grass_double_upper: 45, berry_bush: 46,
+  dry_grass: 47, dry_grass_tall_lower: 48, dry_grass_tall_upper: 49, leaf_litter: 50,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -47,6 +49,14 @@ export const OPAQUE = flags(SOLID);
 export const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // With fast leaves, leaves count as solid too.
 const OPAQUE_FAST = flags([...SOLID, B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
+// Flat shapes: one up-facing cutout quad `lift` above the block's floor, tinted
+// by `tint` ('leaf'). `pad` (the same quad on a water surface) is a table
+// entry away; no block uses it yet.
+const SHAPES = {
+  ground_cover: { lift: 1 / 16, tint: 'leaf' },
+  pad: { lift: 1 / 16, tint: 'leaf' },
+};
+const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover };
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
   B.wheat_0, B.wheat_1, B.wheat_2, B.wheat_3, B.wheat_4, B.wheat_5, B.wheat_6, B.wheat_7]);
@@ -141,7 +151,7 @@ function boxSum(src, n, r) {
 
 /**
  * Per-column climate tints for a size x size area at world (wx, wz): grass
- * leaf and water ramps by humidity, box-blurred over a (2R+1)-wide window so they
+ * leaf, water and dry ramps by humidity, box-blurred over a (2R+1)-wide window so they
  * don't jump at biome borders. `R` defaults to the legend's blend radius.
  * `wasm` needs biome_map, humidity_map and temperature_map.
  *
@@ -150,7 +160,7 @@ function boxSum(src, n, r) {
  * Columns within one of the area are exact; the outermost ring is not.
  *
  * And `corners`: the tint of each of the (size + 1)^2 block corners, the mean
- * of the 4 columns that meet there (`grass`, `leaf` and `water`, Float32Array, 3 per
+ * of the 4 columns that meet there (`grass`, `leaf`, `water` and `dry`, Float32Array, 3 per
  * corner, row z * (size + 1) + x). Edge corners use the padded ring, so
  * areas side by side agree on the corners they share.
  */
@@ -160,27 +170,28 @@ export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.
   const hum = wasm.humidity_map(seed, wx - pad, wz - pad, n, n);
   const tmp = wasm.temperature_map(seed, wx, wz, size, size);
   const bio = new Uint8Array(size * size);
-  const rawG = new Float64Array(n * n * 3), rawL = new Float64Array(n * n * 3), rawW = new Float64Array(n * n * 3);
+  const rawG = new Float64Array(n * n * 3), rawL = new Float64Array(n * n * 3), rawW = new Float64Array(n * n * 3), rawD = new Float64Array(n * n * 3);
   // Whole quarter-steps of 0-255 when blurring, so the sums are exact.
   const q = R > 0 ? (v) => Math.round(v * 4) : (v) => v / 255;
   for (let c = 0; c < n * n; c++) {
     const bi = ctx.BIOMES[bigBio[c]];
-    const g = ramp3(bi.grass, hum[c]), l = ramp3(bi.leaf, hum[c]), w = ramp3(bi.water, hum[c]);
-    for (let k = 0; k < 3; k++) { rawG[c * 3 + k] = q(g[k]); rawL[c * 3 + k] = q(l[k]); rawW[c * 3 + k] = q(w[k]); }
+    const g = ramp3(bi.grass, hum[c]), l = ramp3(bi.leaf, hum[c]), w = ramp3(bi.water, hum[c]), d = ramp3(bi.dry, hum[c]);
+    for (let k = 0; k < 3; k++) { rawG[c * 3 + k] = q(g[k]); rawL[c * 3 + k] = q(l[k]); rawW[c * 3 + k] = q(w[k]); rawD[c * 3 + k] = q(d[k]); }
   }
-  let padG = rawG, padL = rawL, padW = rawW;
+  let padG = rawG, padL = rawL, padW = rawW, padD = rawD;
   if (R > 0) {
     const area = (2 * R + 1) * (2 * R + 1), scale = 4 * 255 * area;
     const norm = (a) => Float32Array.from(boxSum(a, n, R), (v) => v / scale);
-    padG = norm(rawG); padL = norm(rawL); padW = norm(rawW);
+    padG = norm(rawG); padL = norm(rawL); padW = norm(rawW); padD = norm(rawD);
   }
-  const grass = [], leaf = [], water = [];
+  const grass = [], leaf = [], water = [], dry = [];
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     const p = ((z + pad) * n + x + pad) * 3;
     bio[z * size + x] = bigBio[(z + pad) * n + x + pad];
     grass.push([padG[p], padG[p + 1], padG[p + 2]]);
     leaf.push([padL[p], padL[p + 1], padL[p + 2]]);
     water.push([padW[p], padW[p + 1], padW[p + 2]]);
+    dry.push([padD[p], padD[p + 1], padD[p + 2]]);
   }
   const cn = size + 1;
   const corner = (a) => {
@@ -193,19 +204,20 @@ export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.
   };
   const mid = (size >> 1) * size + (size >> 1);
   return {
-    corners: { n: cn, grass: corner(padG), leaf: corner(padL), water: corner(padW) },
-    grass, leaf, water, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] },
-    padded: { pad, n, grass: padG, leaf: padL, water: padW },
+    corners: { n: cn, grass: corner(padG), leaf: corner(padL), water: corner(padW), dry: corner(padD) },
+    grass, leaf, water, dry, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] },
+    padded: { pad, n, grass: padG, leaf: padL, water: padW, dry: padD },
   };
 }
 
 const WHITE = [1, 1, 1];
-function tintFor(ctx, b, grass, leaf, water) {
+function tintFor(ctx, b, grass, leaf, water, dry) {
   switch (b) {
     case B.grass: case B.tall_grass: return grass;
     case B.fern: return grass.map((v) => v * 0.88);
     case B.water: return water ?? WHITE;
-    case B.oak_leaves: return leaf;
+    case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return dry ?? WHITE;
+    case B.oak_leaves: case B.leaf_litter: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
@@ -390,13 +402,22 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
     for (let y = y0; y < H; y++) {
       const b = blocks[base + y];
       if (b === B.air) continue;
-      const flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c], tints.water?.[c]);
+      const flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c], tints.water?.[c], tints.dry?.[c]);
       // Per-vertex tint by corner offset (0 or 1), for blocks that have one.
       const tint = flat === WHITE || !tints.corners ? flat : (ox, oz) => {
-        const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf, w = tints.corners.water;
-        return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]], w && [w[k], w[k + 1], w[k + 2]]);
+        const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf, w = tints.corners.water, dr = tints.corners.dry;
+        return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]], w && [w[k], w[k + 1], w[k + 2]], dr && [dr[k], dr[k + 1], dr[k + 2]]);
       };
       const vr = VARIES[b] ? variantAt(origin[0] + x, y, origin[1] + z) : 0;
+      const shape = SHAPE_OF[b];
+      if (shape) {
+        // one up-facing cutout quad, turned and mirrored by the world coordinate
+        const top = FACES[0], vrs = variantAt(origin[0] + x, y, origin[1] + z);
+        const p = top.c.map((v) => [v[0], shape.lift, v[2]]);
+        const t = typeof tint === 'function' ? p.map((v) => tint(v[0], v[2])) : tint;
+        out[3].quad(x, y, z, p, p.map((v) => faceUV(top, [v[0], 0, v[2]], vrs)), layerOf(ctx, b, 1), top.s * (0.75 + y / 256), t);
+        continue;
+      }
       if (CROSS[b]) {
         // two crossed quads, wound both ways so they show from either side
         const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, y, origin[1] + z), k = 0.9 * (0.75 + y / 256);

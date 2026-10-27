@@ -19,12 +19,16 @@ export const NAMES = [
   'tall_grass', 'tall_grass_1', 'tall_grass_2', 'fern', 'fern_1', 'dead_bush',
   'dandelion', 'dandelion_1', 'rose', 'rose_1', 'sugar_cane',
   'brown_mushroom', 'red_mushroom',
+  'daisy', 'bluebell', 'tall_grass_double_lower', 'tall_grass_double_upper', 'berry_bush',
+  'dry_grass', 'dry_grass_tall_lower', 'dry_grass_tall_upper', 'leaf_litter',
   // the leaves tile with its holes filled, for fast leaves
   'leaves_fast'];
 
 /** Tint palette characters (greyscale-and-tint pixels) per climate-tinted tile. */
 export const TINTED = { grass_top: '89', grass_top_1: '89', grass_top_2: '89', grass_side: '89',
   leaves: '89', tall_grass: '89', tall_grass_1: '89', tall_grass_2: '89', fern: '89', fern_1: '89',
+  tall_grass_double_lower: '89', tall_grass_double_upper: '89', berry_bush: '89',
+  dry_grass: '89', dry_grass_tall_lower: '89', dry_grass_tall_upper: '89', leaf_litter: '89',
   water_0: 'abe', water_1: 'abe', water_2: 'abe', water_3: 'abe',
   water_flow_0: 'abe', water_flow_1: 'abe', water_flow_2: 'abe', water_flow_3: 'abe' };
 
