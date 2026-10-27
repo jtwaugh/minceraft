@@ -70,7 +70,6 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 
 1. How should a held item be drawn: a flat sprite of the 8x8 icon, or the icon extruded into a thin voxel slab (one cube per opaque texel, so it has depth)?
 3. Should an empty hand show a hand or arm, or nothing at all?
-4. Does the held item go in the existing model pass (`client/modelgl.js`, the atlas from `client/models.js`) or get its own small pass drawn after the world with a separate depth range?
 
 Added by the reconciler:
 
@@ -89,7 +88,7 @@ Added by the reconciler:
 
 ## Phases (reconciler)
 
-**Phase A.** Item entities in the world (section 2). Add the `game-web` accessor for item entities (note 1), pack the item icons into the model atlas, and draw each entity at its position at `box_size`, with a spin or bob that depends only on time and id. Cover streamed regions and the raft scene as well as the test scene. Depends on open questions 2 and 4 for the mesh and pass; the flat billboard and the existing model pass are the cheapest defaults if the maintainer doesn't answer. Done when a headless test checks one draw per entity from `Walk::items()` and an input script that throws an item shows `items.count` rising.
+**Phase A.** Item entities in the world (section 2). Add the `game-web` accessor for item entities (note 1), pack the item icons into the model atlas, and draw each entity at its position at `box_size`, with a spin or bob that depends only on time and id. Cover streamed regions and the raft scene as well as the test scene. Depends on open question 2 for the mesh; the flat billboard is the cheapest default if the maintainer doesn't answer. Item entities, and later the held item, are drawn in the existing model pass (`client/modelgl.js`, the atlas from `client/models.js`), with the item icons packed into the atlas via `textureNames`; there is no separate item pass. (Decided in #1146.) Done when a headless test checks one draw per entity from `Walk::items()` and an input script that throws an item shows `items.count` rising.
 
 **Phase B.** Held item (section 1, held tool or item, no empty hand). Draw the held item in the lower right from its icon, using the answer to question 1, with no swing yet. Done when an input script shows the held thing follows `held` (tool selected, carried item, empty) and a test shows it is drawn nowhere else when `held` is empty.
 
