@@ -95,22 +95,73 @@ export const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]
 export const ramp3 = (stops, v) => v < 0.5 ? lerp3(stops[0], stops[1], v * 2) : lerp3(stops[1], stops[2], (v - 0.5) * 2);
 
 /**
- * Per-column climate tints for a size x size area at world (wx, wz): grass
- * and leaf ramps by humidity. `wasm` needs biome_map, humidity_map and
- * temperature_map.
+ * Box blur of `n` x n interleaved 3-channel integer data, window radius `r`
+ * (clipped at the edges), as two separable running-sum passes. Integer
+ * input keeps the sums exact, so a column's value depends only on its window.
+ * Returns the window sums (not yet divided).
  */
-export function columnTints(wasm, ctx, seed, wx, wz, size) {
-  const bio = wasm.biome_map(seed, wx, wz, size, size);
-  const hum = wasm.humidity_map(seed, wx, wz, size, size);
+function boxSum(src, n, r) {
+  const pass = (a, stride, step) => {
+    const out = new Float64Array(a.length);
+    for (let line = 0; line < n; line++) {
+      const base = line * stride;
+      for (let ch = 0; ch < 3; ch++) {
+        let s = 0;
+        for (let i = 0; i < Math.min(r, n - 1) + 1; i++) s += a[base + i * step + ch];
+        for (let i = 0; i < n; i++) {
+          out[base + i * step + ch] = s;
+          if (i + r + 1 < n) s += a[base + (i + r + 1) * step + ch];
+          if (i - r >= 0) s -= a[base + (i - r) * step + ch];
+        }
+      }
+    }
+    return out;
+  };
+  return pass(pass(src, 3 * n, 3), 3, 3 * n);
+}
+
+/**
+ * Per-column climate tints for a size x size area at world (wx, wz): grass
+ * and leaf ramps by humidity, box-blurred over a (2R+1)-wide window so they
+ * don't jump at biome borders. `R` defaults to the legend's blend radius.
+ * `wasm` needs biome_map, humidity_map and temperature_map.
+ *
+ * Also returns `padded`: the blurred grass and leaf tints (Float32Array,
+ * 3 per column) for the area plus a ring of `pad` = R + 1 columns, `n` wide.
+ * Columns within one of the area are exact; the outermost ring is not.
+ */
+export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.radius) {
+  const pad = R + 1, n = size + 2 * pad;
+  const bigBio = wasm.biome_map(seed, wx - pad, wz - pad, n, n);
+  const hum = wasm.humidity_map(seed, wx - pad, wz - pad, n, n);
   const tmp = wasm.temperature_map(seed, wx, wz, size, size);
+  const bio = new Uint8Array(size * size);
+  const rawG = new Float64Array(n * n * 3), rawL = new Float64Array(n * n * 3);
+  // Whole quarter-steps of 0-255 when blurring, so the sums are exact.
+  const q = R > 0 ? (v) => Math.round(v * 4) : (v) => v / 255;
+  for (let c = 0; c < n * n; c++) {
+    const bi = ctx.BIOMES[bigBio[c]];
+    const g = ramp3(bi.grass, hum[c]), l = ramp3(bi.leaf, hum[c]);
+    for (let k = 0; k < 3; k++) { rawG[c * 3 + k] = q(g[k]); rawL[c * 3 + k] = q(l[k]); }
+  }
+  let padG = rawG, padL = rawL;
+  if (R > 0) {
+    const area = (2 * R + 1) * (2 * R + 1), scale = 4 * 255 * area;
+    const norm = (a) => Float32Array.from(boxSum(a, n, R), (v) => v / scale);
+    padG = norm(rawG); padL = norm(rawL);
+  }
   const grass = [], leaf = [];
-  for (let c = 0; c < size * size; c++) {
-    const bi = ctx.BIOMES[bio[c]];
-    grass.push(ramp3(bi.grass, hum[c]).map((v) => v / 255));
-    leaf.push(ramp3(bi.leaf, hum[c]).map((v) => v / 255));
+  for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
+    const p = ((z + pad) * n + x + pad) * 3;
+    bio[z * size + x] = bigBio[(z + pad) * n + x + pad];
+    grass.push([padG[p], padG[p + 1], padG[p + 2]]);
+    leaf.push([padL[p], padL[p + 1], padL[p + 2]]);
   }
   const mid = (size >> 1) * size + (size >> 1);
-  return { grass, leaf, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] } };
+  return {
+    grass, leaf, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] },
+    padded: { pad, n, grass: padG, leaf: padL },
+  };
 }
 
 const WHITE = [1, 1, 1];
