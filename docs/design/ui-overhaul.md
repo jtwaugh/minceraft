@@ -62,7 +62,7 @@ The UI art exists now (slots, hearts, digits, the nine-slice wooden panel), but 
 
 Today the timer's phase word, the hands item name, the death screen, the inventory labels, the hint, the overlay and the console use `12px ui-monospace`. Next to scaled pixel art that's the main thing that looks wrong. `phase_*` and `label_*` textures were planned (play-critic-agent note 7) but none exist.
 
-- A small bitmap font in `art/` (A to Z, 0 to 9, basic punctuation, a fixed cell such as 4x6 to match the digits), drawn by a shared helper next to `uipx.js`, so any string renders as pixel art at the UI scale.
+- A small bitmap font in `art/` (capitals A to Z, 0 to 9, basic punctuation, in a fixed 4x6 cell with a 3x5 glyph to match the digits; lower-case letters in a string are drawn with their capital glyph), drawn by a shared helper next to `uipx.js`, so any string renders as pixel art at the UI scale. (Decided in #1174.)
 - The HUD, inventory, death screen and menu use it. That removes the text fallbacks in `hudLayout`, and every rectangle is exact.
 - The debug console and overlay may stay monospace, since they're debug tools, but they get the same panel and colours.
 
@@ -103,7 +103,6 @@ The first-person held item and item entities in the world are in #1137. Gameplay
 
 ## Open questions
 
-2. **Font case and cell.** A: capitals only, 4x6 cell (matches `digit_*`). B: upper and lower case, 4x6 or 5x7 cell. Lower case needs descenders, so 4x6 is tight; A is smaller art and fewer glyphs.
 3. **Debug console and overlay font.** A: stay monospace with the shared panel and colours. B: move to the pixel font. A keeps long free-form output readable; B is more consistent.
 4. **Hide or fade HUD parts.** A: always show everything. B: fade hearts at full health and the timer when nothing changes. A is simpler and testable; B changes what a layout check should assume.
 5. **One style or a separate menu treatment.** A: the wooden panel for every screen, the menu included. B: the menu keeps its animated sea backdrop and gets only the wordmark and shared buttons.
