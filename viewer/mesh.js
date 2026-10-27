@@ -10,9 +10,11 @@
 //   byte  13    ambient occlusion level 0-3 (AO_SHADE): the opaque blocks among
 //               the corner's two side neighbours and diagonal on the open side
 //               of full-cube faces; 0 elsewhere. The viewer shader reads it.
-//   byte  14    plant top weight  uint8: 255 on the top vertices of cross
-//               plants, 0 at their base and on every other face (the client
-//               fades and sways with it; the viewer ignores it)
+//   byte  14    sway weight  uint8: 255 on the top vertices of cross plants,
+//               0 at their base; LEAF_WEIGHT on every vertex of a cutout leaf
+//               face; 0 on every other face. The client sways with it, and
+//               fades only weights >= 128 (plants, not leaves); the viewer
+//               ignores it
 //   byte  15    padding
 //
 // Positions are local to the meshed area: x and z from 0 to size, y the
@@ -274,6 +276,10 @@ function pickLayer(ctx, layer, x, y, z) {
   return layer + i;
 }
 
+// Byte-14 weight of leaf vertices: below the plant top weight (255) and below
+// 128, which the client reads as "not a plant" so leaves never sink with the fade.
+export const LEAF_WEIGHT = 64;
+
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 
 // Growable quad buffer in the packed vertex format.
@@ -346,7 +352,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
     ? 0 : blocks[col(x, z) + y];
   const out = [new Quads(), new Quads(), new Quads(), new Quads()]; // opaque, water, ice, cutout
   // One face of the box lo..hi (block-local) for face f.
-  const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0, ao = null) => {
+  const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0, ao = null, weight = 0) => {
     let p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
     let uv = p.map((q) => faceUV(f, q, vr));
     if (typeof tint === 'function') tint = p.map((q) => tint(Math.round(q[0]), Math.round(q[2])));
@@ -356,7 +362,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       p = rot(p); uv = rot(uv); ao = rot(ao);
       if (Array.isArray(tint[0])) tint = rot(tint);
     }
-    out[L].quad(x, y, z, p, uv, layer, f.s * (0.75 + y / 256), tint, null, ao);
+    out[L].quad(x, y, z, p, uv, layer, f.s * (0.75 + y / 256), tint, weight ? [weight, weight, weight, weight] : null, ao);
   };
   // AO level 0-3 of each corner of face f of the block at (x, y, z): the
   // opaque blocks among the two side neighbours and the diagonal, on the
@@ -434,7 +440,8 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           // fast) leaves never hide their neighbours and leaf-leaf faces are
           // drawn, as cut-outs
           if (SOLID_N[n]) continue;
-          boxFace(LEAVES[b] && !fast ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr, faceAO(x, y, z, f));
+          const cutLeaf = LEAVES[b] && !fast;
+          boxFace(cutLeaf ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr, faceAO(x, y, z, f), cutLeaf ? LEAF_WEIGHT : 0);
         }
       }
     }
