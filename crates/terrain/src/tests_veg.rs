@@ -286,9 +286,11 @@ fn check_snow_ice(r: &Region, cm: &ClimateMap) -> (usize, usize) {
                 continue; // f32 rounding of the exported temperature
             }
             if want {
-                // Snow, unless a plant already occupies the spot.
+                // Snow, unless a plant or flora block already occupies the spot.
                 assert!(
-                    at == Block::SnowLayer as u8 || crate::plants::is_plant(at),
+                    at == Block::SnowLayer as u8
+                        || crate::plants::is_plant(at)
+                        || crate::flora::FLORA.iter().any(|f| f.block as u8 == at),
                     "no snow at ({x},{top},{z}): {:?}",
                     Block::from_u8(at)
                 );
