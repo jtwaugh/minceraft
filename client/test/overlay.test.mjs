@@ -2,7 +2,7 @@
 // Run: node --test client/test/overlay.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readAim, formatAim, readBelt, formatBelt } from '../overlay.js';
+import { readAim, formatAim, readBelt, formatBelt, readItems } from '../overlay.js';
 
 function fakeWalk({ target = [0, 0, 0, 0, 0], box = [], rules = {}, last = -1 } = {}) {
   return {
@@ -51,4 +51,24 @@ test('the belt reads slots, selection and hands and formats as text', () => {
   });
   assert.deepEqual(belt, { slots: [null, 'sword', 'hoe', null, null], selected: 1, hands: null, held: 'tool:sword' });
   assert.equal(formatBelt(belt), 'belt  1:- >2:sword  3:hoe  4:-  5:-\nhands empty | held tool:sword');
+});
+
+test('readItems reads nothing from an empty world', () => {
+  assert.deepEqual(readItems({ items: () => new Float64Array(), item_names: () => [] }), []);
+});
+
+test('readItems reads one item per loose item, in order', () => {
+  const walk = {
+    items: () => new Float64Array([4, 1, 6, 2, 0.25]),
+    item_names: () => ['stick'],
+  };
+  assert.deepEqual(readItems(walk), [{ id: 4, name: 'stick', pos: [1, 6, 2], size: 0.25 }]);
+  const many = {
+    items: () => new Float64Array([4, 1, 6, 2, 0.25, 9, 3.5, 7, -4, 0.25]),
+    item_names: () => ['stick', 'wheat'],
+  };
+  assert.deepEqual(readItems(many), [
+    { id: 4, name: 'stick', pos: [1, 6, 2], size: 0.25 },
+    { id: 9, name: 'wheat', pos: [3.5, 7, -4], size: 0.25 },
+  ]);
 });
