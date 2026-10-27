@@ -39,7 +39,11 @@ test('slotView picks frame by selection and icon by item texture', async () => {
   assert.deepEqual(slotView(set, 'hoe', false), { frame: 'slot', icon: 'hoe' });
   assert.deepEqual(slotView(set, null, false), { frame: 'slot', icon: null });
   assert.deepEqual(slotView(set, 'no_such_item', true), { frame: 'slot_selected', icon: null });
-  for (const [w, h] of [[0, 0], [100, 50], [1920, 1080]]) assert.ok(Number.isInteger(hudScale(w, h)) && hudScale(w, h) >= 1);
+  const { interfaceScale } = await import('../uipx.js');
+  for (const [w, h] of [[0, 0], [100, 50], [390, 844], [1366, 768], [1920, 1080], [3440, 1440]]) {
+    assert.ok(Number.isInteger(hudScale(w, h)) && hudScale(w, h) >= 1);
+    assert.equal(hudScale(w, h), interfaceScale(w, h));
+  }
 });
 
 test('digitNames splits a number into digit textures', async () => {
