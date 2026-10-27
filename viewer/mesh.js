@@ -53,13 +53,15 @@ export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.ro
  * Meshing context: names, colours and biomes from the legend() JSON, plus
  * `faceLayer`, the texture layer of every block face (see faceLayers). The
  * page owns the texture array, so it builds the table and hands it over.
+ * `variants` (see variantTable) lets grass tops and cross plants pick one of
+ * several tiles per block; without it every block uses its base layer.
  */
-export function legendContext(json, faceLayer = null) {
+export function legendContext(json, faceLayer = null, variants = null) {
   const legend = JSON.parse(json);
   const COLORS = [], NAMES = [], BIOMES = [];
   for (const b of legend.blocks) { COLORS[b.id] = b.color; NAMES[b.id] = b.name; }
   for (const b of legend.biomes) BIOMES[b.id] = b;
-  return { legend, COLORS, NAMES, BIOMES, faceLayer };
+  return { legend, COLORS, NAMES, BIOMES, faceLayer, variants };
 }
 
 /**
@@ -74,6 +76,21 @@ export function faceLayers(tileFor) {
     t[o] = tileFor(b, 1, !!k); t[o + 1] = tileFor(b, 0, !!k); t[o + 2] = tileFor(b, -1, !!k);
   }
   return t;
+}
+/**
+ * Per-layer variant table from the page's layer names and tilelist's VARIANTS:
+ * { [base layer]: { count, cum } }, `cum` the cumulative weights (last is 1).
+ * Variant i of a base lives at layer base + i (the tile list keeps runs contiguous).
+ */
+export function variantTable(layerNames, variants) {
+  const out = {};
+  for (const [base, { count, weights }] of Object.entries(variants)) {
+    const layer = layerNames.indexOf(base);
+    if (layer < 0) continue;
+    let sum = 0;
+    out[layer] = { count, cum: weights.map((w) => (sum += w)) };
+  }
+  return out;
 }
 const layerOf = (ctx, b, dy, fast = false) => ctx.faceLayer[(fast ? 768 : 0) + b * 3 + (dy > 0 ? 0 : dy < 0 ? 2 : 1)];
 
@@ -224,11 +241,22 @@ function faceUV(f, [a, b, c], v) {
 const VARIES = flags([B.grass, B.sand, B.gravel, B.stone, B.snow_layer]);
 // Variant 0-7 from the world coordinate alone (an integer hash), so it
 // doesn't depend on the chunk, pad or area being meshed.
-function variantAt(x, y, z) {
-  let h = Math.imul(x, 0x27d4eb2d) ^ Math.imul(y, 0x165667b1) ^ Math.imul(z, 0x9e3779b1);
+function hashAt(x, y, z, salt) {
+  let h = Math.imul(x, 0x27d4eb2d) ^ Math.imul(y, 0x165667b1) ^ Math.imul(z, 0x9e3779b1) ^ salt;
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
-  return (h ^ (h >>> 16)) & 7;
+  return h ^ (h >>> 16);
+}
+const variantAt = (x, y, z) => hashAt(x, y, z, 0) & 7;
+// `layer` moved to its tile variant, picked by the world coordinate alone with
+// a salt of its own (independent of variantAt). Layers without variants stay.
+function pickLayer(ctx, layer, x, y, z) {
+  const v = ctx.variants?.[layer];
+  if (!v) return layer;
+  const r = (hashAt(x, y, z, 0x5bd1e995) >>> 8) / 0x1000000;
+  let i = 0;
+  while (i < v.count - 1 && r >= v.cum[i]) i++;
+  return layer + i;
 }
 
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
@@ -350,7 +378,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       const vr = VARIES[b] ? variantAt(origin[0] + x, y, origin[1] + z) : 0;
       if (CROSS[b]) {
         // two crossed quads, wound both ways so they show from either side
-        const layer = layerOf(ctx, b, 0), k = 0.9 * (0.75 + y / 256);
+        const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, y, origin[1] + z), k = 0.9 * (0.75 + y / 256);
         for (const q of [X1, X2]) {
           const t = typeof tint === 'function' ? q.map((v) => tint(Math.round(v[0]), Math.round(v[2]))) : tint;
           const flip = (a) => [a[1], a[0], a[3], a[2]];
@@ -362,7 +390,8 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       for (const f of FACES) {
         if (y === y0 && f.d[1] < 0) continue;
         const n = at(x + f.d[0], y + f.d[1], z + f.d[2]);
-        const layer = layerOf(ctx, b, f.d[1], fast);
+        let layer = layerOf(ctx, b, f.d[1], fast);
+        if (b === B.grass && f.d[1] > 0) layer = pickLayer(ctx, layer, origin[0] + x, y, origin[1] + z);
         if (b === B.water) {
           // water: only next to air, plants or leaves (not water, ice or solids)
           if (n === B.water || n === B.ice || SOLID_N[n]) continue;

@@ -16,12 +16,13 @@
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, * as game from './pkg/game_web.js';
-import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
+import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, variantTable, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
 import { raftBoxes, raftMatrix, RAFT_TEXTURES } from './raftmodel.js';
-import { loadTiles, ANIM_FIRST, ANIM_END } from './tiles.js';
+import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
+import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
 import { mountHud } from './hud.js';
@@ -323,7 +324,7 @@ const names = [];
 const legendJson = terrain.legend();
 for (const b of JSON.parse(legendJson).blocks) names[b.id] = b.name;
 const faceLayer = await loadTiles(gl, B, names, '../viewer/textures.json');
-const ctx = legendContext(legendJson, faceLayer);
+const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIANTS));
 // Textured-model drawer (modelgl.js); nothing is drawn with it yet. Without the
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
