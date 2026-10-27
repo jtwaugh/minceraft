@@ -183,6 +183,7 @@
 </main>
 <details id="dev"><summary>stats</summary><dl id="devgrid"></dl></details>
 <script type="module">
+import { REQUIRED, NAMES as SHARED, TINTED, VARIANTS } from './tilelist.js';
 import init, * as wasm from './pkg/terrain_web.js';
 import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
@@ -761,20 +762,9 @@ function useProg(p) {
 // (art batches 13-14) are optional: a missing one falls back to a stand-in
 // built here (legend colours, ribs, plant silhouettes), so an older
 // textures.json still loads.
-const TILES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel',
-  'water_0', 'water_1', 'water_2', 'water_3',
-  'water_flow_0', 'water_flow_1', 'water_flow_2', 'water_flow_3',
-  'sun_sky', 'log_side', 'log_top', 'leaves'];
-const BIOME_TILES = ['birch_log_side', 'birch_log_top', 'spruce_log_side', 'spruce_log_top',
-  'ice', 'snow', 'cactus_side', 'cactus_top', 'pumpkin_side', 'pumpkin_top',
-  'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose', 'sugar_cane',
-  'brown_mushroom', 'red_mushroom'];
-// Greyscale-and-tint pixels (palette greens) for climate-tinted tiles.
-const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89',
-  water_0: 'abe', water_1: 'abe', water_2: 'abe', water_3: 'abe',
-  water_flow_0: 'abe', water_flow_1: 'abe', water_flow_2: 'abe', water_flow_3: 'abe' };
-// leaves_fast: the leaves tile with its holes filled, for fast leaves.
-const LAYER_NAMES = [...TILES, ...BIOME_TILES, 'leaves_fast'];
+const TILES = [...REQUIRED, 'sun_sky'];
+const BIOME_TILES = SHARED.filter((n) => !REQUIRED.includes(n));
+const LAYER_NAMES = [...SHARED, 'sun_sky'];
 const T = Object.fromEntries(LAYER_NAMES.map((n, i) => [n, i]));
 const ANIM_FIRST = T.water_0, ANIM_END = T.water_flow_3 + 1;
 
@@ -874,6 +864,8 @@ async function loadTextures() {
   // (no discard) and its mipmaps keep the tint marker alpha throughout.
   const leaf = make.leaves;
   make.leaves_fast = (x, y) => { const p = leaf(x, y); return p[3] ? p : [96, 96, 96, 255, true]; };
+  // Variants missing from an older textures.json draw as their base tile.
+  for (const [base, { count }] of Object.entries(VARIANTS)) for (let i = 1; i < count; i++) make[`${base}_${i}`] ??= make[base];
   const layers = LAYER_NAMES.map((n) => make[n]);
   // Fish model faces: one layer each, drawn at native size in the top-left
   // corner. The rest of the layer repeats the edge pixels so mipmaps
