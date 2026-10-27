@@ -256,3 +256,86 @@ fn ineligible_entry_does_not_change_single_entry_output() {
         assert!(a == b || *b == Block::Rose as u8, "{i}");
     }
 }
+
+/// A two-block plant that grows on every plains and forest grass column.
+static TALL: [Flora; 1] = [Flora {
+    name: "t",
+    block: Block::TallGrassDoubleLower,
+    upper: Some(Block::TallGrassDoubleUpper),
+    shape: FloraShape::TallCross,
+    ground: &[Block::Grass],
+    tint: FloraTint::Grass,
+    cluster_scale: 8.0,
+    salt: 31,
+    biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
+}];
+
+#[test]
+fn tall_plants_are_never_a_lone_half() {
+    let (lo, up) = (
+        Block::TallGrassDoubleLower as u8,
+        Block::TallGrassDoubleUpper as u8,
+    );
+    let mut pairs = 0;
+    for seed in [12345u64, 9] {
+        let r = gen(seed, 0, 0, 96, 96, &TALL);
+        for z in 0..96 {
+            for x in 0..96 {
+                for y in 0..HEIGHT {
+                    let b = at(&r, x, y, z);
+                    if b == lo {
+                        assert!(y + 1 < HEIGHT && at(&r, x, y + 1, z) == up, "{x},{y},{z}");
+                        pairs += 1;
+                    } else if b == up {
+                        assert!(y > 0 && at(&r, x, y - 1, z) == lo, "{x},{y},{z}");
+                    }
+                }
+            }
+        }
+    }
+    assert!(pairs > 100, "only {pairs} plants");
+}
+
+#[test]
+fn tall_plants_are_independent_of_region() {
+    let big = gen(12345, -64, -64, 192, 192, &TALL);
+    assert!(count(&big, Block::TallGrassDoubleLower) > 0);
+    for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63), (60, -50, 33, 33)] {
+        let small = gen(12345, ox, oz, w, d, &TALL);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&small, x, y, z), at(&big, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn no_flora_where_a_trunk_or_beta_plant_occupies_the_air_cell() {
+    let plain = gen(12345, 0, 0, 96, 96, &[]);
+    let with = gen(12345, 0, 0, 96, 96, &TALL);
+    let mut checked = 0;
+    for z in 0..96 {
+        for x in 0..96 {
+            for y in 1..HEIGHT - 1 {
+                let below = at(&plain, x, y - 1, z);
+                let cell = at(&plain, x, y, z);
+                let occupied = cell == Block::OakLog as u8
+                    || cell == Block::BirchLog as u8
+                    || cell == Block::SpruceLog as u8
+                    || cell == Block::TallGrass as u8
+                    || cell == Block::Fern as u8
+                    || cell == Block::Dandelion as u8
+                    || cell == Block::Rose as u8;
+                if below == Block::Grass as u8 && occupied {
+                    checked += 1;
+                    assert_eq!(at(&with, x, y, z), cell, "{x},{y},{z}");
+                    assert_eq!(at(&with, x, y + 1, z), at(&plain, x, y + 1, z));
+                }
+            }
+        }
+    }
+    assert!(checked > 50, "only {checked} occupied cells");
+}

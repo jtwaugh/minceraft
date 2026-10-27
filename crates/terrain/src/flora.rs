@@ -59,7 +59,7 @@ fn colour_noise(seed: u64) -> OctavePerlin {
     OctavePerlin::new(&mut Rng::new(key), 2)
 }
 
-/// Place single-block flora (`cross`, `ground_cover`, `bush`) over the
+/// Place flora (`cross`, `tall_cross`, `ground_cover`, `bush`) over the
 /// columns `[x0, x1) x [z0, z1)`. Each column reads only itself, the seed and
 /// the noise, and writes only into air, so the result is independent of the
 /// region and the cell RNG is untouched. Returns blocks placed per entry.
@@ -84,7 +84,10 @@ pub(crate) fn place(
             for (i, f) in table.iter().enumerate() {
                 if !matches!(
                     f.shape,
-                    FloraShape::Cross | FloraShape::GroundCover | FloraShape::Bush
+                    FloraShape::Cross
+                        | FloraShape::TallCross
+                        | FloraShape::GroundCover
+                        | FloraShape::Bush
                 ) || !f.ground.contains(&ground)
                 {
                     continue;
@@ -115,14 +118,34 @@ pub(crate) fn place(
             let f = &table[i];
             let n = noises[i].sample2d(x as f64 / f.cluster_scale, z as f64 / f.cluster_scale);
             let patch = (n * 0.5 + 0.5).clamp(0.0, 1.0) * 2.0;
-            if hash_f64(seed, x, z, 0, f.salt as u64) < chance * patch
-                && world.set(x, top, z, f.block as u8)
-            {
-                placed[i] += 1;
+            if hash_f64(seed, x, z, 0, f.salt as u64) < chance * patch {
+                let ok = match (f.shape, f.upper) {
+                    (FloraShape::TallCross, Some(upper)) => place_tall(world, x, top, z, f, upper),
+                    (FloraShape::TallCross, None) => false,
+                    _ => world.set(x, top, z, f.block as u8),
+                };
+                placed[i] += ok as u64;
             }
         }
     }
     placed
+}
+
+/// Place both halves of a two-block plant, only if the cell above the lower
+/// one is inside the world. `surface` has already found the lower cell open;
+/// every cell above the highest solid block is air. Never leaves a lone half.
+fn place_tall(world: &mut World, x: i32, y: i32, z: i32, f: &Flora, upper: Block) -> bool {
+    if y + 1 >= HEIGHT as i32 {
+        return false;
+    }
+    if !world.set(x, y + 1, z, upper as u8) {
+        return false;
+    }
+    if world.set(x, y, z, f.block as u8) {
+        return true;
+    }
+    world.set(x, y + 1, z, AIR);
+    false
 }
 
 /// Height of the air cell above a column's highest solid block, if the cell
