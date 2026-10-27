@@ -770,7 +770,9 @@ const BIOME_TILES = ['birch_log_side', 'birch_log_top', 'spruce_log_side', 'spru
   'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose', 'sugar_cane',
   'brown_mushroom', 'red_mushroom'];
 // Greyscale-and-tint pixels (palette greens) for climate-tinted tiles.
-const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89' };
+const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89',
+  water_0: 'abe', water_1: 'abe', water_2: 'abe', water_3: 'abe',
+  water_flow_0: 'abe', water_flow_1: 'abe', water_flow_2: 'abe', water_flow_3: 'abe' };
 // leaves_fast: the leaves tile with its holes filled, for fast leaves.
 const LAYER_NAMES = [...TILES, ...BIOME_TILES, 'leaves_fast'];
 const T = Object.fromEntries(LAYER_NAMES.map((n, i) => [n, i]));

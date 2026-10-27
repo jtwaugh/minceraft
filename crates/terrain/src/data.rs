@@ -66,6 +66,8 @@ pub struct BiomeInfo {
     pub leaf_ramp: [[u8; 3]; 3],
     /// Three stops, by temperature.
     pub sky_ramp: [[u8; 3]; 3],
+    /// Three stops, by humidity; tints the water tile.
+    pub water_ramp: [[u8; 3]; 3],
     pub creatures: &'static [(&'static str, u32)],
     pub monsters: &'static [(&'static str, u32)],
     pub water_creatures: &'static [(&'static str, u32)],
