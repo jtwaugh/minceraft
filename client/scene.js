@@ -25,6 +25,7 @@ import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.j
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
+import { SWAY_AMPLITUDE, SWAY_WAVE, swayPhase } from './sway.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
@@ -96,12 +97,16 @@ function program(cut) {
     uniform vec3 offset;
     uniform vec3 eye; uniform vec2 plantFade; // start, range (blocks)
     uniform float waterFrame;
+    uniform float swayPhase; // swayPhase in sway.js
     out vec3 vuv; out float vshade; out float vdist; out vec3 vtint; out vec3 vdir;
     void main() {
       vec3 w = pos * unpack.x + offset;
       ${cut ? `// mirrors plantScale in plantfade.js: top vertices sink one block to the base
       float s = 1.0 - clamp((distance(w, eye) - plantFade.x) / plantFade.y, 0.0, 1.0);
-      w.y -= top * (1.0 - s);` : ''}
+      w.y -= top * (1.0 - s);
+      // mirrors swayOffset in sway.js: tops move sideways, bases stay put
+      float k = ${SWAY_WAVE.toFixed(3)};
+      w.xz += ${SWAY_AMPLITUDE.toFixed(3)} * top * vec2(sin(swayPhase + (w.x + 0.6 * w.z) * k), cos(swayPhase + (w.z - 0.6 * w.x) * k));` : ''}
       gl_Position = mvp * vec4(w, 1.0);
       bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
@@ -528,7 +533,7 @@ function render(now) {
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
-    if (prog === cutProg) { gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); }
+    if (prog === cutProg) { gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); gl.uniform1f(prog.u('swayPhase'), swayPhase(now, reducedMotion.matches)); }
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
