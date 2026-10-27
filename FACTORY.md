@@ -311,8 +311,10 @@ Workflows fail, get cancelled, or run twice. The planner creates its
 and only then the tickets; the next run sees the marker and doesn't plan
 the same phase again. For a plan in the store, ticket progress is the
 store's ticket states and the plan closes when they are all done; for older
-plans it lives in GitHub's sub-issues, not a hand-maintained checklist. The mechanical parts are plain scripts, not
-agents, so they behave the same every time: choosing what to plan
+plans it lives in GitHub's sub-issues, not a hand-maintained checklist.
+
+The mechanical parts are plain scripts, not agents, so they behave the same
+every time: choosing what to plan
 ([`plan_targets.py`](.github/scripts/plan_targets.py)), attaching tickets
 to their plan ([`attach_subissues.py`](.github/scripts/attach_subissues.py)),
 and deciding which tickets are unblocked
