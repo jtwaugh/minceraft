@@ -29,7 +29,7 @@ const CLASSES = {
     'regions.loaded', 'regions.freed', 'regions.pending', 'regions.x', 'regions.z',
     'console.lines', 'cheated', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
-    'underwater', 'held', 'items', 'field.ground', 'field.crop', 'flower.block',
+    'underwater', 'held', 'held.drawn', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt',
     'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction',
