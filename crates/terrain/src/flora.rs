@@ -76,6 +76,8 @@ mod tests {
             name: "x".into(),
             block: names(&["daisy"]),
             ground: names(&["grass"]),
+            shape: "cross".into(),
+            tint: "none".into(),
             salt: 1,
             biomes: vec![("Plains".into(), 0.5)],
         }
@@ -106,6 +108,18 @@ mod tests {
             e.biomes = vec![("Plains".into(), bad)];
             assert!(check(&[e]).unwrap_err().contains("outside 0..=1"));
         }
+        let mut e = entry();
+        e.shape = "tree".into();
+        assert!(check(&[e]).unwrap_err().contains("bad shape"));
+        let mut e = entry();
+        e.tint = "blue".into();
+        assert!(check(&[e]).unwrap_err().contains("bad shape"));
+        let mut e = entry();
+        e.shape = "tall_cross".into();
+        assert!(check(&[e]).unwrap_err().contains("needs 2"));
+        let mut e = entry();
+        e.block = names(&["daisy", "daisy"]);
+        assert!(check(&[e]).unwrap_err().contains("needs 1"));
         let (mut a, mut b) = (entry(), entry());
         a.name = "a".into();
         b.name = "b".into();

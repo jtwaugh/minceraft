@@ -80,6 +80,8 @@ fn gen_flora(blocks: &[String], biomes: &[String]) {
             name: f["name"].as_str().expect("flora name").to_string(),
             block: strings(&f["block"]),
             ground: strings(&f["ground"]),
+            shape: f["shape"].as_str().expect("flora shape").to_string(),
+            tint: f["tint"].as_str().expect("flora tint").to_string(),
             salt: int(f, "salt"),
             biomes: f["biomes"]
                 .as_table()
@@ -116,9 +118,9 @@ fn gen_flora(blocks: &[String], biomes: &[String]) {
             "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, biomes: &[{}] }},",
             r.name,
             blk(&r.block[0]),
-            camel(f["shape"].as_str().unwrap()),
+            camel(&r.shape),
             ground.join(", "),
-            camel(f["tint"].as_str().unwrap()),
+            camel(&r.tint),
             num(&f["cluster_scale"]),
             r.salt,
             chances.join(", ")

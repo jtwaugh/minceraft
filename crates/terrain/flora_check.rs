@@ -7,15 +7,30 @@ pub struct RawFlora {
     /// One block name, or lower and upper for a two-block plant.
     pub block: Vec<String>,
     pub ground: Vec<String>,
+    pub shape: String,
+    pub tint: String,
     pub salt: i64,
     pub biomes: Vec<(String, f64)>,
 }
+
+const SHAPES: [&str; 5] = ["cross", "tall_cross", "ground_cover", "pad", "bush"];
+const TINTS: [&str; 4] = ["none", "grass", "leaf", "dry"];
 
 /// Returns the first problem in `entries` as a readable message.
 pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> Result<(), String> {
     let mut salts: Vec<(i64, &str)> = Vec::new();
     for e in entries {
         let n = &e.name;
+        let want = if e.shape == "tall_cross" { 2 } else { 1 };
+        if e.block.len() != want {
+            return Err(format!("flora {n}: {} needs {want} block(s)", e.shape));
+        }
+        if !SHAPES.contains(&e.shape.as_str()) || !TINTS.contains(&e.tint.as_str()) {
+            return Err(format!(
+                "flora {n}: bad shape {:?} or tint {:?}",
+                e.shape, e.tint
+            ));
+        }
         for b in e.block.iter().chain(&e.ground) {
             if !blocks.contains(b) {
                 return Err(format!("flora {n}: unknown block {b:?}"));
