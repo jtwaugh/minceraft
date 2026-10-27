@@ -17,6 +17,8 @@
 //   readAnimals(walk) -> [{ id, species, pos, facing, size, hurt, dying }]
 //     pos     centre of the bottom face; facing in degrees (0 looks along -z);
 //     size    [width, height] of the box
+//   readItems(walk) -> [{ id, name, pos, size }]
+//     pos     centre of the item's box; size the box's edge length
 //   spawnTestAnimals(walk, kinds) puts animals on the raft scene's islet
 //   faceAnimal(walk, look) -> [dx, dy] mouse movement that turns `look` ({ yaw, pitch })
 //     to the first animal's middle
@@ -82,6 +84,14 @@ export function readAnimals(walk) {
   return species.map((name, i) => {
     const [id, x, y, z, facing, w, h, hurt, dying] = rows.slice(i * 9, i * 9 + 9);
     return { id, species: name, pos: [x, y, z], facing, size: [w, h], hurt: hurt === 1, dying: dying === 1 };
+  });
+}
+
+export function readItems(walk) {
+  const rows = Array.from(walk.items()), names = walk.item_names();
+  return names.map((name, i) => {
+    const [id, x, y, z, size] = rows.slice(i * 5, i * 5 + 5);
+    return { id, name, pos: [x, y, z], size };
   });
 }
 
