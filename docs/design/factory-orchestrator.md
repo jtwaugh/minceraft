@@ -298,9 +298,9 @@ The tick leaves a Blocked PR alone while the maintainer is working on it: a main
 > **Reconciler:** blocked on open question 1. A hosted store is `[external]`.
 > The `factory-state` branch needs a branch-protection exemption for the
 > tick's identity, since `master` is protected; a separate branch is fine.
-> Migration: the store starts with the next plan. Plans and tickets already
-> in flight when Phase B lands finish under the old rules and are not
-> imported. (Decided in #1111.)
+> Migration: the store starts with the next plan; plans and tickets already
+> in flight finish under the old rules and are not imported. (Decided in
+> #1111.)
 
 **Phase C: Structured agent results.** Agent runs return JSON against a schema per role (implementer first, then reviewer, planner, docs updater, reconciler, spec editor), through `claude -p` with an output schema or the Agent SDK. A fix run's result includes `needs_maintainer: {kind, question, options}` when it stops, and the tick writes the question issue from it. Done when `expect.py` and the comment and verdict regexes are deleted.
 
