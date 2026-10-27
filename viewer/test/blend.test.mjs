@@ -17,6 +17,7 @@ for (const R of [0, 7]) {
       const ia = (z + 8) * size + x + 8, ib = z * size + x;
       assert.deepEqual(a.grass[ia], b.grass[ib]);
       assert.deepEqual(a.leaf[ia], b.leaf[ib]);
+      assert.deepEqual(a.dry[ia], b.dry[ib]);
     }
   });
 }
