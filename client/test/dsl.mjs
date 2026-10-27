@@ -28,6 +28,7 @@
 //   respawn                     the death screen's respawn button: controller.respawn() (nothing while alive)
 //   frame <ms> [xN]             run N frames of ms each (default 1)
 //   spawn animal <kind>         put a cow, pig or chicken on the raft scene's islet
+//   spawn item <name>           drop a loose item a block east of the player (any scene)
 //   face animal                 turn to look at the first animal (a mousemove)
 //   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
@@ -291,7 +292,12 @@ function step(w, { op, args }) {
       return;
     }
     case 'spawn': {
-      if (args[0] !== 'animal' || !args[1]) throw new Error('spawn animal <kind>');
+      if (args[0] === 'item' && args[1]) {
+        const [x, y, z] = w.walk.feet();
+        w.walk.spawn_item(args[1], x + 1, y + 0.2, z);
+        return;
+      }
+      if (args[0] !== 'animal' || !args[1]) throw new Error('spawn animal <kind> | spawn item <name>');
       spawnTestAnimals(w.walk, [args[1]]);
       return;
     }

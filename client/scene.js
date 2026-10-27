@@ -21,7 +21,7 @@ import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
 import { raftBoxes, raftMatrix, RAFT_TEXTURES } from './raftmodel.js';
-import { ITEM_TEXTURES } from './itemmodel.js';
+import { ITEM_TEXTURES, itemBoxes, itemDraws } from './itemmodel.js';
 import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
@@ -30,7 +30,7 @@ import { SWAY_AMPLITUDE, SWAY_WAVE, swayPhase } from './sway.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
-import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals } from './overlay.js';
+import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { padRegion } from './regionpad.js';
@@ -239,6 +239,14 @@ function drawAnimals(mvp, animals) {
     const m = animalModels[a.species] ??= models.addModel(animalBoxes(a.species));
     const { model, tint } = animalPose(a);
     models.drawModel(mvp, model, m, tint);
+  }
+}
+
+// Loose items as camera-facing icon slabs, one model per item name.
+const itemModels = {};
+function drawItems(mvp, items, timeSeconds, camera) {
+  for (const { key, model } of itemDraws(items, timeSeconds, camera)) {
+    models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)));
   }
 }
 
@@ -556,6 +564,7 @@ function render(now) {
   gl.depthMask(true);
   gl.bindVertexArray(null);
   if (scene) drawAnimals(mvp, readAnimals(walk));
+  drawItems(mvp, readItems(walk), now / 1000, { yaw });
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
   inventoryView.update(controller.state.inventory, controller.state.belt);
   deathView.update(controller.state.dead);

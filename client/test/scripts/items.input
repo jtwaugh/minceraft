@@ -1,0 +1,14 @@
+# Loose items (docs/design/held-and-world-items.md Phase A). scene.js draws
+# every item `items` counts, in the raft scene and the streamed one alike.
+
+case a spawned item adds to the raft scene's items
+start walk raft
+expect items = 3
+spawn item seeds
+expect items = 4
+
+case a spawned item shows in a streamed world
+start walk stream
+expect items = 0
+spawn item seeds
+expect items = 1
