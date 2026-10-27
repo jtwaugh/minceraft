@@ -43,7 +43,7 @@ def render(store):
     tickets = {}
     for n in sorted(states):
         state = states[n]
-        open_deps = [d for d in deps.get(n, []) if states.get(d) != "done"]
+        open_deps = [d for d in deps.get(n, []) if states.get(d) not in ("merged", "done")]
         waits = state in ("proposed", "approved", "waiting") and open_deps
         tickets[str(n)] = {
             "state": state,
