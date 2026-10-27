@@ -122,7 +122,7 @@ function boxSum(src, n, r) {
 
 /**
  * Per-column climate tints for a size x size area at world (wx, wz): grass
- * and leaf ramps by humidity, box-blurred over a (2R+1)-wide window so they
+ * leaf and water ramps by humidity, box-blurred over a (2R+1)-wide window so they
  * don't jump at biome borders. `R` defaults to the legend's blend radius.
  * `wasm` needs biome_map, humidity_map and temperature_map.
  *
@@ -131,7 +131,7 @@ function boxSum(src, n, r) {
  * Columns within one of the area are exact; the outermost ring is not.
  *
  * And `corners`: the tint of each of the (size + 1)^2 block corners, the mean
- * of the 4 columns that meet there (`grass` and `leaf`, Float32Array, 3 per
+ * of the 4 columns that meet there (`grass`, `leaf` and `water`, Float32Array, 3 per
  * corner, row z * (size + 1) + x). Edge corners use the padded ring, so
  * areas side by side agree on the corners they share.
  */
@@ -141,26 +141,27 @@ export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.
   const hum = wasm.humidity_map(seed, wx - pad, wz - pad, n, n);
   const tmp = wasm.temperature_map(seed, wx, wz, size, size);
   const bio = new Uint8Array(size * size);
-  const rawG = new Float64Array(n * n * 3), rawL = new Float64Array(n * n * 3);
+  const rawG = new Float64Array(n * n * 3), rawL = new Float64Array(n * n * 3), rawW = new Float64Array(n * n * 3);
   // Whole quarter-steps of 0-255 when blurring, so the sums are exact.
   const q = R > 0 ? (v) => Math.round(v * 4) : (v) => v / 255;
   for (let c = 0; c < n * n; c++) {
     const bi = ctx.BIOMES[bigBio[c]];
-    const g = ramp3(bi.grass, hum[c]), l = ramp3(bi.leaf, hum[c]);
-    for (let k = 0; k < 3; k++) { rawG[c * 3 + k] = q(g[k]); rawL[c * 3 + k] = q(l[k]); }
+    const g = ramp3(bi.grass, hum[c]), l = ramp3(bi.leaf, hum[c]), w = ramp3(bi.water, hum[c]);
+    for (let k = 0; k < 3; k++) { rawG[c * 3 + k] = q(g[k]); rawL[c * 3 + k] = q(l[k]); rawW[c * 3 + k] = q(w[k]); }
   }
-  let padG = rawG, padL = rawL;
+  let padG = rawG, padL = rawL, padW = rawW;
   if (R > 0) {
     const area = (2 * R + 1) * (2 * R + 1), scale = 4 * 255 * area;
     const norm = (a) => Float32Array.from(boxSum(a, n, R), (v) => v / scale);
-    padG = norm(rawG); padL = norm(rawL);
+    padG = norm(rawG); padL = norm(rawL); padW = norm(rawW);
   }
-  const grass = [], leaf = [];
+  const grass = [], leaf = [], water = [];
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     const p = ((z + pad) * n + x + pad) * 3;
     bio[z * size + x] = bigBio[(z + pad) * n + x + pad];
     grass.push([padG[p], padG[p + 1], padG[p + 2]]);
     leaf.push([padL[p], padL[p + 1], padL[p + 2]]);
+    water.push([padW[p], padW[p + 1], padW[p + 2]]);
   }
   const cn = size + 1;
   const corner = (a) => {
@@ -173,17 +174,18 @@ export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.
   };
   const mid = (size >> 1) * size + (size >> 1);
   return {
-    corners: { n: cn, grass: corner(padG), leaf: corner(padL) },
-    grass, leaf, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] },
-    padded: { pad, n, grass: padG, leaf: padL },
+    corners: { n: cn, grass: corner(padG), leaf: corner(padL), water: corner(padW) },
+    grass, leaf, water, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] },
+    padded: { pad, n, grass: padG, leaf: padL, water: padW },
   };
 }
 
 const WHITE = [1, 1, 1];
-function tintFor(ctx, b, grass, leaf) {
+function tintFor(ctx, b, grass, leaf, water) {
   switch (b) {
     case B.grass: case B.tall_grass: return grass;
     case B.fern: return grass.map((v) => v * 0.88);
+    case B.water: return water ?? WHITE;
     case B.oak_leaves: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
@@ -339,11 +341,11 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
     for (let y = y0; y < H; y++) {
       const b = blocks[base + y];
       if (b === B.air) continue;
-      const flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c]);
+      const flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c], tints.water?.[c]);
       // Per-vertex tint by corner offset (0 or 1), for blocks that have one.
       const tint = flat === WHITE || !tints.corners ? flat : (ox, oz) => {
-        const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf;
-        return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]]);
+        const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf, w = tints.corners.water;
+        return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]], w && [w[k], w[k + 1], w[k + 2]]);
       };
       const vr = VARIES[b] ? variantAt(origin[0] + x, y, origin[1] + z) : 0;
       if (CROSS[b]) {

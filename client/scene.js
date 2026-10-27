@@ -7,6 +7,7 @@
 //   ?scene=raft  the Phase 3 test scene: a flat sea, a raft rocking on the scripted swell,
 //                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
+//   ?blend=R     biome colour blend radius, 0 to 7 (default: the legend's)
 //   ?plants=D    plant draw distance in blocks (default 48)
 //   ?debug=1     debug mode on (also on whenever ?scene= is set); see debug.js
 //   ?log=N      console.log the frame-time summary every N frames, for headless runs
@@ -38,6 +39,7 @@ import { SKY_GLSL } from '../viewer/sky.js';
 import { WATER_GLSL } from '../viewer/water.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
+import { parseBlend } from './blend.js';
 import { sceneById } from './scenes.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
@@ -50,6 +52,7 @@ const seed = BigInt(qs.get('seed') ?? 12345);
 const flying = qs.get('mode') === 'fly';
 const raftScene = sceneById(qs.get('scene'))?.id === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
+const blendRadius = parseBlend(qs.get('blend')); // undefined: the legend default
 const logEvery = +(qs.get('log') ?? 0);
 const debug = debugEnabled(location.search); // ?debug=1 or any ?scene=; console keys are gated on it
 window.debugMode = debug;
@@ -359,7 +362,7 @@ function meshRegion({ rx, rz }, remesh = false) {
   const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
   // one column of the neighbours' edges around the region, so no seams at its borders
   const blocks = padRegion((a, b) => walk.region_blocks(a, b), rx, rz, REGION_SIZE);
-  const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE);
+  const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE, blendRadius);
   if (rx === 0 && rz === 0 && !skyReady) skyColor = skyTarget = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
   const m = meshBlocks(ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });
   const parts = {};
@@ -390,7 +393,7 @@ function freeRegion({ rx, rz }) {
 let remeshFarm = () => {};
 if (scene) {
   const { min, size } = scene;
-  const tints = columnTints(terrain, ctx, seed, min, min, size);
+  const tints = columnTints(terrain, ctx, seed, min, min, size, blendRadius);
   skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
   const offset = [min, 0, min];
   const seaBlocks = scene.sea_blocks();

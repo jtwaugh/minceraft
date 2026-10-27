@@ -54,3 +54,16 @@ test('adjacent areas meshed separately agree on shared edge corners', () => {
 test('blocks with no tint stay white', () => {
   for (const [, ts] of vertexTints(mesh(B.sand, 100, -60).opaque, [100, -60])) assert.ok(ts.every((t) => t === '255,255,255'));
 });
+
+// Water is meshed in its own part and tinted like grass, by its corners.
+test('water quads carry the water tint of their corners and adjacent areas agree', () => {
+  const a = vertexTints(mesh(B.water, 100, -60).water, [100, -60]);
+  const b = vertexTints(mesh(B.water, 108, -60).water, [108, -60]);
+  assert.ok(new Set([...a.values()].map((t) => t[0])).size > 1, 'water tints do not vary');
+  assert.ok([...a.values()].every((ts) => ts.every((t) => t === ts[0]) && t0(ts) !== '255,255,255'));
+  for (let z = -60; z <= -52; z++) assert.deepEqual(a.get(`108,${z}`), b.get(`108,${z}`).slice(0, a.get(`108,${z}`).length), `z = ${z}`);
+  const t = columnTints(wasm, ctx, SEED, 100, -60, 8), k = 0;
+  const w = [...t.corners.water.slice(k, k + 3)].map((v) => Math.round(v * 255)).join(',');
+  assert.equal(a.get('100,-60')[0], w);
+});
+const t0 = (ts) => ts[0];

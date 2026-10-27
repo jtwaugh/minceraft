@@ -329,6 +329,11 @@ Give scripted runs generous timeouts (see the previous section).
   `buildPath` (`clearance`, `cruise`, pitch clamps, aim window).
 - **The framing bar:** `MIN_VIEW` in `planData`, and `featureCoverage`'s
   `far` and `frac`.
+- **Biome colour blending:** flyover chunks blend tints over a radius of
+  2 (`FLYOVER_BLEND` in `player.js`), not the legend's 3 (a 5x5 window
+  instead of 7x7). The camera is far from the ground, so the smaller window
+  is hard to tell apart and cheaper to compute. Every flyover chunk uses
+  the same radius, so neighbours meet without a seam.
 - **Streaming:** `OPENING`, `LOOKAHEAD` and `BEHIND` in `player.js`, and
   `VIEW` in `plan.js`. `VIEW` must match the renderer, so `FLY_FOG` in
   `index.html` is derived from it.
