@@ -1,0 +1,9 @@
+# Idle motion of loose items in the world (docs/design/held-and-world-items.md
+# section 2). Items are flat sprites that face the camera and only bob. These
+# numbers are this game's own, tuned to feel right; client/itemmodel.js mirrors
+# them and client/test/itemmodel.test.mjs checks the two agree.
+
+# Bobs per second.
+bob_speed = 0.5
+# Peak distance above and below the resting position, in item box edges.
+bob_amplitude = 0.15
