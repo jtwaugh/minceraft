@@ -9,14 +9,14 @@
 //   mountInventory(document, set, parent, view) -> { update(open, model) }
 
 import { inventoryModel } from './inventory.js';
-import { textureCanvas, textureSize, uiScale } from './uipx.js';
+import { textureCanvas, textureSize, interfaceScale } from './uipx.js';
 
 const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
 export const PANEL_TEXELS = 4;
 
 /** Pixel scale: whole multiples of a 100x60 texel layout that fits the viewport. */
 export function inventoryScale(viewportW, viewportH) {
-  return uiScale(viewportW, viewportH, 100, 60);
+  return interfaceScale(viewportW, viewportH);
 }
 
 export function itemLabel(name) {

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { menuModel, menuDebug, PANEL, SEA_TILE } from '../menu.js';
+import { hudScale } from '../hud.js';
+import { menuModel, menuScale, menuDebug, PANEL, SEA_TILE } from '../menu.js';
 import { SCENES } from '../scenes.js';
 
 test('menu links are relative and cover every scene', () => {
@@ -35,4 +36,13 @@ test('panel and sea tiles exist in the tileset with the expected sizes', async (
   const set = JSON.parse(await readFile(new URL('../../viewer/textures.json', import.meta.url)));
   for (const name of PANEL.flat()) assert.deepEqual(textureSize(set, name), { w: 4, h: 4 }, name);
   assert.deepEqual(textureSize(set, SEA_TILE), { w: 8, h: 8 });
+});
+
+test('menuScale follows hudScale and never overflows the 160x120 layout', () => {
+  for (const [w, h] of [[390, 844], [1366, 768], [1920, 1080], [3440, 1440]]) {
+    const s = menuScale(w, h);
+    assert.ok(s <= hudScale(w, h));
+    assert.ok(160 * s <= w && 120 * s <= h, `${w}x${h} -> ${s}`);
+  }
+  assert.equal(menuScale(3440, 1440), 12);
 });

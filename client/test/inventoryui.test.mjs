@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { hudScale } from '../hud.js';
 import { inventoryScale, itemLabel, panelSize } from '../inventoryui.js';
 
 test('inventoryScale is an integer >= 1 for any viewport', () => {
@@ -7,7 +8,7 @@ test('inventoryScale is an integer >= 1 for any viewport', () => {
     const s = inventoryScale(w, h);
     assert.ok(Number.isInteger(s) && s >= 1, `${w}x${h} -> ${s}`);
   }
-  assert.equal(inventoryScale(1920, 1080), 18);
+  assert.equal(inventoryScale(1920, 1080), 16);
   assert.equal(inventoryScale(1920, 300), 5);
 });
 
@@ -19,4 +20,8 @@ test('itemLabel turns names into display text', () => {
 
 test('panelSize adds padding around and between slots', () => {
   assert.deepEqual(panelSize(5, 10, 10, 3), { w: 68, h: 16 });
+});
+
+test('inventoryScale agrees with hudScale at the standard sizes', () => {
+  for (const [w, h] of [[390, 844], [1366, 768], [1920, 1080], [3440, 1440]]) assert.equal(inventoryScale(w, h), hudScale(w, h));
 });
