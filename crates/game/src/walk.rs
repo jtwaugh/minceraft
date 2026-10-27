@@ -701,6 +701,16 @@ impl Walker {
             self.events.push(GameEvent::PlayerDied {
                 cause: "fall".to_string(),
             });
+            if let Some(held) = self.state.hands.take() {
+                Self::drop_loose(
+                    &mut self.items,
+                    &mut self.events,
+                    held.item,
+                    self.player.pos,
+                    [0.0; 3],
+                    "death",
+                );
+            }
         }
         let after = self.movement_state();
         Self::emit_movement(&mut self.events, before, after);
@@ -3510,6 +3520,82 @@ mod tests {
             .unwrap();
         assert!(landed < died[0].0);
         assert!(w.dead());
+    }
+
+    fn die_holding(item: Option<&str>) -> (Walker, Vec<GameEvent>) {
+        let mut w = fatal_fall();
+        w.state.hands = item.map(|i| ItemInstance { item: i.into() });
+        let mut seen = Vec::new();
+        for _ in 0..200 {
+            w.tick(&TickInput::default());
+            seen.extend(w.drain_events());
+        }
+        assert!(w.dead());
+        (w, seen)
+    }
+
+    #[test]
+    fn dying_drops_the_carried_item_at_the_death_position() {
+        let (w, seen) = die_holding(Some("seeds"));
+        let died = seen
+            .iter()
+            .position(|e| matches!(e, GameEvent::PlayerDied { .. }))
+            .unwrap();
+        let [GameEvent::ItemDropped {
+            item,
+            position,
+            source,
+        }] = &seen[died + 1..]
+        else {
+            panic!("expected one ItemDropped right after PlayerDied: {seen:?}");
+        };
+        assert_eq!((item.as_str(), source.as_str()), ("seeds", "death"));
+        assert_eq!(*position, w.player().pos);
+        assert!(w.hands().is_none());
+        let loose: Vec<_> = w.items().iter().collect();
+        assert_eq!(loose.len(), 1);
+        assert_eq!(loose[0].item, seeds());
+        assert!(loose[0].velocity.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn dying_with_empty_hands_drops_nothing() {
+        let (w, seen) = die_holding(None);
+        assert!(!seen
+            .iter()
+            .any(|e| matches!(e, GameEvent::ItemDropped { .. })));
+        assert!(w.items().is_empty());
+    }
+
+    #[test]
+    fn dying_leaves_the_belt_alone() {
+        let belt = fatal_fall().player_state().tool_belt.clone();
+        let (w, _) = die_holding(Some("seeds"));
+        assert_eq!(w.player_state().tool_belt, belt);
+    }
+
+    #[test]
+    fn respawning_does_not_return_the_item_and_it_can_be_picked_up() {
+        let (mut w, _) = die_holding(Some("seeds"));
+        w.respawn().unwrap();
+        assert!(w.hands().is_none());
+        assert_eq!(w.items().len(), 1);
+        w.teleport([1.8, 4.0, 0.5]);
+        for _ in 0..20 {
+            w.tick(&TickInput::default());
+        }
+        let e = w.items().iter().next().unwrap().clone();
+        let eye = w.eye(1.0);
+        let d = [0, 1, 2].map(|i| e.pos[i] - eye[i]);
+        let flat = (d[0] * d[0] + d[2] * d[2]).sqrt();
+        w.tick(&TickInput {
+            interact: true,
+            yaw: d[0].atan2(-d[2]) as f32,
+            pitch: d[1].atan2(flat) as f32,
+            ..TickInput::default()
+        });
+        assert_eq!(w.hands(), Some(&seeds()));
+        assert!(w.items().is_empty());
     }
 
     #[test]
