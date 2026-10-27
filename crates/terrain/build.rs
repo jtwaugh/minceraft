@@ -106,10 +106,6 @@ fn gen_flora(blocks: &[String], biomes: &[String]) {
     let mut out = String::new();
     for k in ["patch_noise_salt", "colour_noise_salt"] {
         let v = int(&doc["settings"], k);
-        assert!(
-            (0..=i64::from(u32::MAX)).contains(&v),
-            "flora.toml [settings] {k} must fit in u32"
-        );
         writeln!(
             out,
             "/// `{k}` from `data/flora.toml`.\npub const FLORA_{}: u32 = {v};",

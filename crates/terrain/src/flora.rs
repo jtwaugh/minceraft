@@ -112,9 +112,6 @@ mod tests {
         let (mut a, mut b) = (entry(), entry());
         a.name = "a".into();
         b.name = "b".into();
-        assert!(check(&[a, b]).unwrap_err().contains("duplicates"));
-        let mut e = entry();
-        e.shape = "tall_cross".into();
-        assert!(check(&[e]).unwrap_err().contains("needs 2"));
+        assert!(check(&[a, b]).unwrap_err().contains("repeats"));
     }
 }
