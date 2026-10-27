@@ -42,10 +42,13 @@ Nothing in phases A to F is built yet. What exists and is relied on:
 - Phase A is done: A.1, A.3 and A.5 in PRs #208 and #210 (`client/samplers.js`, plant top flag and fade); A.2 and A.4 arrived through `viewer-rendering.md` Phase B (`viewer/mips.js` `buildMips`, used by `client/tiles.js`; coverage-preserving alpha, `fwidth` alpha sharpening and cutoff 0.5 in `client/scene.js`). Plan #203's tickets #206 and #207 closed via #208 and #210.
 - Phase B is done (plan #1028): `[blend] radius` and legend (PR #1042), blurred column tints (PR #1043), per-vertex corner tints (PR #1045), client `blend` setting and flyover radius (PR #1047), sky and fog easing toward the player (PR #1048), biome water tint ramp (PR #1049). The `[manual check]` item for Phase B remains for the maintainer.
 - Phase C is done (plan #1052): variant art (PR #1061), shared tile list and `VARIANTS` (`viewer/tilelist.js`, PR #1062), texture variants in the mesher (PR #1063), plant offset (PR #1064), plant mirror, height, brightness and dark base (PR #1065), wind sway for plants and leaves (`client/sway.js`, PRs #1067 and #1068, as decided in #1053). C.1 came from `viewer-rendering.md` Phase B. The `[manual check]` items for Phase C remain for the maintainer.
+- Phase D is mostly built (plan #1070): block ids (PR #1092), art (PRs #1090, #1091), cross and tall cross mesher shapes (PR #1095), `dry_ramp` (PR #1094), `ground_cover` (PR #1093), `bush` (PR #1099), `data/flora.toml` and loader (PR #1096), column-local placement pass (PR #1100), winner noise (PR #1103), two-block tall plants (PR #1104), first set and `stats` per biome (PR #1105). One item is missing, so Phase D stays `todo` (see Reconciliation notes).
 - Art for the existing plants is in `art/batches_13_14.json`. None of the
   new tiles listed in C.2, D.5 or E exist.
 
 ## Reconciliation notes
+
+- **Phase D still incomplete (plan #1070).** D.5 (as decided in #1073) asks for a Taiga `fern_double` (`tall_cross`, lower and upper tiles). `data/flora.toml` has the single-block `fern` in Taiga, but no `fern_double` entry, block ids or art exist, and plan #1070 had no ticket for it. Suggest one follow-up ticket: `fern_double_lower`/`fern_double_upper` blocks, art, and a Taiga entry in `data/flora.toml`. Everything else in D is built.
 
 - **Phase A done (plan #203).** A.2 and A.4 were built under `viewer-rendering.md` Phase B (now `done`) as #205 decided: `client/tiles.js` calls `buildMips` from `viewer/mips.js` and `client/scene.js` sharpens alpha with `fwidth`. The `[manual check]` items for Phase A remain for the maintainer.
 
