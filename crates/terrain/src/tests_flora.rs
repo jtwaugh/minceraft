@@ -171,3 +171,88 @@ fn flora_density_varies_between_noise_cells() {
     let dense = ratios.iter().filter(|&&r| r > 0.85).count();
     assert!(sparse >= 1 && dense >= 1, "{sparse} sparse, {dense} dense");
 }
+
+/// Two equal-chance entries that compete on grass in plains and forest.
+static RIVALS: [Flora; 2] = [
+    Flora {
+        name: "r1",
+        block: Block::Daisy,
+        upper: None,
+        shape: FloraShape::Cross,
+        ground: &[Block::Grass],
+        tint: FloraTint::None,
+        cluster_scale: 8.0,
+        salt: 21,
+        biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
+    },
+    Flora {
+        name: "r2",
+        block: Block::Rose,
+        upper: None,
+        shape: FloraShape::Cross,
+        ground: &[Block::Grass],
+        tint: FloraTint::None,
+        cluster_scale: 8.0,
+        salt: 22,
+        biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
+    },
+];
+
+fn flower_at(r: &Region, x: i32, z: i32) -> Option<u8> {
+    (0..HEIGHT)
+        .map(|y| at(r, x, y, z))
+        .find(|&b| b == Block::Daisy as u8 || b == Block::Rose as u8)
+}
+
+#[test]
+fn competing_entries_form_drifts() {
+    // Every eligible column is flowered, so each holds the winning entry.
+    // Independent equal rolls would agree between neighbours half the time;
+    // the winner noise must push that well above 75%.
+    let (mut same, mut pairs) = (0, 0);
+    for seed in [12345u64, 9, 42, 7] {
+        let r = gen(seed, 0, 0, 64, 64, &RIVALS);
+        for z in 0..63 {
+            for x in 0..63 {
+                let Some(a) = flower_at(&r, x, z) else {
+                    continue;
+                };
+                for (nx, nz) in [(x + 1, z), (x, z + 1)] {
+                    if let Some(b) = flower_at(&r, nx, nz) {
+                        pairs += 1;
+                        same += (a == b) as usize;
+                    }
+                }
+            }
+        }
+    }
+    assert!(pairs >= 300, "only {pairs} flowered pairs");
+    assert!(same * 4 > pairs * 3, "{same} of {pairs} neighbours agree");
+}
+
+#[test]
+fn competing_entries_are_independent_of_region() {
+    let big = gen(12345, -64, -64, 192, 192, &RIVALS);
+    assert!(count(&big, Block::Daisy) > 0 && count(&big, Block::Rose) > 0);
+    for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63), (60, -50, 33, 33)] {
+        let small = gen(12345, ox, oz, w, d, &RIVALS);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&small, x, y, z), at(&big, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ineligible_entry_does_not_change_single_entry_output() {
+    // `b` in TEST grows only in desert and taiga, so in plains and forest
+    // the lone `a` behaves exactly as without it.
+    let alone = gen(12345, -64, -64, 160, 160, &TEST[..1]);
+    let both = gen(12345, -64, -64, 160, 160, &TEST);
+    for (i, (a, b)) in alone.blocks.iter().zip(&both.blocks).enumerate() {
+        assert!(a == b || *b == Block::Rose as u8, "{i}");
+    }
+}

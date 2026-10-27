@@ -97,6 +97,8 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
         let v = int(&doc["settings"], k);
         writeln!(out, "pub const FLORA_{}: u32 = {v};", k.to_uppercase()).unwrap();
     }
+    let scale = num(&doc["settings"]["colour_scale"]);
+    writeln!(out, "pub const FLORA_COLOUR_SCALE: f64 = {scale:?};").unwrap();
     writeln!(out, "pub static FLORA: [Flora; {}] = [", raw.len()).unwrap();
     for (f, r) in list.iter().zip(&raw) {
         let ground: Vec<String> = r.ground.iter().map(blk).collect();
