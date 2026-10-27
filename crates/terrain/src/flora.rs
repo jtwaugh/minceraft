@@ -132,9 +132,10 @@ pub(crate) fn place(
 }
 
 /// Place both halves of a two-block plant, only if the cell above the lower
-/// one is air and inside the world. Never leaves a lone half.
+/// one is inside the world. `surface` has already found the lower cell open;
+/// every cell above the highest solid block is air. Never leaves a lone half.
 fn place_tall(world: &mut World, x: i32, y: i32, z: i32, f: &Flora, upper: Block) -> bool {
-    if y + 1 >= HEIGHT as i32 || world.get(x, y + 1, z) != AIR {
+    if y + 1 >= HEIGHT as i32 {
         return false;
     }
     if !world.set(x, y + 1, z, upper as u8) {
