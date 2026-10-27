@@ -37,8 +37,8 @@ To keep branches from conflicting, a ticket also waits while an open pull
 request edits a file the ticket expects to change: the backticked file names
 in its body (the planner's **Files:** line, or "Likely files: `walk.rs`").
 Files every feature touches (lib.rs, mod.rs, Cargo.toml, Cargo.lock) don't
-count; conflicts there are trivial and resolved after each merge
-(resolve-conflicts.yml). When that pull request merges, the next factory
+count; conflicts there are trivial and resolved by the tick's
+Blocked-fix pass (claude-fix.yml). When that pull request merges, the next factory
 tick starts the ticket.
 
 A ticket labelled `local` is never started: label it before working on it in

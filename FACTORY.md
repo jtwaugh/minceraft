@@ -103,8 +103,8 @@ decides what should happen next (decision 14).
    latest commit, or the maintainer overrode its block with a reason.
    Two open PRs for one ticket are never merged automatically; the tick
    reports them. When a PR closes a ticket, any other open PR for it is
-   turned into a draft and labelled `superseded`, and the conflict
-   resolver leaves it alone.
+   turned into a draft and labelled `superseded`, and the Blocked-fix
+   pass leaves it alone.
 9. **Next phase.** When a phase's last ticket closes, the tick closes the
    plan and the docs updater opens a PR marking the phase done. Merging that PR
    changes the doc, which starts the planner on the next phase.
@@ -378,7 +378,7 @@ maintainer.
 | Skip the agent review of a trivial PR | Comment `/override <reason>` before it reviews |
 | Allow a PR over 200 lines | Add the `oversize-ok` label |
 | Measure a branch like CI does | `python3 .github/scripts/pr_size.py origin/master HEAD` |
-| Bring a stuck PR up to date | Click "Update branch", or comment `@claude merge master into this branch and resolve the conflicts` |
+| Bring a stuck PR up to date | `gh workflow run claude-fix.yml -f pr=<n> -f task="merge master into this branch and resolve the conflicts"` |
 | See what's waiting | The project board, or `gh issue list -l planned` |
 | See what's stuck | The "Factory: stalled work" issue |
 | See whether the factory is running, when it stopped and why | `python3 .github/scripts/factory_health.py` (exit 0 healthy, 1 failing, 2 not ticking; `--repro` runs a dry tick locally). A failing tick also opens a "Factory: tick is failing" issue assigned to the maintainer, closed by the next good tick |
