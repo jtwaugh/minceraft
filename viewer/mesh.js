@@ -248,6 +248,13 @@ function hashAt(x, y, z, salt) {
   return h ^ (h >>> 16);
 }
 const variantAt = (x, y, z) => hashAt(x, y, z, 0) & 7;
+// Cross-plant shift in x and z, in whole 1/16s from -2 to 2 (salted apart from
+// the variant hash). The quads' vertices quantise to 2/16 and 14/16, so this
+// is the widest range that keeps them inside their column.
+const plantOffset = (x, y, z) => {
+  const h = hashAt(x, y, z, 0x2c1b3c6d);
+  return [((h >>> 4) % 5 - 2) / 16, ((h >>> 12) % 5 - 2) / 16];
+};
 // `layer` moved to its tile variant, picked by the world coordinate alone with
 // a salt of its own (independent of variantAt). Layers without variants stay.
 function pickLayer(ctx, layer, x, y, z) {
@@ -379,11 +386,12 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       if (CROSS[b]) {
         // two crossed quads, wound both ways so they show from either side
         const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, y, origin[1] + z), k = 0.9 * (0.75 + y / 256);
+        const [dx, dz] = plantOffset(origin[0] + x, y, origin[1] + z);
         for (const q of [X1, X2]) {
           const t = typeof tint === 'function' ? q.map((v) => tint(Math.round(v[0]), Math.round(v[2]))) : tint;
           const flip = (a) => [a[1], a[0], a[3], a[2]];
-          out[3].quad(x, y, z, q, XUV, layer, k, t, XTOP);
-          out[3].quad(x, y, z, flip(q), flip(XUV), layer, k, Array.isArray(t[0]) ? flip(t) : t, flip(XTOP));
+          out[3].quad(x + dx, y, z + dz, q, XUV, layer, k, t, XTOP);
+          out[3].quad(x + dx, y, z + dz, flip(q), flip(XUV), layer, k, Array.isArray(t[0]) ? flip(t) : t, flip(XTOP));
         }
         continue;
       }
