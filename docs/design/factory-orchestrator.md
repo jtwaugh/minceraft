@@ -303,6 +303,11 @@ The tick leaves a Blocked PR alone while the maintainer is working on it: a main
 > Migration: the store starts with the next plan; plans and tickets already
 > in flight finish under the old rules and are not imported. (Decided in
 > #1111.)
+>
+> File leases (section 3) are built in Phase B: the store has a `files` list
+> per ticket and a lease table, and the ready pass reads leases, plus the
+> files of open PRs, instead of the predicted-files regex. (Decided in
+> #1120.)
 
 **Phase C: Structured agent results.** Agent runs return JSON against a schema per role (implementer first, then reviewer, planner, docs updater, reconciler, spec editor), through `claude -p` with an output schema or the Agent SDK. A fix run's result includes `needs_maintainer: {kind, question, options}` when it stops, and the tick writes the question issue from it. Done when `expect.py` and the comment and verdict regexes are deleted.
 
