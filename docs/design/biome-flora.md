@@ -336,6 +336,10 @@ and after per CLAUDE.md.
    cross-cell order, needs no margin, and never changes a block placed by
    a Beta pass. It also doesn't consume the cell RNG, so Beta features
    stay where they are for every seed.
+
+   Snow runs after flora and replaces flora of shape `cross` and
+   `tall_cross`; `ground_cover`, `bush` and `frost_grass` stay.
+   (Decided in #1072.)
 3. **Mesher shapes.** `tall_cross` (two stacked cross quads with lower and
    upper tiles), `ground_cover` (one tinted cutout quad lying 1/16 above the
    block below, up-facing), `pad` (the same, on a water surface),
@@ -380,7 +384,7 @@ Same framework; mostly data and art.
   clustered by the colour noise.
 - **Desert:** `cactus_flower` (small cross on top of a cactus's top block).
 - **Tundra and Ice Desert:** `frost_grass`, sparse short tufts, pale tint;
-  survives under snow layers (open question 4).
+  stays when snow falls (see D.2).
 - **Coast** (any warm biome, sand at y 62 to 66 within 3 blocks of
   water): `dune_grass`, tall and dry-tinted. There's no beach biome, so
   this is a column condition, not a biome; it gives every island a fringe
@@ -397,10 +401,6 @@ shapes leave room for it.
 
 ## Open questions
 
-4. **Snow and flora.** The snow pass (SPEC 13) runs after flora.
-   A. Snow skips columns with flora (plants poke through bare ground).
-   B. Snow replaces flora, except `frost_grass`, which stays under or
-   beside the snow layer.
 6. **Plant draw distance in the flyover.** Plants beyond about 80 blocks
    add faces without adding much.
    A. Don't mesh cross plants in `fast` chunks.
