@@ -3,7 +3,7 @@
 use crate::climate::biome_for;
 use crate::data::{Biome, Block};
 use crate::decorate::generate_decorated_with;
-use crate::flora::{Flora, FloraShape, FloraTint};
+use crate::flora::{Flora, FloraShape, FloraTint, FLORA};
 use crate::{Biases, Generator, Region, HEIGHT};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -46,12 +46,67 @@ fn count(r: &Region, b: Block) -> usize {
 }
 
 #[test]
-fn shipped_table_adds_only_daisies_to_empty_table_output() {
+fn shipped_table_adds_only_flora_blocks_to_empty_table_output() {
     for seed in [12345u64, 9, 42] {
-        let today = crate::generate_decorated(seed, -50, 30, 120, 90);
-        let r = gen(seed, -50, 30, 120, 90, &[]);
+        let today = gen(seed, -50, 30, 120, 90, &[]);
+        let r = crate::generate_decorated(seed, -50, 30, 120, 90);
+        let mut added = 0;
         for (a, b) in r.blocks.iter().zip(&today.blocks) {
-            assert!(a == b || (*a == Block::Air as u8 && *b == Block::Daisy as u8));
+            if a != b {
+                // Snow runs after flora, so a plant can replace a snow layer.
+                assert!(*b == Block::Air as u8 || *b == Block::SnowLayer as u8);
+                assert!(FLORA
+                    .iter()
+                    .any(|f| { f.block as u8 == *a || f.upper.is_some_and(|u| u as u8 == *a) }));
+                added += 1;
+            }
+        }
+        assert!(added > 0, "seed {seed}");
+    }
+}
+
+#[test]
+fn shipped_entries_stay_in_their_biomes() {
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-200, -200, 400, 400);
+        let base = gen(seed, x0, z0, w, d, &[]);
+        let with = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                let (t, h) = g.climate.at(x, z, &[], &[]);
+                let biome = biome_for(t, h);
+                for y in 1..HEIGHT {
+                    let (a, b) = (at(&base, x, y, z), at(&with, x, y, z));
+                    if a == b {
+                        continue;
+                    }
+                    let f = FLORA
+                        .iter()
+                        .find(|f| f.block as u8 == b || f.upper.is_some_and(|u| u as u8 == b))
+                        .unwrap();
+                    assert!(
+                        f.biomes.iter().any(|e| e.0 == biome),
+                        "{} in {biome:?} at {x},{z}",
+                        f.name
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn shipped_table_is_independent_of_region() {
+    let big = gen(12345, -128, -128, 256, 256, &FLORA);
+    for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63), (60, -50, 33, 33)] {
+        let small = gen(12345, ox, oz, w, d, &FLORA);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&small, x, y, z), at(&big, x, y, z), "{x},{y},{z}");
+                }
+            }
         }
     }
 }

@@ -105,9 +105,14 @@ fn main() {
     // ---- trees per chunk per biome over a 2048 x 2048 decorated area ----
     let t = Instant::now();
     let mut stats = DecorationStats::default();
+    let flora_blocks: Vec<(&str, u8)> = flora::FLORA
+        .iter()
+        .map(|f| (f.name, f.block as u8))
+        .collect();
+    let mut flora_counts = vec![[0u64; Biome::COUNT]; flora_blocks.len()];
     for tz in 0..4 {
         for tx in 0..4 {
-            let (_, s) = generate_decorated_with_stats(
+            let (reg, s) = generate_decorated_with_stats(
                 seed,
                 x0 + tx * 512,
                 z0 + tz * 512,
@@ -115,6 +120,14 @@ fn main() {
                 512,
                 &Biases::default(),
             );
+            for (i, &b) in reg.blocks.iter().enumerate() {
+                if let Some(f) = flora_blocks.iter().position(|e| e.1 == b) {
+                    let col = i / HEIGHT;
+                    let (x, z) = (col as i32 % 512, col as i32 / 512);
+                    let (tt, hh) = climate.raw(x0 + tx * 512 + x, z0 + tz * 512 + z);
+                    flora_counts[f][biome_for(tt, hh) as usize] += 1;
+                }
+            }
             for b in 0..Biome::COUNT {
                 let (a, c) = (&mut stats.biomes[b], s.biomes[b]);
                 a.columns += c.columns;
@@ -148,6 +161,18 @@ fn main() {
             s.plants as f64 * per,
             100.0 * s.snow as f64 / s.columns as f64
         );
+    }
+
+    println!("flora blocks per biome over 2048x2048 (lower half of tall plants; fern also counts Beta's):");
+    for (f, (name, _)) in flora_blocks.iter().enumerate() {
+        print!("  {name:<18}");
+        for b in Biome::ALL {
+            let c = flora_counts[f][b as usize];
+            if c > 0 {
+                print!(" {}={}", b.name(), c);
+            }
+        }
+        println!();
     }
 
     if let Some(path) = out {
