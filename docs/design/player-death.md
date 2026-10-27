@@ -14,6 +14,7 @@ phases:
 
 - Phase A is done: the dead flag, `PlayerDied` / `PlayerRespawned` events, the `respawn` command and the replay state landed in #841, #875, #881 and #897 (plan #817); `crates/game/tests/death.rs` covers death, respawn and replay.
 - Phase B is done: `Walk.dead()` (#936), the death mode in `client/input.js` and `controller.js` with `client/test/scripts/death.input` (#939), `controller.respawn()` (#950) and the death screen panel `client/deathui.js` with a respawn button, mounted in `scene.js` (#951); plan #918. Layout is the Open question 1 default (title and one respawn button). The "like Minecraft's" look stays a `[manual check]`.
+- Phase C is partly done: the hands item is dropped at the death position as an item entity with `ItemDropped` source `"death"` (#1022, plan #999; `crates/game/src/walk.rs`, `crates/game/tests/death.rs`). The other Phase C answers (#955, #957, #958, #959) are the Phase A/B defaults and need no code. The belt part is not built; see Reconciliation note 13.
 > **Reconciler:** the bullets from "Player health exists" down to "Replays" were written before Phase A. Phases A and B added the dead flag, `PlayerDied` / `PlayerRespawned`, a `respawn` command, replay state and the death screen (first two bullets), so "nothing reads a 0 health" and "no death event" no longer hold. Phase C is still unbuilt: no `"death"` source for `ItemDropped` exists in `crates/game`, so items are still kept on death.
 
 - Player health exists: `crates/game/src/player.rs` has `Player.health` (starts at `physics.max_health`, 20) and fall damage saturates it at 0 (`update_fall`, tested by `drop_from(100.0, &w).health == 0`). Nothing reads a 0 health: no dead flag, no event, input still drives the player.
@@ -41,6 +42,8 @@ phases:
 10. **Client tests.** Input scripts need new DSL support to force health to 0 (for example a `set health 0` line, or a scene where the player starts above a long drop and walks off). Extend `client/test/dsl.mjs` rather than using screenshots, as CLAUDE.md requires.
 11. **`[manual check]`**: "like Minecraft's" is a visual judgment. Measurable version: the death screen shows exactly the elements decided in Open question 1 (listed by id in the DOM model), a respawn control, and nothing else.
 12. **Invariants.** Nothing here needs a dependency or std in `crates/terrain`; all work is in `crates/game`, `crates/game-web` and `client/`. Report wasm size changes in PRs.
+
+13. **Phase C is incomplete: belt tools are not dropped.** The doc (decided in #1000, `/decide B`) says the belt's tools drop as loose items and the belt is empty after respawn until they are picked up. #1022 left the belt untouched, and tools are still not item entities (`crates/game/src/item_entities.rs` holds only `ItemInstance`), with no way to put a picked-up tool back on the belt. Plan #999 opened no ticket for this. Suggest the planner plans it: tools as pickable item entities, re-equipping onto the belt, then dropping the belt on death and leaving it empty after `Walker::respawn`.
 
 ## Player death and death screen
 
