@@ -119,3 +119,58 @@ test('plant shape is the same from different origins', () => {
   }
   assert.ok(shared > 50);
 });
+
+// Two-block plants: lower at y 60, upper at y 61, per world column.
+function stalks(size, origin, lower, upper) {
+  const blocks = meadow(size);
+  for (let c = 0; c < size * size; c++) { blocks[c * H + 60] = lower; blocks[c * H + 61] = upper; }
+  const m = meshBlocks(ctx, blocks, tints(size), size, 0, { origin });
+  const dv = new DataView(m.cutout.verts), out = new Map();
+  for (let i = 0; i < m.cutout.faces * 4; i += 4) {
+    const q = i * VERTEX_BYTES;
+    const cx = Math.floor((dv.getInt16(q, true) + dv.getInt16(q + VERTEX_BYTES, true)) / 32);
+    const cz = Math.floor((dv.getInt16(q + 4, true) + dv.getInt16(q + VERTEX_BYTES + 4, true)) / 32);
+    const key = `${cx + origin[0]},${cz + origin[1]}`;
+    const s = out.get(key) ?? { lo: [], hi: [] };
+    const yb = Math.min(...[0, 1, 2, 3].map((j) => dv.getInt16(q + j * VERTEX_BYTES + 2, true)));
+    const vs = [0, 1, 2, 3].map((j) => {
+      const o = q + j * VERTEX_BYTES;
+      return [dv.getInt16(o, true) - cx * 16, dv.getInt16(o + 4, true) - cz * 16, dv.getUint8(o + 6), dv.getUint8(o + 10)];
+    });
+    (yb >= 61 * 16 ? s.hi : s.lo).push(vs);
+    out.set(key, s);
+  }
+  return out;
+}
+
+const names = Object.fromEntries(Object.entries(B).map(([k, v]) => [v, k]));
+for (const [lower, upper] of [[B.tall_grass_double_lower, B.tall_grass_double_upper], [B.dry_grass_tall_lower, B.dry_grass_tall_upper]]) {
+  test(`${names[upper]} matches the offset, mirror and brightness of ${names[lower]}`, () => {
+    const s = stalks(16, [0, 0], lower, upper);
+    for (const v of s.values()) {
+      assert.equal(v.lo.length, 4);
+      assert.equal(v.hi.length, 4);
+      assert.deepEqual(v.hi, v.lo);
+    }
+  });
+
+  test(`${names[upper]} is the same from different origins`, () => {
+    const a = stalks(16, [0, 0], lower, upper), b = stalks(16, [5, -3], lower, upper);
+    let shared = 0;
+    for (const [k, v] of b) {
+      const w = a.get(k);
+      if (!w) continue;
+      shared++;
+      assert.deepEqual(v, w);
+    }
+    assert.ok(shared > 50);
+  });
+}
+
+test('flowers and tall plants keep every vertex inside the column', () => {
+  for (const [lower, upper] of [[B.daisy, B.bluebell], [B.tall_grass_double_lower, B.tall_grass_double_upper], [B.dry_grass, B.dry_grass_tall_upper]]) {
+    for (const v of stalks(16, [0, 0], lower, upper).values()) {
+      for (const q of [...v.lo, ...v.hi]) for (const [x, z] of q) assert.ok(x >= 0 && x <= 16 && z >= 0 && z <= 16);
+    }
+  }
+});
