@@ -50,7 +50,6 @@ with its own instructions and its own narrow set of allowed tools.
 | Spec editor | [`claude-spec.yml`](.github/workflows/claude-spec.yml) | The maintainer comments `/decide <option>` on a question | Records the answer in the spec or doc it's about | Add facts about the original game; touch any other file |
 | Implementer | [`claude.yml`](.github/workflows/claude.yml) | The factory tick starts a `factory` ticket whose dependencies are closed and whose files no open PR is editing; `@claude` in a comment | Writes the code and tests, runs every check, opens a PR | Edit SPEC.md, design docs or workflows; rebase or force-push |
 | Reviewer | [`claude-review.yml`](.github/workflows/claude-review.yml) | A PR opens or changes | Reviews it against the spec, the rules in CLAUDE.md, and determinism; a re-review checks its earlier points and the new commits only. Its verdict is the `review-verdict` check ([`review-gate.yml`](.github/workflows/review-gate.yml)) | Approve, merge, or override its own block |
-| Conflict resolver | [`resolve-conflicts.yml`](.github/workflows/resolve-conflicts.yml) | A PR merges | Merges `master` into each `claude/` PR that now conflicts, keeping both sides, and runs the checks; stops and says so when a conflict needs a decision | Touch PRs not opened by the factory |
 | Docs updater | [`claude-docs.yml`](.github/workflows/claude-docs.yml) | The tick asks for a closed plan's phase-done PR; every Monday | Marks finished phases done; re-checks docs against the code | Change anything but design docs |
 
 Plus two that are not agents: [`ci.yml`](.github/workflows/ci.yml), plain
@@ -384,7 +383,6 @@ maintainer.
 | See what's stuck | The "Factory: stalled work" issue |
 | See whether the factory is running, when it stopped and why | `python3 .github/scripts/factory_health.py` (exit 0 healthy, 1 failing, 2 not ticking; `--repro` runs a dry tick locally). A failing tick also opens a "Factory: tick is failing" issue assigned to the maintainer, closed by the next good tick |
 | Run a tick by hand | `gh workflow run factory-tick.yml` (add `-f dry-run=true` to only print what it would do) |
-| Resolve conflicts on one PR | `gh workflow run resolve-conflicts.yml -f pr=<n>` |
 | See what waits on you | The `needs-you` label (filter the board, issues or PRs by `label:needs-you`), and the "Factory: needs you" issue, which gives each item's reason, most-blocking first. The tick keeps both current |
 
 ## Map of the files
@@ -415,7 +413,6 @@ docs/design/                    design docs (README.md: format and lifecycle)
   review-gate.yml               review-verdict status (verdicts, /override)
   pr-size.yml                   PR size check
   factory-tick.yml              the factory tick
-  resolve-conflicts.yml         conflict resolver
   claude-docs.yml               docs updater
 ```
 
