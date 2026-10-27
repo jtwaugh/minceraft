@@ -27,7 +27,7 @@ fn main() {
     let radius = int(&biomes["blend"], "radius");
     assert!((0..=7).contains(&radius), "[blend] radius must be 0 to 7");
     json.push_str(
-        "],\"ramps\":{\"grass\":\"humidity\",\"leaf\":\"humidity\",\"water\":\"humidity\",\"sky\":\"temperature\"}",
+        "],\"ramps\":{\"grass\":\"humidity\",\"leaf\":\"humidity\",\"water\":\"humidity\",\"dry\":\"humidity\",\"sky\":\"temperature\"}",
     );
     write!(json, ",\"blend\":{{\"radius\":{radius}}}}}").unwrap();
     gen_lookup(&biomes, &mut out);
@@ -240,11 +240,12 @@ fn gen_biomes(doc: &Value, blocks: &[String], out: &mut String, json: &mut Strin
             assert_eq!(a.len(), 3, "{key} needs 3 stops");
             [color(&a[0]), color(&a[1]), color(&a[2])]
         };
-        let (g, l, s, wr) = (
+        let (g, l, s, wr, dr) = (
             ramp("grass_ramp"),
             ramp("leaf_ramp"),
             ramp("sky_ramp"),
             ramp("water_ramp"),
+            ramp("dry_ramp"),
         );
         let mut creatures = spawns["creatures"].as_array().unwrap().clone();
         if let Some(extra) = b.get("extra_creatures").and_then(Value::as_array) {
@@ -252,7 +253,7 @@ fn gen_biomes(doc: &Value, blocks: &[String], out: &mut String, json: &mut Strin
         }
         writeln!(
             infos,
-            "    BiomeInfo {{ name: {name:?}, map_color: {map:?}, top: {top}, filler: {filler}, tree_noise: {}, tree_bonus: {}, tree_weights: {w:?}, plants: {p}, grass_ramp: {g:?}, leaf_ramp: {l:?}, sky_ramp: {s:?}, water_ramp: {wr:?}, creatures: {}, monsters: {}, water_creatures: {} }},",
+            "    BiomeInfo {{ name: {name:?}, map_color: {map:?}, top: {top}, filler: {filler}, tree_noise: {}, tree_bonus: {}, tree_weights: {w:?}, plants: {p}, grass_ramp: {g:?}, leaf_ramp: {l:?}, sky_ramp: {s:?}, water_ramp: {wr:?}, dry_ramp: {dr:?}, creatures: {}, monsters: {}, water_creatures: {} }},",
             b["tree_noise"].as_bool().unwrap(),
             int(b, "tree_bonus"),
             species(Some(&Value::Array(creatures))),
@@ -265,11 +266,12 @@ fn gen_biomes(doc: &Value, blocks: &[String], out: &mut String, json: &mut Strin
         }
         write!(
             json,
-            "{{\"id\":{i},\"name\":{name:?},\"map\":{map:?},\"grass\":{},\"leaf\":{},\"sky\":{},\"water\":{}}}",
+            "{{\"id\":{i},\"name\":{name:?},\"map\":{map:?},\"grass\":{},\"leaf\":{},\"sky\":{},\"water\":{},\"dry\":{}}}",
             fmt_ramp(&g),
             fmt_ramp(&l),
             fmt_ramp(&s),
-            fmt_ramp(&wr)
+            fmt_ramp(&wr),
+            fmt_ramp(&dr)
         )
         .unwrap();
         names.push(name);

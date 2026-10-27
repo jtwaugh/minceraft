@@ -67,3 +67,16 @@ test('water quads carry the water tint of their corners and adjacent areas agree
   assert.equal(a.get('100,-60')[0], w);
 });
 const t0 = (ts) => ts[0];
+
+// Dry grass takes the dry ramp, tinted per corner like grass; other blocks are unchanged.
+test('dry grass blocks carry the dry tint of their corners', () => {
+  const m = mesh(B.dry_grass, 100, -60);
+  const part = m.cutout.faces ? m.cutout : m.opaque;
+  const t = columnTints(wasm, ctx, SEED, 100, -60, 8);
+  const want = [...t.corners.dry.slice(0, 3)].map((v) => Math.round(v * 255)).join(',');
+  const grass = [...t.corners.grass.slice(0, 3)].map((v) => Math.round(v * 255)).join(',');
+  const got = vertexTints(part, [100, -60]).get('100,-60');
+  assert.ok(got && got.includes(want), `dry tint ${want} not in ${got}`);
+  assert.notEqual(want, grass);
+  assert.ok(new Set([...vertexTints(part, [100, -60]).values()].map((ts) => ts[0])).size > 1, 'dry tints do not vary');
+});

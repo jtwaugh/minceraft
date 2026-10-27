@@ -9,6 +9,7 @@
 # Ramps have three stops; the viewer interpolates between them:
 #   grass_ramp, leaf_ramp : by the column's humidity H (stop 0 = H 0, stop 2 = H 1)
 #   water_ramp            : by the column's humidity H, like grass (multiplies the water tile)
+#   dry_ramp              : by the column's humidity H, like grass (tan to straw; tints dry grass)
 #   sky_ramp              : by the column's temperature T (stop 0 = T 0, stop 2 = T 1)
 #
 # [blend] radius R (integer 0 to 7, default 3): the viewer box-blurs column
@@ -121,6 +122,7 @@ grass_ramp = ["#5fa83a", "#3fae4a", "#22a35a"]
 leaf_ramp = ["#3f9a2e", "#2a9440", "#18874c"]
 sky_ramp = ["#9cc4e8", "#86c3e6", "#6fc0e4"]
 water_ramp = ["#4fb0b8", "#3fb4a8", "#35b098"]
+dry_ramp = ["#b8a45a", "#b0a050", "#a89c48"]
 
 [[biome]]
 id = 1
@@ -136,6 +138,7 @@ grass_ramp = ["#6f7f3e", "#5f7a3c", "#4e7240"]
 leaf_ramp = ["#5a7232", "#4a6a33", "#3c6338"]
 sky_ramp = ["#a9b8b4", "#9fb5b0", "#94b2aa"]
 water_ramp = ["#5a7a5c", "#4e7a62", "#46765e"]
+dry_ramp = ["#9a9060", "#929058", "#8a8c52"]
 
 [[biome]]
 id = 2
@@ -151,6 +154,7 @@ grass_ramp = ["#9aae3c", "#86b03c", "#6faa40"]
 leaf_ramp = ["#c08a2e", "#a49a2c", "#7e9a30"]
 sky_ramp = ["#a6c6e6", "#94c2e8", "#84bde8"]
 water_ramp = ["#5a9cd0", "#4e98d2", "#4494d0"]
+dry_ramp = ["#c4aa5c", "#bca858", "#b2a452"]
 
 [[biome]]
 id = 3
@@ -166,6 +170,7 @@ grass_ramp = ["#73a43a", "#5c9e38", "#4a9a3e"]
 leaf_ramp = ["#4f8d2c", "#3f852c", "#317e33"]
 sky_ramp = ["#a3c2e4", "#8fbbe6", "#7eb4e6"]
 water_ramp = ["#58a0dc", "#4c9ade", "#4294dc"]
+dry_ramp = ["#bca85e", "#b4a65a", "#aaa254"]
 
 [[biome]]
 id = 4
@@ -181,6 +186,7 @@ grass_ramp = ["#bfae52", "#ada94c", "#98a448"]
 leaf_ramp = ["#8f9a38", "#7f9636", "#6c9136"]
 sky_ramp = ["#b9d0e6", "#a9cbe8", "#98c6ea"]
 water_ramp = ["#60a8d4", "#58a8d0", "#50a4cc"]
+dry_ramp = ["#d0b468", "#c8b264", "#beac5c"]
 
 [[biome]]
 id = 5
@@ -196,6 +202,7 @@ grass_ramp = ["#94a35a", "#82a052", "#6f9c4c"]
 leaf_ramp = ["#728f3e", "#62893c", "#53843c"]
 sky_ramp = ["#acc8e4", "#9cc2e6", "#8cbde6"]
 water_ramp = ["#5ca2d6", "#52a0d4", "#4a9cd2"]
+dry_ramp = ["#c0a864", "#b8a660", "#ae9e58"]
 
 [[biome]]
 id = 6
@@ -212,6 +219,7 @@ grass_ramp = ["#7d9a6a", "#6a9466", "#588d66"]
 leaf_ramp = ["#3f6a4c", "#33654c", "#295e4e"]
 sky_ramp = ["#c4d4e6", "#b2cbe6", "#a0c2e6"]
 water_ramp = ["#5a8cc0", "#5088c2", "#4884c0"]
+dry_ramp = ["#a8a074", "#a09c6e", "#98966a"]
 
 [[biome]]
 id = 7
@@ -227,6 +235,7 @@ grass_ramp = ["#c9b45a", "#bcb056", "#acaa52"]
 leaf_ramp = ["#a8a040", "#999c3e", "#8a983e"]
 sky_ramp = ["#d6dce4", "#c8d8e8", "#b8d2ea"]
 water_ramp = ["#62b0d8", "#58acd8", "#50a8d6"]
+dry_ramp = ["#d8bc6c", "#d0b868", "#c6b260"]
 
 [[biome]]
 id = 8
@@ -242,6 +251,7 @@ grass_ramp = ["#9cbc4c", "#88b84a", "#74b24a"]
 leaf_ramp = ["#6ea03a", "#5e9a3a", "#4f933c"]
 sky_ramp = ["#a8cdee", "#96c6ee", "#84beec"]
 water_ramp = ["#5aa4e0", "#4e9ee0", "#4498de"]
+dry_ramp = ["#c4ac60", "#bcaa5c", "#b2a456"]
 
 [[biome]]
 id = 9
@@ -257,6 +267,7 @@ grass_ramp = ["#a8b49a", "#9cb09a", "#90ac9a"]
 leaf_ramp = ["#7c9478", "#708e78", "#648878"]
 sky_ramp = ["#dfe6ee", "#d2deec", "#c4d6ea"]
 water_ramp = ["#8098b0", "#7894b0", "#7090ae"]
+dry_ramp = ["#b4aa8a", "#aca686", "#a4a282"]
 
 [[biome]]
 id = 10
@@ -272,3 +283,4 @@ grass_ramp = ["#8ea488", "#80a086", "#729a86"]
 leaf_ramp = ["#5e7e66", "#527866", "#467266"]
 sky_ramp = ["#d4dde8", "#c4d6ea", "#b4ceea"]
 water_ramp = ["#6a84a0", "#62809e", "#5a7c9c"]
+dry_ramp = ["#a8a284", "#a09e80", "#989a7c"]
