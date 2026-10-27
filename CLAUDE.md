@@ -87,9 +87,9 @@ done, superseded). When a ticket comes from a design doc:
 3. The maintainer labels tickets `factory`. The factory tick
    (`factory-tick.yml`) starts each one when its dependencies are closed
    and no open PR is editing the same files; the implementer (`claude.yml`)
-   opens a PR; CI and the reviewer (`claude-review.yml`) check it. After
-   each merge, `resolve-conflicts.yml` merges `master` into factory PRs
-   that now conflict.
+   opens a PR; CI and the reviewer (`claude-review.yml`) check it. When a
+   factory PR conflicts with `master`, the tick's Blocked-fix pass
+   dispatches `claude-fix.yml` to merge `master` into it.
 4. The maintainer answers `decision` questions with `/decide <option>`; the
    spec editor (`claude-spec.yml`) opens a PR changing only the file the
    question is about.
