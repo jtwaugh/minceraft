@@ -51,7 +51,7 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 
 - Draw what `held` is (`tool:<name>`, `item:<name>` or empty) in the lower right of the view, from the item's existing icon. Hands win over the belt, as they already do for `held`. The held item is a flat sprite: the 8x8 icon on a thin two-sided slab, like world items (`itemBoxes` in `client/itemmodel.js`), one box per item, not an extruded voxel slab. (Decided in #1186.)
 - A swing on primary and a smaller use motion on secondary, timed from sim ticks so input scripts can check them (CLAUDE.md "Testing the client"). How Beta's swing behaves comes from SPEC.md, not from this doc.
-- It bobs with the camera and doesn't clip into blocks in front of the player.
+- It doesn't clip into blocks in front of the player. Its bob with the camera waits until a camera bob doc or ticket exists; Phase C plans no bob. (Decided in #1204.)
 - An empty hand: either nothing, or a simple hand/arm drawn in `art/`.
 
 > **Reconciler:** Needs the sim animation counter (note 2) and has no Beta swing facts in SPEC.md (note 3). `[manual check]` "lower right" and "looks like a swing": a measurable version is an input-script expectation on the animation phase per tick (for example `swing = 0` before, rising over N ticks, back to 0) plus a test that the held item's model matrix at tick k matches the data curve.
@@ -78,9 +78,6 @@ Added by the reconciler:
 6. Should the animation follow the `Swing` event (any primary press with empty hands) or only a successful action?
    - A: follow the action's success, as `basic-gameplay.md` section 6 says.
    - B: follow the button press, so swinging at air animates.
-7. Should hand bob wait for camera bob?
-   - A: phase the held item after a camera bob doc or ticket exists.
-   - B: give the held item its own bob from distance walked.
 8. Should a dropped tool be drawn?
    - A: wait for `player-death.md` Phase C, where tools become item entities.
    - B: draw only `item:<name>` entities now and skip tools.
@@ -91,4 +88,4 @@ Added by the reconciler:
 
 **Phase B.** Held item (section 1, held tool or item, no empty hand). Draw the held item in the lower right from its icon, using the answer to question 1, with no swing yet. Done when an input script shows the held thing follows `held` (tool selected, carried item, empty) and a test shows it is drawn nowhere else when `held` is empty.
 
-**Phase C.** Swing, use and bob (section 1). Add the sim animation counter and `data/hands.toml` (notes 2 and 3), the primary swing, the smaller secondary use motion and the bob, plus the empty-hand art if question 3 says to draw one. Waits on open questions 5 to 7. Done when input scripts check the animation phase tick by tick through a swing and a use, and the held item's matrix follows the data curve.
+**Phase C.** Swing and use (section 1). Add the sim animation counter and `data/hands.toml` (notes 2 and 3), the primary swing and the smaller secondary use motion, plus the empty-hand art if question 3 says to draw one. No bob: it waits for a camera bob doc or ticket. Waits on open questions 5, 6 and 8. (Decided in #1204.) Done when input scripts check the animation phase tick by tick through a swing and a use, and the held item's matrix follows the data curve.
