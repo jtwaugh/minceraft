@@ -129,3 +129,52 @@ fn flora_comes_in_patches() {
     let all = count(&gen(12345, -64, -64, 192, 192, &[]), Block::Daisy);
     assert!(count(&r, Block::Daisy) > all);
 }
+
+macro_rules! plains_entry {
+    ($chance:expr) => {
+        [Flora {
+            name: "p",
+            block: Block::Daisy,
+            upper: None,
+            shape: FloraShape::Cross,
+            ground: &[Block::Grass],
+            tint: FloraTint::None,
+            cluster_scale: 8.0,
+            salt: 11,
+            biomes: &[(Biome::Plains, $chance), (Biome::Forest, $chance)],
+        }]
+    };
+}
+
+/// Daisies per 8x8 cell of `r`.
+fn daisies_per_cell(r: &Region) -> std::collections::HashMap<(i32, i32), usize> {
+    let mut cells = std::collections::HashMap::new();
+    for z in r.z0..r.z0 + r.depth as i32 {
+        for x in r.x0..r.x0 + r.width as i32 {
+            let c = cells
+                .entry((x.div_euclid(8), z.div_euclid(8)))
+                .or_insert(0usize);
+            *c += (0..HEIGHT).any(|y| at(r, x, y, z) == Block::Daisy as u8) as usize;
+        }
+    }
+    cells
+}
+
+#[test]
+fn flora_density_varies_between_noise_cells() {
+    // A huge chance fills every eligible column, so it counts them per cell;
+    // against that, a fixed chance must land at clearly different fractions
+    // in different cells, which only the patch noise can do.
+    static ALL: [Flora; 1] = plains_entry!(1e9);
+    static HALF: [Flora; 1] = plains_entry!(0.5);
+    let all = daisies_per_cell(&gen(12345, -64, -64, 192, 192, &ALL));
+    let half = daisies_per_cell(&gen(12345, -64, -64, 192, 192, &HALF));
+    let ratios: Vec<f64> = all
+        .iter()
+        .filter(|(_, &e)| e >= 32)
+        .map(|(k, &e)| half[k] as f64 / e as f64)
+        .collect();
+    let sparse = ratios.iter().filter(|&&r| r < 0.15).count();
+    let dense = ratios.iter().filter(|&&r| r > 0.85).count();
+    assert!(sparse >= 1 && dense >= 1, "{sparse} sparse, {dense} dense");
+}
