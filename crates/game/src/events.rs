@@ -36,7 +36,7 @@ pub enum GameEvent {
         attacker: String,
     },
     /// A loose item was created by an action. `source` is `"player"`
-    /// (Drop), `"animal"`, `"forage"`, `"till"` or `"harvest"`.
+    /// (Drop), `"animal"`, `"forage"`, `"till"`, `"harvest"` or `"death"`.
     ItemDropped {
         item: String,
         position: [f64; 3],

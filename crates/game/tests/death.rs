@@ -101,12 +101,18 @@ struct Outcome {
 }
 
 fn session() -> Outcome {
+    session_with(&[])
+}
+
+/// The session, with `setup` commands submitted on the first tick.
+fn session_with(setup: &[&str]) -> Outcome {
     let mut run = Run {
         w: fresh(),
         rec: Recorder::new(),
         events: vec![],
     };
-    run.steps(&idle(), 20);
+    run.step(&idle(), setup);
+    run.steps(&idle(), 19);
     assert!(run.w.player().on_ground);
     assert!(!run.w.dead());
 
@@ -182,4 +188,44 @@ fn the_recording_replays_to_identical_events_and_world_hash() {
     }
     assert_eq!(session().events, o.events);
     assert_eq!(session().hash, o.hash);
+}
+
+fn dropped(events: &[GameEvent]) -> Vec<&GameEvent> {
+    events
+        .iter()
+        .filter(|e| matches!(e, GameEvent::ItemDropped { .. }))
+        .collect()
+}
+
+#[test]
+fn a_death_with_a_carried_item_drops_it_and_replays_identically() {
+    let o = session_with(&["give item wheat"]);
+    let died = o
+        .events
+        .iter()
+        .position(|e| matches!(e, GameEvent::PlayerDied { .. }))
+        .unwrap();
+    let drops = dropped(&o.events);
+    assert_eq!(drops.len(), 1, "{:?}", o.events);
+    let GameEvent::ItemDropped { item, source, .. } = drops[0] else {
+        unreachable!()
+    };
+    assert_eq!((item.as_str(), source.as_str()), ("wheat", "death"));
+    assert!(matches!(o.events[died + 1], GameEvent::ItemDropped { .. }));
+
+    assert!(o.rec.cheated);
+    for rec in [o.rec.clone(), Recording::parse(&o.rec.to_text()).unwrap()] {
+        let mut w = fresh();
+        replay(&rec, &mut w).unwrap();
+        assert_eq!(w.world_hash(), o.hash);
+        assert_eq!(w.drain_events(), o.events);
+        // Respawning did not give it back; the item is still on the ground.
+        assert!(w.hands().is_none());
+        assert_eq!(w.items().len(), 1);
+    }
+}
+
+#[test]
+fn a_death_with_empty_hands_drops_nothing() {
+    assert!(dropped(&session().events).is_empty());
 }
