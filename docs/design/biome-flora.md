@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
   E: todo
   F: todo
@@ -41,6 +41,7 @@ Nothing in phases A to F is built yet. What exists and is relied on:
 - Phase A progress: A.1 and A.3 are built (PR #208, `client/samplers.js`: per-pass samplers, cutout clamp and LOD cap); A.5 is built (PR #210: plant top flag in vertex byte 14 and distance fade). Phase A is not done: A.2 and A.4 remain (see Reconciliation notes).
 - Phase A is done: A.1, A.3 and A.5 in PRs #208 and #210 (`client/samplers.js`, plant top flag and fade); A.2 and A.4 arrived through `viewer-rendering.md` Phase B (`viewer/mips.js` `buildMips`, used by `client/tiles.js`; coverage-preserving alpha, `fwidth` alpha sharpening and cutoff 0.5 in `client/scene.js`). Plan #203's tickets #206 and #207 closed via #208 and #210.
 - Phase B is done (plan #1028): `[blend] radius` and legend (PR #1042), blurred column tints (PR #1043), per-vertex corner tints (PR #1045), client `blend` setting and flyover radius (PR #1047), sky and fog easing toward the player (PR #1048), biome water tint ramp (PR #1049). The `[manual check]` item for Phase B remains for the maintainer.
+- Phase C is done (plan #1052): variant art (PR #1061), shared tile list and `VARIANTS` (`viewer/tilelist.js`, PR #1062), texture variants in the mesher (PR #1063), plant offset (PR #1064), plant mirror, height, brightness and dark base (PR #1065), wind sway for plants and leaves (`client/sway.js`, PRs #1067 and #1068, as decided in #1053). C.1 came from `viewer-rendering.md` Phase B. The `[manual check]` items for Phase C remain for the maintainer.
 - Art for the existing plants is in `art/batches_13_14.json`. None of the
   new tiles listed in C.2, D.5 or E exist.
 
