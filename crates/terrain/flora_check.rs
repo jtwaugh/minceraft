@@ -22,11 +22,10 @@ pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> R
     for e in entries {
         let n = &e.name;
         let want = 1 + (e.shape == "tall_cross") as usize;
-        if e.block.len() != want {
-            return Err(format!("flora {n}: {} needs {want} block(s)", e.shape));
-        }
         if !SHAPES.contains(&e.shape.as_str()) || !TINTS.contains(&e.tint.as_str()) {
             return Err(format!("flora {n}: bad shape or tint"));
+        } else if e.block.len() != want {
+            return Err(format!("flora {n}: {} needs {want} block(s)", e.shape));
         }
         for b in e.block.iter().chain(&e.ground) {
             if !blocks.contains(b) {

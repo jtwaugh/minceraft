@@ -37,7 +37,7 @@ fn main() {
     write!(json, ",\"blend\":{{\"radius\":{radius}}}}}").unwrap();
     gen_lookup(&biomes, &mut out);
     gen_trees(&biomes, &block_names, &mut out);
-    gen_flora(&block_names, &biome_names(&biomes));
+    gen_flora(&flora_path, &block_names, &biome_names(&biomes));
     writeln!(
         out,
         "/// Legend for viewers: blocks and biomes with colours and ramps (JSON)."
@@ -56,11 +56,9 @@ fn biome_names(doc: &Value) -> Vec<String> {
         .collect()
 }
 
-/// Reads `data/flora.toml`, validates it against the block and biome names
-/// and writes `$OUT_DIR/flora.rs`.
-fn gen_flora(blocks: &[String], biomes: &[String]) {
-    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../data");
-    let doc = read(&root.join("flora.toml"));
+/// Validates `flora.toml` and writes `$OUT_DIR/flora.rs`.
+fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
+    let doc = read(path);
     let strings = |v: &Value| -> Vec<String> {
         match v {
             Value::String(s) => vec![s.clone()],
