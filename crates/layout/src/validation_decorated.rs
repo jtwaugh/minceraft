@@ -32,6 +32,15 @@ fn is_decoration(b: u8) -> bool {
             Block::Pumpkin,
             Block::Cactus,
             Block::SnowLayer,
+            Block::Daisy,
+            Block::Bluebell,
+            Block::TallGrassDoubleLower,
+            Block::TallGrassDoubleUpper,
+            Block::BerryBush,
+            Block::DryGrass,
+            Block::DryGrassTallLower,
+            Block::DryGrassTallUpper,
+            Block::LeafLitter,
         ]
         .iter()
         .any(|&d| d as u8 == b)

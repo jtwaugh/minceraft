@@ -87,6 +87,25 @@ fn leaves_alone_decorate_but_are_not_a_tree() {
 }
 
 #[test]
+fn new_flora_decorates_its_tile() {
+    for b in [
+        Block::Daisy,
+        Block::Bluebell,
+        Block::TallGrassDoubleLower,
+        Block::TallGrassDoubleUpper,
+        Block::BerryBush,
+        Block::DryGrass,
+        Block::DryGrassTallLower,
+        Block::DryGrassTallUpper,
+        Block::LeafLitter,
+    ] {
+        let mut r = island(0);
+        put(&mut r, 20, TOP, 20, b);
+        assert_eq!(measured(&r, CHECK_CLEAR_FLAT), 323.0, "{b:?}");
+    }
+}
+
+#[test]
 fn island_covered_in_plants_fails_clear_tiles() {
     let mut r = island(0);
     for z in 10..30 {

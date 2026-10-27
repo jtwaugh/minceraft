@@ -336,6 +336,30 @@ mod tests {
     }
 
     #[test]
+    fn flora_blocks_are_targetable() {
+        use terrain::Block;
+        for b in [
+            Block::Daisy,
+            Block::Bluebell,
+            Block::TallGrassDoubleLower,
+            Block::TallGrassDoubleUpper,
+            Block::BerryBush,
+            Block::DryGrass,
+            Block::DryGrassTallLower,
+            Block::DryGrassTallUpper,
+            Block::LeafLitter,
+        ] {
+            let mut w = MemoryWorld::new();
+            w.set(3, 0, 0, b);
+            assert_eq!(
+                cast(&w, [0.5, 0.5, 0.5], [1.0, 0.0, 0.0]),
+                block([3, 0, 0], Face::West),
+                "{b:?}"
+            );
+        }
+    }
+
+    #[test]
     fn cactus_uses_its_inset_box() {
         use terrain::Block;
         let mut w = MemoryWorld::new();

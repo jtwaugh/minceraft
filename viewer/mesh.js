@@ -36,6 +36,8 @@ export const B = {
   farmland_dry: 29, farmland_wet: 30,
   wheat_0: 31, wheat_1: 32, wheat_2: 33, wheat_3: 34, wheat_4: 35, wheat_5: 36, wheat_6: 37, wheat_7: 38,
   planter_dirt: 39, planter_farmland_dry: 40, planter_farmland_wet: 41,
+  daisy: 42, bluebell: 43, tall_grass_double_lower: 44, tall_grass_double_upper: 45, berry_bush: 46,
+  dry_grass: 47, dry_grass_tall_lower: 48, dry_grass_tall_upper: 49, leaf_litter: 50,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
