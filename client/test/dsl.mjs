@@ -46,7 +46,8 @@
 //                               start facing along it (pitch level)
 //   layout <w> <h>              HUD layout for a w x h viewport from the current state: `exec`/`execStep`
 //                               return { ok: true, value: { scale, rects, problems } } (hudLayout and layoutChecks,
-//                               tileset from viewer/textures.json); changes nothing in the world
+//                               tileset from viewer/textures.json); changes nothing in the world,
+//                               but remembers the result for the `layout.*` paths
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
 //   mark                        remember the current eye (and raft offset), for `moved` and `raft.moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
@@ -66,6 +67,7 @@
 // planter.ground and planter.crop (the same for the first planter),
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
 // events.foraged (`foraged` events seen since the case began),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
@@ -131,7 +133,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, text: '', output: [] };
+  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, text: '', output: [], layout: null };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
@@ -178,6 +180,12 @@ function read(w, path) {
     const field = { loaded: r.loaded, freed: r.freed, pending: r.pending, x: r.centre.rx, z: r.centre.rz }[path.slice(8)];
     if (field === undefined) throw new Error(`unknown path '${path}'`);
     return field;
+  }
+  if (path.startsWith('layout.')) {
+    if (!w.layout) throw new Error(`${path} needs an earlier \`layout <w> <h>\``);
+    const v = w.layout[path.slice(7)];
+    if (v === undefined) throw new Error(`unknown path '${path}'`);
+    return v;
   }
   if (path === 'events.foraged') return w.events.filter((e) => e.startsWith('foraged ')).length;
   if (path === 'events') return w.events.length;
@@ -243,7 +251,9 @@ function layout(w, args) {
   tileset ??= JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url), 'utf8'));
   const viewport = { w: vw, h: vh };
   const { scale, rects } = hudLayout(w.controller.state.hud, tileset, viewport);
-  return { scale, rects, problems: layoutChecks({ scale, rects }, viewport) };
+  const result = { scale, rects, problems: layoutChecks({ scale, rects }, viewport) };
+  w.layout = { scale, problems: result.problems.length, 'belt.w': rects.belt.w, 'belt.fraction': rects.belt.w / vw };
+  return result;
 }
 
 function step(w, { op, args }) {
