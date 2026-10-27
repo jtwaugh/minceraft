@@ -1,0 +1,74 @@
+# Draft of the scheduled play-critic workflow (docs/design/play-critic-agent.md, Phase E).
+#
+# This file is a draft because the agent app cannot edit .github/workflows/.
+# To enable it, the maintainer:
+#   1. moves it: git mv .github/workflow-drafts/claude-critic.yml .github/workflows/claude-critic.yml
+#   2. checks the repository secret CLAUDE_CODE_OAUTH_TOKEN exists (the other claude*.yml use it).
+#      GH_TOKEN is the job's own github.token, limited to contents: read and issues: write below.
+#
+# It plays the game headlessly, replays every finding, and files an issue per verified finding with
+# `critic.mjs --file`. It never adds the `idea` label (the maintainer does) and never commits or pushes.
+name: Claude critic
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays, 06:17 UTC
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'client/**'
+
+permissions:
+  contents: read
+  issues: write
+
+# One critic run at a time; a newer trigger waits rather than cancelling a run that may be filing.
+concurrency:
+  group: claude-critic
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Keep in step with ci.yml.
+  RUST_TOOLCHAIN: 1.97.1
+  BINARYEN_VERSION: version_133
+
+jobs:
+  critic:
+    name: Play critic
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/wasm-tools
+        with:
+          binaryen: ${{ env.BINARYEN_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Build (./build.sh)
+        run: ./build.sh
+
+      - id: claude-deps
+        uses: ./.github/actions/claude-deps
+
+      - name: Put claude on PATH
+        env:
+          CLAUDE: ${{ steps.claude-deps.outputs.claude }}
+        run: |
+          mkdir -p "$HOME/bin"
+          ln -sf "$CLAUDE" "$HOME/bin/claude"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Critic (verify findings, file issues)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: node client/tools/critic.mjs --file
