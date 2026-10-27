@@ -185,7 +185,7 @@
 <script type="module">
 import { REQUIRED, NAMES as SHARED, TINTED, VARIANTS } from './tilelist.js';
 import init, * as wasm from './pkg/terrain_web.js';
-import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, quadIndices, columnTints, meshBlocks } from './mesh.js';
+import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, variantTable, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
@@ -1727,8 +1727,8 @@ for (const b of LEGEND.blocks) { COLORS[b.id] = b.color; NAMES[b.id] = b.name; }
 HABITATS = JSON.parse(habitat_names());
 BIOMES = [];
 for (const b of LEGEND.biomes) BIOMES[b.id] = b;
-CTX = legendContext(legend(), faceLayers(tileFor));
-pool = new WorkerPool({ faceLayer: CTX.faceLayer, module: wasmModule });
+CTX = legendContext(legend(), faceLayers(tileFor), variantTable(LAYER_NAMES, VARIANTS));
+pool = new WorkerPool({ faceLayer: CTX.faceLayer, variants: CTX.variants, module: wasmModule });
 setMode(['terrain', 'biome', 'temperature', 'humidity', 'habitat'].includes(qs.get('mode')) ? qs.get('mode') : 'terrain');
 initGL();
 state.textured = await loadTextures();

@@ -16,7 +16,8 @@ import { buildMips } from '../viewer/mips.js';
 import { NAMES as SHARED, TINTED } from '../viewer/tilelist.js';
 
 const S = 16;
-const NAMES = [...SHARED, 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
+/** Layer names in texture-array order. */
+export const NAMES = [...SHARED, 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
   'planter_side', 'planter_top', 'planter_bottom', 'planter_farmland_top'];
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
 /** Layers [ANIM_FIRST, ANIM_END) are the water runs; the shader offsets them by the frame. */
