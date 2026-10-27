@@ -6,10 +6,7 @@ pub struct RawFlora {
     pub name: String,
     /// One block name, or lower and upper for a two-block plant.
     pub block: Vec<String>,
-    pub shape: String,
     pub ground: Vec<String>,
-    pub tint: String,
-    pub cluster_scale: f64,
     pub salt: i64,
     pub biomes: Vec<(String, f64)>,
 }

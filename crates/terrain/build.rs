@@ -76,68 +76,51 @@ fn gen_flora(blocks: &[String], biomes: &[String]) {
     let list = doc["flora"].as_array().expect("[[flora]]");
     let raw: Vec<flora_check::RawFlora> = list
         .iter()
-        .map(|f| {
-            let name = f["name"].as_str().expect("flora name").to_string();
-            let field = |k: &str| {
-                f.get(k)
-                    .unwrap_or_else(|| panic!("flora {name}: missing {k}"))
-            };
-            flora_check::RawFlora {
-                block: strings(field("block")),
-                shape: field("shape").as_str().unwrap().to_string(),
-                ground: strings(field("ground")),
-                tint: field("tint").as_str().unwrap().to_string(),
-                cluster_scale: num(field("cluster_scale")),
-                salt: field("salt").as_integer().expect("salt integer"),
-                biomes: field("biomes")
-                    .as_table()
-                    .expect("biomes table")
-                    .iter()
-                    .map(|(k, v)| (k.clone(), num(v)))
-                    .collect(),
-                name,
-            }
+        .map(|f| flora_check::RawFlora {
+            name: f["name"].as_str().expect("flora name").to_string(),
+            block: strings(&f["block"]),
+            ground: strings(&f["ground"]),
+            salt: int(f, "salt"),
+            biomes: f["biomes"]
+                .as_table()
+                .expect("biomes table")
+                .iter()
+                .map(|(k, v)| (k.clone(), num(v)))
+                .collect(),
         })
         .collect();
     if let Err(e) = flora_check::validate(&raw, blocks, biomes) {
         panic!("data/flora.toml: {e}");
     }
 
+    let blk = |n: &String| format!("Block::{}", camel(n));
     let mut out = String::new();
     for k in ["patch_noise_salt", "colour_noise_salt"] {
         let v = int(&doc["settings"], k);
-        writeln!(
-            out,
-            "/// `{k}` from `data/flora.toml`.\npub const FLORA_{}: u32 = {v};",
-            k.to_uppercase()
-        )
-        .unwrap();
+        writeln!(out, "pub const FLORA_{}: u32 = {v};", k.to_uppercase()).unwrap();
     }
-    let blk = |n: &String| format!("Block::{}", camel(n));
-    writeln!(
-        out,
-        "/// Flora table, generated from `data/flora.toml`.\npub static FLORA: [Flora; {}] = [",
-        raw.len()
-    )
-    .unwrap();
-    for f in &raw {
-        let ground: Vec<String> = f.ground.iter().map(blk).collect();
-        let chances: Vec<String> = f
+    writeln!(out, "pub static FLORA: [Flora; {}] = [", raw.len()).unwrap();
+    for (f, r) in list.iter().zip(&raw) {
+        let ground: Vec<String> = r.ground.iter().map(blk).collect();
+        let chances: Vec<String> = r
             .biomes
             .iter()
             .map(|(b, c)| format!("(Biome::{}, {c:?})", camel(b)))
             .collect();
+        let upper = r
+            .block
+            .get(1)
+            .map_or("None".into(), |u| format!("Some({})", blk(u)));
         writeln!(
             out,
-            "    Flora {{ name: {:?}, block: {}, upper: {}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, biomes: &[{}] }},",
-            f.name,
-            blk(&f.block[0]),
-            f.block.get(1).map_or("None".to_string(), |u| format!("Some({})", blk(u))),
-            camel(&f.shape),
+            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, biomes: &[{}] }},",
+            r.name,
+            blk(&r.block[0]),
+            camel(f["shape"].as_str().unwrap()),
             ground.join(", "),
-            camel(&f.tint),
-            f.cluster_scale,
-            f.salt,
+            camel(f["tint"].as_str().unwrap()),
+            num(&f["cluster_scale"]),
+            r.salt,
             chances.join(", ")
         )
         .unwrap();

@@ -75,10 +75,7 @@ mod tests {
         RawFlora {
             name: "x".into(),
             block: names(&["daisy"]),
-            shape: "cross".into(),
             ground: names(&["grass"]),
-            tint: "none".into(),
-            cluster_scale: 8.0,
             salt: 1,
             biomes: vec![("Plains".into(), 0.5)],
         }
