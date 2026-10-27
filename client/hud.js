@@ -6,21 +6,21 @@
 //     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected }], selected, hands, hearts: { full, half, empty } }
 //
 //   slotView(set, name, selected) -> { frame, icon }   frame is `slot` or `slot_selected`; icon is the item's texture name or null
-//   mountHud(document, set, parent) draws frames and icons from the parsed tileset at an integer scale (uiScale).
+//   mountHud(document, set, parent) draws frames and icons from the parsed tileset at an integer scale (interfaceScale).
 //
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
 import { hudLayout } from './hudlayout.js';
-import { findTexture, textureCanvas, textureSize, uiScale } from './uipx.js';
+import { findTexture, textureCanvas, textureSize, interfaceScale } from './uipx.js';
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
 export function slotView(set, name, selected) {
   return { frame: selected ? 'slot_selected' : 'slot', icon: name && findTexture(set, name) ? name : null };
 }
 
-/** Pixel scale for the HUD: whole multiples of the 10x10 slot, about 8 slots wide on the viewport. */
+/** Pixel scale for the HUD: the shared UI scale rule. */
 export function hudScale(viewportW, viewportH) {
-  return uiScale(viewportW, viewportH, 80, 45);
+  return interfaceScale(viewportW, viewportH);
 }
 
 /** Digit texture names for a non-negative whole number: 0 -> ['digit_0'], 125 -> ['digit_1', 'digit_2', 'digit_5']. */

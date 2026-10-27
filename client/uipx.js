@@ -9,6 +9,21 @@ export function uiScale(viewportW, viewportH, baseW, baseH) {
   return Number.isFinite(s) && s >= 1 ? s : 1;
 }
 
+/** The belt is 5 slots of 10 texels with 2-texel gaps. */
+export const BELT_TEXELS_W = 5 * 10 + 4 * 2;
+/** Largest share of the viewport width the belt may take; Phase B lowers this to one third. */
+export const BELT_MAX_WIDTH_FRACTION = 0.5;
+/** The layout the inventory and death screens use, in texels. */
+const PANEL_TEXELS_W = 100;
+const PANEL_TEXELS_H = 60;
+
+/** Shared UI scale: the largest integer >= 1 keeping the belt within its width share and the 100x60 layout on screen. */
+export function interfaceScale(viewportW, viewportH) {
+  const belt = Math.floor((viewportW * BELT_MAX_WIDTH_FRACTION) / BELT_TEXELS_W);
+  const s = Math.min(belt, uiScale(viewportW, viewportH, PANEL_TEXELS_W, PANEL_TEXELS_H));
+  return Number.isFinite(s) && s >= 1 ? s : 1;
+}
+
 /** Finds a texture's grid (array of equal-length strings) by name across all batches; null if absent. */
 export function findTexture(set, name) {
   for (const batch of Object.values(set?.batches ?? {})) {
