@@ -21,6 +21,7 @@ import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
 import { raftBoxes, raftMatrix, RAFT_TEXTURES } from './raftmodel.js';
+import { ITEM_TEXTURES } from './itemmodel.js';
 import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
@@ -334,7 +335,7 @@ const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIA
 // Textured-model drawer (modelgl.js); nothing is drawn with it yet. Without the
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
-const models = createModelDrawer(gl, tileset, RAFT_TEXTURES);
+const models = createModelDrawer(gl, tileset, [...RAFT_TEXTURES, ...ITEM_TEXTURES]);
 const hud = mountHud(document, tileset);
 const inventoryView = mountInventory(document, tileset);
 
