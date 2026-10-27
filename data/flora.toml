@@ -9,6 +9,7 @@
 [settings]
 patch_noise_salt = 7001
 colour_noise_salt = 7002
+colour_scale = 20.0     # blocks per cell of the noise that picks the winner
 
 [[flora]]
 name = "daisy"

@@ -53,6 +53,12 @@ fn patch_noise(seed: u64, f: &Flora) -> OctavePerlin {
     OctavePerlin::new(&mut Rng::new(key), 2)
 }
 
+/// Low-frequency noise that picks the winner among competing entries.
+fn colour_noise(seed: u64) -> OctavePerlin {
+    let key = mix64(seed ^ ((FLORA_COLOUR_NOISE_SALT as u64) << 32));
+    OctavePerlin::new(&mut Rng::new(key), 2)
+}
+
 /// Place single-block flora (`cross`, `ground_cover`, `bush`) over the
 /// columns `[x0, x1) x [z0, z1)`. Each column reads only itself, the seed and
 /// the noise, and writes only into air, so the result is independent of the
@@ -65,6 +71,7 @@ pub(crate) fn place(
 ) -> Vec<u64> {
     let mut placed = alloc::vec![0u64; table.len()];
     let noises: Vec<OctavePerlin> = table.iter().map(|f| patch_noise(seed, f)).collect();
+    let colour = colour_noise(seed);
     for z in z0..z1 {
         for x in x0..x1 {
             let Some(top) = surface(world, x, z) else {
@@ -72,6 +79,8 @@ pub(crate) fn place(
             };
             let ground = Block::from_u8(world.get(x, top - 1, z));
             let biome = world.biome(x, z);
+            // Entries that could grow here, with their chance in this biome.
+            let mut eligible: Vec<(usize, f64)> = Vec::new();
             for (i, f) in table.iter().enumerate() {
                 if !matches!(
                     f.shape,
@@ -80,17 +89,36 @@ pub(crate) fn place(
                 {
                     continue;
                 }
-                let Some(&(_, chance)) = f.biomes.iter().find(|(b, _)| *b == biome) else {
-                    continue;
-                };
-                let n = noises[i].sample2d(x as f64 / f.cluster_scale, z as f64 / f.cluster_scale);
-                let patch = (n * 0.5 + 0.5).clamp(0.0, 1.0) * 2.0;
-                if hash_f64(seed, x, z, 0, f.salt as u64) < chance * patch
-                    && world.set(x, top, z, f.block as u8)
-                {
-                    placed[i] += 1;
-                    break;
+                if let Some(&(_, chance)) = f.biomes.iter().find(|(b, _)| *b == biome) {
+                    eligible.push((i, chance));
                 }
+            }
+            // The colour noise picks one winner, weighted by chance, so
+            // neighbouring columns favour the same entry.
+            let total: f64 = eligible.iter().map(|e| e.1).sum();
+            let mut pick = eligible.last().copied();
+            if eligible.len() > 1 && total > 0.0 {
+                let c =
+                    colour.sample2d(x as f64 / FLORA_COLOUR_SCALE, z as f64 / FLORA_COLOUR_SCALE);
+                let mut at = (c * 0.5 + 0.5).clamp(0.0, 1.0) * total;
+                for &e in &eligible {
+                    pick = Some(e);
+                    at -= e.1;
+                    if at < 0.0 {
+                        break;
+                    }
+                }
+            }
+            let Some((i, chance)) = pick else {
+                continue;
+            };
+            let f = &table[i];
+            let n = noises[i].sample2d(x as f64 / f.cluster_scale, z as f64 / f.cluster_scale);
+            let patch = (n * 0.5 + 0.5).clamp(0.0, 1.0) * 2.0;
+            if hash_f64(seed, x, z, 0, f.salt as u64) < chance * patch
+                && world.set(x, top, z, f.block as u8)
+            {
+                placed[i] += 1;
             }
         }
     }
