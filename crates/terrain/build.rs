@@ -16,10 +16,8 @@ fn main() {
     let biomes_path = root.join("biomes.toml");
     println!("cargo:rerun-if-changed={}", blocks_path.display());
     println!("cargo:rerun-if-changed={}", biomes_path.display());
-    println!(
-        "cargo:rerun-if-changed={}",
-        root.join("flora.toml").display()
-    );
+    let flora_path = root.join("flora.toml");
+    println!("cargo:rerun-if-changed={}", flora_path.display());
     println!("cargo:rerun-if-changed=flora_check.rs");
     println!("cargo:rerun-if-changed=build.rs");
 

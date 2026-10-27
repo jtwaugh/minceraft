@@ -21,15 +21,12 @@ pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> R
     let mut salts: Vec<(i64, &str)> = Vec::new();
     for e in entries {
         let n = &e.name;
-        let want = if e.shape == "tall_cross" { 2 } else { 1 };
+        let want = 1 + (e.shape == "tall_cross") as usize;
         if e.block.len() != want {
             return Err(format!("flora {n}: {} needs {want} block(s)", e.shape));
         }
         if !SHAPES.contains(&e.shape.as_str()) || !TINTS.contains(&e.tint.as_str()) {
-            return Err(format!(
-                "flora {n}: bad shape {:?} or tint {:?}",
-                e.shape, e.tint
-            ));
+            return Err(format!("flora {n}: bad shape or tint"));
         }
         for b in e.block.iter().chain(&e.ground) {
             if !blocks.contains(b) {
