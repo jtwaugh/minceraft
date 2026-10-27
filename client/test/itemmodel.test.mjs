@@ -73,5 +73,9 @@ test('the pose scales to item.size and faces the camera upright', () => {
     assert.ok(Math.abs(Math.hypot(m[8], m[9], m[10]) - size) < 1e-6);
     assert.equal(m[5], size);
     assert.equal(m[1], 0);
+    // Local +z is -forward from view.js basis: (-sin yaw, 0, cos yaw).
+    assert.ok(Math.abs(m[8] / size + Math.sin(camera.yaw)) < 1e-6);
+    assert.equal(m[9], 0);
+    assert.ok(Math.abs(m[10] / size - Math.cos(camera.yaw)) < 1e-6);
   }
 });
