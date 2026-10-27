@@ -111,7 +111,8 @@ class Snapshot:
         import tickets  # here: tickets reads the environment on import
         for i in snap.issues:
             i["depends_on"] = sorted(tickets.deps(i["body"]) - {i["number"]})
-            if i["state"].lower() == "open" and i["kind"] == "ticket" and "factory" in i["labels"]:
+            if (i["state"].lower() == "open" and i["kind"] == "ticket" and "factory" in i["labels"]) \
+                    or (i["kind"] == "decision" and i["parent"]):  # decisions: the store records /decide
                 i["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
                                   "created_at": c["created_at"]}
                                  for c in paged(f"repos/{repo}/issues/{i['number']}/comments")
