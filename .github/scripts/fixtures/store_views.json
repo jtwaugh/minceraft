@@ -1,0 +1,29 @@
+{
+  "input": {
+    "issues": [
+      {"number": 1, "title": "Plan: old", "state": "open", "labels": [], "kind": "plan", "parent": null,
+       "plan_source": {"file": "docs/design/old.md", "section": "Phase A"}, "body": ""},
+      {"number": 10, "title": "Plan: new", "state": "open", "labels": [], "kind": "plan", "parent": null,
+       "plan_source": {"file": "docs/design/x.md", "section": "Phase B"}, "body": ""},
+      {"number": 11, "title": "first", "state": "closed", "labels": ["planned", "factory"], "kind": "ticket", "parent": 10, "body": ""},
+      {"number": 12, "title": "second", "state": "open", "labels": ["planned", "factory"], "kind": "ticket", "parent": 10,
+       "body": "**Depends on:** #11"},
+      {"number": 13, "title": "third", "state": "open", "labels": ["planned", "factory"], "kind": "ticket", "parent": 10,
+       "body": "**Depends on:** #12"},
+      {"number": 14, "title": "unapproved", "state": "open", "labels": ["planned"], "kind": "ticket", "parent": 10,
+       "body": "**Depends on:** #13"}
+    ],
+    "prs": []
+  },
+  "views": {
+    "tickets": {
+      "11": {"state": "done", "status": "Done", "waiting": "", "labels": ["planned", "factory"]},
+      "12": {"state": "approved", "status": "Approved", "waiting": "", "labels": ["planned", "factory"]},
+      "13": {"state": "waiting", "status": "Approved", "waiting": "#12", "labels": ["planned", "factory"]},
+      "14": {"state": "proposed", "status": "Inbox", "waiting": "#13", "labels": ["planned"]}
+    },
+    "plans": {
+      "10": {"state": "open", "status": null, "waiting": "", "labels": []}
+    }
+  }
+}
