@@ -52,7 +52,7 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 - Draw what `held` is (`tool:<name>`, `item:<name>` or empty) in the lower right of the view, from the item's existing icon. Hands win over the belt, as they already do for `held`. The held item is a flat sprite: the 8x8 icon on a thin two-sided slab, like world items (`itemBoxes` in `client/itemmodel.js`), one box per item, not an extruded voxel slab. (Decided in #1186.)
 - A swing on primary and a smaller use motion on secondary, timed from sim ticks so input scripts can check them (CLAUDE.md "Testing the client"). How Beta's swing behaves comes from SPEC.md, not from this doc.
 - It bobs with the camera and doesn't clip into blocks in front of the player.
-- An empty hand: either nothing, or a simple hand/arm drawn in `art/`.
+- An empty hand: nothing is drawn, and no hand or arm art is made. (Decided in #1205.)
 
 > **Reconciler:** Needs the sim animation counter (note 2) and has no Beta swing facts in SPEC.md (note 3). `[manual check]` "lower right" and "looks like a swing": a measurable version is an input-script expectation on the animation phase per tick (for example `swing = 0` before, rising over N ticks, back to 0) plus a test that the held item's model matrix at tick k matches the data curve.
 
@@ -67,8 +67,6 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 > **Reconciler:** Needs the item accessor in `game-web` (note 1). `scene.js` spawns test items only in `scene` mode; the streamed and raft scenes must call the same draw path. `[manual check]` "stand out from the terrain": the testable part is that every entity in `Walk::items()` yields exactly one draw call at its position, and that spin or bob is a pure function of time and id, so it needs no sim state.
 
 ## Open questions
-
-3. Should an empty hand show a hand or arm, or nothing at all?
 
 Added by the reconciler:
 
