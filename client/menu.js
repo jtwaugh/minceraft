@@ -1,7 +1,7 @@
 // Root menu page logic (docs/design/root-menu.md section 1). The link-building
 // is DOM-free so node tests can cover it; the DOM part only runs in a browser.
 import { ALPHA, menuEntries } from './scenes.js';
-import { textureCanvas, uiScale } from './uipx.js';
+import { textureCanvas, interfaceScale } from './uipx.js';
 
 // Nine-slice panel pieces, 4x4 texels each, and the water tile the sea scrolls.
 export const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
@@ -75,6 +75,11 @@ function panelImage(doc, set) {
   return canvas.toDataURL();
 }
 
+/** Menu scale: the shared rule, bounded so the 160x120 layout fits. */
+export function menuScale(viewportW, viewportH) {
+  return interfaceScale(viewportW, viewportH, BASE_W, BASE_H);
+}
+
 /**
  * Switches the rendered menu to the tile-drawn look. Everything is set as CSS
  * variables on the root, so the plain links keep working if this is skipped.
@@ -82,7 +87,7 @@ function panelImage(doc, set) {
 export function styleMenu(doc, win, set) {
   const sea = textureCanvas(set, SEA_TILE, doc);
   if (!sea) return false;
-  const scale = uiScale(win.innerWidth, win.innerHeight, BASE_W, BASE_H);
+  const scale = menuScale(win.innerWidth, win.innerHeight);
   const style = doc.documentElement.style;
   style.setProperty('--px', `${scale}px`);
   style.setProperty('--panel', `url(${panelImage(doc, set)})`);

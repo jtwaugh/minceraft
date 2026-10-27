@@ -8,13 +8,13 @@
 //   mountDeath(document, set, controller, parent, view) -> { update(dead) }
 
 import { panelImage, PANEL_TEXELS } from './inventoryui.js';
-import { uiScale } from './uipx.js';
+import { interfaceScale } from './uipx.js';
 
 export const DEATH_TITLE = 'You died';
 export const DEATH_RESPAWN = 'Respawn';
 
 export function deathScale(viewportW, viewportH) {
-  return uiScale(viewportW, viewportH, 100, 60);
+  return interfaceScale(viewportW, viewportH);
 }
 
 export function deathModel() {

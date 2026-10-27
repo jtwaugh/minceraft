@@ -1,6 +1,7 @@
 // Run: node --test client/test/deathui.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { hudScale } from '../hud.js';
 import { deathModel, deathScale, mountDeath } from '../deathui.js';
 
 // Just enough DOM for mountDeath: elements with children, listeners and a canvas stub.
@@ -56,4 +57,8 @@ test('clicking respawn calls controller.respawn once', () => {
   view.update(true);
   root.children[0].children[1].click();
   assert.equal(count(), 1);
+});
+
+test('deathScale agrees with hudScale at the standard sizes', () => {
+  for (const [w, h] of [[390, 844], [1366, 768], [1920, 1080], [3440, 1440]]) assert.equal(deathScale(w, h), hudScale(w, h));
 });
