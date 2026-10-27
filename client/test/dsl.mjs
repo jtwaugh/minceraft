@@ -62,7 +62,8 @@
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
 // belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
-// item or none), held (empty|tool:<name>|item:<name>), held.drawn (the icon the held-item pass draws, or none), items (loose items in the world),
+// item or none), held (empty|tool:<name>|item:<name>), held.drawn (the icon the
+// held-item pass draws, or none), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
