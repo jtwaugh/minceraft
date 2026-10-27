@@ -13,6 +13,7 @@ a PR's `head`, `body`, `files` and `state`.
 """
 import os
 import re
+import sqlite3
 
 os.environ.setdefault("GITHUB_REPOSITORY", "unused/unused")  # tickets.py reads it at import
 import tickets  # noqa: E402
@@ -37,12 +38,29 @@ def _comment_blockers(issue):
             for x in re.findall(r"#(\d+)", m.group(1))]
 
 
-def _waiting_on(issue, by_number):
+def _stored(store):
+    """{ticket: (dependencies, predicted files)} for every stored ticket; empty
+    without a store or before ingest has made its tables."""
+    if store is None:
+        return {}
+    try:
+        out = {r[0]: (set(), set()) for r in store.execute("SELECT id FROM tickets")}
+        for t, d in store.execute("SELECT ticket, depends_on FROM dependencies"):
+            out[t][0].add(d)
+        for t, f in store.execute("SELECT ticket, path FROM predicted_files"):
+            out[t][1].add(f)
+    except sqlite3.OperationalError:
+        return {}
+    return out
+
+
+def _waiting_on(issue, by_number, stored=None):
     """Dependencies that are not closed (unknown issues count as open), and
-    any plan among them."""
+    any plan among them. A stored ticket's dependencies come from the store,
+    not from its body."""
     n = issue["number"]
-    wanted = (tickets.deps(_body(issue)) | set(issue.get("depends_on", []))
-              | {b for b, _ in _comment_blockers(issue)}) - {n}
+    own = (tickets.deps(_body(issue)) | set(issue.get("depends_on", []))) if stored is None else stored
+    wanted = (own | {b for b, _ in _comment_blockers(issue)}) - {n}
     open_ = sorted(d for d in wanted if by_number.get(d, {}).get("state") != "closed")
     plans = sorted(d for d in wanted if by_number.get(d, {}).get("kind") == "plan")
     return open_, plans
@@ -70,14 +88,16 @@ def ready(snap):
          and "idea" not in i["labels"]),
         key=lambda i: i["number"])
     actions, claimed = [], {}
+    store = _stored(getattr(snap, "store", None))
     for t in candidates:
         n = t["number"]
-        open_, plans = _waiting_on(t, by_number)
-        if (open_ or plans or tickets.depends_error(_body(t))
+        row = store.get(n)
+        open_, plans = _waiting_on(t, by_number, row and row[0])
+        if (open_ or plans or (row is None and tickets.depends_error(_body(t)))
                 or tickets.has_open_pr(n, prs) or _auto_started(t)
                 or tickets.LOCAL in t.get("labels", [])):
             continue
-        preds = tickets.predicted_files(_body(t))
+        preds = row[1] if row else tickets.predicted_files(_body(t))
         if preds and any(not tickets.is_pr_for(n, p) and tickets.overlap(preds, p["files"])
                          for p in prs):
             continue
