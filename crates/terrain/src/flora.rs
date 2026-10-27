@@ -3,7 +3,6 @@
 
 use crate::data::{Biome, Block};
 
-/// How a plant is drawn and stacked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FloraShape {
     Cross,
@@ -13,7 +12,6 @@ pub enum FloraShape {
     Bush,
 }
 
-/// Which colour ramp tints the plant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FloraTint {
     None,
