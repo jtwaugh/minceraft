@@ -63,3 +63,59 @@ test('same plant gets the same offset in areas with different origins', () => {
   }
   assert.ok(shared > 50);
 });
+
+// Per world column: top/base vertex heights (1/16), tints and u values.
+function shapes(size, origin, block = B.tall_grass) {
+  const blocks = meadow(size);
+  for (let c = 0; c < size * size; c++) blocks[c * H + 60] = block;
+  const m = meshBlocks(ctx, blocks, tints(size), size, 0, { origin });
+  const dv = new DataView(m.cutout.verts), out = new Map();
+  for (let i = 0; i < m.cutout.faces * 4; i += 4) {
+    const q = i * VERTEX_BYTES;
+    // the first two vertices of a quad average to the column centre
+    const cx = Math.floor((dv.getInt16(q, true) + dv.getInt16(q + VERTEX_BYTES, true)) / 32);
+    const cz = Math.floor((dv.getInt16(q + 4, true) + dv.getInt16(q + VERTEX_BYTES + 4, true)) / 32);
+    const key = `${cx + origin[0]},${cz + origin[1]}`;
+    const s = out.get(key) ?? { top: [], base: [], u: [] };
+    for (let j = 0; j < 4; j++) {
+      const o = q + j * VERTEX_BYTES;
+      const v = { y: dv.getInt16(o + 2, true) - 60 * 16, t: dv.getUint8(o + 10), u: dv.getUint8(o + 6) };
+      (dv.getUint8(o + 14) ? s.top : s.base).push(v);
+      s.u.push(v.u);
+    }
+    out.set(key, s);
+  }
+  return out;
+}
+
+test('tall grass height, base darkening, jitter and mirroring', () => {
+  const s = shapes(16, [0, 0]);
+  const heights = new Set(), mirrored = new Set();
+  for (const v of s.values()) {
+    const top = v.top[0].y;
+    assert.ok(top >= 12 && top <= 16);
+    heights.add(top);
+    assert.ok(v.top.every((q) => q.y === top) && v.base.every((q) => q.y === 0));
+    const tt = v.top[0].t, bt = v.base[0].t;
+    assert.ok(tt <= 255 && Math.abs(tt - 255) <= 255 * 0.07 + 1);
+    assert.ok(Math.abs(bt / tt - 0.8) < 0.02);
+    mirrored.add(v.u[0]);
+  }
+  assert.ok(heights.size > 2 && mirrored.size > 1);
+});
+
+test('other plants keep full height', () => {
+  for (const v of shapes(8, [0, 0], B.dandelion).values()) assert.ok(v.top.every((q) => q.y === 16));
+});
+
+test('plant shape is the same from different origins', () => {
+  const a = shapes(16, [0, 0]), b = shapes(16, [5, -3]);
+  let shared = 0;
+  for (const [k, v] of b) {
+    const w = a.get(k);
+    if (!w) continue;
+    shared++;
+    assert.deepEqual(v, w);
+  }
+  assert.ok(shared > 50);
+});

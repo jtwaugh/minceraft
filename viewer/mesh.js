@@ -255,6 +255,14 @@ const plantOffset = (x, y, z) => {
   const h = hashAt(x, y, z, 0x2c1b3c6d);
   return [((h >>> 4) % 5 - 2) / 16, ((h >>> 12) % 5 - 2) / 16];
 };
+// Cross-plant shape from the world coordinate alone (own salt): mirrored
+// texture, height in 12/16..16/16 (used for tall grass and ferns only) and
+// brightness jitter of about +-6%.
+const plantShape = (x, y, z) => {
+  const h = hashAt(x, y, z, 0x7f4a7c15);
+  return { mirror: (h & 1) === 1, height: (12 + ((h >>> 1) & 0xff) % 5) / 16, bright: 1 + (((h >>> 9) & 0xff) / 255 - 0.5) * 0.12 };
+};
+const PLANT_BASE_DARK = 0.8, clamp01 = (v) => Math.min(1, Math.max(0, v));
 // `layer` moved to its tile variant, picked by the world coordinate alone with
 // a salt of its own (independent of variantAt). Layers without variants stay.
 function pickLayer(ctx, layer, x, y, z) {
@@ -387,11 +395,16 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         // two crossed quads, wound both ways so they show from either side
         const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, y, origin[1] + z), k = 0.9 * (0.75 + y / 256);
         const [dx, dz] = plantOffset(origin[0] + x, y, origin[1] + z);
+        const shape = plantShape(origin[0] + x, y, z + origin[1]);
+        const tall = b === B.tall_grass || b === B.fern, hgt = tall ? shape.height : 1;
+        const uvs = XUV.map(([u, v]) => [shape.mirror ? 1 - u : u, v === 0 ? 1 - hgt : v]);
         for (const q of [X1, X2]) {
-          const t = typeof tint === 'function' ? q.map((v) => tint(Math.round(v[0]), Math.round(v[2]))) : tint;
+          const t = typeof tint === 'function' ? q.map((v) => tint(Math.round(v[0]), Math.round(v[2]))) : q.map(() => tint);
+          const tj = t.map((c, j) => c.map((v) => clamp01(v * shape.bright) * (XTOP[j] ? 1 : PLANT_BASE_DARK)));
+          const qs = q.map((v) => [v[0], v[1] * hgt, v[2]]);
           const flip = (a) => [a[1], a[0], a[3], a[2]];
-          out[3].quad(x + dx, y, z + dz, q, XUV, layer, k, t, XTOP);
-          out[3].quad(x + dx, y, z + dz, flip(q), flip(XUV), layer, k, Array.isArray(t[0]) ? flip(t) : t, flip(XTOP));
+          out[3].quad(x + dx, y, z + dz, qs, uvs, layer, k, tj, XTOP);
+          out[3].quad(x + dx, y, z + dz, flip(qs), flip(uvs), layer, k, flip(tj), flip(XTOP));
         }
         continue;
       }
