@@ -26,7 +26,7 @@ test('a failed expect, a bad line and a missing expect are dropped with a reason
 });
 
 test('replay runs in debug mode', () => {
-  assert.equal(verifyFinding(finding('case a\nstart walk\nexpect cheated = false\n')).reproduced, true);
+  assert.equal(verifyFinding(finding('case a\nstart walk\nclick\nlock\npress Backquote\nexpect mode = console\n')).reproduced, true);
 });
 
 test('replaying twice gives the same result', () => {
