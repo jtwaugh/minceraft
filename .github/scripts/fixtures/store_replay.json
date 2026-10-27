@@ -1,0 +1,169 @@
+{
+ "note": "Synthetic: one new plan (#100) above the cutoff, with a ticket waiting, in review, blocked on a question and done; an older plan (#50) and its tickets; an orphan ticket.",
+ "cutoff": 50,
+ "issues": [
+  {
+   "number": 50,
+   "title": "Plan: Old Phase 1",
+   "state": "open",
+   "labels": [],
+   "kind": "plan",
+   "parent": null,
+   "body": "",
+   "plan_source": {
+    "file": "docs/design/old.md",
+    "section": "Phase 1"
+   }
+  },
+  {
+   "number": 51,
+   "title": "Old ticket",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": 50,
+   "body": "**Depends on:** none\n**Files:** `a.py`"
+  },
+  {
+   "number": 100,
+   "title": "Plan: Store replay Phase 1",
+   "state": "open",
+   "labels": [],
+   "kind": "plan",
+   "parent": null,
+   "body": "",
+   "plan_source": {
+    "file": "docs/design/store-replay.md",
+    "section": "Phase 1"
+   }
+  },
+  {
+   "number": 101,
+   "title": "Waiting ticket",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": 100,
+   "body": "**Depends on:** #102\n**Files:** `x.py`"
+  },
+  {
+   "number": 102,
+   "title": "In review ticket",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": 100,
+   "body": "**Depends on:** #104\n**Files:** `y.py`",
+   "comments": [
+    {
+     "user": "github-actions[bot]",
+     "body": "<!-- factory-auto-start --> Dependencies closed; starting automatically.",
+     "created_at": "2026-10-27T10:00:00Z"
+    }
+   ]
+  },
+  {
+   "number": 103,
+   "title": "Question ticket",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": 100,
+   "body": "**Depends on:** #104\n**Files:** `z.py`",
+   "comments": [
+    {
+     "user": "github-actions[bot]",
+     "body": "<!-- factory-auto-start --> Dependencies closed; starting automatically.",
+     "created_at": "2026-10-27T10:00:00Z"
+    }
+   ]
+  },
+  {
+   "number": 104,
+   "title": "Done ticket",
+   "state": "closed",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": 100,
+   "body": "**Depends on:** none\n**Files:** `w.py`",
+   "comments": [
+    {
+     "user": "github-actions[bot]",
+     "body": "<!-- factory-auto-start --> Dependencies closed; starting automatically.",
+     "created_at": "2026-10-27T10:00:00Z"
+    }
+   ]
+  },
+  {
+   "number": 105,
+   "title": "Old plan's late ticket",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": 50,
+   "body": "**Files:** `b.py`"
+  },
+  {
+   "number": 106,
+   "title": "Orphan ticket",
+   "state": "open",
+   "labels": [
+    "factory"
+   ],
+   "kind": "ticket",
+   "parent": null,
+   "body": "**Files:** `c.py`"
+  },
+  {
+   "number": 107,
+   "title": "Question: which option for #103?",
+   "state": "open",
+   "labels": [
+    "spec-question"
+   ],
+   "kind": "decision",
+   "parent": 100,
+   "body": "<!-- factory-question ticket=103 cause=needs-you -->\nWhich option?"
+  }
+ ],
+ "prs": [
+  {
+   "number": 200,
+   "head": "claude/issue-102-20261027-1200",
+   "state": "open",
+   "body": "Closes #102",
+   "files": [
+    "y.py"
+   ],
+   "closes": [
+    102
+   ]
+  },
+  {
+   "number": 201,
+   "head": "claude/issue-103-20261027-1210",
+   "state": "open",
+   "body": "Closes #103",
+   "files": [
+    "z.py"
+   ],
+   "closes": [
+    103
+   ]
+  }
+ ],
+ "docs": [],
+ "branches": []
+}
