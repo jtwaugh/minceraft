@@ -1,5 +1,5 @@
 # Flora (docs/design/biome-flora.md Phase D.1). build.rs checks every name
-# and generates `FLORA` in crates/terrain/src/flora.rs; nothing reads it yet.
+# and generates `FLORA` in crates/terrain/src/flora.rs; the placement pass reads it.
 #   block         block name; tall_cross takes [lower, upper]
 #   shape         cross | tall_cross | ground_cover | pad | bush
 #   tint          none | grass | leaf | dry
@@ -20,3 +20,73 @@ tint = "none"
 cluster_scale = 24.0
 salt = 1
 biomes = { Plains = 0.020, Forest = 0.004 }
+
+[[flora]]
+name = "bluebell"
+block = "bluebell"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 18.0
+salt = 2
+biomes = { Plains = 0.015 }
+
+[[flora]]
+name = "tall_grass_double"
+block = ["tall_grass_double_lower", "tall_grass_double_upper"]
+shape = "tall_cross"
+ground = ["grass"]
+tint = "grass"
+cluster_scale = 20.0
+salt = 3
+biomes = { Plains = 0.040 }
+
+[[flora]]
+name = "fern"
+block = "fern"
+shape = "cross"
+ground = ["grass"]
+tint = "grass"
+cluster_scale = 16.0
+salt = 4
+biomes = { Taiga = 0.060 }
+
+[[flora]]
+name = "berry_bush"
+block = "berry_bush"
+shape = "bush"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 28.0
+salt = 5
+biomes = { Taiga = 0.012 }
+
+[[flora]]
+name = "dry_grass"
+block = "dry_grass"
+shape = "cross"
+ground = ["grass", "sand"]
+tint = "dry"
+cluster_scale = 16.0
+salt = 6
+biomes = { Savanna = 0.050, Desert = 0.030 }
+
+[[flora]]
+name = "dry_grass_tall"
+block = ["dry_grass_tall_lower", "dry_grass_tall_upper"]
+shape = "tall_cross"
+ground = ["grass", "sand"]
+tint = "dry"
+cluster_scale = 22.0
+salt = 7
+biomes = { Savanna = 0.020, Desert = 0.010 }
+
+[[flora]]
+name = "leaf_litter"
+block = "leaf_litter"
+shape = "ground_cover"
+ground = ["grass"]
+tint = "leaf"
+cluster_scale = 14.0
+salt = 8
+biomes = { Forest = 0.120, "Seasonal Forest" = 0.150 }
