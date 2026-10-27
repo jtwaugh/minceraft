@@ -8,7 +8,7 @@ phases:
   A: done
   B: done
   C: done
-  D: todo
+  D: done
   E: todo
 ---
 
@@ -19,6 +19,7 @@ Checked against the code on `master`:
 - **Phase A done.** Plan #738: PR #752 (`createSession` and `exec` in `client/test/dsl.mjs`, `run` rebuilt on it) and PR #769 (session `transcript()` replays as an `.input` case); tests in `client/test/session.test.mjs`. The script-runner bullet below describes the code before these PRs.
 - **Phase B done.** Plan #773: PR #779 (path classification and player/debug observations in `client/tools/observe.mjs`), PR #782 (`client/tools/play.mjs`, JSON lines over `createSession`) and PR #960 (player mode refuses debug paths, verify mode allows them); tests in `client/test/observe.test.mjs` and `client/test/play.test.mjs`. The "No critic tooling" bullet below predates these PRs for `client/tools/`.
 - **Phase C done.** Plan #968: PR #985 (`hudLayout` crosshair, belt, hearts in `client/hudlayout.js`), PR #990 (timer and hands rectangles), PR #992 (`mountHud` places elements from `hudLayout`), PR #991 (overlap and off-screen checks in `client/hudcheck.js`), PR #1002 (scale, crosshair clear zone and distance checks), PR #1004 (`layout <w> <h>` statement in `client/test/dsl.mjs`) and PR #1005 (`play.mjs` returns layout results). The HUD and `layout` bullets below describe the code before these PRs.
+- **Phase D done.** Plan #1007: PR #1021 (finding schema, `client/tools/finding.mjs`), PR #1025 (verify pass, `verify.mjs`), PR #1024 (grouped idea-issue report, `report.mjs`), PR #1023 (critic prompt, `.github/prompts/critic.md`), PR #1036 (local runner, `critic.mjs`) and PR #1037 (filing with duplicate search, `file.mjs`); tests in `client/test/` (`finding`, `verify`, `report`, `criticprompt`, `critic`, `file`). The "No critic tooling" bullet below predates these PRs.
 - **Script runner (section 1).** `client/test/dsl.mjs` exports `parse(src)` and `run(c)`. `world()` builds the fake canvas, document and window, the sampler, `attachInput`, the wasm `Walk`/`FlyCamera`/`Scene` and `createController`. `step(w, {op, args})` runs one statement. `run(c)` builds the world and loops over a whole case; there is no way to keep a world open and feed it a line at a time. `client/test/scripts.test.mjs` runs every `client/test/scripts/*.input` case through `parse` and `run`.
 - **State reads (section 2).** `read(w, path)` in `dsl.mjs` serves every path in the header comment: player-visible ones (`hearts.*`, `hud.selected`, `hud.hands`, `phase`, `phase.left`, `box`, `target.kind`, `console.last`, `console.lines`, `mode`, `locked`) and debug ones (`rule.primary|secondary|last`, `events`, `field.crop`, `planter.*`, `sim_tick`, `animals*`, `eye.*`). Nothing marks which are which.
 - **HUD (section 3).** `client/hud.js` has `hudModel` (plain data), `hudScale` (`uiScale(w, h, 80, 45)`, integer scale), `digitNames`, `heartNames`, `slotView` and `mountHud`. `mountHud` lays out with CSS flex (`#hud-bottom`, `#hud-belt`, `#hud-hearts`, `#hud-timer`, fixed-pixel margins and gaps such as `bottom: 12px`, `gap: 2px`) and reads `view.innerWidth`/`innerHeight` only for the scale. `client/uipx.js` has `textureSize(set, name)`. There is no `hudLayout` and no `layout` command. `client/test/hud.test.mjs` tests the model only.
