@@ -49,7 +49,7 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 
 `basic-gameplay.md` section 3 says "A first-person hand renders the current tool or carried item, with Beta's swing animation on primary and a smaller use animation on secondary." Phase 1 left hand rendering for later and no phase has picked it up since.
 
-- Draw what `held` is (`tool:<name>`, `item:<name>` or empty) in the lower right of the view, from the item's existing icon. Hands win over the belt, as they already do for `held`.
+- Draw what `held` is (`tool:<name>`, `item:<name>` or empty) in the lower right of the view, from the item's existing icon. Hands win over the belt, as they already do for `held`. The held item is a flat sprite: the 8x8 icon on a thin two-sided slab, like world items (`itemBoxes` in `client/itemmodel.js`), one box per item, not an extruded voxel slab. (Decided in #1186.)
 - A swing on primary and a smaller use motion on secondary, timed from sim ticks so input scripts can check them (CLAUDE.md "Testing the client"). How Beta's swing behaves comes from SPEC.md, not from this doc.
 - It bobs with the camera and doesn't clip into blocks in front of the player.
 - An empty hand: either nothing, or a simple hand/arm drawn in `art/`.
@@ -68,7 +68,6 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 
 ## Open questions
 
-1. How should a held item be drawn: a flat sprite of the 8x8 icon, or the icon extruded into a thin voxel slab (one cube per opaque texel, so it has depth)?
 3. Should an empty hand show a hand or arm, or nothing at all?
 
 Added by the reconciler:
