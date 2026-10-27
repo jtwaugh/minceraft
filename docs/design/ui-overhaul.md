@@ -51,7 +51,7 @@ The UI art exists now (slots, hearts, digits, the nine-slice wooden panel), but 
 
 `hudScale` is `uiScale(w, h, 80, 45)`. That gives scale 17 at 1366x768 and 24 at 1920x1080, so a 10x10 slot is 170 to 240 CSS pixels wide, and the hearts row runs off both edges (#1003).
 
-- One UI scale rule for the HUD, inventory, death screen and menu, chosen so the HUD takes up a modest strip of the screen: the belt about a third of the viewport width at most, never more than half.
+- One UI scale rule for the HUD, inventory, death screen and menu, chosen so the HUD takes up a modest strip of the screen: the belt about a third of the viewport width at most, never more than half. The rule is a fixed target: the belt is about 30% of the viewport width, and the scale is the largest integer at or below that, minimum 1. (Decided in #1151.)
 - Nothing off-screen or overlapping at 390x844, 1366x768, 1920x1080 or 3440x1440. The `layout` DSL statement already checks this, so these sizes become test cases.
 - Fixes #1003 as part of the overhaul, or before it.
 
@@ -102,7 +102,6 @@ The first-person held item and item entities in the world are in #1137. Gameplay
 
 ## Open questions
 
-1. **Scale rule.** A: fixed target ("belt is about 30% of viewport width", then pick the largest integer scale at or below it, minimum 1). B: a CSS-pixel size per texel with a minimum and maximum (for example clamp the scale to 2..6). Option A matches the author's stated goal; option B is simpler to test. Because the scale is an integer, both are coarse at small sizes.
 2. **Font case and cell.** A: capitals only, 4x6 cell (matches `digit_*`). B: upper and lower case, 4x6 or 5x7 cell. Lower case needs descenders, so 4x6 is tight; A is smaller art and fewer glyphs.
 3. **Debug console and overlay font.** A: stay monospace with the shared panel and colours. B: move to the pixel font. A keeps long free-form output readable; B is more consistent.
 4. **Hide or fade HUD parts.** A: always show everything. B: fade hearts at full health and the timer when nothing changes. A is simpler and testable; B changes what a layout check should assume.
