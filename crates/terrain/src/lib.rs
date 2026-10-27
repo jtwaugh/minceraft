@@ -28,6 +28,7 @@ extern crate alloc;
 pub mod climate;
 pub mod data;
 pub mod decorate;
+pub mod flora;
 pub mod noise;
 mod plants;
 mod trees;

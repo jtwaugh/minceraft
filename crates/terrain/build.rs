@@ -4,6 +4,8 @@
 //! The `toml` crate is only a build-dependency; nothing here reaches the
 //! runtime crate or the wasm output.
 
+mod flora_check;
+
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use toml::Value;
@@ -14,6 +16,11 @@ fn main() {
     let biomes_path = root.join("biomes.toml");
     println!("cargo:rerun-if-changed={}", blocks_path.display());
     println!("cargo:rerun-if-changed={}", biomes_path.display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        root.join("flora.toml").display()
+    );
+    println!("cargo:rerun-if-changed=flora_check.rs");
     println!("cargo:rerun-if-changed=build.rs");
 
     let blocks: Value = read(&blocks_path);
@@ -32,6 +39,7 @@ fn main() {
     write!(json, ",\"blend\":{{\"radius\":{radius}}}}}").unwrap();
     gen_lookup(&biomes, &mut out);
     gen_trees(&biomes, &block_names, &mut out);
+    gen_flora(&block_names, &biome_names(&biomes));
     writeln!(
         out,
         "/// Legend for viewers: blocks and biomes with colours and ramps (JSON)."
@@ -40,6 +48,106 @@ fn main() {
     writeln!(out, "pub const LEGEND_JSON: &str = {:?};", json).unwrap();
 
     let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("data.rs");
+    std::fs::write(dest, out).unwrap();
+}
+
+fn biome_names(doc: &Value) -> Vec<String> {
+    let list = doc["biome"].as_array().expect("[[biome]]");
+    list.iter()
+        .map(|b| b["name"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Reads `data/flora.toml`, validates it against the block and biome names
+/// and writes `$OUT_DIR/flora.rs`.
+fn gen_flora(blocks: &[String], biomes: &[String]) {
+    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../data");
+    let doc = read(&root.join("flora.toml"));
+    let strings = |v: &Value| -> Vec<String> {
+        match v {
+            Value::String(s) => vec![s.clone()],
+            Value::Array(a) => a
+                .iter()
+                .map(|e| e.as_str().expect("name string").to_string())
+                .collect(),
+            _ => panic!("flora.toml: expected a name or a list of names"),
+        }
+    };
+    let list = doc["flora"].as_array().expect("[[flora]]");
+    let raw: Vec<flora_check::RawFlora> = list
+        .iter()
+        .map(|f| {
+            let name = f["name"].as_str().expect("flora name").to_string();
+            let field = |k: &str| {
+                f.get(k)
+                    .unwrap_or_else(|| panic!("flora {name}: missing {k}"))
+            };
+            flora_check::RawFlora {
+                block: strings(field("block")),
+                shape: field("shape").as_str().unwrap().to_string(),
+                ground: strings(field("ground")),
+                tint: field("tint").as_str().unwrap().to_string(),
+                cluster_scale: num(field("cluster_scale")),
+                salt: field("salt").as_integer().expect("salt integer"),
+                biomes: field("biomes")
+                    .as_table()
+                    .expect("biomes table")
+                    .iter()
+                    .map(|(k, v)| (k.clone(), num(v)))
+                    .collect(),
+                name,
+            }
+        })
+        .collect();
+    if let Err(e) = flora_check::validate(&raw, blocks, biomes) {
+        panic!("data/flora.toml: {e}");
+    }
+
+    let mut out = String::new();
+    for k in ["patch_noise_salt", "colour_noise_salt"] {
+        let v = int(&doc["settings"], k);
+        assert!(
+            (0..=i64::from(u32::MAX)).contains(&v),
+            "flora.toml [settings] {k} must fit in u32"
+        );
+        writeln!(
+            out,
+            "/// `{k}` from `data/flora.toml`.\npub const FLORA_{}: u32 = {v};",
+            k.to_uppercase()
+        )
+        .unwrap();
+    }
+    let blk = |n: &String| format!("Block::{}", camel(n));
+    writeln!(
+        out,
+        "/// Flora table, generated from `data/flora.toml`.\npub static FLORA: [Flora; {}] = [",
+        raw.len()
+    )
+    .unwrap();
+    for f in &raw {
+        let ground: Vec<String> = f.ground.iter().map(blk).collect();
+        let chances: Vec<String> = f
+            .biomes
+            .iter()
+            .map(|(b, c)| format!("(Biome::{}, {c:?})", camel(b)))
+            .collect();
+        writeln!(
+            out,
+            "    Flora {{ name: {:?}, block: {}, upper: {}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, biomes: &[{}] }},",
+            f.name,
+            blk(&f.block[0]),
+            f.block.get(1).map_or("None".to_string(), |u| format!("Some({})", blk(u))),
+            camel(&f.shape),
+            ground.join(", "),
+            camel(&f.tint),
+            f.cluster_scale,
+            f.salt,
+            chances.join(", ")
+        )
+        .unwrap();
+    }
+    writeln!(out, "];").unwrap();
+    let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("flora.rs");
     std::fs::write(dest, out).unwrap();
 }
 

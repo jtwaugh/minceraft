@@ -1,0 +1,31 @@
+# Flora: plants placed by a column-local pass (docs/design/biome-flora.md,
+# Phase D). Read at compile time by crates/terrain/build.rs, which checks
+# every name and generates the `FLORA` table in crates/terrain/src/flora.rs.
+# Nothing reads the table yet.
+#
+# Per entry:
+#   name          unique label
+#   block         block name; tall_cross takes [lower, upper]
+#   shape         cross | tall_cross | ground_cover | pad | bush
+#   ground        block names the plant may stand on
+#   tint          none | grass | leaf | dry
+#   cluster_scale blocks per noise cell for patchiness (> 0)
+#   salt          fixed per-entry salt, unique across entries (0 to 2^32-1)
+#   biomes        biome name -> chance per eligible column (0 to 1)
+#
+# A build error names the entry and the bad value.
+
+[settings]
+# Salts for the low-frequency patch noise and the flower-colour noise.
+patch_noise_salt = 7001
+colour_noise_salt = 7002
+
+[[flora]]
+name = "daisy"
+block = "daisy"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 24.0
+salt = 1
+biomes = { Plains = 0.020, Forest = 0.004 }
