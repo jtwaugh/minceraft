@@ -51,6 +51,7 @@ class Snapshot:
     unchanged: bool = False  # every read was a 304 after a clean tick: nothing to do
     implementer_runs: list = field(default_factory=list)  # claude.yml runs: display_title, status, created_at
     stray: dict = field(default_factory=dict)  # ticket -> claude/issue-<n>- branches with work and no PR
+    store: object = None  # open state store (sqlite connection); None without $FACTORY_STORE
 
     @classmethod
     def from_dict(cls, d):
@@ -478,7 +479,7 @@ def invariants(snap):
 
 
 def passes():
-    """The fixed order: invariants, supersede, refresh, stalls, rerun, nits, questions, blocked, report,
+    """The fixed order: invariants, store sync, supersede, refresh, stalls, rerun, nits, questions, blocked, report,
     plans, ready, merge, needs-you, board."""
     from factory_automerge import auto_merge
     from factory_board import board_pass as board
@@ -498,9 +499,16 @@ def passes():
     def board_pass(snap):
         return board(snap) if snap.board_meta.get("loaded") else []
 
-    return [invariants, superseded, refresh_after_red_master, stalls, rerun_failed, nits, questions,
+    from factory_store_sync import store_sync
+
+    return [invariants, store_sync, superseded, refresh_after_red_master, stalls, rerun_failed, nits, questions,
             link_questions, blocked, report, close_finished_plans, ready, stalled_tickets, auto_merge,
             needs_you, board_pass]
+
+
+def crashed_store(crashed):
+    """Whether the store pass crashed: a store it half-updated is not published."""
+    return any(name == "store_sync" for name, _ in crashed)
 
 
 def main(argv):
@@ -541,7 +549,12 @@ def _main(argv):
         backend = GhBackend(os.environ["GITHUB_REPOSITORY"])
         gh_cache.state["last_tick_clean"] = False  # until this tick finishes with nothing to do
     crashed = []
-    actions = tick(snap, passes(), backend, crashed)
+    import factory_store_sync
+    snap.store, store_file = factory_store_sync.open_store(os.environ.get("FACTORY_STORE"), live)
+    try:
+        actions = tick(snap, passes(), backend, crashed)
+    finally:
+        factory_store_sync.finish(snap, store_file, live and not crashed_store(crashed))
     if live:
         gh_cache.state["last_tick_clean"] = not (backend.applied or backend.failed
                                                  or backend.refused or crashed)
