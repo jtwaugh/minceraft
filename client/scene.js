@@ -32,6 +32,7 @@ import { createController } from './controller.js';
 import { padRegion } from './regionpad.js';
 import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
+import { sampleSky, easeSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { SKY_GLSL } from '../viewer/sky.js';
 import { WATER_GLSL } from '../viewer/water.js';
@@ -338,6 +339,13 @@ const cut = (draw) => {
   if (msaa) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
 };
 let skyColor = [0.61, 0.76, 0.9];
+let skyTarget = skyColor, skySampleAt = 0, skyReady = false;
+// The sky the player stands under: the mean over a small window of columns around the eye.
+function sampleSkyAt(eye) {
+  const n = 2 * SKY_SAMPLE_RADIUS + 1;
+  const x0 = Math.floor(eye[0]) - SKY_SAMPLE_RADIUS, z0 = Math.floor(eye[2]) - SKY_SAMPLE_RADIUS;
+  return sampleSky(terrain.biome_map(seed, x0, z0, n, n), terrain.temperature_map(seed, x0, z0, n, n), ctx.BIOMES, ramp3);
+}
 const meshes = { opaque: [], cutout: [], water: [], ice: [] };
 
 let raftModel = null; // the raft's boxes; moved each frame by the sim's raft offset
@@ -352,7 +360,7 @@ function meshRegion({ rx, rz }, remesh = false) {
   // one column of the neighbours' edges around the region, so no seams at its borders
   const blocks = padRegion((a, b) => walk.region_blocks(a, b), rx, rz, REGION_SIZE);
   const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE);
-  if (rx === 0 && rz === 0) skyColor = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
+  if (rx === 0 && rz === 0 && !skyReady) skyColor = skyTarget = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
   const m = meshBlocks(ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });
   const parts = {};
   for (const k of Object.keys(meshes)) {
@@ -474,6 +482,9 @@ function render(now) {
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   gl.viewport(0, 0, w, h);
   const fogFar = (loadRadius + 0.5) * REGION_SIZE * 1.1;
+  const dtSky = lastFrame === null ? 0 : (now - lastFrame) / 1000;
+  if (now - skySampleAt > 250) { skySampleAt = now; skyTarget = sampleSkyAt(eye); if (!skyReady) skyColor = skyTarget; skyReady = true; }
+  skyColor = easeSky(skyColor, skyTarget, dtSky);
   const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
