@@ -43,7 +43,9 @@ function layers(ctx, size, origin) {
       const wy = dv.getInt16(o + 2, true) / 16;
       const layer = dv.getUint8(o + 8);
       if (map === out.grass && wy !== y) continue;
-      map.set(`${Math.floor(dv.getInt16(o, true) / 16 + origin[0])},${Math.floor(dv.getInt16(o + 4, true) / 16 + origin[1])}`, layer);
+      // plants are offset within their column, so locate a quad by its first two vertices' mean
+      const mx = (dv.getInt16(o, true) + dv.getInt16(o + VERTEX_BYTES, true)) / 32, mz = (dv.getInt16(o + 4, true) + dv.getInt16(o + VERTEX_BYTES + 4, true)) / 32;
+      map.set(`${Math.floor(mx + origin[0])},${Math.floor(mz + origin[1])}`, layer);
     }
   }
   return out;
