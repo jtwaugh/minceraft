@@ -62,7 +62,8 @@
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
 // belt.selected (0-based slot), belt.slot.<1-5> (tool name or none), hands (carried
-// item or none), held (empty|tool:<name>|item:<name>), items (loose items in the world),
+// item or none), held (empty|tool:<name>|item:<name>), held.drawn (the icon the
+// held-item pass draws, or none), items (loose items in the world),
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
@@ -77,6 +78,7 @@ import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg
 import { B } from '../../viewer/mesh.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
+import { heldDraw } from '../helditem.js';
 import { hudLayout } from '../hudlayout.js';
 import { layoutChecks } from '../hudcheck.js';
 import { spawnTestItems, readAnimals, faceAnimal, spawnTestAnimals } from '../overlay.js';
@@ -208,6 +210,7 @@ function read(w, path) {
   if (/^belt\.slot\.[1-9]$/.test(path)) return s.belt.slots[+path.slice(-1) - 1] ?? 'none';
   if (path === 'hands') return s.belt.hands ?? 'none';
   if (path === 'held') return s.belt.held;
+  if (path === 'held.drawn') return heldDraw(s.belt.held)?.key ?? 'none';
   if (path === 'health') return s.hud.hearts.full * 2 + s.hud.hearts.half;
   if (path.startsWith('hearts.')) return s.hud.hearts[path.slice(7)];
   if (path === 'phase') return s.hud.timer.phase;

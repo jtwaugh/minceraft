@@ -1,0 +1,31 @@
+# The held-item pass draws the icon of `held` (client/helditem.js heldDraw), and
+# nothing when the hands are empty. held.drawn reports its key, or none.
+
+case empty hands draw nothing
+start walk
+expect held = empty
+expect held.drawn = none
+
+case a selected tool is drawn
+start walk
+held tool:sword
+frame 50 x2
+expect held.drawn = sword
+held tool:hoe
+frame 50 x2
+expect held.drawn = hoe
+
+case a carried item is drawn
+start walk
+held item:seeds
+frame 50 x2
+expect held.drawn = seeds
+
+case going back to empty draws nothing again
+start walk
+held tool:sword
+frame 50 x2
+expect held.drawn = sword
+held empty
+frame 50 x2
+expect held.drawn = none
