@@ -103,7 +103,7 @@ The HUD's layout is done by CSS flex in `mountHud` (`client/hud.js`), so Node ca
 ## 5. Verify, then file
 
 - A second pass replays each `repro` deterministically with the debug observation and drops any finding that doesn't reproduce.
-- What survives is grouped into one `idea` issue per run, in this format. The critic never edits code or design docs.
+- What survives is grouped into one `idea` issue per run, in this format, filed without maintainer review after searching open and closed `idea` issues for duplicates. The `idea` label that starts the reconciler stays maintainer-only, which keeps a gate. The critic never edits code or design docs. (Decided in #1011.)
 - Runs locally (`claude -p` or the Agent SDK) and later as a workflow (e.g. `claude-critic.yml`), weekly and after client PRs merge.
 
 > **Reconciler:** see notes 10, 11 and 12. A workflow file is outside what the agent app can edit.
@@ -124,12 +124,10 @@ The HUD's layout is done by CSS flex in `mountHud` (`client/hud.js`), so Node ca
 
 1. Is the critic's prompt and runner implementation-lane code (e.g. under `client/tools/` or `.github/`), or does it belong with the other workflow agents?
 2. Should a confirmed repro also be added to `client/test/scripts/` as an expected-failing case, or only attached to the issue?
-3. How much may it file per run without review: one grouped issue (proposed), or a draft the maintainer approves before it's posted?
 4. Does `hudLayout` replacing CSS flex in `mountHud` need a basic-gameplay section 12 change, or is it an implementation detail?
 
 ## Open questions (reconciler)
 
 1. **Q1 placement.** A: prompt in `.github/prompts/critic.md`, runner and verify in `client/tools/` (suggested, note 10). B: everything under `client/tools/`. C: inline in the workflow, like the other agents.
 2. **Q2 expected-failing scripts.** `scripts.test.mjs` has no expected-failure mode, so A: attach to the issue only (suggested). B: add an `xfail` case marker to the DSL first.
-3. **Q3 filing.** A: one grouped `idea` issue per run (proposed), with duplicate search first. B: a draft the maintainer approves. A is the lighter option; the `idea` label that starts the reconciler can stay maintainer-only to keep a gate (note 12).
 4. **Q4 `hudLayout`.** Implementation detail (note 6); no change to basic-gameplay section 12. Suggest closing it as such.
