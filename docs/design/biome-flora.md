@@ -221,6 +221,7 @@ flyover and client get it together.
    `R` is). Inner columns get the blurred value.
    - `R` comes from data (`data/biomes.toml`, `[blend] radius`, default 3,
      so a 7x7 window) and can be overridden by a client setting, 0 to 7.
+     The default stays 3, one value in the data. (Decided in #1029.)
    - The flyover workers may use a smaller radius for speed; say so in the
      flyover README.
 2. **Per-vertex tint.** Each top-face corner takes the average of the 4
@@ -389,10 +390,6 @@ shapes leave room for it.
 
 ## Open questions
 
-2. **Blend radius default.**
-   A. 3 (7x7), the cheap default.
-   B. 5 (11x11), softer borders.
-   C. Per surface: client 5, flyover 2.
 3. **Do new plants drop anything?**
    A. Nothing for now (decorative).
    B. Berries and flowers drop items; feeds later cooking and dyes.
