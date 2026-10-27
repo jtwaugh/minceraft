@@ -32,6 +32,7 @@ use crate::climate::biome_for;
 use crate::data::{
     blocks_movement, is_liquid, opacity, Biome, BiomeInfo, Block, Plants, TreeKind, BIOME_INFO,
 };
+use crate::flora::{Flora, FLORA};
 use crate::noise::{mix64, Rng};
 use crate::{plants, trees, Biases, Generator, Region, AIR, HEIGHT, ICE, STONE};
 use alloc::vec;
@@ -359,7 +360,7 @@ pub fn decorate(region: &mut Region, gen: &Generator, biases: &Biases) -> Decora
         protected: biases.protected,
         pending: Vec::new(),
     };
-    run(&mut world, gen, area, 0)
+    run(&mut world, gen, area, 0, &FLORA)
 }
 
 /// Generate terrain for the region plus margin, decorate, crop (SPEC 15).
@@ -370,6 +371,19 @@ pub(crate) fn generate_decorated(
     w: u32,
     d: u32,
     biases: &Biases,
+) -> (Region, DecorationStats) {
+    generate_decorated_with(gen, x0, z0, w, d, biases, &FLORA)
+}
+
+/// [`generate_decorated`] with an explicit flora table (tests pass their own).
+pub(crate) fn generate_decorated_with(
+    gen: &Generator,
+    x0: i32,
+    z0: i32,
+    w: u32,
+    d: u32,
+    biases: &Biases,
+    flora: &[Flora],
 ) -> (Region, DecorationStats) {
     let mut out = Region {
         blocks: vec![0u8; w as usize * d as usize * HEIGHT],
@@ -422,7 +436,7 @@ pub(crate) fn generate_decorated(
         protected: biases.protected,
         pending: Vec::new(),
     };
-    let stats = run(&mut world, gen, area, MARGIN_CELLS);
+    let stats = run(&mut world, gen, area, MARGIN_CELLS, flora);
     for z in 0..d as usize {
         for x in 0..w as usize {
             let src = ((z + (z0 - bz0) as usize) * bw as usize + x + (x0 - bx0) as usize) * HEIGHT;
@@ -434,8 +448,15 @@ pub(crate) fn generate_decorated(
 }
 
 /// Four parity passes over the cells overlapping `area` (plus `margin`
-/// cells, shrinking by one per pass), then the snow pass over `area`.
-fn run(world: &mut World, gen: &Generator, area: Area, margin: i32) -> DecorationStats {
+/// cells, shrinking by one per pass), then the column-local flora pass and the
+/// snow pass over `area`.
+fn run(
+    world: &mut World,
+    gen: &Generator,
+    area: Area,
+    margin: i32,
+    flora: &[Flora],
+) -> DecorationStats {
     let mut stats = DecorationStats::default();
     let (cx0, cz0) = (cell_index(area.x0), cell_index(area.z0));
     let (cx1, cz1) = (cell_index(area.x1 - 1), cell_index(area.z1 - 1));
@@ -460,6 +481,8 @@ fn run(world: &mut World, gen: &Generator, area: Area, margin: i32) -> Decoratio
             plants::cleanup_column(world, x, z);
         }
     }
+    let bounds = (area.x0, area.z0, area.x1, area.z1);
+    crate::flora::place(world, gen.seed, bounds, flora);
     for z in area.z0..area.z1 {
         for x in area.x0..area.x1 {
             let b = world.biome(x, z) as usize;

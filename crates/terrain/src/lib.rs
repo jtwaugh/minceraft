@@ -1025,3 +1025,6 @@ mod tests;
 
 #[cfg(test)]
 mod tests_veg;
+
+#[cfg(test)]
+mod tests_flora;

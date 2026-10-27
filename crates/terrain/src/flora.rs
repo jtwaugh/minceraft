@@ -1,7 +1,12 @@
 //! Flora table, generated at compile time from `data/flora.toml` (see
-//! `build.rs`). Nothing reads it yet; the placement pass comes later.
+//! `build.rs`), and the column-local placement pass that reads it
+//! (docs/design/biome-flora.md D.2).
 
-use crate::data::{Biome, Block};
+use crate::data::{blocks_movement, is_liquid, Biome, Block};
+use crate::decorate::World;
+use crate::noise::{hash_f64, mix64, OctavePerlin, Rng};
+use crate::{AIR, HEIGHT};
+use alloc::vec::Vec;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FloraShape {
@@ -41,6 +46,70 @@ pub struct Flora {
 }
 
 include!(concat!(env!("OUT_DIR"), "/flora.rs"));
+
+/// Low-frequency patch noise for one entry, from the seed and its salt.
+fn patch_noise(seed: u64, f: &Flora) -> OctavePerlin {
+    let key = mix64(seed ^ ((FLORA_PATCH_NOISE_SALT as u64) << 32 | f.salt as u64));
+    OctavePerlin::new(&mut Rng::new(key), 2)
+}
+
+/// Place single-block flora (`cross`, `ground_cover`, `bush`) over the
+/// columns `[x0, x1) x [z0, z1)`. Each column reads only itself, the seed and
+/// the noise, and writes only into air, so the result is independent of the
+/// region and the cell RNG is untouched. Returns blocks placed per entry.
+pub(crate) fn place(
+    world: &mut World,
+    seed: u64,
+    (x0, z0, x1, z1): (i32, i32, i32, i32),
+    table: &[Flora],
+) -> Vec<u64> {
+    let mut placed = alloc::vec![0u64; table.len()];
+    let noises: Vec<OctavePerlin> = table.iter().map(|f| patch_noise(seed, f)).collect();
+    for z in z0..z1 {
+        for x in x0..x1 {
+            let Some(top) = surface(world, x, z) else {
+                continue;
+            };
+            let ground = Block::from_u8(world.get(x, top - 1, z));
+            let biome = world.biome(x, z);
+            for (i, f) in table.iter().enumerate() {
+                if !matches!(
+                    f.shape,
+                    FloraShape::Cross | FloraShape::GroundCover | FloraShape::Bush
+                ) || !f.ground.contains(&ground)
+                {
+                    continue;
+                }
+                let Some(&(_, chance)) = f.biomes.iter().find(|(b, _)| *b == biome) else {
+                    continue;
+                };
+                let n = noises[i].sample2d(x as f64 / f.cluster_scale, z as f64 / f.cluster_scale);
+                let patch = (n * 0.5 + 0.5).clamp(0.0, 1.0) * 2.0;
+                if hash_f64(seed, x, z, 0, f.salt as u64) < chance * patch
+                    && world.set(x, top, z, f.block as u8)
+                {
+                    placed[i] += 1;
+                    break;
+                }
+            }
+        }
+    }
+    placed
+}
+
+/// Height of the air cell above a column's highest solid block, if the cell
+/// is air and the block below is not liquid.
+fn surface(world: &World, x: i32, z: i32) -> Option<i32> {
+    for y in (1..HEIGHT as i32).rev() {
+        let b = world.get(x, y, z);
+        if blocks_movement(b) || is_liquid(b) {
+            let top = y + 1;
+            let open = top < HEIGHT as i32 && world.get(x, top, z) == AIR && !is_liquid(b);
+            return open.then_some(top);
+        }
+    }
+    None
+}
 
 #[cfg(test)]
 #[path = "../flora_check.rs"]
