@@ -33,3 +33,33 @@ test('every held icon exists in the tileset export', (t) => {
   const tiles = JSON.stringify(JSON.parse(readFileSync(path, 'utf8')));
   for (const n of [...HELD_TEXTURES, ...ITEM_TEXTURES]) assert.ok(tiles.includes(`"${n}"`), `${n} missing from the export`);
 });
+
+test('heldDraw is null for empty hands and unknown things', async () => {
+  const { heldDraw } = await import('../helditem.js');
+  assert.equal(heldDraw('empty'), null);
+  assert.equal(heldDraw('tool:nope'), null);
+});
+
+test('heldDraw places tools and items right of and below the view centre', async () => {
+  const { heldDraw, heldBoxes } = await import('../helditem.js');
+  for (const h of ['tool:sword', 'tool:hoe', 'item:seeds']) {
+    const d = heldDraw(h);
+    assert.equal(d.key, h.split(':')[1]);
+    assert.ok(d.model[12] > 0 && d.model[13] < 0 && d.model[14] < 0, h);
+    const boxes = heldBoxes(h);
+    assert.equal(boxes.length, 1);
+    assert.equal(boxes[0].faces.front, d.key);
+    assert.equal(boxes[0].faces.back, d.key);
+  }
+  assert.deepEqual(heldBoxes('empty'), []);
+});
+
+test('held pose tunables match data/held.toml', async () => {
+  const h = await import('../helditem.js');
+  const toml = readFileSync(new URL('../../data/held.toml', import.meta.url), 'utf8');
+  const num = (k) => +toml.match(new RegExp(`^${k} = (\\S+)`, 'm'))[1];
+  assert.deepEqual(h.HELD_OFFSET, [num('offset_x'), num('offset_y'), num('offset_z')]);
+  assert.equal(h.HELD_SCALE, num('scale'));
+  assert.equal(h.HELD_TILT_YAW, num('tilt_yaw'));
+  assert.equal(h.HELD_TILT_ROLL, num('tilt_roll'));
+});

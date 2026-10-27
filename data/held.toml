@@ -1,0 +1,14 @@
+# Resting pose of the held item (docs/design/held-and-world-items.md section 1).
+# The item is a flat sprite placed in camera space (x right, y up, -z ahead).
+# These numbers are this game's own, tuned to feel right; client/helditem.js
+# mirrors them and client/test/helditem.test.mjs checks the two agree.
+
+# Offset of the sprite's centre from the view centre: right, up, ahead (metres).
+offset_x = 0.35
+offset_y = -0.3
+offset_z = -0.6
+# Edge of the sprite, in metres.
+scale = 0.4
+# Turn about the vertical (inwards toward the centre) and roll about the view axis, in degrees.
+tilt_yaw = 25.0
+tilt_roll = 20.0
