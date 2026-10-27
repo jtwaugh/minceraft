@@ -1,6 +1,6 @@
 // client/tools/critic.mjs: local play-critic runner (Node only). Run: node client/tools/critic.mjs
-// Asks the model for findings, drops any that don't replay, prints the report. It never files
-// anything and never edits the repo (docs/design/play-critic-agent.md sections 4 and 5).
+// Asks the model for findings, drops any that don't replay, prints the report. It files an issue
+// only with --file, and never edits the repo (docs/design/play-critic-agent.md sections 4 and 5).
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { parseFindings } from './finding.mjs';
 import { verifyAll } from './verify.mjs';
 import { renderReport } from './report.mjs';
+import { fileReport } from './file.mjs';
 
 const root = new URL('../../', import.meta.url);
 const OUTPUT_RULE =
@@ -41,10 +42,14 @@ export async function runCritic({ model = claudeModel, runDate = new Date().toIS
   return renderReport(kept, { runDate });
 }
 
-export async function main(out = process.stdout, err = process.stderr, options = {}) {
+export async function main(out = process.stdout, err = process.stderr, options = {}, argv = []) {
   try {
     const report = await runCritic(options);
     out.write(report ? `${report.title}\n\n${report.body}\n` : 'no findings\n');
+    if (report && argv.includes('--file')) {
+      const r = await fileReport(report, options.gh);
+      out.write(r.filed ? `filed ${r.url}\n` : `duplicate of #${r.duplicateOf.number} (${r.duplicateOf.title}); not filed\n`);
+    }
     return 0;
   } catch (e) {
     err.write(`critic: ${e.message}\n`);
@@ -52,4 +57,4 @@ export async function main(out = process.stdout, err = process.stderr, options =
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = await main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = await main(process.stdout, process.stderr, {}, process.argv.slice(2));
