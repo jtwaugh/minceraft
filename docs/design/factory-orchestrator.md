@@ -293,7 +293,7 @@ The tick leaves a Blocked PR alone while the maintainer is working on it: a main
 > note 8. Workflow edits are maintainer-only (note 2). The review-gate and
 > reviewer workflows are not in this list and stay as they are.
 
-**Phase B: State store.** The tick keeps its state in SQLite (on a `factory-state` branch or a small hosted store) and writes issues, labels and the board as views. Human inputs (labels, `/decide`, `/override`, merges) are the only things read back. Done when deleting and recreating the board from the store loses nothing, and a ticket can't exist without a plan.
+**Phase B: State store.** The tick keeps its state in SQLite (on a `factory-state` branch or a small hosted store) and writes issues, labels and the board as views. Human inputs (labels, `/decide`, `/override`, merges) are the only things read back. Done when deleting and recreating the board from the store loses nothing, and a ticket can't exist without a plan. The project board stays as a view the tick writes until Phase E exists. (Decided in #1113.)
 
 > **Reconciler:** blocked on open question 1. A hosted store is `[external]`.
 > The `factory-state` branch needs a branch-protection exemption for the
@@ -320,7 +320,6 @@ The tick leaves a Blocked PR alone while the maintainer is working on it: a main
 1. Where the store lives: a SQLite file committed to a `factory-state` branch (simple, auditable, merge races), or a hosted database (needs a secret and something `[external]`).
 2. Whether the tick stays a GitHub Actions workflow, or becomes a long-running service with webhooks (faster, but `[external]` hosting).
 3. GitHub App for the factory's identity: worth setting up now, or after Phase A shows the remaining API load?
-4. Whether the project board stays, or the needs-you queue and per-ticket timelines replace it.
 5. Migration: do in-flight plans and tickets move into the store, or does the store start with the next plan?
 
 ---
@@ -340,9 +339,6 @@ Options for the author's questions, and new ones from the notes above.
 3. **GitHub App** (author's question 3). A: after Phase A, using the
    measured request count. B: before, so Phase A starts with its own budget.
    Suggest A; the tick's batching already removes most calls.
-4. **Project board** (author's question 4). A: keep it as a view the tick
-   writes. B: drop it once Phase E exists. Suggest A until Phase E is done,
-   then decide.
 5. **Migration** (author's question 5). A: the store starts with the next
    plan, in-flight work finishes under the old rules. B: import open plans
    and tickets at Phase B. Suggest B: Phase A's tick already has to read
