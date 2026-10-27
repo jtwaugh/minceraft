@@ -129,6 +129,11 @@ function boxSum(src, n, r) {
  * Also returns `padded`: the blurred grass and leaf tints (Float32Array,
  * 3 per column) for the area plus a ring of `pad` = R + 1 columns, `n` wide.
  * Columns within one of the area are exact; the outermost ring is not.
+ *
+ * And `corners`: the tint of each of the (size + 1)^2 block corners, the mean
+ * of the 4 columns that meet there (`grass` and `leaf`, Float32Array, 3 per
+ * corner, row z * (size + 1) + x). Edge corners use the padded ring, so
+ * areas side by side agree on the corners they share.
  */
 export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.radius) {
   const pad = R + 1, n = size + 2 * pad;
@@ -157,21 +162,31 @@ export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.
     grass.push([padG[p], padG[p + 1], padG[p + 2]]);
     leaf.push([padL[p], padL[p + 1], padL[p + 2]]);
   }
+  const cn = size + 1;
+  const corner = (a) => {
+    const out = new Float32Array(cn * cn * 3);
+    for (let z = 0; z < cn; z++) for (let x = 0; x < cn; x++) for (let k = 0; k < 3; k++) {
+      const p = ((z + pad - 1) * n + x + pad - 1) * 3 + k;
+      out[(z * cn + x) * 3 + k] = (a[p] + a[p + 3] + a[p + n * 3] + a[p + n * 3 + 3]) / 4;
+    }
+    return out;
+  };
   const mid = (size >> 1) * size + (size >> 1);
   return {
+    corners: { n: cn, grass: corner(padG), leaf: corner(padL) },
     grass, leaf, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] },
     padded: { pad, n, grass: padG, leaf: padL },
   };
 }
 
 const WHITE = [1, 1, 1];
-function tintFor(ctx, b, tints, c) {
+function tintFor(ctx, b, grass, leaf) {
   switch (b) {
-    case B.grass: case B.tall_grass: return tints.grass[c];
-    case B.fern: return tints.grass[c].map((v) => v * 0.88);
-    case B.oak_leaves: return tints.leaf[c];
-    case B.birch_leaves: return lerp3(tints.leaf[c], ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
-    case B.spruce_leaves: return lerp3(tints.leaf[c], ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
+    case B.grass: case B.tall_grass: return grass;
+    case B.fern: return grass.map((v) => v * 0.88);
+    case B.oak_leaves: return leaf;
+    case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
+    case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
   }
 }
@@ -220,13 +235,16 @@ const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 class Quads {
   constructor() { this.buf = new ArrayBuffer(VERTEX_BYTES * 4 * 1024); this.n = 0; this.view(); }
   view() { this.i16 = new Int16Array(this.buf); this.u8 = new Uint8Array(this.buf); }
+  // `tint` is one [r, g, b] (0-1) for all four vertices, or four of them.
   quad(x, y, z, p, uv, layer, k, tint, top = null, ao = null) {
     if ((this.n + 4) * VERTEX_BYTES > this.buf.byteLength) {
       const nb = new ArrayBuffer(this.buf.byteLength * 2);
       new Uint8Array(nb).set(this.u8); this.buf = nb; this.view();
     }
-    const sh = Math.round(k * 128), r = Math.round(tint[0] * 255), g = Math.round(tint[1] * 255), b = Math.round(tint[2] * 255);
+    const sh = Math.round(k * 128), per = Array.isArray(tint[0]);
     for (let j = 0; j < 4; j++) {
+      const t = per ? tint[j] : tint;
+      const r = Math.round(t[0] * 255), g = Math.round(t[1] * 255), b = Math.round(t[2] * 255);
       const o = (this.n + j) * VERTEX_BYTES;
       this.i16[o >> 1] = Math.round((x + p[j][0]) * 16);
       this.i16[(o >> 1) + 1] = Math.round((y + p[j][1]) * 16);
@@ -248,6 +266,10 @@ class Quads {
  * meshed, and the pad ring is used for face culling, so meshes of adjacent
  * areas meet without seams. With pad 0 the outside counts as air (the 3D
  * view's free-standing block of terrain). `tints` are for the inner columns.
+ * When they carry `corners` (see `columnTints`), tinted blocks colour each
+ * vertex from the corner grid, so tops, sides and neighbouring blocks agree
+ * where they meet (cross plants use the nearest corner of their own column);
+ * otherwise a face takes its column's tint.
  *
  * Solid ground is clipped 8 blocks under the lowest surface. Returns
  * { opaque, cutout, water, ice } (each { verts, faces }), and the mean and
@@ -282,10 +304,12 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
   const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0, ao = null) => {
     let p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
     let uv = p.map((q) => faceUV(f, q, vr));
+    if (typeof tint === 'function') tint = p.map((q) => tint(Math.round(q[0]), Math.round(q[2])));
     if (ao && ao[0] + ao[2] < ao[1] + ao[3]) {
       // flip the diagonal: rotate the vertices so the shared index pattern splits the other way
       const rot = (a) => [a[1], a[2], a[3], a[0]];
       p = rot(p); uv = rot(uv); ao = rot(ao);
+      if (Array.isArray(tint[0])) tint = rot(tint);
     }
     out[L].quad(x, y, z, p, uv, layer, f.s * (0.75 + y / 256), tint, null, ao);
   };
@@ -315,14 +339,21 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
     for (let y = y0; y < H; y++) {
       const b = blocks[base + y];
       if (b === B.air) continue;
-      const tint = tintFor(ctx, b, tints, c);
+      const flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c]);
+      // Per-vertex tint by corner offset (0 or 1), for blocks that have one.
+      const tint = flat === WHITE || !tints.corners ? flat : (ox, oz) => {
+        const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf;
+        return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]]);
+      };
       const vr = VARIES[b] ? variantAt(origin[0] + x, y, origin[1] + z) : 0;
       if (CROSS[b]) {
         // two crossed quads, wound both ways so they show from either side
         const layer = layerOf(ctx, b, 0), k = 0.9 * (0.75 + y / 256);
         for (const q of [X1, X2]) {
-          out[3].quad(x, y, z, q, XUV, layer, k, tint, XTOP);
-          out[3].quad(x, y, z, [q[1], q[0], q[3], q[2]], [XUV[1], XUV[0], XUV[3], XUV[2]], layer, k, tint, [XTOP[1], XTOP[0], XTOP[3], XTOP[2]]);
+          const t = typeof tint === 'function' ? q.map((v) => tint(Math.round(v[0]), Math.round(v[2]))) : tint;
+          const flip = (a) => [a[1], a[0], a[3], a[2]];
+          out[3].quad(x, y, z, q, XUV, layer, k, t, XTOP);
+          out[3].quad(x, y, z, flip(q), flip(XUV), layer, k, Array.isArray(t[0]) ? flip(t) : t, flip(XTOP));
         }
         continue;
       }
