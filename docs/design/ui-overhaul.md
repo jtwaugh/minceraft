@@ -5,7 +5,7 @@ scope: game
 source: "#1138"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -15,7 +15,8 @@ phases:
 
 Checked against the code:
 
-- **Scale.** `hudScale(w, h)` is `uiScale(w, h, 80, 45)` in `client/hud.js:22`. `uiScale` (`client/uipx.js:7`) returns the largest whole multiple that fits the base size. The inventory and death screen use their own `uiScale(w, h, 100, 60)` (`client/inventoryui.js:19`, `client/deathui.js:17`) and the menu uses `BASE_W` and `BASE_H` (`client/menu.js:85`). So there are three or four scale rules, not one.
+- **Phase A done.** One scale rule, `interfaceScale` in `client/uipx.js`, is used by the HUD, inventory, death screen and menu (#1161, #1166); the `layout` results are readable from `expect` (#1163); `client/test/scripts/hudsizes.input` checks the four sizes (#1169). It caps the belt at half the viewport width (`BELT_MAX_WIDTH_FRACTION = 0.5`); the one-third/30% target from #1151 is left to Phase B.
+- **Scale (before Phase A).** `hudScale(w, h)` is `uiScale(w, h, 80, 45)` in `client/hud.js:22`. `uiScale` (`client/uipx.js:7`) returns the largest whole multiple that fits the base size. The inventory and death screen use their own `uiScale(w, h, 100, 60)` (`client/inventoryui.js:19`, `client/deathui.js:17`) and the menu uses `BASE_W` and `BASE_H` (`client/menu.js:85`). So there are three or four scale rules, not one.
 - **Layout.** `client/hudlayout.js` computes exact rectangles from `textureSize`. Hearts and belt are in one column, left-aligned and centred as a block (`hudLayout`). The timer is a box centred at the top. Words with no texture use the fallback `TEXT_CHAR_W = 8` and `TEXT_H = 14` (12px monospace).
 - **Layout checks.** The `layout <w> <h>` DSL statement (`client/test/dsl.mjs:240`) runs `hudLayout` and `layoutChecks` (`client/hudcheck.js`) and returns `problems`. The sizes in section 1 are not yet test cases in `client/test/scripts/`.
 - **Text.** `12px ui-monospace` is set in `client/hud.js:51`, `client/inventoryui.js:33`, `client/deathui.js:28` and `client/index.html:8`. `play-critic-agent.md` note 7 (decided in #969) already says the timer's phase word and the hands' item name are to be drawn from textures.
