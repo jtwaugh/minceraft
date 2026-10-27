@@ -38,7 +38,7 @@ Checked against the code on `master`:
 7. **Text in the HUD.** The timer's phase word and the hands' item name are DOM text (`font: 12px ui-monospace`), not pixel-art textures, so their width can't be computed exactly from `textureSize`. Those two labels are to be drawn from textures, so every `hudLayout` rectangle, the timer's and the hands' included, is exact. The art for them is a later ticket, not part of `hudLayout` itself. (Decided in #969.)
 8. **Mechanical checks (section 3)** are measurable and testable as written (overlap, off-screen, `hudScale` below 2, crosshair clear zone, belt-to-hands distance). The thresholds (clear-zone radius, "far apart") are not given; they need numbers, ideally in a `data/*.toml` or constants with tests.
 9. **Viewport sweep.** `uiScale` returns an integer scale from the viewport; phone portrait will likely hit scale 1, so the "scale below 2" check will fire there. Decided in #970: advisory on portrait viewports (section 3).
-10. **Critic prompt and runner placement (open question 1).** Nothing in the repo is a model-driven tool other than the workflows, whose prompts live in `.github/prompts/` (reconcile) or inline. CLAUDE.md puts `.github/` and `client/` in the implementation lane, so either location is allowed; but `.github/workflows/` files can't be changed by the agent app, so Phase E's workflow file will need the maintainer. Suggest the prompt in `.github/prompts/critic.md` and the runner and verify code in `client/tools/`.
+10. **Critic prompt and runner placement (open question 1).** Nothing in the repo is a model-driven tool other than the workflows, whose prompts live in `.github/prompts/` (reconcile) or inline. CLAUDE.md puts `.github/` and `client/` in the implementation lane, so either location is allowed; but `.github/workflows/` files can't be changed by the agent app, so Phase E's workflow file will need the maintainer. The prompt goes in `.github/prompts/critic.md` and the runner and verify code in `client/tools/`. (Decided in #1008.)
 11. **Verify pass (section 5).** Deterministic replay is supported: the sim is a fixed 20 Hz tick with a deterministic RNG (basic-gameplay phase 6, `crates/game/src/rng.rs`), and `run` is already used that way. A repro that fails to replay, or whose `expect` lines don't hold, is dropped.
 12. **Filing (section 5).** The critic opens `idea` issues, which trigger `claude-idea.yml`. That workflow needs the title and body in the shape the reconciler expects (a `# Mince Raft: <title>` heading, `Status: idea`, `Scope:` line). Rate: one grouped issue per run is already the proposal; also guard against duplicates of earlier findings (the critic should search open and closed `idea` issues first). Needs a token that can create issues; an agent-created issue labelled `idea` is the maintainer-controlled gate only if the label is added by the maintainer (the workflow triggers on the label, see `claude-idea.yml`).
 13. **Clean room.** The critic judges against design docs and UX principles. Its prompt must repeat the CLAUDE.md rules: no Minecraft comparisons, no Beta facts outside SPEC.md, never touch `work/` or `*.jar`. The tool lives in the implementation lane and never edits `SPEC.md` or design docs.
@@ -103,7 +103,7 @@ The HUD's layout is done by CSS flex in `mountHud` (`client/hud.js`), so Node ca
 ## 5. Verify, then file
 
 - A second pass replays each `repro` deterministically with the debug observation and drops any finding that doesn't reproduce.
-- What survives is grouped into one `idea` issue per run, in this format. The critic never edits code or design docs. A confirmed repro is attached to the issue only; it is not added to `client/test/scripts/` as an expected-failing case. (Decided in #1010.)
+- What survives is grouped into one `idea` issue per run, in this format, filed without maintainer review after searching open and closed `idea` issues for duplicates. The `idea` label that starts the reconciler stays maintainer-only, which keeps a gate. The critic never edits code or design docs. A confirmed repro is attached to the issue only; it is not added to `client/test/scripts/` as an expected-failing case. (Decided in #1011 and #1010.)
 - Runs locally (`claude -p` or the Agent SDK) and later as a workflow (e.g. `claude-critic.yml`), weekly and after client PRs merge.
 
 > **Reconciler:** see notes 10, 11 and 12. A workflow file is outside what the agent app can edit.
@@ -122,12 +122,8 @@ The HUD's layout is done by CSS flex in `mountHud` (`client/hud.js`), so Node ca
 
 ## Open questions
 
-1. Is the critic's prompt and runner implementation-lane code (e.g. under `client/tools/` or `.github/`), or does it belong with the other workflow agents?
-3. How much may it file per run without review: one grouped issue (proposed), or a draft the maintainer approves before it's posted?
 4. Does `hudLayout` replacing CSS flex in `mountHud` need a basic-gameplay section 12 change, or is it an implementation detail?
 
 ## Open questions (reconciler)
 
-1. **Q1 placement.** A: prompt in `.github/prompts/critic.md`, runner and verify in `client/tools/` (suggested, note 10). B: everything under `client/tools/`. C: inline in the workflow, like the other agents.
-3. **Q3 filing.** A: one grouped `idea` issue per run (proposed), with duplicate search first. B: a draft the maintainer approves. A is the lighter option; the `idea` label that starts the reconciler can stay maintainer-only to keep a gate (note 12).
 4. **Q4 `hudLayout`.** Implementation detail (note 6); no change to basic-gameplay section 12. Suggest closing it as such.
