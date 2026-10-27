@@ -1,7 +1,7 @@
 // Texture array and block-face table for the client scene, built from the
 // viewer's tileset export (viewer/textures.json, written by build.sh) so the
 // client draws the same blocks as the viewer through viewer/mesh.js.
-// Same layer order as viewer/index.html; water is two runs of 4 frames (tileFor
+// Shared names come from viewer/tilelist.js; water is two runs of 4 frames (tileFor
 // returns frame 0; the shader adds the animation frame) and tiles missing from the export fall back to flat grey.
 //
 // Unlike the viewer, the tint flag is not packed into alpha (mipmapping averages
@@ -13,18 +13,11 @@
 
 import { faceLayers } from '../viewer/mesh.js';
 import { buildMips } from '../viewer/mips.js';
+import { NAMES as SHARED, TINTED } from '../viewer/tilelist.js';
 
 const S = 16;
-const NAMES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel', 'water_0', 'water_1', 'water_2', 'water_3',
-  'water_flow_0', 'water_flow_1', 'water_flow_2', 'water_flow_3',
-  'log_side', 'log_top', 'leaves', 'birch_log_side', 'birch_log_top', 'spruce_log_side', 'spruce_log_top',
-  'ice', 'snow', 'cactus_side', 'cactus_top', 'pumpkin_side', 'pumpkin_top',
-  'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose', 'sugar_cane', 'brown_mushroom', 'red_mushroom',
-  'leaves_fast', 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
+const NAMES = [...SHARED, 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
   'planter_side', 'planter_top', 'planter_bottom', 'planter_farmland_top'];
-const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89',
-  water_0: 'abe', water_1: 'abe', water_2: 'abe', water_3: 'abe',
-  water_flow_0: 'abe', water_flow_1: 'abe', water_flow_2: 'abe', water_flow_3: 'abe' };
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
 /** Layers [ANIM_FIRST, ANIM_END) are the water runs; the shader offsets them by the frame. */
 export const ANIM_FIRST = L.water_0, ANIM_END = L.water_flow_3 + 1;
