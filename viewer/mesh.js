@@ -59,7 +59,11 @@ const SHAPES = {
 const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover };
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
+  B.daisy, B.bluebell, B.tall_grass_double_lower, B.tall_grass_double_upper, B.dry_grass, B.dry_grass_tall_lower, B.dry_grass_tall_upper,
   B.wheat_0, B.wheat_1, B.wheat_2, B.wheat_3, B.wheat_4, B.wheat_5, B.wheat_6, B.wheat_7]);
+
+// Upper blocks of two-block plants.
+const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper]);
 
 /**
  * Meshing context: names, colours and biomes from the legend() JSON, plus
@@ -214,6 +218,9 @@ const WHITE = [1, 1, 1];
 function tintFor(ctx, b, grass, leaf, water, dry) {
   switch (b) {
     case B.grass: case B.tall_grass: return grass;
+    // dry grass takes the grass tint until the dry ramp exists
+    case B.tall_grass_double_lower: case B.tall_grass_double_upper:
+    case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return grass;
     case B.fern: return grass.map((v) => v * 0.88);
     case B.water: return water ?? WHITE;
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return dry ?? WHITE;
@@ -420,9 +427,11 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       }
       if (CROSS[b]) {
         // two crossed quads, wound both ways so they show from either side
-        const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, y, origin[1] + z), k = 0.9 * (0.75 + y / 256);
-        const [dx, dz] = plantOffset(origin[0] + x, y, origin[1] + z);
-        const shape = plantShape(origin[0] + x, y, z + origin[1]);
+        // the upper half of a tall plant takes its variation from the lower block
+        const py = UPPER_HALF[b] ? y - 1 : y;
+        const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, py, origin[1] + z), k = 0.9 * (0.75 + py / 256);
+        const [dx, dz] = plantOffset(origin[0] + x, py, origin[1] + z);
+        const shape = plantShape(origin[0] + x, py, z + origin[1]);
         const tall = b === B.tall_grass || b === B.fern, hgt = tall ? shape.height : 1;
         const uvs = XUV.map(([u, v]) => [shape.mirror ? 1 - u : u, v === 0 ? 1 - hgt : v]);
         for (const q of [X1, X2]) {
