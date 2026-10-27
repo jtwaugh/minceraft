@@ -410,7 +410,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         // two crossed quads, wound both ways so they show from either side
         // the upper half of a tall plant takes its variation from the lower block
         const py = UPPER_HALF[b] ? y - 1 : y;
-        const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, py, origin[1] + z), k = 0.9 * (0.75 + y / 256);
+        const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, py, origin[1] + z), k = 0.9 * (0.75 + py / 256);
         const [dx, dz] = plantOffset(origin[0] + x, py, origin[1] + z);
         const shape = plantShape(origin[0] + x, py, z + origin[1]);
         const tall = b === B.tall_grass || b === B.fern, hgt = tall ? shape.height : 1;
