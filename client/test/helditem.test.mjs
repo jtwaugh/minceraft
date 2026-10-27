@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { HELD_TEXTURES, heldTextureName } from '../helditem.js';
+import { packAtlas } from '../models.js';
 import { ITEM_TEXTURES } from '../itemmodel.js';
 
 const itemsToml = readFileSync(new URL('../../data/items.toml', import.meta.url), 'utf8');
@@ -32,6 +33,13 @@ test('every held icon exists in the tileset export', (t) => {
   if (!existsSync(path)) return t.skip('viewer/textures.json missing; run ./build.sh');
   const tiles = JSON.stringify(JSON.parse(readFileSync(path, 'utf8')));
   for (const n of [...HELD_TEXTURES, ...ITEM_TEXTURES]) assert.ok(tiles.includes(`"${n}"`), `${n} missing from the export`);
+});
+
+test('HELD_TEXTURES and ITEM_TEXTURES pack together into the atlas', (t) => {
+  const path = new URL('../../viewer/textures.json', import.meta.url);
+  if (!existsSync(path)) return t.skip('viewer/textures.json missing; run ./build.sh');
+  const atlas = packAtlas(JSON.parse(readFileSync(path, 'utf8')), [...ITEM_TEXTURES, ...HELD_TEXTURES]);
+  for (const n of [...HELD_TEXTURES, ...ITEM_TEXTURES]) assert.ok(atlas.rects[n], `${n} missing from the atlas`);
 });
 
 test('heldDraw is null for empty hands and unknown things', async () => {
