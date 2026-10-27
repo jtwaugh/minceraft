@@ -345,7 +345,9 @@ and after per CLAUDE.md.
 5. **First set**, chosen to give the bare biomes something:
    - Plains: `daisy` (white, `e` with `f` centre), `bluebell` (blue,
      `b`/`a`), `tall_grass_double`.
-   - Taiga: ferns (both sizes), `berry_bush` (bush shape, `c` dots).
+   - Taiga: ferns in two sizes, the existing `fern` block as a flora entry
+     and a new two-block `fern_double` (`tall_cross`, lower and upper
+     tiles); `berry_bush` (bush shape, `c` dots). (Decided in #1073.)
    - Savanna and Desert: `dry_grass` and `dry_grass_tall`, tinted by a new
      per-biome `dry_ramp` (tan to straw).
    - Forest and Seasonal Forest: `leaf_litter` (ground cover, tinted with
