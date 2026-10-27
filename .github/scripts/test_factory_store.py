@@ -57,6 +57,11 @@ class Test(unittest.TestCase):
         self.db.execute("INSERT INTO tickets (id, plan) VALUES (10, 1)")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO plans (id) VALUES (10)")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("UPDATE tickets SET id = 1 WHERE id = 10")
+        self.db.execute("INSERT INTO plans (id) VALUES (2)")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("UPDATE plans SET id = 10 WHERE id = 2")
 
     def test_dump_ignores_insert_order(self):
         rows = [("INSERT INTO plans (id) VALUES (?)", [(1,), (2,)]),

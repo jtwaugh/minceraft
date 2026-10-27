@@ -64,6 +64,12 @@ BEGIN SELECT RAISE(ABORT, 'id is already a plan'); END;
 CREATE TRIGGER plan_not_ticket BEFORE INSERT ON plans
 WHEN EXISTS (SELECT 1 FROM tickets WHERE id = NEW.id)
 BEGIN SELECT RAISE(ABORT, 'id is already a ticket'); END;
+CREATE TRIGGER ticket_not_plan_update BEFORE UPDATE OF id ON tickets
+WHEN EXISTS (SELECT 1 FROM plans WHERE id = NEW.id)
+BEGIN SELECT RAISE(ABORT, 'id is already a plan'); END;
+CREATE TRIGGER plan_not_ticket_update BEFORE UPDATE OF id ON plans
+WHEN EXISTS (SELECT 1 FROM tickets WHERE id = NEW.id)
+BEGIN SELECT RAISE(ABORT, 'id is already a ticket'); END;
 """
 
 
