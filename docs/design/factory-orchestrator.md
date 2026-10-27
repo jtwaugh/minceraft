@@ -100,9 +100,10 @@ What exists today that this doc relies on or overlaps (checked against the code)
 3. **Rule 1 vs. design docs.** Rule 1 puts "docs, phases" in the store, but a
    doc's `status` and `phases` header is read by CI, `plan_targets.py` and
    `stalled.py`, and is changed only by merged PRs (`docs/design/README.md`).
-   Suggest the header stays the source of truth for docs and phases (a human
-   merge is the acceptance), and the store mirrors it and owns plans,
-   tickets, decisions, runs and attempts.
+   The header stays the source of truth for docs and phases (a human merge is
+   the acceptance); the store mirrors it and owns plans, tickets, decisions,
+   runs and attempts, so rule 1 does not apply to docs and phases.
+   (Decided in #1112.)
 4. **Rule 1 vs. `FACTORY.md`.** `FACTORY.md` decision 3 ("three sources of
    truth") and decision 10 ("ticket progress lives in GitHub's sub-issues")
    would become false after Phase B. Updating `FACTORY.md` is not part of
@@ -349,6 +350,3 @@ Options for the author's questions, and new ones from the notes above.
    them, so the import is the same code run once.
 6. **Header scope** (note 1). A: add `factory` to the CI scope check and use
    it here. B: keep `both`. Suggest A.
-7. **Docs and phases in the store** (note 3). A: headers stay the source of
-   truth, the store mirrors them. B: the store owns phase status and a PR
-   writes it back. Suggest A.
