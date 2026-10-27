@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { HELD_TEXTURES, heldTextureName } from '../helditem.js';
 import { packAtlas } from '../models.js';
 import { ITEM_TEXTURES } from '../itemmodel.js';
+import { SCENE_TEXTURES } from '../scenetextures.js';
 
 const itemsToml = readFileSync(new URL('../../data/items.toml', import.meta.url), 'utf8');
 const toolNames = [...itemsToml.matchAll(/\[\[tool\]\]\s*\nname = "([^"]+)"/g)].map((m) => m[1]);
@@ -35,11 +36,11 @@ test('every held icon exists in the tileset export', (t) => {
   for (const n of [...HELD_TEXTURES, ...ITEM_TEXTURES]) assert.ok(tiles.includes(`"${n}"`), `${n} missing from the export`);
 });
 
-test('HELD_TEXTURES and ITEM_TEXTURES pack together into the atlas', (t) => {
+test('the scene texture list packs into the atlas and includes the held icons', (t) => {
   const path = new URL('../../viewer/textures.json', import.meta.url);
   if (!existsSync(path)) return t.skip('viewer/textures.json missing; run ./build.sh');
-  const atlas = packAtlas(JSON.parse(readFileSync(path, 'utf8')), [...ITEM_TEXTURES, ...HELD_TEXTURES]);
-  for (const n of [...HELD_TEXTURES, ...ITEM_TEXTURES]) assert.ok(atlas.rects[n], `${n} missing from the atlas`);
+  const atlas = packAtlas(JSON.parse(readFileSync(path, 'utf8')), SCENE_TEXTURES);
+  for (const n of [...HELD_TEXTURES, ...ITEM_TEXTURES, ...SCENE_TEXTURES]) assert.ok(atlas.rects[n], `${n} missing from the atlas`);
 });
 
 test('heldDraw is null for empty hands and unknown things', async () => {

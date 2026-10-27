@@ -20,9 +20,10 @@ import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendCont
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
-import { raftBoxes, raftMatrix, RAFT_TEXTURES } from './raftmodel.js';
-import { ITEM_TEXTURES, itemBoxes, itemDraws } from './itemmodel.js';
-import { HELD_TEXTURES, heldBoxes, heldDraw } from './helditem.js';
+import { raftBoxes, raftMatrix } from './raftmodel.js';
+import { itemBoxes, itemDraws } from './itemmodel.js';
+import { heldBoxes, heldDraw } from './helditem.js';
+import { SCENE_TEXTURES } from './scenetextures.js';
 import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
@@ -254,12 +255,11 @@ function drawItems(mvp, items, timeSeconds, camera) {
 // The held item, in camera space after everything else: the depth buffer is
 // cleared first, so it never clips into blocks in front of the player.
 const heldModels = {};
-function drawHeld(w, h, fogFar) {
+function drawHeld(proj) {
   const d = heldDraw(controller.state.belt.held);
   if (!d) return;
   gl.clear(gl.DEPTH_BUFFER_BIT);
   gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.depthMask(true);
-  const proj = new Float32Array(perspective(fov * Math.PI / 180, w / h, NEAR, farPlane(fogFar)));
   models.drawModel(proj, d.model, heldModels[d.key] ??= models.addModel(heldBoxes(d.key)));
 }
 
@@ -356,7 +356,7 @@ const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIA
 // Textured-model drawer (modelgl.js); nothing is drawn with it yet. Without the
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
-const models = createModelDrawer(gl, tileset, [...RAFT_TEXTURES, ...ITEM_TEXTURES, ...HELD_TEXTURES]);
+const models = createModelDrawer(gl, tileset, SCENE_TEXTURES);
 const hud = mountHud(document, tileset);
 const inventoryView = mountInventory(document, tileset);
 
@@ -536,8 +536,9 @@ function render(now) {
   }
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
 
+  const proj = new Float32Array(perspective(fov * Math.PI / 180, w / h, NEAR, farPlane(fogFar)));
   const mvp = new Float32Array(mul(
-    perspective(fov * Math.PI / 180, w / h, NEAR, farPlane(fogFar)),
+    proj,
     view_matrix(eye[0], eye[1], eye[2], yaw, pitch),
   ));
   const bind = (prog, a) => {
@@ -579,7 +580,7 @@ function render(now) {
   if (scene) drawAnimals(mvp, readAnimals(walk));
   drawItems(mvp, readItems(walk), now / 1000, { yaw });
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
-  if (!flying) drawHeld(w, h, fogFar);
+  if (!flying) drawHeld(proj);
   inventoryView.update(controller.state.inventory, controller.state.belt);
   deathView.update(controller.state.dead);
   hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
