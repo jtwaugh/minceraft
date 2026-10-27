@@ -22,7 +22,9 @@ const NAMES = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel', 'wa
   'tall_grass', 'fern', 'dead_bush', 'dandelion', 'rose', 'sugar_cane', 'brown_mushroom', 'red_mushroom',
   'leaves_fast', 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
   'planter_side', 'planter_top', 'planter_bottom', 'planter_farmland_top'];
-const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89' };
+const TINTED = { grass_top: '89', grass_side: '89', leaves: '89', tall_grass: '89', fern: '89',
+  water_0: 'abe', water_1: 'abe', water_2: 'abe', water_3: 'abe',
+  water_flow_0: 'abe', water_flow_1: 'abe', water_flow_2: 'abe', water_flow_3: 'abe' };
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
 /** Layers [ANIM_FIRST, ANIM_END) are the water runs; the shader offsets them by the frame. */
 export const ANIM_FIRST = L.water_0, ANIM_END = L.water_flow_3 + 1;
