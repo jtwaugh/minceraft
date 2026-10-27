@@ -5,7 +5,7 @@ scope: both
 source: "#566"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -67,6 +67,10 @@ What exists today that this doc relies on or overlaps (checked against the code)
   label, Phase E's start) and the fixtures in `test_factory_replay.py`. The
   tick's pass order is in `factory_tick.py`. `resolve-conflicts.yml` is
   still present.
+- **Phase A done (plan #884, closed).** `resolve-conflicts.yml` was retired
+  in #1101 and `conflicts.py` with the resolver docs in #1107; the nits,
+  Blocked-fix, retry-budget and question pieces are #896, #926, #931, #933,
+  #938, #941, #942, #946, #947, #949.
 - **Not present** (the `factory-tick` workflow and the `needs-you` label
   now exist, see Phase A progress): any state store, any `factory-state`
   branch, file leases, per-transition history, a "needs
@@ -175,6 +179,9 @@ What exists today that this doc relies on or overlaps (checked against the code)
     `.github/scripts/tickets.py` still refer to it. Removing a workflow is
     maintainer-only (note 2). Phase A stays `todo` until the maintainer
     removes it; then mark it `done`.
+    > **Reconciler:** resolved. #1101 and #1107 removed
+    > `resolve-conflicts.yml`, `conflicts.py` and the references; Phase A is
+    > `done`.
 
 ---
 
