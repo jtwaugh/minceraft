@@ -599,6 +599,24 @@ impl Walk {
         self.0.animals().iter().map(|e| e.species.clone()).collect()
     }
 
+    /// The loose items, five numbers each: `id, x, y, z, box_size`.
+    /// `(x, y, z)` is the centre of the item's box and `box_size` is its
+    /// edge length. Item names are in [`Walk::item_names`], in the same
+    /// order.
+    pub fn items(&self) -> Vec<f64> {
+        let size = self.0.items().config().box_size;
+        self.0
+            .items()
+            .iter()
+            .flat_map(|e| [e.id as f64, e.pos[0], e.pos[1], e.pos[2], size])
+            .collect()
+    }
+
+    /// The name of each item in [`Walk::items`], in the same order.
+    pub fn item_names(&self) -> Vec<String> {
+        self.0.items().iter().map(|e| e.item.item.clone()).collect()
+    }
+
     /// How many loose items lie in the world.
     pub fn loose_items(&self) -> u32 {
         self.0.items().len() as u32
@@ -698,6 +716,23 @@ mod tests {
 
     fn walk() -> Walk {
         with_default_commands(Walker::new([0.5, 5.0, 0.5]).unwrap()).unwrap_or_else(|_| panic!())
+    }
+
+    #[test]
+    fn items_lists_each_loose_item_with_its_name() {
+        let mut w = walk();
+        assert!(w.items().is_empty() && w.item_names().is_empty());
+        let a = w.spawn_item("stick", 1.0, 6.0, 2.0);
+        let b = w.spawn_item("wheat", 3.5, 7.0, -4.0);
+        // `data/items.toml` `[item_entity] box_size`
+        let size = game::item_entities::ItemEntityConfig::default_from_data().box_size;
+        assert_eq!(size, 0.25);
+        assert_eq!(
+            w.items(),
+            vec![a as f64, 1.0, 6.0, 2.0, size, b as f64, 3.5, 7.0, -4.0, size]
+        );
+        assert_eq!(w.item_names(), vec!["stick", "wheat"]);
+        assert_eq!(w.loose_items(), 2);
     }
 
     #[test]
