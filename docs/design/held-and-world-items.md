@@ -5,7 +5,7 @@ scope: game
 source: "#1137"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
 ---
@@ -23,7 +23,7 @@ Checked against the code:
 - The model drawer is unshaded and unfogged, and its atlas packs model faces plus any texture named in `textureNames` (`packAtlas`), so item icons can be packed into it. Its fragment shader discards texels with alpha under 0.5.
 - View bobbing is a documented default in `docs/design/basic-gameplay.md` section 3, but no bob is implemented in `client/` (`basic-gameplay.md` Phase 1 note says bobbing and hand rendering were left for later).
 
-Nothing in this doc is done yet.
+Phase A (item entities in the world) is done: `Walk::items()` and `item_names()` in `crates/game-web/src/lib.rs` (#1164), `readItems` in `client/overlay.js` (#1165), item icons packed into the model atlas (#1168), `itemPose` in `client/itemmodel.js` (#1172), and `drawItems` in every scene plus `client/test/scripts/items.input` (#1182). Phases B and C are not started.
 
 ## Reconciliation notes
 
