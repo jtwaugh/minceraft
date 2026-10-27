@@ -1,0 +1,31 @@
+# HUD layout at the four viewport sizes of #1003: no overlaps or off-screen parts,
+# and the belt takes at most half the viewport width. The scale is the shared rule,
+# interfaceScale (client/uipx.js): min(belt-width limit, 100x60 panel fit).
+
+case hud fits a phone in portrait (390x844)
+start walk
+layout 390 844
+expect layout.scale = 3
+expect layout.problems = 0
+expect layout.belt.fraction <= 0.5
+
+case hud fits a laptop (1366x768)
+start walk
+layout 1366 768
+expect layout.scale = 11
+expect layout.problems = 0
+expect layout.belt.fraction <= 0.5
+
+case hud fits full HD (1920x1080)
+start walk
+layout 1920 1080
+expect layout.scale = 16
+expect layout.problems = 0
+expect layout.belt.fraction <= 0.5
+
+case hud fits ultrawide (3440x1440)
+start walk
+layout 3440 1440
+expect layout.scale = 24
+expect layout.problems = 0
+expect layout.belt.fraction <= 0.5
