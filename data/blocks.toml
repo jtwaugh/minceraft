@@ -585,3 +585,30 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#b9cfc4"
+
+[[block]]
+id = 63
+name = "tulip_red"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#c0392b"
+
+[[block]]
+id = 64
+name = "tulip_salmon"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#f08a5d"
+
+[[block]]
+id = 65
+name = "tulip_yellow"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#e8c33a"

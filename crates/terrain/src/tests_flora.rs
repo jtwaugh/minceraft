@@ -913,3 +913,62 @@ fn cactus_flowers_sit_on_cactus_tops_in_desert_and_are_region_independent() {
     }
     assert!(n > 0, "no cactus flowers");
 }
+
+#[test]
+fn tulips_grow_in_seasonal_forest_in_same_colour_drifts() {
+    let tulips = [
+        Block::TulipRed as u8,
+        Block::TulipSalmon as u8,
+        Block::TulipYellow as u8,
+    ];
+    let (mut pairs, mut same, mut n) = (0u64, 0u64, [0u64; 3]);
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-512, -512, 1024, 1024);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        let mut found = Vec::new();
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT {
+                    let b = at(&r, x, y, z);
+                    if let Some(k) = tulips.iter().position(|&t| t == b) {
+                        let (t, h) = g.climate.at(x, z, &[], &[]);
+                        assert_eq!(biome_for(t, h), Biome::SeasonalForest, "{x},{z}");
+                        assert_eq!(at(&r, x, y - 1, z), Block::Grass as u8, "{x},{y},{z}");
+                        found.push((x, z, k));
+                        n[k] += 1;
+                    }
+                }
+            }
+        }
+        // Pairs of tulips within 8 columns: same colour vs. what the
+        // colour mix alone would give for independent picks.
+        for (i, a) in found.iter().enumerate() {
+            for b in &found[i + 1..] {
+                if (b.0 - a.0).abs() <= 8 && (b.1 - a.1).abs() <= 8 {
+                    pairs += 1;
+                    same += (a.2 == b.2) as u64;
+                }
+            }
+        }
+        let part = gen(seed, -40, -60, 90, 80, &FLORA);
+        for z in part.z0..part.z0 + 80 {
+            for x in part.x0..part.x0 + 90 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&r, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+        let off = gen(seed, x0, z0, w, d, &[]);
+        assert!(tulips.iter().all(|&t| !off.blocks.contains(&t)));
+    }
+    let total: u64 = n.iter().sum();
+    assert!(n.iter().all(|&c| c > 0), "{n:?}");
+    let tot = total as f64;
+    let chance: f64 = n.iter().map(|&c| (c as f64 / tot).powi(2)).sum();
+    let rate = same as f64 / pairs as f64;
+    assert!(
+        pairs > 100 && rate > chance + 0.1,
+        "{rate} vs {chance} over {pairs}"
+    );
+}
