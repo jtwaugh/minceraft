@@ -40,6 +40,10 @@ jump_velocity = 0.42
 # Horizontal speed added along the yaw facing on the tick a sprinting player
 # jumps (docs/design/sprinting.md, decided in #821).
 sprint_jump_boost = 0.2
+# A wall ends a sprint only on a head-on hit: the facing within this many
+# degrees of the wall's normal (docs/design/sprinting.md, decided in #1331 and
+# #1334). This game's own value, with no parity claim. In [0, 90).
+sprint_wall_tolerance_degrees = 30.0
 # Per tick: vy = (vy - gravity) * drag.
 gravity = 0.08
 drag = 0.98

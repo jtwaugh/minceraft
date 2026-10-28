@@ -36,6 +36,9 @@ pub struct PlayerPhysics {
     pub jump_velocity: f32,
     /// Horizontal speed added along the facing when a sprinting player jumps.
     pub sprint_jump_boost: f32,
+    /// A wall ends a sprint only when the facing is within this many degrees
+    /// of the wall's normal.
+    pub sprint_wall_tolerance_degrees: f32,
     pub gravity: f32,
     pub drag: f32,
     /// Step size when shrinking motion at a ledge while sneaking.
@@ -138,6 +141,12 @@ impl PlayerPhysics {
                 "movement.sprint_jump_boost must not be negative".into(),
             ));
         }
+        let sprint_wall_tolerance_degrees = get("movement", "sprint_wall_tolerance_degrees")?;
+        if !(0.0..90.0).contains(&sprint_wall_tolerance_degrees) {
+            return Err(PhysicsError::Invalid(
+                "movement.sprint_wall_tolerance_degrees must be in [0, 90)".into(),
+            ));
+        }
         Ok(PlayerPhysics {
             width: get("body", "width")?,
             height: get("body", "height")?,
@@ -155,6 +164,7 @@ impl PlayerPhysics {
             air_accel: get("movement", "air_accel")?,
             jump_velocity: get("movement", "jump_velocity")?,
             sprint_jump_boost,
+            sprint_wall_tolerance_degrees,
             gravity: get("movement", "gravity")?,
             drag: get("movement", "drag")?,
             sneak_edge_step: get("sneak", "edge_step")?,
@@ -196,6 +206,7 @@ mod tests {
         assert_eq!(p.air_accel, 0.02);
         assert_eq!(p.jump_velocity, 0.42);
         assert_eq!(p.sprint_jump_boost, 0.2);
+        assert_eq!(p.sprint_wall_tolerance_degrees, 30.0);
         assert_eq!(p.gravity, 0.08);
         assert_eq!(p.drag, 0.98);
         assert_eq!(p.sneak_edge_step, 0.05);
@@ -226,6 +237,24 @@ mod tests {
         for bad in ["\"fast\"", "1.0"] {
             let text =
                 DEFAULT_PLAYER.replace("sprint_scale = 1.3", &format!("sprint_scale = {bad}"));
+            assert!(matches!(
+                PlayerPhysics::parse(&text),
+                Err(PhysicsError::Invalid(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn missing_or_bad_wall_tolerance_is_an_error() {
+        assert!(matches!(
+            PlayerPhysics::parse(&without("sprint_wall_tolerance_degrees")),
+            Err(PhysicsError::Missing(k)) if k == "movement.sprint_wall_tolerance_degrees"
+        ));
+        for bad in ["-1.0", "90.0"] {
+            let text = DEFAULT_PLAYER.replace(
+                "sprint_wall_tolerance_degrees = 30.0",
+                &format!("sprint_wall_tolerance_degrees = {bad}"),
+            );
             assert!(matches!(
                 PlayerPhysics::parse(&text),
                 Err(PhysicsError::Invalid(_))
