@@ -7,3 +7,16 @@
 swing_ticks = 6
 # Secondary use: shorter, and the client draws it smaller.
 use_ticks = 4
+
+# Pose at phase 1 (the middle of the animation), as a change from the resting
+# pose in data/held.toml: offset right, up, ahead (metres) and a pitch about the
+# sprite's centre (degrees, positive tips the top away). Between 0 and 1 the
+# pose is linear in the phase. client/helditem.js mirrors these.
+swing_offset_x = -0.2
+swing_offset_y = 0.1
+swing_offset_z = -0.1
+swing_pitch = 50.0
+use_offset_x = -0.05
+use_offset_y = 0.05
+use_offset_z = -0.1
+use_pitch = 15.0
