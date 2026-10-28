@@ -70,5 +70,17 @@ class Deps(unittest.TestCase):
         self.assertEqual(tickets.deps(body), {5, 6, 7})
 
 
+class PredictedFiles(unittest.TestCase):
+    def test_dot_directories_keep_their_dot(self):
+        body = "`.github/scripts/tickets.py`, `./client/scene.js`"
+        self.assertEqual(tickets.predicted_files(body),
+                         {".github/scripts/tickets.py", "client/scene.js"})
+
+    def test_overlap_finds_github_path(self):
+        preds = tickets.predicted_files("`.github/scripts/tickets.py`")
+        self.assertEqual(tickets.overlap(preds, [".github/scripts/tickets.py", "README.md"]),
+                         [".github/scripts/tickets.py"])
+
+
 if __name__ == "__main__":
     unittest.main()

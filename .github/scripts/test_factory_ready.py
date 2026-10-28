@@ -4,6 +4,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import factory_store  # noqa: E402
+from factory_ingest import ingest  # noqa: E402
 from factory_ready import ready  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
 
@@ -53,6 +55,31 @@ class Test(unittest.TestCase):
     def test_batch_file_overlap(self):
         s = snap([issue(1, "`a.rs`"), issue(2, "`a.rs`"), issue(3, "`b.rs`")])
         self.assertEqual(started(s), ["issue#1", "issue#3"])
+
+    def test_github_files_overlap(self):
+        body = "`.github/scripts/tickets.py`"
+        self.assertEqual(started(snap([issue(1, body), issue(2, body)])), ["issue#1"])
+        pr = {"number": 9, "head": "other", "files": [".github/scripts/tickets.py"]}
+        self.assertEqual(started(snap([issue(1, body)], [pr])), [])
+
+    def test_stale_store_rows_refreshed_by_ingest(self):
+        body = "`.github/scripts/tickets.py`"
+        db = factory_store.open(":memory:")
+        self.addCleanup(db.close)
+        plan = {"number": 9, "title": "Plan: x", "state": "open", "labels": [], "kind": "plan",
+                "parent": None, "plan_source": {"file": "docs/design/x.md", "section": "A"},
+                "body": ""}
+        tix = [dict(issue(n, body), parent=9) for n in (10, 11)]
+        old = dict(plan, number=5)
+        ingest(db, snap([old]))  # records the plan cutoff
+        ingest(db, snap([plan] + tix))
+        db.execute("UPDATE predicted_files SET path = 'github/scripts/tickets.py'")
+        ingest(db, snap([plan] + tix))
+        self.assertEqual({r[0] for r in db.execute("SELECT path FROM predicted_files")},
+                         {".github/scripts/tickets.py"})
+        s = snap(tix)
+        s.store = db
+        self.assertEqual(started(s), ["issue#10"])
 
     def test_plan_dependency_never_started(self):
         s = snap([issue(5, kind="plan", labels=()), issue(6, "**Depends on:** #5")])

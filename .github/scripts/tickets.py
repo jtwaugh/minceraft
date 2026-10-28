@@ -132,7 +132,8 @@ SHARED = re.compile(r"(^|/)(lib\.rs|mod\.rs|main\.rs|Cargo\.toml|Cargo\.lock)$")
 
 def predicted_files(body):
     """File names or paths a ticket says it will change."""
-    return {f.lstrip("./") for f in FILE.findall(body or "") if not SHARED.search(f)}
+    return {f[2:] if f.startswith("./") else f
+            for f in FILE.findall(body or "") if not SHARED.search(f)}
 
 
 def touches(pred, path):
