@@ -722,6 +722,16 @@ impl Walker {
                     "death",
                 );
             }
+            for tool in self.state.tool_belt.iter_mut().filter_map(Option::take) {
+                Self::drop_loose(
+                    &mut self.items,
+                    &mut self.events,
+                    tool.tool,
+                    self.player.pos,
+                    [0.0; 3],
+                    "death",
+                );
+            }
         }
         let after = self.movement_state();
         Self::emit_movement(&mut self.events, before, after);
@@ -3652,6 +3662,7 @@ mod tests {
     fn die_holding(item: Option<&str>) -> (Walker, Vec<GameEvent>) {
         let mut w = fatal_fall();
         w.state.hands = item.map(|i| ItemInstance { item: i.into() });
+        w.state.tool_belt = Default::default();
         let mut seen = Vec::new();
         for _ in 0..200 {
             w.tick(&TickInput::default());
@@ -3695,10 +3706,35 @@ mod tests {
     }
 
     #[test]
-    fn dying_leaves_the_belt_alone() {
-        let belt = fatal_fall().player_state().tool_belt.clone();
-        let (w, _) = die_holding(Some("seeds"));
-        assert_eq!(w.player_state().tool_belt, belt);
+    fn dying_drops_belt_tools_in_slot_order_and_empties_the_belt() {
+        let mut w = fatal_fall();
+        let mut seen = Vec::new();
+        for _ in 0..200 {
+            w.tick(&TickInput::default());
+            seen.extend(w.drain_events());
+        }
+        let dropped: Vec<_> = seen
+            .iter()
+            .filter_map(|e| match e {
+                GameEvent::ItemDropped {
+                    item,
+                    position,
+                    source,
+                } => Some((item.as_str(), *position, source.as_str())),
+                _ => None,
+            })
+            .collect();
+        let pos = w.player().pos;
+        assert_eq!(
+            dropped,
+            vec![("sword", pos, "death"), ("hoe", pos, "death")]
+        );
+        assert!(w.player_state().tool_belt.iter().all(Option::is_none));
+        assert_eq!(w.items().len(), 2);
+        assert_eq!(w.player_state().held_thing(), HeldThing::Empty);
+        w.respawn().unwrap();
+        assert!(w.player_state().tool_belt.iter().all(Option::is_none));
+        assert_eq!(w.health(), w.max_health());
     }
 
     #[test]

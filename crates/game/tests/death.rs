@@ -206,7 +206,7 @@ fn a_death_with_a_carried_item_drops_it_and_replays_identically() {
         .position(|e| matches!(e, GameEvent::PlayerDied { .. }))
         .unwrap();
     let drops = dropped(&o.events);
-    assert_eq!(drops.len(), 1, "{:?}", o.events);
+    assert_eq!(drops.len(), 3, "{:?}", o.events);
     let GameEvent::ItemDropped { item, source, .. } = drops[0] else {
         unreachable!()
     };
@@ -221,13 +221,60 @@ fn a_death_with_a_carried_item_drops_it_and_replays_identically() {
         assert_eq!(w.drain_events(), o.events);
         // Respawning did not give it back; the item is still on the ground.
         assert!(w.hands().is_none());
-        assert_eq!(w.items().len(), 1);
+        assert_eq!(w.items().len(), 3);
     }
 }
 
+/// Item names and sources of the `ItemDropped` events, in order.
+fn drops(events: &[GameEvent]) -> Vec<(String, String)> {
+    dropped(events)
+        .into_iter()
+        .map(|e| match e {
+            GameEvent::ItemDropped { item, source, .. } => (item.clone(), source.clone()),
+            _ => unreachable!(),
+        })
+        .collect()
+}
+
 #[test]
-fn a_death_with_empty_hands_drops_nothing() {
-    assert!(dropped(&session().events).is_empty());
+fn a_death_with_empty_hands_drops_only_the_belt_tools_and_empties_the_belt() {
+    let o = session();
+    let death = |t: &str| (t.to_string(), "death".to_string());
+    assert_eq!(drops(&o.events), vec![death("sword"), death("hoe")]);
+    let mut w = fresh();
+    replay(&o.rec, &mut w).unwrap();
+    assert_eq!(w.world_hash(), o.hash);
+    assert!(belt_tools(&w).iter().all(Option::is_none));
+    assert_eq!(w.items().len(), 2);
+    assert_eq!(w.health(), w.max_health());
+}
+
+#[test]
+fn a_tool_dropped_on_death_can_be_picked_up_onto_the_empty_belt() {
+    let o = session();
+    let mut w = fresh();
+    replay(&o.rec, &mut w).unwrap();
+    // Put the walker back beside its dropped tools and take the sword.
+    let sword = w
+        .items()
+        .iter()
+        .find(|e| e.item.item == "sword")
+        .unwrap()
+        .clone();
+    w.teleport([sword.pos[0] - 1.0, sword.pos[1], sword.pos[2]]);
+    for _ in 0..20 {
+        w.tick(&idle());
+    }
+    let eye = w.eye(1.0);
+    let d = [0, 1, 2].map(|i| sword.pos[i] - eye[i]);
+    let flat = (d[0] * d[0] + d[2] * d[2]).sqrt();
+    w.tick(&TickInput {
+        interact: true,
+        yaw: d[0].atan2(-d[2]) as f32,
+        pitch: d[1].atan2(flat) as f32,
+        ..idle()
+    });
+    assert_eq!(belt_tools(&w)[1].as_deref(), Some("sword"));
 }
 
 /// A walker on the plateau with a loose `name` 1.5 blocks ahead of the eye.
