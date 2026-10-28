@@ -24,6 +24,9 @@
 // `events` is the sim's events since the previous frame (every tick of this one),
 // oldest first, as `name key=value ...` strings; each is delivered once.
 //
+// `particles` is the live particle list (particles.js: a burst per `forage_missed` event),
+// `particleCount` its length; scene.js only draws it.
+//
 // `underwater` is whether the drawn eye is in a water cell, in either mode;
 // scene.js switches the fog and tint on it.
 //
@@ -41,11 +44,13 @@ import { stepWalk } from './walk.js';
 import { readAim, readBelt } from './overlay.js';
 import { hudModel } from './hud.js';
 import { createStream, regionOf } from './stream.js';
+import { createParticles } from './particles.js';
 
 export function createController({ input, walk, fly, clock, document, flying = false, stream = null, sprintFov = { base: 70, extra: 0, seconds: 1 } }) {
   const regions = stream && createStream(stream);
   let followed = null;
-  const state = { flying, inventory: false, dead: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, events: [] };
+  const state = { flying, inventory: false, dead: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, events: [], particles: [], particleCount: 0 };
+  const particles = createParticles();
 
   const onKey = (e) => {
     if (e.code !== 'KeyF' || e.repeat || !input.locked || input.console || input.inventory) return;
@@ -101,7 +106,10 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
       const belt = readBelt(walk);
       const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
-      Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, events: Array.from(walk.drain_events()) });
+      const events = Array.from(walk.drain_events());
+      particles.spawnMisses(events);
+      particles.update(dt);
+      Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, events, particles: particles.list, particleCount: particles.count });
       return state;
     },
     submitConsole(line) {
