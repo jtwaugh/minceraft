@@ -13,7 +13,7 @@ inputs:
     description: steps.<claude step>.outputs.execution_file (may be empty)
     required: true
   ok:
-    description: "'false' when the run's expected result is missing (from .github/scripts/expect.py)"
+    description: "'false' when the run's expected result is missing"
     default: "true"
   expected:
     description: What was missing, for the message

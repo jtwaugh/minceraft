@@ -93,26 +93,25 @@ class Verdict(unittest.TestCase):
     def c(self, body, at="2026-10-21T10:00:00Z", user="claude[bot]"):
         return {"user": {"login": user}, "body": body, "updated_at": at}
 
-    def test_kinds_and_head(self):
-        ok = f"Verdict: Ready\nReviewed commit: `{HEAD[:7]}`"
-        self.assertEqual(verdict_of([self.c(ok)], HEAD), {"kind": "ready", "current": True})
-        self.assertEqual(verdict_of([self.c(ok.replace("Ready", "Ready, with nits"))], HEAD)["kind"], "nits")
-        self.assertEqual(verdict_of([self.c(ok.replace("Ready", "Blocked"))], HEAD)["kind"], "blocked")
-        self.assertFalse(verdict_of([self.c(ok)], "0000000fff")["current"])
-        self.assertIsNone(verdict_of([self.c("Verdict: Ready", user="mallory")], HEAD))
+    def result(self, word, at="2026-10-21T10:00:00Z", user="claude[bot]", sha=HEAD):
+        value = json.dumps({"verdict": word, "reviewed_commit": sha[:7], "blockers": [], "nits": []})
+        return self.c(f"Verdict: shown\n<!-- factory-result role=reviewer -->\n```json\n{value}\n```", at, user)
 
-    def test_workflow_comment_needs_structured_result(self):
-        lines = f"Verdict: Ready, with nits\nReviewed commit: `{HEAD[:7]}`\n"
-        result = json.dumps({"verdict": "ready with nits", "reviewed_commit": HEAD[:7],
-                             "blockers": [], "nits": [{"number": 1, "text": "x"}]})
-        block = f"<!-- factory-result role=reviewer pr=1 sha={HEAD} -->\n```json\n{result}\n```"
-        bot = "github-actions[bot]"
-        self.assertEqual(verdict_of([self.c(lines + block, user=bot)], HEAD)["kind"], "nits")
-        self.assertIsNone(verdict_of([self.c(lines, user=bot)], HEAD))
+    def test_kinds_and_head(self):
+        self.assertEqual(verdict_of([self.result("ready")], HEAD), {"kind": "ready", "current": True})
+        self.assertEqual(verdict_of([self.result("ready with nits")], HEAD)["kind"], "nits")
+        self.assertEqual(verdict_of([self.result("blocked")], HEAD)["kind"], "blocked")
+        self.assertFalse(verdict_of([self.result("ready")], "0000000fff")["current"])
+        self.assertIsNone(verdict_of([self.result("ready", user="mallory")], HEAD))
+
+    def test_text_without_a_result_is_ignored(self):
+        text = f"Verdict: Ready\nReviewed commit: `{HEAD[:7]}`\n"
+        for user in ("claude[bot]", "github-actions[bot]"):
+            self.assertIsNone(verdict_of([self.c(text, user=user)], HEAD))
 
     def test_newest_wins(self):
-        old = self.c(f"Verdict: Ready\nReviewed commit: `{HEAD[:7]}`", "2026-10-21T10:00:00Z")
-        new = self.c(f"Verdict: Blocked\nReviewed commit: `{HEAD[:7]}`", "2026-10-21T11:00:00Z")
+        old = self.result("ready", "2026-10-21T10:00:00Z")
+        new = self.result("blocked", "2026-10-21T11:00:00Z")
         self.assertEqual(verdict_of([new, old], HEAD)["kind"], "blocked")
 
 

@@ -17,13 +17,13 @@ def comment(login, body, t="2026-01-02T00:00:00Z"):
             "updated_at": t, "html_url": "http://c"}
 
 
-def verdict(word, sha=HEAD):
-    return comment(rg.BOT, f"Verdict: {word}\nReviewed commit: `{sha[:7]}`")
-
-
 def structured(word, sha=HEAD, t="2026-01-02T00:00:00Z"):
     body = json.dumps({"verdict": word, "reviewed_commit": sha[:7], "blockers": [], "nits": []})
     return comment(rg.BOT, f"<!-- factory-result role=reviewer -->\n```json\n{body}\n```", t)
+
+
+def verdict(word, sha=HEAD):
+    return structured(word.lower(), sha)
 
 
 class Decide(unittest.TestCase):
@@ -83,9 +83,9 @@ class Decide(unittest.TestCase):
         c = structured("blocked")
         c["user"]["login"] = rg.ACTIONS
         self.assertEqual(self.state(["a.rs"], [c])[0], "failure")
-        plain = verdict("Blocked")
-        plain["user"]["login"] = rg.ACTIONS
-        self.assertEqual(self.state(["a.rs"], [plain])[0], "pending")
+        for login in (rg.ACTIONS, rg.BOT):
+            plain = comment(login, f"Verdict: Blocked\nReviewed commit: `{HEAD[:7]}`")
+            self.assertEqual(self.state(["a.rs"], [plain])[0], "pending")
 
 
 if __name__ == "__main__":

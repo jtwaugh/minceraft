@@ -1,4 +1,5 @@
 """Tests for the nits pass. python3 -I test_factory_nits.py (no network)."""
+import json
 import os
 import sys
 import unittest
@@ -94,15 +95,16 @@ class Test(unittest.TestCase):
         # stopped every tick from 2026-10-22 19:31Z.
         from factory_automerge import verdict_of
         comments = [{"user": {"login": "claude[bot]"}, "updated_at": "2026-10-22T00:00:00Z",
-                     "body": f"Verdict: Ready, with nits\nReviewed commit: `{H1[:7]}`\n"}]
+                     "body": review("ready with nits")["body"]}]
         s = snap()
         s.prs[0]["verdict"] = verdict_of(comments, H1)
         run(s)  # must not raise
 
 
-def review(verdict_line, tail="", sha=H1, user="claude[bot]", at="2026-01-01T00:00:00Z"):
+def review(word, tail="", sha=H1, user="claude[bot]", at="2026-01-01T00:00:00Z"):
+    value = json.dumps({"verdict": word, "reviewed_commit": sha[:7], "blockers": [], "nits": []})
     return {"user": {"login": user}, "updated_at": at, "created_at": at,
-            "body": f"Verdict: **{verdict_line}**\nReviewed commit: `{sha[:7]}`\n\n{tail}"}
+            "body": f"{tail}\n<!-- factory-result role=reviewer -->\n```json\n{value}\n```"}
 
 
 class Loading(unittest.TestCase):
@@ -118,13 +120,13 @@ class Loading(unittest.TestCase):
         self.assertEqual(parse_nits("**Nits**\n- one\n\nNone of these block.\n"), ["one"])
 
     def test_verdict_kinds(self):
-        nit = review("Ready, with nits", "**Nits**\n- fix a\n")
+        nit = review("ready with nits", "**Nits**\n- fix a\n")
         v = verdict([nit], H1)
         self.assertEqual((v["kind"], v["commit"], v["nits"]), ("nits", H1[:7], ["fix a"]))
-        self.assertEqual(verdict([review("Ready")], H1)["kind"], "ready")
-        self.assertEqual(verdict([review("Blocked")], H1)["kind"], "blocked")
+        self.assertEqual(verdict([review("ready")], H1)["kind"], "ready")
+        self.assertEqual(verdict([review("blocked")], H1)["kind"], "blocked")
         self.assertIsNone(verdict([], H1))
-        self.assertIsNone(verdict([review("Ready", user="mallory")], H1))
+        self.assertIsNone(verdict([review("ready", user="mallory")], H1))
         self.assertFalse(verdict([nit], H2)["current"])
 
 
