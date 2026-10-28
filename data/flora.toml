@@ -179,3 +179,13 @@ tint = "grass"
 cluster_scale = 18.0
 salt = 16
 biomes = { Rainforest = 0.030 }
+
+[[flora]]
+name = "cactus_flower"
+block = "cactus_flower"
+shape = "cross"
+ground = ["cactus"]
+tint = "none"
+cluster_scale = 12.0
+salt = 17
+biomes = { Desert = 0.300 }
