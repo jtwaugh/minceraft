@@ -11,8 +11,11 @@ enum, minItems, minimum, pattern, additionalProperties.
 
     python3 -I agent_results.py <role> < result.json   # exit 1 and errors on stderr
     python3 -I agent_results.py verify <role> <arg> <result.json>
-        role implementer (arg: ticket), docs_updater (arg: plan issue),
-        reconciler or spec_editor (arg: the issue it answered). Writes ok= and expected= to $GITHUB_OUTPUT (or stdout), as `expect.py ticket`
+        role implementer (arg: ticket), planner (arg: design-doc file),
+        docs_updater (arg: plan issue), reconciler or spec_editor (arg: the
+        issue it answered). Writes ok= and expected= to $GITHUB_OUTPUT (or
+        stdout), as `expect.py ticket`; for planner, ok means a Plan issue for
+        the file exists
     python3 -I agent_results.py follow-ups <ticket> <result.json>
         files each follow_ups entry once, as a `planned` ticket, via planner_issue.py
 """
@@ -114,15 +117,23 @@ SCHEMAS = {
             "type": "object",
             "required": ["plan", "tickets", "questions"],
             "properties": {
-                "plan": ISSUE_REF,
+                # Where the Plan issue comes from; planner_apply.py creates it.
+                "plan": {
+                    "type": "object",
+                    "required": ["title", "file", "section", "notes"],
+                    "properties": {"title": STR, "file": STR, "section": {"type": "string"},
+                                   "notes": {"type": "string"}},
+                    "additionalProperties": False},
                 "tickets": {"type": "array", "items": {
                     "type": "object",
-                    "required": ["title", "body", "files"],
+                    "required": ["title", "body", "files", "depends_on"],
                     "properties": {
                         "title": STR,
                         "body": STR,
                         # Paths the ticket edits: the source for file leases.
                         "files": {"type": "array", "minItems": 1, "items": STR},
+                        # 1-based positions of earlier tickets this one waits on.
+                        "depends_on": {"type": "array", "items": ISSUE_REF},
                     },
                     "additionalProperties": False}},
                 "questions": {"type": "array", "items": {
@@ -217,6 +228,10 @@ def validate(role, text):
         else:
             for i, q in enumerate(value.get("questions", [])):
                 check_options(q, f"result.questions[{i}]", errors)
+            if role == "planner":
+                for i, t in enumerate(value["tickets"]):
+                    if any(d >= i + 1 for d in t["depends_on"]):
+                        errors.append(f"result.tickets[{i}].depends_on: must name earlier tickets")
     return errors
 
 
@@ -241,6 +256,22 @@ def verify(ticket, text, run=gh):
     closes = re.search(rf"(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #{ticket}\b", pr.get("body") or "")
     mine = pr["headRefName"].startswith(f"claude/issue-{ticket}-") or closes
     return pr["state"] == "OPEN" and bool(mine), expected
+
+
+def verify_planner(path, text, run=gh):
+    """(ok, expected) for a planner result: it stops with a question, or a
+    Plan issue for `path` exists."""
+    expected = f"a Plan issue for {path}"
+    if validate("planner", text):
+        return False, expected
+    if "needs_maintainer" in json.loads(text):
+        return True, expected
+    code, out = run("issue", "list", "--state", "all", "--label", "planned",
+                    "--limit", "500", "--json", "title,body")
+    if code != 0:
+        return False, expected
+    return any(i["title"].startswith("Plan:") and f"plan-source file={path} " in (i["body"] or "")
+               for i in json.loads(out)), expected
 
 
 # Branch each PR-opening role works on: a pattern for the head ref, given arg.
@@ -314,6 +345,8 @@ def main(argv):
         text = open(argv[4], encoding="utf-8").read()
         if argv[2] == "implementer":
             ok, expected = verify(argv[3], text)
+        elif argv[2] == "planner":
+            ok, expected = verify_planner(argv[3], text)
         else:
             ok, expected = verify_opener(argv[2], argv[3], text)
         lines = [f"ok={'true' if ok else 'false'}", f"expected={expected}"]
