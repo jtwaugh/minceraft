@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hudLayout, CROSSHAIR_SIZE, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP, TEXT_CHAR_W, TEXT_H } from '../hudlayout.js';
+import { hudLayout, CROSSHAIR_SIZE, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP } from '../hudlayout.js';
 import { hudModel } from '../hud.js';
 import { readFileSync } from 'node:fs';
 import { layoutChecks } from '../hudcheck.js';
@@ -8,7 +8,7 @@ import { layoutChecks } from '../hudcheck.js';
 const grid = (w, h) => Array(h).fill('a'.repeat(w));
 const set = {
   palette: { a: '#ffffff' },
-  batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), phase_gathering: grid(30, 6), sword: grid(8, 8), font_unknown: grid(5, 7), font_s: grid(5, 7), font_w: grid(5, 7), font_o: grid(5, 7), font_r: grid(5, 7), font_d: grid(5, 7), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } },
+  batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), sun: grid(8, 8), moon: grid(8, 8), sword: grid(8, 8), font_unknown: grid(5, 7), font_s: grid(5, 7), font_w: grid(5, 7), font_o: grid(5, 7), font_r: grid(5, 7), font_d: grid(5, 7), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } },
 };
 const belt = { slots: [null, 'sword', 'hoe', null, null], selected: 1, hands: null };
 const model = hudModel({ belt, health: 19, maxHealth: 20 });
@@ -59,19 +59,24 @@ test('layout depends only on model, tileset and viewport', () => {
 const withTimer = (secondsLeft, hands = null) => hudModel({ belt: { ...belt, hands }, health: 19, maxHealth: 20, phase: 'gathering', secondsLeft });
 
 for (const [w, h, name] of sweep) {
-  for (const secs of [7, 42, 125]) {
-    test(`timer with ${String(secs).length} digit(s) at ${w}x${h} (${name})`, () => {
-      const { scale, rects: { timer } } = hudLayout(withTimer(secs), set, { w, h });
-      const n = String(secs).length;
-      assert.equal(timer.y, TOP_MARGIN);
-      assert.equal(timer.x, Math.floor((w - timer.w) / 2));
-      assert.equal(timer.w, (30 + n * 4 + n * LABEL_GAP + 2 * TIMER_PAD_X) * scale);
-      assert.equal(timer.h, (6 + 2 * TIMER_PAD_Y) * scale);
-      assert.deepEqual(timer.phase, { x: timer.x + TIMER_PAD_X * scale, y: timer.y + TIMER_PAD_Y * scale, w: 30 * scale, h: 6 * scale });
-      assert.equal(timer.digits.length, n);
-      assert.equal(timer.digits[0].x, timer.phase.x + timer.phase.w + LABEL_GAP * scale);
-      timer.digits.forEach((d) => assert.deepEqual([d.w, d.h, d.y], [4 * scale, 6 * scale, timer.phase.y]));
-    });
+  for (const phase of ['gathering', 'service']) {
+    for (const secs of [7, 42, 125]) {
+      test(`${phase} timer with ${String(secs).length} digit(s) at ${w}x${h} (${name})`, () => {
+        const m = hudModel({ belt, health: 19, maxHealth: 20, phase, secondsLeft: secs });
+        const { scale, rects: { timer } } = hudLayout(m, set, { w, h });
+        const n = String(secs).length;
+        assert.equal(timer.y, TOP_MARGIN);
+        assert.equal(timer.x, Math.floor((w - timer.w) / 2));
+        assert.equal(timer.w, (8 + n * 4 + n * LABEL_GAP + 2 * TIMER_PAD_X) * scale);
+        assert.equal(timer.h, (8 + 2 * TIMER_PAD_Y) * scale);
+        assert.deepEqual(timer.phase, { x: timer.x + TIMER_PAD_X * scale, y: timer.y + TIMER_PAD_Y * scale, w: 8 * scale, h: 8 * scale });
+        assert.equal(timer.digits.length, n);
+        assert.equal(timer.digits[0].x, timer.phase.x + timer.phase.w + LABEL_GAP * scale);
+        timer.digits.forEach((d) => assert.deepEqual([d.w, d.h, d.y], [4 * scale, 6 * scale, timer.phase.y + scale]));
+        const last = timer.digits.at(-1);
+        assert.equal(timer.x + timer.w - (last.x + last.w), TIMER_PAD_X * scale);
+      });
+    }
   }
 
   test(`hands at ${w}x${h} (${name})`, () => {
@@ -111,12 +116,10 @@ test('an unknown character is measured with font_unknown', () => {
   assert.equal(rects.hands.label.glyphs[2].glyph, 'font_unknown');
 });
 
-test('a missing phase texture falls back to text rects', () => {
-  const { rects } = hudLayout(withTimer(7), { ...set, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10) } } } }, { w: 800, h: 450 });
+test('a missing phase icon leaves only the digits', () => {
+  const { rects } = hudLayout(withTimer(7), { ...set, batches: { ui: { textures: { ...set.batches.ui.textures, sun: undefined } } } }, { w: 800, h: 450 });
   assert.equal(rects.timer.phase, null);
-  assert.deepEqual(rects.timer.digits, []);
-  assert.equal(rects.timer.text.w, 'gathering'.length * TEXT_CHAR_W);
-  assert.equal(TEXT_H, rects.timer.text.h);
+  assert.equal(rects.timer.digits.length, 1);
 });
 
 test('the real tileset with an item in hands has no layout problems across the sweep', () => {

@@ -1,8 +1,8 @@
 // Pure HUD geometry: integer-pixel rectangles for the crosshair, belt and hearts, from the HUD
 // model, the tileset and the viewport. No DOM; imports only the pixel-art helpers. The constants
-// below are the positions `mountHud`'s CSS fixes today. The timer's phase word is a texture named
-// `phase_<phase>` (docs/design/play-critic-agent.md, note 7); a missing texture is drawn as text, which
-// takes `rects.timer.text` in the same row. The hands' item name is drawn in the pixel font (font.js).
+// below are the positions `mountHud`'s CSS fixes today. The timer sits on a nine-slice panel
+// (panel.js) with the `sun` or `moon` icon for the phase beside its `digit_*` textures. The hands'
+// item name is drawn in the pixel font (font.js).
 
 import { hudScale, heartNames, digitNames } from './hud.js';
 import { textureSize } from './uipx.js';
@@ -18,13 +18,12 @@ export const HEART_GAP = 2;
 export const HEARTS_BELT_GAP = 4;
 /** The timer's distance from the viewport top, in CSS pixels (not scaled). */
 export const TOP_MARGIN = 8;
-/** Timer padding (sides, top and bottom) and the gap inside the timer and hands rows, in texels. */
+/** Timer padding (sides, top and bottom; the top and bottom clear the panel's border tiles) and the gap inside the timer and hands rows, in texels. */
 export const TIMER_PAD_X = 8;
-export const TIMER_PAD_Y = 2;
+export const TIMER_PAD_Y = 4;
 export const LABEL_GAP = 4;
-/** Fallback text (a word with no texture) in CSS pixels, matching the HUD's 12px monospace with a 14px line. */
-export const TEXT_CHAR_W = 8;
-export const TEXT_H = 14;
+/** The icon texture drawn for each timer phase. */
+export const PHASE_ICONS = { gathering: 'sun', service: 'moon' };
 
 const rect = (x, y, w, h) => ({ x, y, w, h });
 
@@ -76,17 +75,18 @@ export function hudLayout(model, set, viewport) {
   const slots = place(beltRow.r, left, beltY);
   const heartIcons = place(heartRow.r, left, heartsY);
 
-  const timerNames = [`phase_${model.timer.phase}`, ...digitNames(model.timer.secondsLeft)];
-  const hasPhase = textureSize(set, timerNames[0]) !== null;
-  const timerRow = row(set, timerNames, 0, 0, LABEL_GAP);
-  // Without a phase texture the word is text, ahead of the digits.
-  const wordW = hasPhase ? 0 : String(model.timer.phase).length * TEXT_CHAR_W;
-  const digitsX = hasPhase || !timerRow.w ? wordW : wordW + LABEL_GAP * scale;
-  const timerW = digitsX + timerRow.w * scale + 2 * TIMER_PAD_X * scale;
-  const timerH = Math.max(timerRow.h * scale, hasPhase ? 0 : TEXT_H) + 2 * TIMER_PAD_Y * scale;
+  const phaseName = PHASE_ICONS[model.timer.phase];
+  const phaseSize = phaseName ? textureSize(set, phaseName) : null;
+  const timerRow = row(set, [...(phaseSize ? [phaseName] : []), ...digitNames(model.timer.secondsLeft)], 0, 0, LABEL_GAP);
+  const timerW = timerRow.w * scale + 2 * TIMER_PAD_X * scale;
+  const timerH = timerRow.h * scale + 2 * TIMER_PAD_Y * scale;
   const timerX = Math.floor((vw - timerW) / 2);
   const timerLeft = timerX + TIMER_PAD_X * scale, timerTop = TOP_MARGIN + TIMER_PAD_Y * scale;
-  const timerParts = place(timerRow, timerLeft + (hasPhase ? 0 : digitsX), timerTop);
+  // Parts are centred vertically in the row.
+  const timerParts = timerRow.rects.map((q) => {
+    const g = grow(q);
+    return rect(timerLeft + g.x, timerTop + Math.floor((timerRow.h * scale - g.h) / 2), g.w, g.h);
+  });
 
   // The hands sit above the belt, right-aligned with it; the label is the item name in the pixel font.
   const icon = model.hands ? row(set, [model.hands], 0, 0, 0) : { rects: [], w: 0, h: 0 };
@@ -119,9 +119,8 @@ export function hudLayout(model, set, viewport) {
       heartIcons,
       timer: {
         ...rect(timerX, TOP_MARGIN, timerW, timerH),
-        phase: hasPhase ? timerParts[0] : null,
-        text: hasPhase ? null : rect(timerLeft, timerTop, wordW, TEXT_H),
-        digits: timerParts.slice(hasPhase ? 1 : 0),
+        phase: phaseSize ? timerParts[0] : null,
+        digits: timerParts.slice(phaseSize ? 1 : 0),
       },
       hands: {
         ...rect(handsX, handsY, handsW, handsH),
