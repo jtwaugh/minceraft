@@ -394,3 +394,30 @@ fn no_flora_where_a_trunk_or_beta_plant_occupies_the_air_cell() {
     }
     assert!(checked > 50, "only {checked} occupied cells");
 }
+
+#[test]
+fn fern_double_is_taiga_only_and_stacked() {
+    let (lo, up) = (Block::FernDoubleLower as u8, Block::FernDoubleUpper as u8);
+    let mut pairs = 0;
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-200, -200, 400, 400);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT - 1 {
+                    let b = at(&r, x, y, z);
+                    if b == lo {
+                        let (t, h) = g.climate.at(x, z, &[], &[]);
+                        assert_eq!(biome_for(t, h), Biome::Taiga, "{x},{z}");
+                        assert_eq!(at(&r, x, y + 1, z), up, "{x},{y},{z}");
+                        pairs += 1;
+                    } else if b == up {
+                        assert_eq!(at(&r, x, y - 1, z), lo, "{x},{y},{z}");
+                    }
+                }
+            }
+        }
+    }
+    assert!(pairs > 0, "no double ferns");
+}

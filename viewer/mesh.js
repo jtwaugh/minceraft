@@ -38,6 +38,7 @@ export const B = {
   planter_dirt: 39, planter_farmland_dry: 40, planter_farmland_wet: 41,
   daisy: 42, bluebell: 43, tall_grass_double_lower: 44, tall_grass_double_upper: 45, berry_bush: 46,
   dry_grass: 47, dry_grass_tall_lower: 48, dry_grass_tall_upper: 49, leaf_litter: 50,
+  fern_double_lower: 51, fern_double_upper: 52,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -60,10 +61,11 @@ const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover };
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
   B.daisy, B.bluebell, B.tall_grass_double_lower, B.tall_grass_double_upper, B.dry_grass, B.dry_grass_tall_lower, B.dry_grass_tall_upper,
+  B.fern_double_lower, B.fern_double_upper,
   B.wheat_0, B.wheat_1, B.wheat_2, B.wheat_3, B.wheat_4, B.wheat_5, B.wheat_6, B.wheat_7]);
 
 // Upper blocks of two-block plants.
-const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper]);
+const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper, B.fern_double_upper]);
 
 /**
  * Meshing context: names, colours and biomes from the legend() JSON, plus
@@ -221,6 +223,7 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
     // dry grass takes the grass tint until the dry ramp exists
     case B.tall_grass_double_lower: case B.tall_grass_double_upper:
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return grass;
+    case B.fern_double_lower: case B.fern_double_upper:
     case B.fern: return grass.map((v) => v * 0.88);
     case B.water: return water ?? WHITE;
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return dry ?? WHITE;

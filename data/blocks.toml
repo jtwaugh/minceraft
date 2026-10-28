@@ -477,3 +477,21 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#8a5a2b"
+
+[[block]]
+id = 51
+name = "fern_double_lower"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4f8f3a"
+
+[[block]]
+id = 52
+name = "fern_double_upper"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4f8f3a"
