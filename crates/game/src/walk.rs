@@ -659,6 +659,13 @@ impl Walker {
                     f.raft
                         .advance(&frame, &mut [&mut self.player], &self.physics);
                 }
+                // Sprinting is land only: it ends on the deck or at the helm
+                // and cannot start there (sprinting.md section 3).
+                let bb = self.player.aabb(&self.physics);
+                if f.driving || f.raft.supports(&bb) || f.raft.on_helm(&bb) {
+                    self.player.sprinting = false;
+                    walk_input.sprint = false;
+                }
                 let world = RaftWorld::new(&self.world, &f.raft);
                 self.player.tick(&walk_input, &self.physics, &world);
                 self.prev_eye = self.cur_eye;
@@ -2829,6 +2836,52 @@ mod tests {
         w.player.pos[0] += 2.0;
         w.tick(&steer(1.0, 0.0));
         assert!(!w.driving());
+    }
+
+    fn sprint_forward() -> TickInput {
+        TickInput {
+            move_forward: 1.0,
+            sprint: true,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn sprint_ends_on_boarding_and_cannot_start_on_the_deck() {
+        let mut w = boarded();
+        w.player.sprinting = true;
+        w.tick(&TickInput::default());
+        assert!(!w.sprinting());
+        for _ in 0..3 {
+            w.tick(&sprint_forward());
+            assert!(!w.sprinting());
+        }
+    }
+
+    #[test]
+    fn sprint_cannot_start_at_the_helm() {
+        let mut w = at_the_helm();
+        w.tick(&sprint_forward());
+        assert!(!w.sprinting());
+        w.tick(&interact());
+        assert!(w.driving());
+        w.tick(&sprint_forward());
+        assert!(!w.sprinting());
+    }
+
+    #[test]
+    fn sprint_on_the_islet_still_works() {
+        let mut w = scene_walker();
+        let spawn = crate::scene::raft_scene().spawn;
+        w.player.pos = [spawn[0].floor() + 1.5, 64.0, spawn[2].floor() + 0.5];
+        for _ in 0..5 {
+            w.tick(&TickInput::default());
+        }
+        assert!(w.player().on_ground, "{:?}", w.player());
+        w.tick(&sprint_forward());
+        assert!(w.sprinting());
+        w.tick(&sprint_forward());
+        assert!(w.sprinting());
     }
 
     fn grass_floor_walker(chance: u32) -> Walker {
