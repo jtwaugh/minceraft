@@ -440,6 +440,7 @@ fn cold(shape: FloraShape, block: Block, upper: Option<Block>) -> [Flora; 1] {
         cluster_scale: 8.0,
         salt: 41,
         biomes: &COLD,
+        requires: None,
     }]
 }
 
