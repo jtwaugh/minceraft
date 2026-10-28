@@ -16,7 +16,7 @@ from dataclasses import dataclass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_tick import Snapshot  # noqa: E402
 os.environ.setdefault("GITHUB_REPOSITORY", "unused/unused")  # tickets.py reads it at import
-from tickets import depends_error, ticket_numbers  # noqa: E402
+from tickets import CLOSES, depends_error, ticket_numbers  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -68,6 +68,14 @@ def check(snap):
         if len(prs) > 1 and by.get(n, {}).get("state") == "open":
             out.add(Violation("duplicate-prs", f"issue#{n}",
                               f"open PRs {', '.join(f'#{p}' for p in prs)}; close all but one"))
+    for pr in snap.merged_prs:
+        if pr.get("base") == "master":
+            continue
+        for n in sorted({int(m) for m in CLOSES.findall(pr.get("body") or "")}):
+            if by.get(n, {}).get("state") == "open":
+                out.add(Violation("closes-merged-to-non-master", f"issue#{n}",
+                                  f"PR #{pr['number']} (base {pr['base']}) says Closes #{n} and merged; "
+                                  "close the ticket once the base has reached master"))
     for doc in snap.docs:
         if doc.get("status") == "accepted" and not doc.get("phases"):
             out.add(Violation("accepted-doc-without-phases", doc["file"]))

@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_invariants import check  # noqa: E402
-from factory_tick import Snapshot  # noqa: E402
+from factory_tick import Snapshot, load_merged_prs  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "history.json")
 
@@ -40,6 +40,44 @@ class Test(unittest.TestCase):
                          [("issue#900", "open PRs #903, #905; close all but one")])
         s.issues[0]["state"] = "closed"  # then it's the supersede pass's
         self.assertEqual([v for v in check(s) if v.kind == "duplicate-prs"], [])
+
+    def test_closes_merged_to_non_master(self):
+        t = {"number": 900, "title": "t", "state": "open", "kind": "ticket",
+             "labels": [], "body": "", "parent": None}
+        pr = {"number": 905, "base": "factory-c/x", "body": "Closes #900", "merged_at": "2026-10-20T00:00:00Z"}
+        s = Snapshot(issues=[t], merged_prs=[pr])
+        want = [("closes-merged-to-non-master", "issue#900")]
+        got = lambda: [(v.kind, v.subject) for v in check(s) if v.kind == "closes-merged-to-non-master"]
+        self.assertEqual(got(), want)
+        detail = [v for v in check(s) if v.kind == "closes-merged-to-non-master"][0].detail
+        self.assertIn("#905", detail)
+        self.assertIn("factory-c/x", detail)
+        self.assertEqual(check(s), check(s))  # stable
+        pr["base"] = "master"
+        self.assertEqual(got(), [])
+        pr["base"] = "factory-c/x"
+        t["state"] = "closed"
+        self.assertEqual(got(), [])
+        t["state"] = "open"
+        s.merged_prs = []  # an unmerged closed PR is never loaded
+        self.assertEqual(got(), [])
+
+    def test_load_merged_prs(self):
+        from datetime import datetime, timezone
+        def pr(n, merged, base):
+            return {"number": n, "merged_at": merged, "base": {"ref": base}, "body": f"Closes #{n}"}
+        page = [pr(1, None, "master"), pr(2, "2026-08-01T00:00:00Z", "master"),
+                pr(3, "2026-10-20T00:00:00Z", "factory-c/x")]
+        asked = []
+        def get(path):
+            asked.append(path)
+            return page
+        now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+        got = load_merged_prs("o/r", get, now)
+        self.assertEqual(got, [{"number": 3, "base": "factory-c/x", "body": "Closes #3",
+                                "merged_at": "2026-10-20T00:00:00Z"}])
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(load_merged_prs("o/r", lambda p: None, now), [])
 
     def test_orphan_tickets(self):
         k = keys(load())
