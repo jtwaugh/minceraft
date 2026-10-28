@@ -179,6 +179,13 @@ impl Player {
             }
         } else if input.jump && self.on_ground {
             self.vel[1] = physics.jump_velocity as f64;
+            // A sprint-jump pushes along the yaw facing only, whatever keys
+            // are held.
+            if self.sprinting {
+                let boost = physics.sprint_jump_boost as f64;
+                self.vel[0] += boost * sin;
+                self.vel[2] -= boost * cos;
+            }
         }
 
         // 5. Move with collision. A blocked axis loses its velocity.
@@ -492,6 +499,101 @@ mod tests {
         assert_eq!(air, 12);
     }
 
+    fn jump_tick_velocity(
+        pl: &mut Player,
+        input: TickInput,
+        p: &PlayerPhysics,
+        w: &MemoryWorld,
+    ) -> [f64; 3] {
+        let before = pl.vel;
+        pl.tick(&input, p, w);
+        [pl.vel[0] - before[0], pl.vel[1], pl.vel[2] - before[2]]
+    }
+
+    #[test]
+    fn sprint_jump_pushes_along_yaw_only() {
+        let (p, w) = (phys(), floor());
+        let yaw = 0.7f32;
+        let jump = TickInput {
+            jump: true,
+            yaw,
+            ..sprint_tick()
+        };
+        // Reference: same jump without sprinting-state boost.
+        let mut base = sprinter(&p, &w);
+        let mut noboost = p.clone();
+        noboost.sprint_jump_boost = 0.0;
+        let a = jump_tick_velocity(&mut base, jump, &noboost, &w);
+        let mut pl = sprinter(&p, &w);
+        let b = jump_tick_velocity(&mut pl, jump, &p, &w);
+        let (dx, dz) = (b[0] - a[0], b[2] - a[2]);
+        // Drag is applied after the push, so compare against the same tick.
+        assert!(dx > 0.0 && dz < 0.0);
+        assert!((dx / dz + (yaw as f64).tan()).abs() < 1e-6);
+        assert!((b[1] - a[1]).abs() < 1e-12);
+        // Strafe keys and pitch make no difference to the push.
+        let mut pl2 = sprinter(&p, &w);
+        let c = jump_tick_velocity(
+            &mut pl2,
+            TickInput {
+                jump: true,
+                yaw,
+                pitch: 0.9,
+                move_strafe: 1.0,
+                ..sprint_tick()
+            },
+            &p,
+            &w,
+        );
+        let mut pl3 = sprinter(&p, &w);
+        let mut nb = p.clone();
+        nb.sprint_jump_boost = 0.0;
+        let d = jump_tick_velocity(
+            &mut pl3,
+            TickInput {
+                jump: true,
+                yaw,
+                pitch: 0.9,
+                move_strafe: 1.0,
+                ..sprint_tick()
+            },
+            &nb,
+            &w,
+        );
+        assert!(((c[0] - d[0]) - dx).abs() < 1e-9 && ((c[2] - d[2]) - dz).abs() < 1e-9);
+    }
+
+    #[test]
+    fn walking_or_released_or_airborne_jump_has_no_push() {
+        let (p, w) = (phys(), floor());
+        let mut nb = p.clone();
+        nb.sprint_jump_boost = 0.0;
+        let jump = TickInput {
+            jump: true,
+            ..walk()
+        };
+        let same = |a: &mut Player, b: &mut Player, i: &TickInput| {
+            a.tick(i, &p, &w);
+            b.tick(i, &nb, &w);
+            assert_eq!(a.vel, b.vel);
+        };
+        // Walking.
+        same(&mut grounded(&p, &w), &mut grounded(&nb, &w), &jump);
+        // Forward released on the jump tick.
+        let release = TickInput {
+            jump: true,
+            ..TickInput::default()
+        };
+        same(&mut sprinter(&p, &w), &mut sprinter(&nb, &w), &release);
+        // Sprinting but airborne.
+        let (mut a, mut b) = (sprinter(&p, &w), sprinter(&nb, &w));
+        a.pos[1] += 3.0;
+        b.pos[1] += 3.0;
+        a.on_ground = false;
+        b.on_ground = false;
+        same(&mut a, &mut b, &jump);
+    }
+
     #[test]
     fn jump_only_works_on_ground() {
         let (p, w) = (phys(), floor());
@@ -789,6 +891,7 @@ mod tests {
                     yaw: i as f32 * 0.05,
                     jump: i % 11 < 3,
                     sneak: i % 13 == 0,
+                    sprint: i % 4 == 0,
                     ..TickInput::default()
                 };
                 pl.tick(&input, &p, &w);

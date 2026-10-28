@@ -48,6 +48,7 @@ runs:
       run: |
         f="$RUNNER_TEMP/result-$GITHUB_JOB.json"
         printf '%s' "$RESULT" > "$f"
+        python3 -I .github/scripts/agent_results.py fill "$ROLE" "$f"
         echo "file=$f" >> "$GITHUB_OUTPUT"
         if python3 -I .github/scripts/agent_results.py "$ROLE" < "$f" 2> "$f.errors"; then
           echo "valid=true" >> "$GITHUB_OUTPUT"

@@ -32,7 +32,7 @@ use crate::climate::biome_for;
 use crate::data::{
     blocks_movement, is_liquid, opacity, Biome, BiomeInfo, Block, Plants, TreeKind, BIOME_INFO,
 };
-use crate::flora::{Flora, FLORA};
+use crate::flora::{Flora, FloraShape, FLORA};
 use crate::noise::{mix64, Rng};
 use crate::{plants, trees, Biases, Generator, Region, AIR, HEIGHT, ICE, STONE};
 use alloc::vec;
@@ -487,7 +487,7 @@ fn run(
         for x in area.x0..area.x1 {
             let b = world.biome(x, z) as usize;
             stats.biomes[b].columns += 1;
-            if snow_column(world, x, z) {
+            if snow_column(world, x, z, flora) {
                 stats.biomes[b].snow += 1;
             }
         }
@@ -645,7 +645,7 @@ fn decorate_cell(
 }
 
 /// SPEC 13 snow pass for one column. Returns whether snow was placed.
-pub(crate) fn snow_column(world: &mut World, x: i32, z: i32) -> bool {
+pub(crate) fn snow_column(world: &mut World, x: i32, z: i32, flora: &[Flora]) -> bool {
     let mut top = -1;
     for y in (1..HEIGHT as i32).rev() {
         let b = world.get(x, y, z);
@@ -658,8 +658,28 @@ pub(crate) fn snow_column(world: &mut World, x: i32, z: i32) -> bool {
         return false;
     }
     let t = world.temperature(x, z) - (top - 64) as f64 / 64.0 * 0.3;
-    if t >= 0.5 || world.get(x, top, z) != AIR {
+    if t >= 0.5 {
         return false;
+    }
+    // Snow replaces `cross` and `tall_cross` plants (both halves); other
+    // flora keep their cell and get no snow.
+    let here = world.get(x, top, z);
+    if here != AIR {
+        let Some(f) = flora.iter().find(|f| f.block as u8 == here) else {
+            return false;
+        };
+        match f.shape {
+            FloraShape::Cross => {}
+            FloraShape::TallCross => {
+                if let Some(up) = f.upper {
+                    if world.get(x, top + 1, z) == up as u8 {
+                        world.set(x, top + 1, z, AIR);
+                    }
+                }
+            }
+            _ => return false,
+        }
+        world.set(x, top, z, AIR);
     }
     let below = world.get(x, top - 1, z);
     if !blocks_movement(below) || below == ICE {

@@ -16,6 +16,8 @@ test('Tick.sprint is set on the drain after a double-tap of forward', () => {
   const s = new InputSampler();
   s.key_down('KeyW');
   s.key_up('KeyW');
+  s.drain();
+  s.drain();
   s.key_down('KeyW');
   const t = s.drain();
   assert.equal(t.sprint, true);
@@ -25,7 +27,7 @@ test('Tick.sprint is set on the drain after a double-tap of forward', () => {
 });
 
 test('a double-tap makes expect sprinting = true hold', () => {
-  run(script('runway 12\nexpect sprinting = false\npress KeyW\ndown KeyW\nframe 100\nexpect sprinting = true'));
+  run(script('runway 12\nexpect sprinting = false\npress KeyW\nframe 100\ndown KeyW\nframe 100\nexpect sprinting = true'));
 });
 
 test('a single press does not sprint, and the expectation can fail', () => {

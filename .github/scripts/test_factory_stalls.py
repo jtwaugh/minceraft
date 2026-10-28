@@ -75,6 +75,7 @@ class Test(unittest.TestCase):
 
     def test_still_incomplete_note_replans_once(self):
         s = load()
+        next(i for i in s.issues if i["number"] == 452)["parent"] = 287  # a closed ticket
         doc = next(d for d in s.docs if d["file"] == "docs/design/basic-gameplay.md")
         doc["text"] = "**Phase 7 still incomplete (plan #287).** The cue is missing."
         acts = [a for a in stalls(s) if "#287" in a.reason]
@@ -86,6 +87,7 @@ class Test(unittest.TestCase):
         self.assertFalse(any("#287" in a.reason for a in stalls(s)))
         # The note must name this plan: an older plan's note doesn't count.
         t = load()
+        next(i for i in t.issues if i["number"] == 452)["parent"] = 287
         next(d for d in t.docs if d["file"] == doc["file"])["text"] = \
             "Phase 7 still incomplete (plan #28)."
         self.assertNotIn("request_replan", [a.kind for a in stalls(t)])
@@ -97,6 +99,19 @@ class Test(unittest.TestCase):
         self.assertFalse(any("#287" in r for r in reasons(s)))
         plan["closed_at"] = "2026-01-01T00:00:00Z"
         self.assertTrue(any("#287" in r for r in reasons(s)))
+
+    def test_incomplete_after_a_plan_with_nothing_to_build_is_not_replanned(self):
+        # A phase only the maintainer can finish: re-planning would loop
+        # (empty plan, docs updater's note for the new plan, re-plan, ...).
+        s = load()
+        for i in s.issues:
+            if i["number"] == 452:
+                i["parent"], i["labels"] = 287, ["spec-question", "decision"]
+        next(d for d in s.docs if d["file"] == "docs/design/basic-gameplay.md")["text"] = \
+            "**Phase 7 still incomplete (plan #287).** The maintainer must move a file."
+        acts = [a for a in stalls(s) if "#287" in a.reason]
+        self.assertEqual([a.kind for a in acts], ["report"])
+        self.assertIn("found nothing to build", acts[0].reason)
 
     def test_open_docs_pr_skips_doc(self):
         s = load()

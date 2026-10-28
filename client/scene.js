@@ -41,7 +41,7 @@ import { NEAR, farPlane, look, skyInputs } from './view.js';
 import { sampleSky, easeSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { SKY_GLSL } from '../viewer/sky.js';
-import { WATER_GLSL } from '../viewer/water.js';
+import { WATER_GLSL, WATER_DEPTH_GLSL } from '../viewer/water.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
 import { parseBlend } from './blend.js';
@@ -94,6 +94,7 @@ function program(cut) {
     layout(location=4) in vec3 tint;
     layout(location=5) in float top;
     layout(location=6) in float ao; // AO level 0-3 (mesh.js byte 13)
+    layout(location=7) in float depth; // water depth 0-255 (mesh.js byte 15); 0 off water
     const float AO_SHADE[4] = float[4](${AO_SHADE.map((v) => v.toFixed(3)).join(', ')});
     uniform mat4 mvp;
     uniform vec3 unpack;
@@ -101,7 +102,7 @@ function program(cut) {
     uniform vec3 eye; uniform vec2 plantFade; // start, range (blocks)
     uniform float waterFrame;
     uniform float swayPhase; // swayPhase in sway.js
-    out vec3 vuv; out float vshade; out float vdist; out vec3 vtint; out vec3 vdir;
+    out vec3 vuv; out float vshade; out float vdist; out vec3 vtint; out vec3 vdir; out float vdepth;
     void main() {
       vec3 w = pos * unpack.x + offset;
       ${cut ? `// mirrors plantScale in plantfade.js: top vertices sink one block to the base
@@ -116,13 +117,14 @@ function program(cut) {
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
       vshade = shade * unpack.z * AO_SHADE[int(ao)];
       vtint = tint;
+      vdepth = depth;
       vdist = distance(w, eye);
       vdir = w - eye;
     }`));
   gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
     precision mediump sampler2DArray;
-    in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir;
+    in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir; in float vdepth;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
     uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir;
     uniform float waterFresnel; // 1 while drawing water from above the surface
@@ -130,6 +132,7 @@ function program(cut) {
     ${FOG_GLSL}
     ${SKY_GLSL}
     ${WATER_GLSL}
+    ${WATER_DEPTH_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
       vec2 px = vuv.xy * ${TEX_SIZE}.0;
@@ -139,14 +142,16 @@ function program(cut) {
       ${cut && !msaa ? 'if (t.a < 0.5) discard;' : ''}
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
       float g = texture(tintTex, vuv).r;
-      vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint;
+      // depth shading is for water seen from above; under water the look is unchanged
+      float wd = vdepth * waterFresnel;
+      vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint * waterColorFactor(wd);
       vec3 vd = normalize(vdir);
       // water reflects the sky: blend toward it at low view angles (as in the viewer)
       c = mix(c, skyColor(fogColor, vec3(vd.x, -vd.y, vd.z), sunDir), waterFresnel * fresnel(vd));
       float f = fogFar > 0.0 ? fogAmount(vdist, fogFar) : clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
       // above water fog fades toward the sky in the view direction; under water it is flat
       vec3 fc = fogFar > 0.0 ? skyColor(fogColor, vd, sunDir) : fogColor;
-      o = vec4(mix(c, fc, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'alpha'});
+      o = vec4(mix(c, fc, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'min(alpha * waterAlphaScale(wd), 1.0)'});
     }`));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
@@ -316,7 +321,7 @@ function upload({ verts, faces }, offset) {
   };
   attr(0, 3, gl.SHORT, false, 0); attr(1, 2, gl.UNSIGNED_BYTE, false, 6); attr(2, 1, gl.UNSIGNED_BYTE, false, 8);
   attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10);
-  attr(5, 1, gl.UNSIGNED_BYTE, true, 14); attr(6, 1, gl.UNSIGNED_BYTE, false, 13);
+  attr(5, 1, gl.UNSIGNED_BYTE, true, 14); attr(6, 1, gl.UNSIGNED_BYTE, false, 13); attr(7, 1, gl.UNSIGNED_BYTE, false, 15);
   gl.bindVertexArray(null);
   return { vao, buf, n: faces * 6, offset };
 }

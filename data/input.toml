@@ -17,8 +17,9 @@ sensitivity = 0.0025
 fov_degrees = 70.0
 
 [sprint]
-# Placeholder (docs/design/sprinting.md): the double-tap window, in sim ticks,
-# pending research question #820. Must be a whole number of at least 1.
+# Double-tap window in sim ticks (SPEC Sprinting, decided in #821): the second
+# forward press must come 2 to double_tap_ticks - 1 ticks after the first.
+# A whole number from 0 to 10; 0 turns double-tap sprinting off.
 double_tap_ticks = 7
 # This game's own tunables (SPEC Sprinting, Camera), not facts about Beta. While
 # sprinting the field of view widens by fov_extra_degrees, easing in and out over

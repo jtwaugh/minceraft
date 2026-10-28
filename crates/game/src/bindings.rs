@@ -177,10 +177,10 @@ impl Bindings {
             .and_then(|v| v.as_table())
             .ok_or_else(|| BindingsError::Invalid("missing [sprint] table".into()))?;
         let double_tap_ticks = match sprint.get("double_tap_ticks") {
-            Some(toml::Value::Integer(i)) if (1..=i64::from(u32::MAX)).contains(i) => *i as u32,
+            Some(toml::Value::Integer(i)) if (0..=10).contains(i) => *i as u32,
             _ => {
                 return Err(BindingsError::Invalid(
-                    "sprint.double_tap_ticks must be a whole number of at least 1".into(),
+                    "sprint.double_tap_ticks must be a whole number from 0 to 10".into(),
                 ))
             }
         };
