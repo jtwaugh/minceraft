@@ -50,7 +50,7 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 `basic-gameplay.md` section 3 says "A first-person hand renders the current tool or carried item, with Beta's swing animation on primary and a smaller use animation on secondary." Phase 1 left hand rendering for later and no phase has picked it up since.
 
 - Draw what `held` is (`tool:<name>`, `item:<name>` or empty) in the lower right of the view, from the item's existing icon. Hands win over the belt, as they already do for `held`. The held item is a flat sprite: the 8x8 icon on a thin two-sided slab, like world items (`itemBoxes` in `client/itemmodel.js`), one box per item, not an extruded voxel slab. (Decided in #1186.)
-- A swing on primary and a smaller use motion on secondary, timed from sim ticks so input scripts can check them (CLAUDE.md "Testing the client"). The swing and use durations and curves are this project's own values in `data/hands.toml`, tuned by feel; they do not come from SPEC.md and no SPEC change is needed. (Decided in #1202.)
+- A swing on primary and a smaller use motion on secondary, timed from sim ticks so input scripts can check them (CLAUDE.md "Testing the client"). The swing and use durations and curves are this project's own values in `data/hands.toml`, tuned by feel; they do not come from SPEC.md and no SPEC change is needed. (Decided in #1202.) The swing follows the action's success, as `basic-gameplay.md` section 6 says, not the button press: pressing primary at nothing does not animate. (Decided in #1203.)
 - It bobs with the camera and doesn't clip into blocks in front of the player.
 - An empty hand: nothing is drawn, and no hand or arm art is made. (Decided in #1205.)
 
@@ -70,9 +70,6 @@ Tools and items have icons (`sword`, `hoe`, `seeds`, the animal drops and flower
 
 Added by the reconciler:
 
-6. Should the animation follow the `Swing` event (any primary press with empty hands) or only a successful action?
-   - A: follow the action's success, as `basic-gameplay.md` section 6 says.
-   - B: follow the button press, so swinging at air animates.
 7. Should hand bob wait for camera bob?
    - A: phase the held item after a camera bob doc or ticket exists.
    - B: give the held item its own bob from distance walked.
