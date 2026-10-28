@@ -154,8 +154,16 @@ fn rejects_missing_or_bad_sprint_fov_tunables() {
 fn rejects_missing_or_bad_double_tap_window() {
     let missing = shipped().replace("double_tap_ticks = 7", "");
     assert_err_contains::<(), _>(Bindings::parse(&missing).map(|_| ()), "double_tap_ticks");
-    for bad in ["\"7\"", "7.5", "0"] {
+    for bad in ["\"7\"", "7.5", "11", "-1"] {
         let text = shipped().replace("double_tap_ticks = 7", &format!("double_tap_ticks = {bad}"));
         assert_err_contains::<(), _>(Bindings::parse(&text).map(|_| ()), "double_tap_ticks");
+    }
+}
+
+#[test]
+fn accepts_double_tap_window_from_zero_to_ten() {
+    for ok in [0, 10] {
+        let text = shipped().replace("double_tap_ticks = 7", &format!("double_tap_ticks = {ok}"));
+        assert_eq!(Bindings::parse(&text).unwrap().double_tap_ticks, ok);
     }
 }
