@@ -319,7 +319,7 @@ The tick leaves a Blocked PR alone while the maintainer is working on it: a main
 > files of open PRs, instead of the predicted-files regex. (Decided in
 > #1120.)
 
-**Phase C: Structured agent results.** Agent runs return JSON against a schema per role (implementer first, then reviewer, planner, docs updater, reconciler, spec editor), through `claude -p` with an output schema or the Agent SDK. A fix run's result includes `needs_maintainer: {kind, question, options}` when it stops, and the tick writes the question issue from it. Done when `expect.py` and the comment and verdict regexes are deleted.
+**Phase C: Structured agent results.** Agent runs return JSON against a schema per role (implementer first, then reviewer, planner, docs updater, reconciler, spec editor), through `claude -p` with an output schema or the Agent SDK. A fix run's result includes `needs_maintainer: {kind, question, options}` when it stops, and the tick writes the question issue from it. The agent workflow validates the JSON against the role's schema and posts it as a comment on the ticket or PR holding one JSON block; the tick reads it with `json.loads`, from trusted accounts only. Done when `expect.py` and the comment and verdict regexes are deleted. (Decided in #1218.)
 
 > **Reconciler:** see note 11. Deleting the verdict regexes in
 > `review_gate.py` changes the `review-verdict` check, which is required on
