@@ -79,7 +79,8 @@ def _as_pr(pr):
 
 
 def ready(snap):
-    by_number = {i["number"]: i for i in snap.issues}
+    by_number = {n: {"state": "closed"} for n in snap.done_prs}
+    by_number.update({i["number"]: i for i in snap.issues})
     prs = [_as_pr(p) for p in snap.prs if p.get("state", "open") == "open"]
     candidates = sorted(
         (i for i in snap.issues

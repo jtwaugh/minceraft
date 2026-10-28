@@ -59,5 +59,16 @@ class Claimed(unittest.TestCase):
         self.assertEqual(tickets.ticket_numbers("claude/x", "see #900"), set())
 
 
+class Deps(unittest.TestCase):
+    def test_header_only(self):
+        body = ("**Depends on:** none\n\nThe Depends on: line said #12 and #1257.\n"
+                "- [ ] Depends on: #3 is read from the header\n")
+        self.assertEqual(tickets.deps(body), set())
+
+    def test_header_and_blocked_by(self):
+        body = "**Depends on:** #5, #6\n\nprose\nBlocked by #7\n"
+        self.assertEqual(tickets.deps(body), {5, 6, 7})
+
+
 if __name__ == "__main__":
     unittest.main()
