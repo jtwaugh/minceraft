@@ -722,3 +722,59 @@ fn marsh_orchid_is_swampland_only_on_grass_and_independent_of_region() {
     }
     assert!(n > 0, "no marsh orchids");
 }
+
+#[test]
+fn shrubland_gets_bush_berry_bush_and_sparse_dry_grass() {
+    let (bush, berry, dry) = (
+        Block::Bush as u8,
+        Block::BerryBush as u8,
+        Block::DryGrass as u8,
+    );
+    let (mut n_bush, mut n_berry, mut n_dry) = (0, 0, 0);
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-400, -400, 800, 800);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                let (t, h) = g.climate.at(x, z, &[], &[]);
+                let shrub = biome_for(t, h) == Biome::Shrubland;
+                for y in 1..HEIGHT - 1 {
+                    let b = at(&r, x, y, z);
+                    if b == bush {
+                        assert!(shrub, "bush outside Shrubland at {x},{z}");
+                        n_bush += 1;
+                    } else if b == berry && shrub {
+                        n_berry += 1;
+                    } else if b == dry && shrub {
+                        n_dry += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        n_bush > 0 && n_berry > 0 && n_dry > 0,
+        "{n_bush} {n_berry} {n_dry}"
+    );
+    assert!(n_dry < n_bush, "dry grass must stay sparse");
+}
+
+#[test]
+fn shrubland_flora_is_independent_of_region_and_flora_off_matches_empty_table() {
+    let seed = 12345;
+    let big = gen(seed, -400, -400, 800, 800, &FLORA);
+    assert!(count(&big, Block::Bush) > 0);
+    let part = gen(seed, -40, -60, 90, 80, &FLORA);
+    for z in part.z0..part.z0 + 80 {
+        for x in part.x0..part.x0 + 90 {
+            for y in 0..HEIGHT {
+                assert_eq!(at(&big, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+            }
+        }
+    }
+    for seed in [12345u64, 9, 42] {
+        let off = gen(seed, -150, -150, 300, 300, &[]);
+        assert_eq!(count(&off, Block::Bush), 0);
+    }
+}
