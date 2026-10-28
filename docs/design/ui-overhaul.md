@@ -79,6 +79,7 @@ Today the timer's phase word, the hands item name, the death screen, the invento
 - **Crosshair** as a small pixel-art texture at the UI scale, not a 16px CSS gradient.
 - A short pop-up of the item name when the selected slot changes, then it fades.
 - Optional: a heart wobble when health is low, and a brief flash when damage is taken.
+- Every HUD part is always shown: hearts and the timer don't hide or fade when nothing changes, so a layout check can assume all of them are present. (Decided in #1346.)
 
 > **Reconciler:** The crosshair is a CSS box today (see Current state), not a 16px gradient; the point stands. `sun` and `moon_*` exist, but `moon_*` is a set of eight 16x16 phases (`moon_0` to `moon_7`) in `art/PROMPT.md`, so the timer icon needs a small version or a chosen scale-down; that is new art. The pop-up fade and wobble are time-based, so they need a clock in the controller state to be testable (note 7).
 
@@ -100,12 +101,11 @@ The first-person held item and item entities in the world are in #1137. Gameplay
 
 **Phase B.** Section 2: the bitmap font art (capitals, digits, punctuation, as the open question 2 decides) and the helper beside `uipx.js` that measures and draws a string at a scale. Done when the art passes `validate.py` and `test_art.py`, and a node test shows the helper's width and rects for several strings at several scales, with a defined fallback glyph.
 
-**Phase C.** Sections 3 and 4 (HUD part): switch the HUD to the font and remove the text fallbacks in `hudLayout`; belt on a panel strip with slot numbers; hearts left and hands right above the belt; timer on a panel with a phase icon; crosshair texture. Done when `layout` scripts at the four sizes pass with no `problems` and no `TEXT_CHAR_W` or `TEXT_H` remains. Pop-up, wobble and flash are optional and wait on open question 4.
+**Phase C.** Sections 3 and 4 (HUD part): switch the HUD to the font and remove the text fallbacks in `hudLayout`; belt on a panel strip with slot numbers; hearts left and hands right above the belt; timer on a panel with a phase icon; crosshair texture. Done when `layout` scripts at the four sizes pass with no `problems` and no `TEXT_CHAR_W` or `TEXT_H` remains. Pop-up, wobble and flash are optional.
 
 **Phase D.** Section 4: the shared panel, button states (pressed and unpressed) and palette on the inventory, death screen, hint and menu, plus the wordmark. Debug console and overlay get the panel and colours (open question 3 decides the font). Done when the inventory, death and menu tests still pass, the hint is a panel with font text, and the `[manual check]` look is accepted by the maintainer.
 
 ## Open questions
 
 3. **Debug console and overlay font.** A: stay monospace with the shared panel and colours. B: move to the pixel font. A keeps long free-form output readable; B is more consistent.
-4. **Hide or fade HUD parts.** A: always show everything. B: fade hearts at full health and the timer when nothing changes. A is simpler and testable; B changes what a layout check should assume.
 5. **One style or a separate menu treatment.** A: the wooden panel for every screen, the menu included. B: the menu keeps its animated sea backdrop and gets only the wordmark and shared buttons.
