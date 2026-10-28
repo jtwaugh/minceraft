@@ -135,15 +135,16 @@ files the `research` spec-questions of section 3 (what the original does, per
 the reference version in section 3). (Decided in #822.)
 
 **Phase B.** Section 3 items that wait on open questions: camera FOV change
-(question 2), raft and water behaviour (question 3), and a configurable window
-(question 4), plus replacing placeholder values with researched ones once
-`SPEC.md` has them. Done when each decided behaviour has an input script.
+(question 2), raft and water behaviour (question 3), plus replacing
+placeholder values with researched ones once `SPEC.md` has them. The
+double-tap window stays a fixed value in `data/input.toml`, not a user
+setting. Done when each decided behaviour has an input script.
 For the sprint-jump, ground drag applies on the jump tick for sprint-jumps
 only; ordinary jumps keep the drag they have today. (Decided in #1332.)
 A wall ends a sprint only on a head-on hit: the facing within a small angular
 tolerance of the wall's normal. The tolerance is this game's own tunable in
 `data/player.toml`, with no parity claim; contact outside it, such as sliding
-along a wall, does not end the sprint. (Decided in #1331.)
+along a wall, does not end the sprint. (Decided in #1331, #1334.)
 
 ## Reconciliation notes (phase-done, Phase A)
 
@@ -159,5 +160,3 @@ along a wall, does not end the sprint. (Decided in #1331.)
 
 2. **Camera.** Match the original's FOV change while sprinting? A: yes, with a
    tunable in `data/input.toml`. B: leave the camera alone.
-4. **Double-tap window.** A: fixed value in `data/input.toml` (not a user
-   setting). B: a user setting in the menu.
