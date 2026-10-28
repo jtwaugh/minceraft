@@ -137,6 +137,8 @@ the reference version in section 3). (Decided in #822.)
 (question 2), raft and water behaviour (question 3), and a configurable window
 (question 4), plus replacing placeholder values with researched ones once
 `SPEC.md` has them. Done when each decided behaviour has an input script.
+For the sprint-jump, ground drag applies on the jump tick for sprint-jumps
+only; ordinary jumps keep the drag they have today. (Decided in #1332.)
 
 ## Reconciliation notes (phase-done, Phase A)
 
