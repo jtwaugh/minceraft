@@ -42,10 +42,14 @@ REVIEWED = re.compile(r"Reviewed commit:\s*`?([0-9a-f]{7,40})", re.I)
 
 def verdict_of(comments, head):
     """The reviewer's newest verdict as {"kind": ready|nits|blocked, "current":
-    whether it names `head`}, or None. `comments` are REST issue comments."""
+    whether it names `head`}, or None. `comments` are REST issue comments; the
+    reviewer workflow's own comment counts when it holds a valid result."""
     newest = None
+    import review_gate
     for c in comments:
-        if (c.get("user") or {}).get("login") != BOT:
+        login = (c.get("user") or {}).get("login")
+        if login != BOT and not (login == review_gate.ACTIONS
+                                 and review_gate.structured_verdict(c.get("body") or "")):
             continue
         m = VERDICT.search(c.get("body") or "")
         if m and (newest is None or c["updated_at"] > newest[0]["updated_at"]):

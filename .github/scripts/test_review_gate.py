@@ -79,6 +79,14 @@ class Decide(unittest.TestCase):
         c["user"]["login"] = "someone"
         self.assertEqual(self.state(["a.rs"], [c])[0], "pending")
 
+    def test_workflow_comment_counts_only_with_structured_result(self):
+        c = structured("blocked")
+        c["user"]["login"] = rg.ACTIONS
+        self.assertEqual(self.state(["a.rs"], [c])[0], "failure")
+        plain = verdict("Blocked")
+        plain["user"]["login"] = rg.ACTIONS
+        self.assertEqual(self.state(["a.rs"], [plain])[0], "pending")
+
 
 if __name__ == "__main__":
     unittest.main()

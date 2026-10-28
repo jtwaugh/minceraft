@@ -1,4 +1,5 @@
 """Tests for the auto-merge pass. python3 -I test_factory_automerge.py (no network)."""
+import json
 import os
 import sys
 import unittest
@@ -99,6 +100,15 @@ class Verdict(unittest.TestCase):
         self.assertEqual(verdict_of([self.c(ok.replace("Ready", "Blocked"))], HEAD)["kind"], "blocked")
         self.assertFalse(verdict_of([self.c(ok)], "0000000fff")["current"])
         self.assertIsNone(verdict_of([self.c("Verdict: Ready", user="mallory")], HEAD))
+
+    def test_workflow_comment_needs_structured_result(self):
+        lines = f"Verdict: Ready, with nits\nReviewed commit: `{HEAD[:7]}`\n"
+        result = json.dumps({"verdict": "ready with nits", "reviewed_commit": HEAD[:7],
+                             "blockers": [], "nits": [{"number": 1, "text": "x"}]})
+        block = f"<!-- factory-result role=reviewer pr=1 sha={HEAD} -->\n```json\n{result}\n```"
+        bot = "github-actions[bot]"
+        self.assertEqual(verdict_of([self.c(lines + block, user=bot)], HEAD)["kind"], "nits")
+        self.assertIsNone(verdict_of([self.c(lines, user=bot)], HEAD))
 
     def test_newest_wins(self):
         old = self.c(f"Verdict: Ready\nReviewed commit: `{HEAD[:7]}`", "2026-10-21T10:00:00Z")

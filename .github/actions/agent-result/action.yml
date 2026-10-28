@@ -1,0 +1,81 @@
+name: Agent result
+description: >-
+  Checks a Claude run's structured output against its role's schema
+  (agent_results.py), posts it as a comment holding one JSON block, and
+  checks the run left what the result names (agent_results.py verify).
+  An invalid or missing result fails the step, so it never looks like a
+  finished run. (docs/design/factory-orchestrator.md Phase C, decided in #1218)
+inputs:
+  role:
+    description: implementer, fix, reviewer, planner, docs_updater, reconciler or spec_editor
+    required: true
+  result:
+    description: steps.<claude step>.outputs.structured_output (may be empty)
+    required: true
+  comment-on:
+    description: Issue or PR number to post the result on (empty posts nothing)
+    default: ""
+  marker:
+    description: Fields after the role in the marker, e.g. "pr=12 sha=<head>"
+    default: ""
+  header-file:
+    description: Markdown to put above the JSON block (optional)
+    default: ""
+  verify:
+    description: The argument for `agent_results.py verify <role>` (empty skips it)
+    default: ""
+outputs:
+  valid:
+    description: "'true' when the result passed the schema"
+    value: ${{ steps.check.outputs.valid }}
+  file:
+    description: Path of the result JSON
+    value: ${{ steps.check.outputs.file }}
+  ok:
+    description: verify's ok (or valid, when verify is skipped)
+    value: ${{ steps.verify.outputs.ok || steps.check.outputs.valid }}
+  expected:
+    description: verify's expected
+    value: ${{ steps.verify.outputs.expected || 'a valid result' }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        ROLE: ${{ inputs.role }}
+        RESULT: ${{ inputs.result }}
+      run: |
+        f="$RUNNER_TEMP/result-$GITHUB_JOB.json"
+        printf '%s' "$RESULT" > "$f"
+        echo "file=$f" >> "$GITHUB_OUTPUT"
+        if python3 -I .github/scripts/agent_results.py "$ROLE" < "$f" 2> "$f.errors"; then
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "valid=false" >> "$GITHUB_OUTPUT"
+          { echo "### Invalid $ROLE result"; echo; sed 's/^/- /' "$f.errors"; } >> "$GITHUB_STEP_SUMMARY"
+        fi
+    - if: steps.check.outputs.valid == 'true' && inputs.comment-on != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ROLE: ${{ inputs.role }}
+        MARKER: ${{ inputs.marker }}
+        HEADER: ${{ inputs.header-file }}
+        TARGET: ${{ inputs.comment-on }}
+        FILE: ${{ steps.check.outputs.file }}
+      run: |
+        body="$RUNNER_TEMP/result-$GITHUB_JOB.md"
+        { if [ -n "$HEADER" ]; then cat "$HEADER"; echo; fi
+          echo "<!-- factory-result role=$ROLE${MARKER:+ $MARKER} -->"
+          echo '```json'; jq . "$FILE"; echo '```'; } > "$body"
+        gh issue comment "$TARGET" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+    - id: verify
+      if: steps.check.outputs.valid == 'true' && inputs.verify != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ROLE: ${{ inputs.role }}
+        ARG: ${{ inputs.verify }}
+        FILE: ${{ steps.check.outputs.file }}
+      run: python3 -I .github/scripts/agent_results.py verify "$ROLE" "$ARG" "$FILE"
