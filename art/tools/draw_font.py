@@ -1,6 +1,6 @@
-"""Batch 22 of the Mince Raft textures: the pixel font's letters.
+"""Batch 22 of the Mince Raft textures: the pixel font's letters and punctuation.
 
-Capitals A to Z plus font_unknown, each a 3x5 glyph in a 4x6 cell, drawn
+Capitals A to Z, ten punctuation marks and font_unknown, each a 3x5 glyph in a 4x6 cell, drawn
 like digit_* in draw_7_12.py: off-white glyph, near-black drop shadow one
 pixel right and below, transparent elsewhere. Lower case reuses the
 capitals and digit_* are the digits (#1174).
@@ -38,6 +38,17 @@ GLYPHS = {
     "x": ["101", "101", "010", "101", "101"],
     "y": ["101", "101", "010", "010", "010"],
     "z": ["111", "001", "010", "100", "111"],
+    # punctuation
+    "period": ["000", "000", "000", "000", "010"],
+    "comma": ["000", "000", "000", "010", "100"],
+    "colon": ["000", "010", "000", "010", "000"],
+    "exclamation": ["010", "010", "010", "000", "010"],
+    "question": ["111", "001", "011", "000", "010"],
+    "apostrophe": ["010", "010", "000", "000", "000"],
+    "hyphen": ["000", "000", "111", "000", "000"],
+    "slash": ["001", "001", "010", "100", "100"],
+    "lparen": ["001", "010", "010", "010", "001"],
+    "rparen": ["100", "010", "010", "010", "100"],
     # fallback for any character the font lacks: a question mark
     "unknown": ["111", "001", "011", "000", "010"],
 }
@@ -60,8 +71,8 @@ errs = []
 for k, v in batch22.items():
     if len(v) != H or any(len(r) != W or set(r) - PAL for r in v):
         errs.append(f"{k}: not a {W}x{H} palette grid")
-if len(batch22) != 27:
-    errs.append(f"want 27 glyphs, got {len(batch22)}")
+if len(batch22) != 37:
+    errs.append(f"want 37 glyphs, got {len(batch22)}")
 if errs:
     raise SystemExit("\n".join(errs))
 
