@@ -113,7 +113,7 @@ Everything else about sprinting should match the original game: how fast you go,
 - `SPEC.md` has no player physics and no sprinting, and Beta 1.7.3 itself has no sprinting. None of this can come from memory: per CLAUDE.md, each of these needs a `research` spec-question, and the answers reach `SPEC.md` through the maintainer. The research describes a current release of
   the original game as the reference version. (Decided in #821.)
 - Until then, any tunables go in `data/player.toml` (`[movement]`) and `data/input.toml` as this game's own values, as the existing movement constants are (#90).
-- Sprinting is land only: a sprint ends on boarding the raft or at the helm, and cannot be started on the raft scene. (Decided in #1333.)
+- Sprinting is land only: a sprint ends on boarding the raft or at the helm, and cannot be started while standing on the raft deck (boarded) or at the helm. Sprinting on the raft scene's islet and runway still works. (Decided in #1333, #1380.)
 
 ## 4. Tests
 
