@@ -191,7 +191,7 @@ import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
 import { FOG_GLSL } from './fog.js';
 import { SKY_GLSL } from './sky.js';
-import { WATER_GLSL } from './water.js';
+import { WATER_GLSL, WATER_DEPTH_GLSL } from './water.js';
 import { buildMips, buildMips1 } from './mips.js';
 const { heightmap_decorated, generate_region_decorated, biome_map, temperature_map, humidity_map, legend, habitat_names } = wasm;
 
@@ -638,6 +638,7 @@ function program(cut) {
     layout(location=3) in float shade;
     layout(location=4) in vec3 tint;
     layout(location=6) in float ao; // AO level 0-3; unset (0) on float meshes
+    layout(location=7) in float depth; // water depth 0-255 (byte 15); 0 off water and on float meshes
     const float AO_SHADE[4] = float[4](${AO_SHADE.map((v) => v.toFixed(3)).join(', ')});
     uniform mat4 mvp;
     uniform float waterFrame;
@@ -650,6 +651,7 @@ function program(cut) {
     out float vdist;
     out vec3 vdir; // eye to fragment, for the fog's sky colour
     out vec3 vtint;
+    out float vdepth;
     void main() {
       vec3 wp = pos * unpack.x + offset;
       gl_Position = mvp * vec4(wp, 1.0);
@@ -659,13 +661,14 @@ function program(cut) {
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
       vshade = shade * unpack.z * AO_SHADE[int(ao)];
       vtint = tint;
+      vdepth = depth;
       vdist = distance(wp, camPos);
       vdir = wp - camPos;
     }`));
   gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, `#version 300 es
     precision mediump float;
     precision mediump sampler2DArray;
-    in vec3 vuv; in float vshade; in float vdist; in vec3 vdir; in vec3 vtint;
+    in vec3 vuv; in float vshade; in float vdist; in vec3 vdir; in vec3 vtint; in float vdepth;
     uniform sampler2DArray tex;
     uniform sampler2DArray tintTex; // R8 tint weight, same layers and UVs as tex
     uniform float alpha; uniform float fogFar; uniform float fogMax; uniform vec3 fogColor; uniform vec3 sunDir;
@@ -674,6 +677,7 @@ function program(cut) {
     ${FOG_GLSL}
     ${SKY_GLSL}
     ${WATER_GLSL}
+    ${WATER_DEPTH_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
       vec2 px = vuv.xy * ${TEX_SIZE}.0;
@@ -683,12 +687,12 @@ function program(cut) {
       float tw = textureGrad(tintTex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy)).r;
       ${cut && !msaa ? 'if (t.a < 0.5) discard; // transparent pixels: sprites, leaf holes, sky' : ''}
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
-      vec3 c = t.rgb * mix(vec3(1.0), vtint, tw) * vshade;
+      vec3 c = t.rgb * mix(vec3(1.0), vtint, tw) * vshade * waterColorFactor(vdepth);
       vec3 vd = normalize(vdir);
       // water reflects the sky: blend toward it at low view angles
       c = mix(c, skyColor(fogColor, vec3(vd.x, -vd.y, vd.z), sunDir), waterFresnel * fresnel(vd));
       float f = fogAmount(vdist, fogFar) * fogMax;
-      o = vec4(mix(c, skyColor(fogColor, vd, sunDir), f), ${cut && msaa ? 'ca * alpha' : 'alpha'});
+      o = vec4(mix(c, skyColor(fogColor, vd, sunDir), f), ${cut && msaa ? 'ca * alpha' : 'min(alpha * waterAlphaScale(vdepth), 1.0)'});
     }`));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
@@ -1004,7 +1008,7 @@ function uploadPacked({ verts, faces }) {
     gl.vertexAttribPointer(loc, size, type, normalized, VERTEX_BYTES, off);
   };
   attr(0, 3, gl.SHORT, false, 0); attr(1, 2, gl.UNSIGNED_BYTE, false, 6); attr(2, 1, gl.UNSIGNED_BYTE, false, 8);
-  attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10); attr(6, 1, gl.UNSIGNED_BYTE, false, 13);
+  attr(3, 1, gl.UNSIGNED_BYTE, false, 9); attr(4, 3, gl.UNSIGNED_BYTE, true, 10); attr(6, 1, gl.UNSIGNED_BYTE, false, 13); attr(7, 1, gl.UNSIGNED_BYTE, false, 15);
   gl.bindVertexArray(null);
   return { vao, n: faces * 6, faces, packed: true, bufs: [vb] };
 }
