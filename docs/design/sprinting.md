@@ -174,6 +174,18 @@ along a wall, does not end the sprint. (Decided in #1331, #1334.)
      and not start on the raft scene; `walk.rs` and `raft.rs` do not clear or
      block `Player.sprinting`.
 
+## Reconciliation notes (phase-done, Phase B, plan #1377)
+
+11. **Phase B still incomplete (plan #1377).** Plan #1377's tickets closed:
+   the head-on wall rule (#1378, PR #1383: `sprint_wall_tolerance_degrees` in
+   `data/player.toml`, `player.rs`) and the sprint-jump drag (#1379, PR #1386).
+   Still missing: the raft rule (#1333, #1380, option A). Nothing in
+   `walk.rs`, `raft.rs` or `player.rs` ends a sprint on boarding the raft or
+   at the helm, or blocks starting one while boarded or at the helm, and no
+   input script covers it (the existing `sprint*.input` scripts only sprint on
+   the islet and runway, which must keep working). PR #1381 only changed this
+   doc.
+
 ## Open questions
 
 2. **Camera.** Match the original's FOV change while sprinting? A: yes, with a
