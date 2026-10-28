@@ -53,10 +53,6 @@ jobs:
       # failing test instead of describing it.
       - uses: ./.github/actions/toolchain
 
-      - name: Note the start time
-        id: start
-        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
         uses: ./.github/actions/claude-deps
