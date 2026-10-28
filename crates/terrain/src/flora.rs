@@ -68,7 +68,7 @@ fn colour_noise(seed: u64) -> OctavePerlin {
     OctavePerlin::new(&mut Rng::new(key), 2)
 }
 
-/// Place flora (`cross`, `tall_cross`, `ground_cover`, `bush`) over the
+/// Place flora (`cross`, `tall_cross`, `ground_cover`, `bush`, and `pad` on water) over the
 /// columns `[x0, x1) x [z0, z1)`. Each column reads only itself, the seed and
 /// the noise, and writes only into air, so the result is independent of the
 /// region and the cell RNG is untouched. Returns blocks placed per entry.
@@ -84,6 +84,7 @@ pub(crate) fn place(
     for z in z0..z1 {
         for x in x0..x1 {
             let Some(top) = surface(world, x, z) else {
+                place_pad(world, seed, (x, z), table, &noises, &mut placed);
                 continue;
             };
             let ground = Block::from_u8(world.get(x, top - 1, z));
@@ -139,6 +140,53 @@ pub(crate) fn place(
         }
     }
     placed
+}
+
+/// Float a `pad` entry on a column whose top block is water with air above,
+/// when land (a solid, non-liquid block at the water's height) lies within
+/// `FLORA_PAD_LAND_RADIUS` columns. Same patch noise and hash roll as `place`.
+fn place_pad(
+    world: &mut World,
+    seed: u64,
+    (x, z): (i32, i32),
+    table: &[Flora],
+    noises: &[OctavePerlin],
+    placed: &mut [u64],
+) {
+    let Some(top) = (1..HEIGHT as i32 - 1)
+        .rev()
+        .find(|&y| world.get(x, y, z) != AIR)
+        .map(|y| y + 1)
+    else {
+        return;
+    };
+    if Block::from_u8(world.get(x, top - 1, z)) != Block::Water {
+        return;
+    }
+    let biome = world.biome(x, z);
+    let n = FLORA_PAD_LAND_RADIUS;
+    let land = |dx: i32, dz: i32| {
+        let b = world.get(x + dx, top - 1, z + dz);
+        blocks_movement(b) && !is_liquid(b)
+    };
+    let mut near = None;
+    for (i, f) in table.iter().enumerate() {
+        if f.shape != FloraShape::Pad || !f.ground.contains(&Block::Water) {
+            continue;
+        }
+        let Some(&(_, chance)) = f.biomes.iter().find(|(b, _)| *b == biome) else {
+            continue;
+        };
+        if !*near.get_or_insert_with(|| (-n..=n).any(|dz| (-n..=n).any(|dx| land(dx, dz)))) {
+            return;
+        }
+        let v = noises[i].sample2d(x as f64 / f.cluster_scale, z as f64 / f.cluster_scale);
+        let patch = (v * 0.5 + 0.5).clamp(0.0, 1.0) * 2.0;
+        if hash_f64(seed, x, z, 0, f.salt as u64) < chance * patch {
+            placed[i] += world.set(x, top, z, f.block as u8) as u64;
+            return;
+        }
+    }
 }
 
 /// Whether the column at `(x, z)`, whose ground block is at `y`, meets `r`.

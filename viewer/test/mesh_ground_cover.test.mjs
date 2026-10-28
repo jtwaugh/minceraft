@@ -43,3 +43,18 @@ test('the same block gets the same variant in areas with different origins', () 
   const ma = uvs(a, [100, 40]);
   for (const [k, v] of uvs(b, [102, 42])) assert.equal(ma.get(k), v, k);
 });
+
+test('a lily pad is one leaf-tinted quad 1/16 above the water surface it floats on', () => {
+  const size = 4, blocks = new Uint8Array(size * size * H);
+  for (let c = 0; c < size * size; c++) {
+    for (let y = 0; y < 60; y++) blocks[c * H + y] = B.stone;
+    blocks[c * H + 60] = B.water;
+    blocks[c * H + 61] = B.lily_pad;
+  }
+  const m = meshBlocks(ctx, blocks, tints(size), size, 0);
+  assert.equal(m.cutout.faces, 16);
+  for (let i = 0; i < 16; i++) for (const v of verts(m.cutout, i)) {
+    assert.equal(v.y, 61 * 16 + 1);
+    assert.deepEqual(v.t, [128, 64, 26]);
+  }
+});

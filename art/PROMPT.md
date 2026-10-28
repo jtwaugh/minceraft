@@ -297,3 +297,8 @@ font_slash, font_lparen, font_rparen (. , : ! ? ' - / ( ); these cover the
 punctuation in current client strings (hint line, "Hands: ...", "Test play
 (alpha)"); a space has no texture), font_unknown (a question mark, drawn for any character
 the font lacks)
+
+BATCH 24: HUD (drawn by art/tools/draw_hud.py, file batches_24.json)
+crosshair (7×7, transparent background): a plus of off-white pixels, arms
+3 long on each side with a transparent centre pixel, so the aimed block
+shows through. It will replace the CSS crosshair box.
