@@ -10,12 +10,13 @@
 #
 # Claude works on the PR's own branch under the implementer's rules
 # (CLAUDE.md, every check, 200 lines) and pushes, and the push is reviewed
-# again. When it can't go on, it posts a stop marker
-# (`<!-- factory-fix-stop pr= sha= kind= -->`, factory_fix.py) with a
-# question, and the tick turns that into a question issue
-# (factory_questions.py). A run that ends without pushing and without
-# saying why gets a stop marker from this workflow, so the attempt never
-# looks like it's still running.
+# again. Its result is JSON against the fix schema (agent_results.py):
+# `{pushed, commit}`, or `{needs_maintainer: {kind, question, options}}`
+# when it can't go on. This workflow validates it and posts it on the PR as
+# a `<!-- factory-result role=fix pr= sha= -->` comment, and the tick turns
+# a stop into a question issue (factory_questions.py). A run with no valid
+# result, or one claiming a push that didn't happen, gets a needs-you result
+# from this workflow, so the attempt never looks like it's still running.
 #
 # Run by hand: gh workflow run claude-fix.yml -f pr=<n> -f task="<what to fix>"
 name: Claude fix
@@ -82,6 +83,9 @@ jobs:
       - id: claude-deps
         if: steps.pr.outputs.go == 'true'
         uses: ./.github/actions/claude-deps
+      - id: schema
+        if: steps.pr.outputs.go == 'true'
+        run: echo "json=$(python3 -I .github/scripts/agent_results.py schema fix)" >> "$GITHUB_OUTPUT"
       - id: claude
         if: steps.pr.outputs.go == 'true'
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
@@ -118,47 +122,56 @@ jobs:
             5. Comment on the PR with each point of the task and what you
                did about it, so the re-review can check them off.
 
+            Your result: after pushing, `{"pushed": true, "commit": "<the sha you pushed>"}`.
             If you can't go on (the spec is ambiguous, you disagree with a
             blocker, a conflict needs a real decision, the fix is outside the
-            implementation lane, or it can't fit 200 lines), push nothing.
-            Post one comment with `gh pr comment ${{ inputs.pr }} --body-file <file>`
-            whose first line is exactly
-            `<!-- factory-fix-stop pr=${{ inputs.pr }} sha=${{ steps.pr.outputs.sha }} kind=<kind> -->`,
-            where <kind> is `decision` (a project choice in the spec or a
-            design doc; then add a line `**File:** <that file>`), `research`
-            (needs facts about the original game), or `needs-you` (anything
-            else). After it, state the question and list the options as
-            A, B, ... The tick turns it into a question for the maintainer.
+            implementation lane, or it can't fit 200 lines), push nothing and
+            return `{"needs_maintainer": {"kind": ..., "question": ..., "options": [...]}}`,
+            where kind is `decision` (a project choice in the spec or a
+            design doc; start the question with a line `**File:** <that file>`),
+            `research` (needs facts about the original game), or `needs-you`
+            (anything else). Give each option as one string; the tick turns
+            it into a question for the maintainer.
           claude_args: |
             --max-turns 80
+            --json-schema '${{ steps.schema.outputs.json }}'
             --allowedTools "Edit,Write,Bash(cargo fmt:*),Bash(cargo clippy:*),Bash(cargo test:*),Bash(cargo build:*),Bash(cargo run:*),Bash(./build.sh:*),Bash(node --test:*),Bash(node viewer/flyover/preview.mjs:*),Bash(python3:*),Bash(cd:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git fetch:*),Bash(git merge:*),Bash(git restore CLAUDE.md),Bash(git restore .claude:*),Bash(git restore .mcp.json),Bash(git add:*),Bash(git commit:*),Bash(git push origin claude/*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr checks:*),Bash(gh issue view:*),Bash(gh run view:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
-            --append-system-prompt "Follow CLAUDE.md exactly, above all its clean-room rules: Beta behaviour comes only from SPEC.md, and never edit SPEC.md, docs/design/ or workflow files. Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and comment bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr comment --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, post the stop marker saying exactly what you couldn't do."
+            --append-system-prompt "Follow CLAUDE.md exactly, above all its clean-room rules: Beta behaviour comes only from SPEC.md, and never edit SPEC.md, docs/design/ or workflow files. Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and comment bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr comment --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, return a needs_maintainer result saying exactly what you couldn't do."
 
-      # An attempt must end in a push or a stop marker; otherwise the tick
-      # would count it as still running and never retry or ask.
-      - name: Say so if the run left no result
+      # An attempt must end in a push or a stop; otherwise the tick would
+      # count it as still running and never retry or ask.
+      - id: result
+        if: ${{ !cancelled() && steps.pr.outputs.go == 'true' }}
+        uses: ./.github/actions/agent-result
+        with:
+          role: fix
+          result: ${{ steps.claude.outputs.structured_output }}
+          comment-on: ${{ inputs.pr }}
+          marker: pr=${{ inputs.pr }} sha=${{ steps.pr.outputs.sha }}
+      - name: Stop with a question if the run left no result
         if: ${{ !cancelled() && steps.pr.outputs.go == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ inputs.pr }}
           SHA: ${{ steps.pr.outputs.sha }}
-          AT: ${{ steps.pr.outputs.at }}
+          VALID: ${{ steps.result.outputs.valid }}
+          FILE: ${{ steps.result.outputs.file }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)
-          stopped=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?since=$AT&per_page=100" \
-            --jq "[.[] | select(.user.login == \"claude[bot]\" and (.body | contains(\"<!-- factory-fix-stop pr=$PR sha=$SHA\")))] | length")
-          if [ "$head" != "$SHA" ] || [ "$stopped" != 0 ]; then
-            echo "Result: $([ "$head" != "$SHA" ] && echo "pushed ${head:0:7}" || echo "stopped with a question")." >> "$GITHUB_STEP_SUMMARY"
+          stopped=$(jq -r 'has("needs_maintainer")' "$FILE" 2>/dev/null || echo false)
+          if [ "$VALID" = true ] && { [ "$stopped" = true ] || [ "$head" != "$SHA" ]; }; then
+            echo "Result: $([ "$stopped" = true ] && echo "stopped with a question" || echo "pushed ${head:0:7}")." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          printf '%s\n' "<!-- factory-fix-stop pr=$PR sha=$SHA kind=needs-you -->" \
-            "The fix run ended without pushing a fix or saying why it stopped: $RUN_URL" "" \
-            "- A: comment \`@claude <what to change>\` on the PR." \
-            "- B: fix it by hand and push to the branch." \
-            "- C: if the blocker is wrong, comment \`/override <reason>\`." > stop.md
+          jq -n --arg q "The fix run ended without pushing a fix or a valid result saying why it stopped: $RUN_URL" \
+            '{needs_maintainer: {kind: "needs-you", question: $q, options: [
+              "comment `@claude <what to change>` on the PR",
+              "fix it by hand and push to the branch",
+              "if the blocker is wrong, comment `/override <reason>`"]}}' > stop.json
+          { echo "<!-- factory-result role=fix pr=$PR sha=$SHA -->"; echo '```json'; cat stop.json; echo '```'; } > stop.md
           gh pr comment "$PR" --body-file stop.md
-          echo "Result: nothing pushed and no reason given; posted a stop marker." >> "$GITHUB_STEP_SUMMARY"
+          echo "Result: nothing pushed and no valid result; posted a needs-you result." >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - name: Report the run
         if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}

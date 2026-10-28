@@ -189,6 +189,9 @@ jobs:
       - id: claude-deps
         if: steps.mark.outputs.go == 'true'
         uses: ./.github/actions/claude-deps
+      - id: schema
+        if: steps.mark.outputs.go == 'true'
+        run: echo "json=$(python3 -I .github/scripts/agent_results.py schema implementer)" >> "$GITHUB_OUTPUT"
       - if: steps.mark.outputs.go == 'true'
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         id: claude
@@ -214,21 +217,42 @@ jobs:
                from master, implement the ticket, and run every check.
             4. Commit, push with `git push -u origin <that branch>`, and open
                the pull request. Never push to any other branch.
-            5. Comment on the ticket with a link to the pull request, or,
-               if you stopped, why.
+
+            Your result (this workflow posts it on the ticket): once the PR
+            is open, `{"pr": <number>, "follow_ups": [...], "questions": [...], "blocked_on": [...]}`.
+            `follow_ups` are tickets for work the 200-line limit left out,
+            each `{"title", "body"}` with the planner's ticket header (the
+            workflow files them; don't create them yourself). `blocked_on`
+            lists issues the PR waits on; `questions` are for the maintainer.
+            If you stopped without a PR (a dependency is open, someone else
+            is building it, or you opened a spec question), return
+            `{"needs_maintainer": {"kind": ..., "question": ..., "options": [...]}}`
+            instead: kind `decision`, `research` or `needs-you`, the
+            question saying why you stopped (name any issue you opened), and
+            each option as one string.
           claude_args: |
             --max-turns 80
+            --json-schema '${{ steps.schema.outputs.json }}'
             --allowedTools "${{ env.ALLOWED_TOOLS }},Bash(git checkout -b claude/*),Bash(git switch -c claude/*),Bash(git add:*),Bash(git commit:*),Bash(git push -u origin claude/*),Bash(git push origin claude/*),Bash(date:*)"
             --append-system-prompt "${{ env.RULES }}"
 
-      # Claude exits "successfully" even when it gives up, so check for the
-      # result itself; a miss fails the job (and says so where given).
+      # Claude exits "successfully" even when it gives up, so check the
+      # result names a real PR (or a stop); a miss fails the job (and says so).
       - name: Check the run left its result
         id: check
         if: ${{ !cancelled() && steps.mark.outputs.go == 'true' }}
+        uses: ./.github/actions/agent-result
+        with:
+          role: implementer
+          result: ${{ steps.claude.outputs.structured_output }}
+          comment-on: ${{ inputs.issue }}
+          marker: issue=${{ inputs.issue }}
+          verify: ${{ inputs.issue }}
+      - name: File the follow-up tickets
+        if: ${{ !cancelled() && steps.check.outputs.valid == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -B .github/scripts/expect.py ticket "${{ inputs.issue }}" "${{ steps.mark.outputs.at }}"
+        run: python3 -I .github/scripts/agent_results.py follow-ups "${{ inputs.issue }}" "${{ steps.check.outputs.file }}"
       - name: Report the run
         if: ${{ !cancelled() && steps.mark.outputs.go == 'true' }}
         uses: ./.github/actions/claude-report
