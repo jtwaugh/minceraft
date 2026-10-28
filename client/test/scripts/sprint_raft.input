@@ -1,0 +1,61 @@
+# Sprinting is land only (docs/design/sprinting.md Phase B, section 4). It ends
+# when the player boards the raft and cannot start on the deck or at the helm.
+# The islet is across open water from the deck, so boarding is a `stand deck`.
+
+case a sprint from the islet ends on boarding the deck
+start walk raft
+click
+lock
+stand planter
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x2
+expect sprinting = true
+stand deck
+frame 50 x2
+expect sprinting = false
+
+case a double-tap on the deck does not start a sprint
+start walk raft
+click
+lock
+stand deck
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x4
+expect sprinting = false
+
+case a double-tap at the helm does not start a sprint
+start walk raft
+click
+lock
+stand helm
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x4
+expect sprinting = false
+
+case sprinting on the islet still works
+start walk raft
+click
+lock
+stand planter
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x2
+expect sprinting = true
+
+case sprinting on the runway still works
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x4
+expect sprinting = true
