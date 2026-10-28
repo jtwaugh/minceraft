@@ -184,6 +184,22 @@ class IncrementalTest(unittest.TestCase):
                 factory_tick.read_issues("o/r", dict(state), lambda p: asked.append(p) or [])
             self.assertNotIn("since=", asked[0])
 
+    def test_a_list_saved_with_other_fields_is_read_again(self):
+        import factory_tick
+        state = {"issues": {"1": self.issue(1, "x")}, "issues_since": "x",
+                 "issues_full_at": "2999-01-01T00:00:00+00:00", "issues_keep": ["number"]}
+        asked = []
+
+        def paged(path):
+            asked.append(path)
+            return [self.issue(1, "x")]
+        with mock.patch.dict(os.environ, {"GITHUB_EVENT_NAME": "workflow_run"}):
+            factory_tick.read_issues("o/r", state, paged)
+            self.assertNotIn("since=", asked[0])  # KEEP changed: closed_at was missing
+            self.assertEqual(state["issues_keep"], list(factory_tick.KEEP))
+            factory_tick.read_issues("o/r", state, paged)
+        self.assertIn("since=", asked[1])
+
     def test_unchanged_needs_all_304s_a_clean_last_tick_and_an_event(self):
         import factory_tick
         clean, free = {"last_tick_clean": True}, {"requests": 9, "not_modified": 9}

@@ -1101,22 +1101,37 @@ impl Walker {
     /// With full hands it does nothing: put-down arrives with stations
     /// and counters (decided in #215); only Drop releases the item.
     fn interact(&mut self) {
-        if self.state.hands.is_some() {
-            return;
-        }
         let Target::Entity { id } = self.target else {
             return;
         };
-        if let Some(e) = self.items.remove(id) {
-            self.events.push(GameEvent::ItemPickedUp {
-                item: e.item.item.clone(),
-                player: "player".to_string(),
-            });
-            self.state.hands = Some(e.item);
-            self.target = Target::None;
-            self.target_box = None;
-            self.facts = TargetFacts::default();
+        let Some(e) = self.items.get(id) else {
+            return;
+        };
+        // A loose tool goes to the belt whatever the hands hold; ordinary
+        // items need empty hands.
+        let tool = self.item_table.has_tool(&e.item.item);
+        if tool {
+            if self.state.first_empty_belt_slot().is_none() {
+                return;
+            }
+        } else if self.state.hands.is_some() {
+            return;
         }
+        let Some(e) = self.items.remove(id) else {
+            return;
+        };
+        self.events.push(GameEvent::ItemPickedUp {
+            item: e.item.item.clone(),
+            player: "player".to_string(),
+        });
+        if tool {
+            self.state.stow_tool(e.item.item);
+        } else {
+            self.state.hands = Some(e.item);
+        }
+        self.target = Target::None;
+        self.target_box = None;
+        self.facts = TargetFacts::default();
     }
 
     /// The box to outline for the current target (the block's selection box
