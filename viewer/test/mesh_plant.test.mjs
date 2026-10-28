@@ -185,3 +185,11 @@ test('large_fern and broadleaf draw as grass-tinted crossed quads', () => {
     assert.equal(m.cutout.faces, size * size * 4);
   }
 });
+
+test('frost_grass draws as untinted crossed quads', () => {
+  const size = 4;
+  const blocks = meadow(size);
+  for (let c = 0; c < size * size; c++) blocks[c * H + 60] = B.frost_grass;
+  const m = meshBlocks(ctx, blocks, tints(size), size, 0);
+  assert.equal(m.cutout.faces, size * size * 4);
+});

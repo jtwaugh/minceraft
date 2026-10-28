@@ -13,6 +13,8 @@ pub struct RawFlora {
     pub biomes: Vec<(String, f64)>,
     /// Optional column condition, one of `REQUIRES`.
     pub requires: Option<String>,
+    /// Plant survives the snow pass; only meaningful for `cross` and `tall_cross`.
+    pub snow_stays: bool,
 }
 
 const SHAPES: [&str; 5] = ["cross", "tall_cross", "ground_cover", "pad", "bush"];
@@ -30,6 +32,11 @@ pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> R
             return Err(format!("flora {n}: bad shape or tint"));
         } else if e.block.len() != want {
             return Err(format!("flora {n}: {} needs {want} block(s)", e.shape));
+        }
+        if e.snow_stays && !matches!(e.shape.as_str(), "cross" | "tall_cross") {
+            return Err(format!(
+                "flora {n}: snow_stays needs a cross or tall_cross shape"
+            ));
         }
         if let Some(r) = &e.requires {
             if !REQUIRES.contains(&r.as_str()) {

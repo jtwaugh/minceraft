@@ -82,6 +82,9 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
             requires: f
                 .get("requires")
                 .map(|r| r.as_str().expect("requires string").to_string()),
+            snow_stays: f
+                .get("snow_stays")
+                .is_some_and(|v| v.as_bool().expect("snow_stays bool")),
             biomes: f["biomes"]
                 .as_table()
                 .expect("biomes table")
@@ -123,7 +126,7 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
         });
         writeln!(
             out,
-            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, requires: {requires}, biomes: &[{}] }},",
+            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, requires: {requires}, snow_stays: {}, biomes: &[{}] }},",
             r.name,
             blk(&r.block[0]),
             camel(&r.shape),
@@ -131,6 +134,7 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
             camel(&r.tint),
             num(&f["cluster_scale"]),
             r.salt,
+            r.snow_stays,
             chances.join(", ")
         )
         .unwrap();
