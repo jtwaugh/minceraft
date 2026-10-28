@@ -1,6 +1,6 @@
 ---
 title: Picking plants and the seed loop
-status: accepted
+status: done
 scope: game
 source: "#503"
 superseded_by: ""
@@ -8,7 +8,7 @@ phases:
   A: done
   B: done
   C: done
-  D: todo
+  D: done
 ---
 
 ## Current state
@@ -20,6 +20,8 @@ Checked against the code:
 - **Phase B done** (plan #625): the block-edit layer (#682), flower items and the pickable block table (#689), the `pick_flower` function (#696), flower icons (#672), the `pick` rule for flowers with the item going to the hands (#728), picked flowers shown in streamed regions (#736), the input script `client/test/scripts/pick_flower.input` (#737), and edits kept for the session (#662). Bullets below about flowers, items and the missing `pick` rule predate Phase B.
 
 - **Phase C done** (plans #758 and #1282): the missed-forage particle cue is built (#1285): `client/particles.js` bursts on each `forage_missed` event, driven from `client/controller.js`, with `forage.input` checking the particles appear and expire. Earlier work (plan #758): `client/test/scripts/forage.input` (#981); `[forage]` `chance = 3` with the one-minute cooldown kept, and `GameEvent::ForageMissed` exposed to the client as `forage_missed` (#983). The bullets below on foraging data and events predate this.
+
+- **Phase D done** (plan #1317): `client/test/scripts/forage.input` has a case that tills the field, forages seeds from placed tall grass, plants them, waits for `wheat_7`, picks the crop and checks the produce arrives (#1318, PR #1323). Earlier bullets that say no script plants foraged seeds predate this.
 
 - **Interaction rules** are in `data/interactions.toml`: `till`, `plant` (`item:seeds` on `block:farmland`, top face, air above), `harvest` (empty hands or any tool, `block:crop`, `require_state = "mature"`), `forage` (empty hands, `block:tall_grass`) and `attack`. The first match wins. There is no `pick` action and no rule targeting `block:dandelion` or `block:rose`.
 - **Actions** live in `crates/game/src/`: `plant.rs`, `harvest.rs` (resets the crop to stage 0 and returns the yields from `data/crops.toml`), `forage.rs` (`Forager`, per-block cooldown), `till.rs`, `farm.rs`.
