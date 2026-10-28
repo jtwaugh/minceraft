@@ -179,3 +179,33 @@ tint = "grass"
 cluster_scale = 18.0
 salt = 16
 biomes = { Rainforest = 0.030 }
+
+[[flora]]
+name = "tulip_red"
+block = "tulip_red"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 14.0
+salt = 17
+biomes = { "Seasonal Forest" = 0.020 }
+
+[[flora]]
+name = "tulip_salmon"
+block = "tulip_salmon"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 14.0
+salt = 18
+biomes = { "Seasonal Forest" = 0.020 }
+
+[[flora]]
+name = "tulip_yellow"
+block = "tulip_yellow"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 14.0
+salt = 19
+biomes = { "Seasonal Forest" = 0.020 }
