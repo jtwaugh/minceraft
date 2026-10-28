@@ -1,10 +1,7 @@
-# Draft of the scheduled play-critic workflow (docs/design/play-critic-agent.md, Phase E).
+# The scheduled play-critic workflow (docs/design/play-critic-agent.md, Phase E).
 #
-# This file is a draft because the agent app cannot edit .github/workflows/.
-# To enable it, the maintainer:
-#   1. moves it: git mv .github/workflow-drafts/claude-critic.yml .github/workflows/claude-critic.yml
-#   2. checks the repository secret CLAUDE_CODE_OAUTH_TOKEN exists (the other claude*.yml use it).
-#      GH_TOKEN is the job's own github.token, limited to contents: read and issues: write below.
+# Needs the repository secret CLAUDE_CODE_OAUTH_TOKEN (the other claude*.yml use it).
+# GH_TOKEN is the job's own github.token, limited to contents: read and issues: write below.
 #
 # It plays the game headlessly, replays every finding, and files an issue per verified finding with
 # `critic.mjs --file`. It never adds the `idea` label (the maintainer does) and never commits or pushes.
