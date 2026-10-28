@@ -158,7 +158,7 @@ def check(schema, value, path, errors):
         errors.append(f"{path}: must not be empty")
     if want == "integer" and value < schema.get("minimum", value):
         errors.append(f"{path}: must be at least {schema['minimum']}")
-    if want == "string" and "pattern" in schema and not re.search(schema["pattern"], value):
+    if want == "string" and "pattern" in schema and not re.fullmatch(schema["pattern"], value):
         errors.append(f"{path}: {value!r} does not match {schema['pattern']}")
     if want == "array":
         if len(value) < schema.get("minItems", 0):

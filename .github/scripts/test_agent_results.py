@@ -100,7 +100,7 @@ class Reviewer(unittest.TestCase):
 
     def test_invalid(self):
         bad("reviewer", {**REV, "verdict": "lgtm"}, "result.verdict")
-        for sha in ("abc12", "ABC1234", "g" * 8, "a" * 41, ""):
+        for sha in ("abc12", "ABC1234", "g" * 8, "a" * 41, "", "abc1234\n"):
             bad("reviewer", {**REV, "reviewed_commit": sha}, "result.reviewed_commit")
         bad("reviewer", {**REV, "blockers": [{"text": "x"}]}, "result.blockers[0].number")
         bad("reviewer", {**REV, "nits": [{"number": 0, "text": "x"}]}, "result.nits[0].number")
