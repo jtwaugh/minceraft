@@ -531,3 +531,12 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#4a6fc4"
+
+[[block]]
+id = 57
+name = "bush"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4f7a34"

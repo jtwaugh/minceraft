@@ -65,7 +65,7 @@ ground = ["grass"]
 tint = "none"
 cluster_scale = 28.0
 salt = 5
-biomes = { Taiga = 0.012 }
+biomes = { Taiga = 0.012, Shrubland = 0.015 }
 
 [[flora]]
 name = "dry_grass"
@@ -75,7 +75,7 @@ ground = ["grass", "sand"]
 tint = "dry"
 cluster_scale = 16.0
 salt = 6
-biomes = { Savanna = 0.050, Desert = 0.030 }
+biomes = { Savanna = 0.050, Desert = 0.030, Shrubland = 0.015 }
 
 [[flora]]
 name = "dry_grass_tall"
@@ -137,3 +137,13 @@ tint = "none"
 cluster_scale = 16.0
 salt = 12
 biomes = { Swampland = 0.020 }
+
+[[flora]]
+name = "bush"
+block = "bush"
+shape = "bush"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 20.0
+salt = 13
+biomes = { Shrubland = 0.030 }
