@@ -11,6 +11,7 @@
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
 import { hudLayout } from './hudlayout.js';
+import { drawString } from './font.js';
 import { findTexture, textureCanvas, textureSize, interfaceScale } from './uipx.js';
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
@@ -95,6 +96,11 @@ export function mountHud(document, set, parent = document.body, view = globalThi
         el.style.top = `${r.y - parent.y}px`;
         return el;
       };
+      const label = (name, r, parent) => {
+        const c = drawString(set, String(name), scale, document);
+        place(c, r, parent.x, parent.y);
+        return c;
+      };
       place(cross, rects.crosshair);
 
       const t = rects.timer;
@@ -108,7 +114,7 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       place(hands, h);
       hands.replaceChildren(...(m.hands ? [
         h.icon && icon(m.hands, h.icon, h.x, h.y),
-        h.label ? icon(`label_${m.hands}`, h.label, h.x, h.y) : text(m.hands, h.text, h),
+        h.label && h.label.w ? label(m.hands, h.label, h) : null,
       ].filter(Boolean) : []));
 
       place(hearts, rects.hearts);
