@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fogAmount, FOG_NEAR } from '../fog.js';
+import { fogAmount, FOG_NEAR, FAR_FOG_END, farCutRadius } from '../fog.js';
 import { VIEW } from '../flyover/plan.js';
 
 test('fog is 0 at the near end and exactly 1 at VIEW.fogEnd', () => {
@@ -27,4 +27,11 @@ test('equal radial distance gives equal fog, whatever the direction', () => {
   const c = [eye[0] + 90, eye[1] + 120, eye[2]];
   assert.equal(fogAmount(dist(a), VIEW.fogEnd), fogAmount(dist(b), VIEW.fogEnd));
   assert.ok(Math.abs(fogAmount(dist(c), VIEW.fogEnd) - fogAmount(150, VIEW.fogEnd)) < 1e-12);
+});
+
+test('far layer: fully fogged at its own end, cut away just inside the chunks\' fog end', () => {
+  assert.equal(FAR_FOG_END, 500);
+  assert.equal(fogAmount(FAR_FOG_END, FAR_FOG_END), 1);
+  assert.equal(farCutRadius(VIEW.fogEnd), VIEW.fogEnd - 16);
+  assert.ok(farCutRadius(VIEW.fogEnd) < VIEW.fogEnd && FAR_FOG_END > VIEW.fogEnd);
 });

@@ -13,3 +13,10 @@ export const FOG_GLSL = `
     float fogAmount(float dist, float far) {
       return smoothstep(far * ${FOG_NEAR.toFixed(2)}, far, dist);
     }`;
+
+// Far terrain (farmesh.js) fogs out at its own, much longer distance, and is
+// cut away where the chunks are drawn: nearer than the chunks' fog end minus a
+// margin (the margin keeps the far mesh's edge under the chunks' own fog).
+export const FAR_FOG_END = 500;
+export const FAR_CUT_MARGIN = 16;
+export const farCutRadius = (chunkFogEnd) => chunkFogEnd - FAR_CUT_MARGIN;
