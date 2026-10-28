@@ -26,6 +26,6 @@ expect layout.belt.fraction <= 0.5
 case hud fits ultrawide (3440x1440)
 start walk
 layout 3440 1440
-expect layout.scale = 24
+expect layout.scale = 22
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5

@@ -9,8 +9,7 @@ import { textureSize, BELT_PAD } from './uipx.js';
 import { CROSSHAIR_CLEAR_MARGIN } from './hudcheck.js';
 import { measureString, stringRects } from './font.js';
 
-/** Crosshair side and the belt's distance from the viewport bottom, in CSS pixels (not scaled). */
-export const CROSSHAIR_SIZE = 16;
+/** The belt's distance from the viewport bottom, in CSS pixels (not scaled). */
 export const BOTTOM_MARGIN = 12;
 /** Pixel-art gaps in texels, multiplied by the HUD scale: between slots, between hearts, and hearts to belt. */
 export const SLOT_GAP = 2;
@@ -57,6 +56,10 @@ export function hudLayout(model, set, viewport) {
     const r = row(set, names, 0, 0, gap);
     return { r, y };
   };
+
+  // The crosshair texture at the HUD scale, centred on whole pixels (zero-sized if the tileset lacks it).
+  const cs = textureSize(set, 'crosshair') || { w: 0, h: 0 };
+  const crosshair = rect(Math.floor((vw - cs.w * scale) / 2), Math.floor((vh - cs.h * scale) / 2), cs.w * scale, cs.h * scale);
 
   const slotNames = model.slots.map((s) => (s.selected ? 'slot_selected' : 'slot'));
   const beltRow = places(slotNames, 0, SLOT_GAP);
@@ -106,7 +109,7 @@ export function hudLayout(model, set, viewport) {
     return { label, w: icon.w * k + (hasIcon && label.w ? LABEL_GAP * k : 0) + label.w, h: Math.max(icon.h * k, label.h) };
   };
   // The row shrinks (in whole texels) until it clears the crosshair's clear zone above the hearts.
-  const crossBottom = Math.floor((vh + CROSSHAIR_SIZE) / 2) + CROSSHAIR_CLEAR_MARGIN;
+  const crossBottom = crosshair.y + crosshair.h + CROSSHAIR_CLEAR_MARGIN;
   let handsScale = scale;
   while (handsScale > 1 && heartsY - measure(handsScale).h < crossBottom && measure(handsScale).h > 0) handsScale--;
   const { label: labelSize, w: handsW, h: handsH } = measure(handsScale);
@@ -121,7 +124,7 @@ export function hudLayout(model, set, viewport) {
   return {
     scale,
     rects: {
-      crosshair: rect(Math.floor((vw - CROSSHAIR_SIZE) / 2), Math.floor((vh - CROSSHAIR_SIZE) / 2), CROSSHAIR_SIZE, CROSSHAIR_SIZE),
+      crosshair,
       belt: rect(beltX, beltY, beltW, beltH),
       beltPanel: rect(left, panelY, panelW, panelH),
       slots,

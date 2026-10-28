@@ -17,9 +17,10 @@ export const BELT_TEXELS_W = 5 * 10 + 4 * 2 + 2 * BELT_PAD;
 export const BELT_MAX_WIDTH_FRACTION = 0.5;
 /** The layout the inventory and death screens use, in texels. */
 const PANEL_TEXELS_W = 100;
-const PANEL_TEXELS_H = 60;
+// Taller than the panels need: leaves room for the crosshair texture, drawn at this scale, above the hearts.
+const PANEL_TEXELS_H = 65;
 
-/** Shared UI scale: the largest integer >= 1 keeping the belt within its width share and the 100x60 layout (or a larger fitW x fitH layout) on screen. */
+/** Shared UI scale: the largest integer >= 1 keeping the belt within its width share and the 100x65 layout (or a larger fitW x fitH layout) on screen. */
 export function interfaceScale(viewportW, viewportH, fitW = PANEL_TEXELS_W, fitH = PANEL_TEXELS_H) {
   const belt = Math.floor((viewportW * BELT_MAX_WIDTH_FRACTION) / BELT_TEXELS_W);
   const s = Math.min(belt, uiScale(viewportW, viewportH, Math.max(fitW, PANEL_TEXELS_W), Math.max(fitH, PANEL_TEXELS_H)));

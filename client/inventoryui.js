@@ -14,7 +14,7 @@ import { textureCanvas, textureSize, interfaceScale } from './uipx.js';
 const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
 export const PANEL_TEXELS = 4;
 
-/** Pixel scale: whole multiples of a 100x60 texel layout that fits the viewport. */
+/** Pixel scale: whole multiples of a 100x65 texel layout that fits the viewport. */
 export function inventoryScale(viewportW, viewportH) {
   return interfaceScale(viewportW, viewportH);
 }

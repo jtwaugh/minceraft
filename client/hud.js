@@ -52,7 +52,6 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font: 12px/14px ui-monospace, monospace; color: #fff; }
 #hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot { position: absolute; }
-#hud-cross { background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; mix-blend-mode: difference; }
 #hud canvas { image-rendering: pixelated; }
 #hud-hands { text-shadow: 0 0 3px #000; }
 #hud span { white-space: nowrap; }
@@ -96,6 +95,8 @@ export function mountHud(document, set, parent = document.body, view = globalThi
         return c;
       };
       place(cross, rects.crosshair);
+      const cc = icon('crosshair', { x: 0, y: 0, w: rects.crosshair.w, h: rects.crosshair.h }, 0, 0);
+      cross.replaceChildren(...(cc ? [cc] : []));
 
       const t = rects.timer;
       place(timer, t);
