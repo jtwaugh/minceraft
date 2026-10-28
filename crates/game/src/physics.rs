@@ -34,6 +34,8 @@ pub struct PlayerPhysics {
     pub ground_accel_ref: f32,
     pub air_accel: f32,
     pub jump_velocity: f32,
+    /// Horizontal speed added along the facing when a sprinting player jumps.
+    pub sprint_jump_boost: f32,
     pub gravity: f32,
     pub drag: f32,
     /// Step size when shrinking motion at a ledge while sneaking.
@@ -130,6 +132,12 @@ impl PlayerPhysics {
                 "movement.sprint_scale must be greater than 1".into(),
             ));
         }
+        let sprint_jump_boost = get("movement", "sprint_jump_boost")?;
+        if sprint_jump_boost < 0.0 {
+            return Err(PhysicsError::Invalid(
+                "movement.sprint_jump_boost must not be negative".into(),
+            ));
+        }
         Ok(PlayerPhysics {
             width: get("body", "width")?,
             height: get("body", "height")?,
@@ -146,6 +154,7 @@ impl PlayerPhysics {
             ground_accel_ref: get("movement", "ground_accel_ref")?,
             air_accel: get("movement", "air_accel")?,
             jump_velocity: get("movement", "jump_velocity")?,
+            sprint_jump_boost,
             gravity: get("movement", "gravity")?,
             drag: get("movement", "drag")?,
             sneak_edge_step: get("sneak", "edge_step")?,
@@ -186,6 +195,7 @@ mod tests {
         assert_eq!(p.ground_accel_ref, 0.16277136);
         assert_eq!(p.air_accel, 0.02);
         assert_eq!(p.jump_velocity, 0.42);
+        assert_eq!(p.sprint_jump_boost, 0.2);
         assert_eq!(p.gravity, 0.08);
         assert_eq!(p.drag, 0.98);
         assert_eq!(p.sneak_edge_step, 0.05);

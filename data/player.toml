@@ -37,6 +37,9 @@ ground_accel_ref = 0.16277136
 air_accel = 0.02
 # Vertical velocity set when jumping from the ground.
 jump_velocity = 0.42
+# Horizontal speed added along the yaw facing on the tick a sprinting player
+# jumps (docs/design/sprinting.md, decided in #821).
+sprint_jump_boost = 0.2
 # Per tick: vy = (vy - gravity) * drag.
 gravity = 0.08
 drag = 0.98
