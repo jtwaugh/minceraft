@@ -21,7 +21,7 @@ export const NAMES = [
   'brown_mushroom', 'red_mushroom',
   'daisy', 'bluebell', 'tall_grass_double_lower', 'tall_grass_double_upper', 'berry_bush',
   'dry_grass', 'dry_grass_tall_lower', 'dry_grass_tall_upper', 'leaf_litter',
-  'fern_double_lower', 'fern_double_upper', 'cattail_lower', 'cattail_upper', 'lily_pad',
+  'fern_double_lower', 'fern_double_upper', 'cattail_lower', 'cattail_upper', 'lily_pad', 'marsh_orchid',
   // the leaves tile with its holes filled, for fast leaves
   'leaves_fast'];
 
