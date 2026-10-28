@@ -1,0 +1,9 @@
+# Length of the hand animations (docs/design/held-and-world-items.md section 1).
+# These are this game's own values, tuned by feel; they do not come from SPEC.md.
+# Each is a whole number of 20 Hz sim ticks from the action to the hand being
+# at rest again; the phase peaks halfway.
+
+# Primary swing.
+swing_ticks = 6
+# Secondary use: shorter, and the client draws it smaller.
+use_ticks = 4
