@@ -193,3 +193,11 @@ test('frost_grass draws as untinted crossed quads', () => {
   const m = meshBlocks(ctx, blocks, tints(size), size, 0);
   assert.equal(m.cutout.faces, size * size * 4);
 });
+
+test('cactus_flower draws as crossed quads', () => {
+  const size = 4;
+  const blocks = meadow(size);
+  for (let c = 0; c < size * size; c++) blocks[c * H + 60] = B.cactus_flower;
+  const m = meshBlocks(ctx, blocks, tints(size), size, 0);
+  assert.equal(m.cutout.faces, size * size * 4);
+});

@@ -182,6 +182,16 @@ salt = 16
 biomes = { Rainforest = 0.030 }
 
 [[flora]]
+name = "cactus_flower"
+block = "cactus_flower"
+shape = "cross"
+ground = ["cactus"]
+tint = "none"
+cluster_scale = 12.0
+salt = 17
+biomes = { Desert = 0.300 }
+
+[[flora]]
 name = "frost_grass"
 block = "frost_grass"
 shape = "cross"
@@ -189,5 +199,5 @@ ground = ["grass", "sand"]
 tint = "none"
 snow_stays = true   # D.2: survives the snow pass; its cell gets no snow
 cluster_scale = 12.0
-salt = 17
+salt = 18
 biomes = { Tundra = 0.040, "Ice Desert" = 0.020 }
