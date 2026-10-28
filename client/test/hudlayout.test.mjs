@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hudLayout, CROSSHAIR_SIZE, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP } from '../hudlayout.js';
+import { hudLayout, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP } from '../hudlayout.js';
 import { hudModel } from '../hud.js';
 import { readFileSync } from 'node:fs';
 import { layoutChecks } from '../hudcheck.js';
@@ -9,7 +9,7 @@ import { BELT_PAD, BELT_MAX_WIDTH_FRACTION } from '../uipx.js';
 const grid = (w, h) => Array(h).fill('a'.repeat(w));
 const set = {
   palette: { a: '#ffffff' },
-  batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), sun: grid(8, 8), moon: grid(8, 8), sword: grid(8, 8), panel_c: grid(4, 4), font_unknown: grid(5, 7), font_s: grid(5, 7), font_w: grid(5, 7), font_o: grid(5, 7), font_r: grid(5, 7), font_d: grid(5, 7), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } },
+  batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), crosshair: grid(7, 7), sun: grid(8, 8), moon: grid(8, 8), sword: grid(8, 8), panel_c: grid(4, 4), font_unknown: grid(5, 7), font_s: grid(5, 7), font_w: grid(5, 7), font_o: grid(5, 7), font_r: grid(5, 7), font_d: grid(5, 7), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } },
 };
 const belt = { slots: [null, 'sword', 'hoe', null, null], selected: 1, hands: null };
 const model = hudModel({ belt, health: 19, maxHealth: 20 });
@@ -36,7 +36,7 @@ for (const [w, h, name] of sweep) {
     assert.equal(rects.belt.w, (5 * 10 + 4 * SLOT_GAP) * scale);
     assert.equal(rects.hearts.w, (10 * 9 + 9 * HEART_GAP) * scale);
     // Crosshair centred; belt centred at the bottom margin; hearts above the belt.
-    assert.deepEqual(rects.crosshair, { x: Math.floor((w - CROSSHAIR_SIZE) / 2), y: Math.floor((h - CROSSHAIR_SIZE) / 2), w: CROSSHAIR_SIZE, h: CROSSHAIR_SIZE });
+    assert.deepEqual(rects.crosshair, { x: Math.floor((w - 7 * scale) / 2), y: Math.floor((h - 7 * scale) / 2), w: 7 * scale, h: 7 * scale });
     const bp = rects.beltPanel;
     assert.equal(bp.x, Math.floor((w - Math.max(bp.w, rects.hearts.w)) / 2));
     assert.equal(rects.hearts.x, bp.x);
@@ -122,7 +122,7 @@ for (const [w, h, name] of sweep) {
     // The row shrinks in whole texels only when it would reach the crosshair's clear zone.
     const k = hd.icon.h / 8;
     assert.ok(Number.isInteger(k) && k >= 1 && k <= scale);
-    assert.ok(k === 1 || hd.y >= Math.floor((h + CROSSHAIR_SIZE) / 2) + 8, 'clear of the crosshair zone');
+    assert.ok(k === 1 || hd.y >= rects.crosshair.y + rects.crosshair.h + 8, 'clear of the crosshair zone');
     assert.equal(hd.scale, k);
     const labelW = 'sword'.length * 5 * k;
     assert.equal(hd.x + hd.w, rects.beltPanel.x + rects.beltPanel.w);
