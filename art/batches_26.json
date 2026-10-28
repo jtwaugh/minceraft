@@ -1,0 +1,18 @@
+{
+ "Batch 26": {
+  "title": "Biome flora: marsh orchid",
+  "tiles": false,
+  "textures": {
+   "marsh_orchid": [
+    "........",
+    "..b..b..",
+    ".bab.ba.",
+    "..ab.b..",
+    "...ba...",
+    "...9....",
+    "..89.9..",
+    "...8...."
+   ]
+  }
+ }
+}

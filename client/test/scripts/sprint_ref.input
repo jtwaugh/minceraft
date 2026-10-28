@@ -1,0 +1,128 @@
+# Sprinting, reference behaviours decided in #821 (SPEC Sprinting, "Sprinting in the
+# reference version"; docs/design/sprinting.md Phase B). A sim tick is 50 ms, so
+# `frame 50 xN` steps are N ticks apart. The default double-tap window is 7 ticks:
+# the second press may come at most 6 ticks after the first.
+
+case a second press 6 ticks after the first starts a sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x6
+down KeyW
+frame 50 x2
+expect sprinting = true
+
+case a second press 7 ticks after the first does not
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x7
+down KeyW
+frame 50 x2
+expect sprinting = false
+
+case holding forward and back together ends the sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x2
+expect sprinting = true
+down KeyS
+frame 50
+expect sprinting = false
+
+case strafing with no forward key ends the sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x2
+expect sprinting = true
+up KeyW
+down KeyA
+frame 50
+expect sprinting = false
+
+case forward plus a strafe key keeps the sprint
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x2
+expect sprinting = true
+down KeyA
+frame 50 x2
+expect sprinting = true
+
+case a sprint continues in the air while forward is held
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x4
+expect sprinting = true
+press Space
+frame 50 x2
+expect eye.y > 1.7
+expect sprinting = true
+
+case a walking jump covers a set distance
+start walk raft
+click
+lock
+runway 12
+down KeyW
+frame 50 x8
+mark
+press Space
+frame 50 x10
+expect moved.z < -2.1
+expect moved.z > -2.2
+
+case a sprint-jump moves farther than a walking jump
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x8
+expect sprinting = true
+mark
+press Space
+frame 50 x10
+expect moved.z < -2.6
+
+case releasing forward on the jump tick gives no push
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x8
+expect sprinting = true
+mark
+up KeyW
+press Space
+frame 50 x10
+expect moved.z > -1.5
