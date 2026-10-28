@@ -199,7 +199,7 @@ def load_merged_prs(repo, get, now=None):
     return out
 
 
-LOG_LINES = 40 # of a failed check's log kept for the fix task
+LOG_LINES = 40  # of a failed check's log kept for the fix task
 
 
 def load_blocked_facts(repo, pr, comments, get):
