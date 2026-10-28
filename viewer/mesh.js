@@ -40,7 +40,7 @@ export const B = {
   daisy: 42, bluebell: 43, tall_grass_double_lower: 44, tall_grass_double_upper: 45, berry_bush: 46,
   dry_grass: 47, dry_grass_tall_lower: 48, dry_grass_tall_upper: 49, leaf_litter: 50,
   fern_double_lower: 51, fern_double_upper: 52, cattail_lower: 53, cattail_upper: 54,
-  lily_pad: 55,
+  lily_pad: 55, bush: 56,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -229,7 +229,7 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
     case B.fern: return grass.map((v) => v * 0.88);
     case B.water: return water ?? WHITE;
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return dry ?? WHITE;
-    case B.oak_leaves: case B.leaf_litter: case B.lily_pad: case B.berry_bush: return leaf;
+    case B.oak_leaves: case B.leaf_litter: case B.lily_pad: case B.berry_bush: case B.bush: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
@@ -472,7 +472,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           if (f.d[1] > 0 && n === B.cactus) continue;
           if (f.d[1] < 0 && (n === B.cactus || SOLID_N[n])) continue;
           boxFace(0, x, y, z, f, CACTUS_LO, CACTUS_HI, layer, tint);
-        } else if (b === B.berry_bush) {
+        } else if (b === B.berry_bush || b === B.bush) {
           // leaves-style cutout: inset faces always show, only the bottom hides on solid ground
           if (f.d[1] < 0 && SOLID_N[n]) continue;
           boxFace(3, x, y, z, f, BUSH_LO, BUSH_HI, layer, tint, vr, null, LEAF_WEIGHT);

@@ -30,3 +30,14 @@ test('bushes do not hide the solid faces next to them', () => {
   const tops = [...Array(m.opaque.faces).keys()].filter((i) => verts(m.opaque, i).every((v) => v.y === 60 * 16));
   assert.equal(tops.length, 16);
 });
+
+test('a plain bush meshes like a berry bush', () => {
+  const mesh = (id) => {
+    const blocks = field(1);
+    blocks[60] = id;
+    return meshBlocks(ctx, blocks, tints(1), 1, 0).cutout;
+  };
+  const [a, b] = [mesh(B.berry_bush), mesh(B.bush)];
+  assert.equal(b.faces, 5);
+  for (let i = 0; i < 5; i++) assert.deepEqual(verts(b, i), verts(a, i));
+});
