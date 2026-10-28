@@ -50,6 +50,7 @@ Checked against the code on `master`:
 17. **`[external]`.** None. The critic runs on Claude Code or the Agent SDK, which the existing workflows already use; scheduling is a GitHub workflow in this repo.
 18. **Phases.** The author's suggested A to E are kept below. Phase C does not depend on A or B and could be planned in parallel, but the planner does one phase at a time in header order, so order is A, B, C, D, E.
 19. **Phase E incomplete.** Its done-when is that `claude-critic.yml` exists and runs on schedule. Only the draft in `.github/workflow-drafts/` is merged (PR #1044); the agent app cannot write to `.github/workflows/`. The maintainer must move the draft there (note 10). Phase E stays `todo` until then.
+20. **Phase E still incomplete (plan #1040).** Plan #1040 closed with PR #1044 for ticket #1041, which added only the draft. `.github/workflows/claude-critic.yml` is still missing, so the workflow does not run on schedule. What is missing: the maintainer moving `.github/workflow-drafts/claude-critic.yml` to `.github/workflows/` (note 10). No further code is needed in this repo.
 
 ## Idea
 
