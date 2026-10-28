@@ -6,7 +6,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
 from factory_blocked import blocked  # noqa: E402
-from factory_fix import stop_marker, stops  # noqa: E402
+import json  # noqa: E402
+from factory_fix import result_marker, results, stop_marker, stops  # noqa: E402
 from factory_nits import nits  # noqa: E402
 from factory_questions import link_questions, questions  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
@@ -28,6 +29,41 @@ def snap(kind, text, sha=SHA, **pr):
 
 def run(s):
     return tick(s, [questions, blocked], FakeBackend())
+
+
+def result_snap(kind, sha=SHA, options=("X", "Y"), result=None):
+    nm = {"kind": kind, "question": "Spec 3.2 says X and Y.", "options": list(options)}
+    body = json.dumps(result or {"needs_maintainer": nm})
+    s = snap(kind, "", sha=SHA)
+    s.prs[0]["comments"] = [{"user": "claude[bot]", "created_at": "2026-01-01T00:00:00Z",
+                             "body": f"{result_marker(9, sha)}\n```json\n{body}\n```"}]
+    return s
+
+
+class TestResult(unittest.TestCase):
+    def test_each_kind_matches_the_marker_path(self):
+        for kind, labels in (("decision", ["spec-question", "decision"]),
+                             ("research", ["spec-question", "research"]),
+                             ("needs-you", ["needs-you"])):
+            s = result_snap(kind)
+            old = snap(kind, "Spec 3.2 says X and Y.\n\nA: X\nB: Y")
+            run(old)
+            self.assertEqual([x.kind for x in run(s)], ["open_question"])
+            self.assertEqual(s.issues[-1], old.issues[-1])
+            self.assertEqual(s.issues[-1]["labels"], labels)
+            self.assertEqual(run(s), [])  # second pass: no second issue
+            self.assertEqual(len(s.issues), 2)
+
+    def test_stale_head_ignored(self):
+        a = run(result_snap("needs-you", sha="b" * 40))
+        self.assertEqual([x.kind for x in a], ["start_fix"])
+
+    def test_invalid_or_pushed_result_asks_nothing(self):
+        for r in ({"needs_maintainer": {"kind": "decision", "question": "q", "options": []}},
+                  {"pushed": True, "commit": "abc"}):
+            s = result_snap("needs-you", result=r)
+            self.assertEqual(results(s.prs[0]["comments"]) != [], "pushed" in r)
+            self.assertEqual([x.kind for x in run(s)], ["start_fix"])
 
 
 class Test(unittest.TestCase):
