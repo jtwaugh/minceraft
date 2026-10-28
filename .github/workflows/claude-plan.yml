@@ -14,7 +14,9 @@
 #   gh workflow run claude-plan.yml -f file=docs/design/world-layout.md    # next phase
 #   gh workflow run claude-plan.yml -f file=docs/design/world-layout.md -f section="Phase C"
 #
-# It opens issues labelled "planned". Read them, edit as needed, and add the
+# Claude returns the plan as JSON against the planner schema
+# (agent_results.py) and creates nothing itself; planner_apply.py creates
+# the issues, labelled "planned". Read them, edit as needed, and add the
 # "factory" label to the ones you want built, in dependency order.
 name: Claude planner
 
@@ -115,18 +117,17 @@ jobs:
       contents: read
       issues: write
       id-token: write
+      actions: write # starts the docs updater for a plan with nothing to build
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Note the start time
-        id: start
-        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
         uses: ./.github/actions/claude-deps
+      - id: schema
+        run: echo "json=$(python3 -I .github/scripts/agent_results.py schema planner)" >> "$GITHUB_OUTPUT"
       - id: claude
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         env:
@@ -200,10 +201,9 @@ jobs:
             Where the spec is ambiguous, incomplete or contradicts itself,
             don't guess. Open an issue that quotes the sentence, says what's
             unclear and lists the options as A, B, ..., and leave that part
-            out of the tickets (or put #n on the dependent ticket's
-            Depends on line). Create it with
-            `python3 .github/scripts/planner_issue.py question --kind <kind> --title "<title>" --body-file <file>`,
-            which labels it `spec-question` plus the kind, one of:
+            out of the tickets. Put it in your result's `questions` as
+            `{"kind", "title", "body"}`; it is labelled `spec-question` plus
+            the kind, one of:
 
             - `decision`: a choice about this project that can be made
               without knowing how the original game behaves (policy,
@@ -235,18 +235,19 @@ jobs:
             keeps collecting unrelated changes (check `git log --stat`),
             plan a small ticket that splits it first.
 
-            Create each with
-            `python3 .github/scripts/planner_issue.py ticket --title "<title>" --body-file <file>`,
-            writing the body to a file first. The script checks the header
-            below and refuses a ticket the factory couldn't schedule,
-            listing why; fix those and run it again. Use this body format:
+            Put each in your result's `tickets`, in build order, as
+            `{"title", "body", "files", "depends_on"}`: `files` the paths on
+            its Files line, `depends_on` the 1-based positions of earlier
+            tickets in this list that it waits on. planner_issue.py checks
+            each body's header when the workflow creates it and refuses a
+            ticket the factory couldn't schedule, which fails the whole
+            plan, so check the header carefully. Use this body format:
 
             ```
             **Spec:** SPEC <number> (<heading>), or for a design doc
                       <FILE> <phase> (<heading>), plus any SPEC sections it relies on
-            **Depends on:** #<n>, #<m>, ... or none (nothing else on this
-                            line: name sibling tickets by their numbers, and
-                            put any reasons in What)
+            **Depends on:** none (the workflow rewrites this line from
+                            depends_on; put any reasons in What)
             **Files:** <each file you expect it to change, as a backticked
                        path from the repo root, e.g. `crates/game/src/walk.rs`,
                        followed by (new) if this ticket creates it>
@@ -273,53 +274,69 @@ jobs:
             branch clusters", or for a design doc its short name and phase,
             e.g. "Layout A: radial base-height bias".
 
-            ## Order of work
+            ## Your result
 
-            Create the Plan issue first, before any ticket, so that a run
-            that dies halfway still leaves the marker and is never planned
-            twice. Then create the tickets and spec questions, then edit the
-            Plan issue's body to list them, then attach them.
+            Before planning, check no *open* Plan issue whose body has the
+            line `<!-- plan-source file=<FILE> section=<SECTION> -->`
+            exists; if one does, stop. Closed plans for the same section
+            are history (for example a plan whose questions have since been
+            answered): the pick step has already decided this section needs
+            a new plan, so go ahead.
 
-            Create the Plan issue with
-            `python3 .github/scripts/planner_issue.py plan --title "<title>" --body-file <file>`.
-            It is labelled `planned` and titled
-            "Plan: SPEC <section>" (or "Plan: <doc title> <phase>" for a
-            design doc). Its body starts with this line, exactly, which the
-            pick step and the docs updater read:
+            Return `{"plan": {"title", "file", "section", "notes"},
+            "tickets": [...], "questions": [...]}`. `title` is "Plan: SPEC
+            <section>" (or "Plan: <doc title> <phase>" for a design doc);
+            `file` and `section` are FILE and SECTION exactly as printenv
+            shows them. `notes` is up to three short parts: why the build
+            order is what it is; any code/spec disagreements you found; and,
+            for a design doc, the `[external]` items not planned here. If
+            you plan no tickets, `notes` says why. Don't create, edit or
+            close any issue yourself: the workflow creates the Plan issue,
+            the tickets in order, the questions, and the Plan body listing
+            them, then attaches them. A plan with no tickets and no
+            questions (SECTION needs nothing built in this repo) is closed,
+            and the docs updater then marks the phase done.
 
-            `<!-- plan-source file=<FILE> section=<SECTION> -->`
-
-            Then three short parts: the build order as a numbered list of
-            issue numbers with one line each on why that order; the
-            spec-question issues; and any code/spec disagreements you found
-            (plus, for a design doc, the `[external]` items not planned here).
-            Don't use a `- [ ]` checklist; GitHub's sub-issue list tracks
-            progress instead. Update the body with
-            `python3 .github/scripts/planner_issue.py edit-plan <plan number> --body-file <file>`.
-
-            Don't attach sub-issues yourself: after you finish, a workflow
-            step attaches every ticket and spec question the Plan body
-            mentions, in the order it mentions them. So make sure the body
-            lists each one as `#<number>`, build order first, questions
-            last. Before creating anything, check no *open* Plan issue
-            with the same plan-source line exists; if one does, stop.
-            Closed plans for the same section are history (for example a
-            plan whose questions have since been answered): the pick step
-            has already decided this section needs a new plan, so go ahead.
-
-            If this run created no tickets, the Plan issue says why. If it
-            also opened no spec questions (SECTION needs nothing built in
-            this repo), close the Plan issue with
-            `gh issue close <plan number> --reason completed`; the docs
-            updater then marks the phase done and the next one is planned.
+            If you stop (an open plan exists, or you can't plan this at
+            all), return `{"needs_maintainer": {"kind", "question", "options"}}`
+            saying why.
 
             Don't add the `factory` label to anything. The maintainer does
             that after reviewing.
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(python3 .github/scripts/planner_issue.py:*),Bash(gh issue close:*),Bash(git log:*),Bash(git diff:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --json-schema '${{ steps.schema.outputs.json }}'
+            --allowedTools "Read,Glob,Grep,Write,Bash(printenv:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
             --append-system-prompt "Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message."
 
+      - id: result
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/agent-result
+        with:
+          role: planner
+          result: ${{ steps.claude.outputs.structured_output }}
+      # Everything the result asks for, through planner_issue.py's checks.
+      - name: Create the plan's issues
+        if: ${{ !cancelled() && steps.result.outputs.valid == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILE: ${{ steps.result.outputs.file }}
+        run: |
+          if jq -e 'has("needs_maintainer")' "$FILE" > /dev/null; then
+            { echo "### The planner stopped"; echo
+              jq -r '.needs_maintainer | .question, "", (.options[] | "- \(.)")' "$FILE"; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          python3 -I .github/scripts/planner_apply.py "$FILE" 2>&1 | tee "$RUNNER_TEMP/apply.log"
+          n=$(sed -n 's/^created Plan #//p' "$RUNNER_TEMP/apply.log")
+          # Nothing to build here: close it, and ask for the phase-done PR
+          # (a close by this workflow's token starts no workflow by itself).
+          if [ -n "$n" ] && jq -e '(.tickets | length) == 0 and (.questions | length) == 0' "$FILE" > /dev/null; then
+            gh issue close "$n" --reason completed
+            if [[ "$(jq -r .plan.file "$FILE")" == docs/design/* ]]; then
+              gh workflow run claude-docs.yml --repo "$GITHUB_REPOSITORY" --ref master -f plan="$n"
+            fi
+          fi
       # Attach the plan's tickets and questions as sub-issues, from the
       # issue numbers in its body. Done here, not by Claude, so it always
       # happens and in a fixed order.
@@ -336,14 +353,15 @@ jobs:
       # result itself; a miss fails the job (and says so where given).
       - name: Check the run left its result
         id: check
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.result.outputs.valid == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -B .github/scripts/expect.py plan "${{ matrix.target.file }}" "${{ steps.start.outputs.at }}"
+          FILE: ${{ steps.result.outputs.file }}
+        run: python3 -I .github/scripts/agent_results.py verify planner "${{ matrix.target.file }}" "$FILE"
       - name: Report the run
         if: ${{ !cancelled() }}
         uses: ./.github/actions/claude-report
         with:
           execution-file: ${{ steps.claude.outputs.execution_file }}
-          ok: ${{ steps.check.outputs.ok }}
+          ok: ${{ steps.check.outputs.ok || 'false' }}
           expected: ${{ steps.check.outputs.expected }}
