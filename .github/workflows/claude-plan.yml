@@ -322,6 +322,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           FILE: ${{ steps.result.outputs.file }}
         run: |
+          set -o pipefail
           if jq -e 'has("needs_maintainer")' "$FILE" > /dev/null; then
             { echo "### The planner stopped"; echo
               jq -r '.needs_maintainer | .question, "", (.options[] | "- \(.)")' "$FILE"; } >> "$GITHUB_STEP_SUMMARY"
