@@ -129,13 +129,23 @@ salt = 11
 biomes = { Swampland = 0.250 }
 
 [[flora]]
+name = "marsh_orchid"
+block = "marsh_orchid"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 16.0
+salt = 12
+biomes = { Swampland = 0.020 }
+
+[[flora]]
 name = "large_fern"
 block = "large_fern"
 shape = "cross"
 ground = ["grass"]
 tint = "grass"
 cluster_scale = 14.0
-salt = 12
+salt = 13
 biomes = { Rainforest = 0.040 }
 
 [[flora]]
@@ -145,5 +155,5 @@ shape = "cross"
 ground = ["grass"]
 tint = "grass"
 cluster_scale = 18.0
-salt = 13
+salt = 14
 biomes = { Rainforest = 0.030 }

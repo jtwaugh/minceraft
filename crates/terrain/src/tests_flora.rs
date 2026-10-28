@@ -643,6 +643,41 @@ fn lily_pads_are_independent_of_region_and_flora_off_matches_empty_table() {
 }
 
 #[test]
+fn marsh_orchid_is_swampland_only_on_grass_and_independent_of_region() {
+    let orchid = Block::MarshOrchid as u8;
+    let mut n = 0;
+    for seed in [12345u64, 9, 42] {
+        let big = gen(seed, -300, -300, 600, 600, &FLORA);
+        let g = Generator::new(seed);
+        for z in big.z0..big.z0 + 600 {
+            for x in big.x0..big.x0 + 600 {
+                for y in 1..HEIGHT {
+                    if at(&big, x, y, z) == orchid {
+                        let (t, h) = g.climate.at(x, z, &[], &[]);
+                        assert_eq!(biome_for(t, h), Biome::Swampland, "{x},{z}");
+                        assert_eq!(at(&big, x, y - 1, z), Block::Grass as u8);
+                        n += 1;
+                    }
+                }
+            }
+        }
+        let part = gen(seed, -40, -60, 90, 80, &FLORA);
+        for z in part.z0..part.z0 + 80 {
+            for x in part.x0..part.x0 + 90 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&big, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+        assert_eq!(
+            count(&gen(seed, -150, -150, 300, 300, &[]), Block::MarshOrchid),
+            0
+        );
+    }
+    assert!(n > 0, "no marsh orchids");
+}
+
+#[test]
 fn rainforest_plants_stand_on_grass_in_rainforest_and_are_region_independent() {
     let (lf, bl) = (Block::LargeFern as u8, Block::Broadleaf as u8);
     let (mut nlf, mut nbl) = (0, 0);
