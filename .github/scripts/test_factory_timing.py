@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_timing import summarise  # noqa: E402
+from factory_timing import format_report, parse_runs, report, summarise  # noqa: E402
 
 CUT = "2026-10-20T00:00:00Z"
 
@@ -57,6 +57,44 @@ class Test(unittest.TestCase):
         ]
         s = summarise(runs, {1: "2026-10-18T10:05:00Z"}, CUT)["before"]
         self.assertEqual((s["tickets"], s["median_wall"], s["median_to_first_commit"]), (1, 1800, 300))
+
+
+class TestReport(unittest.TestCase):
+    RAW = [
+        {"display_title": "Claude implementer #7", "run_started_at": "2026-10-18T10:00:00Z",
+         "updated_at": "2026-10-18T10:30:00Z", "conclusion": "success"},
+        {"display_title": "Claude implementer #8", "run_started_at": "2026-10-21T10:00:00Z",
+         "updated_at": "2026-10-21T10:10:00Z", "conclusion": "success"},
+        {"display_title": "Some issue title", "run_started_at": "2026-10-21T10:00:00Z",
+         "updated_at": "2026-10-21T10:10:00Z", "conclusion": "success"},
+        {"display_title": "Claude implementer #9x", "run_started_at": "2026-10-21T10:00:00Z",
+         "updated_at": "2026-10-21T10:10:00Z", "conclusion": "success"},
+    ]
+
+    def test_parse_ignores_unnamed_runs(self):
+        runs = parse_runs(self.RAW)
+        self.assertEqual([r["ticket"] for r in runs], [7, 8])
+        self.assertEqual(runs[0]["start"], "2026-10-18T10:00:00Z")
+
+    def test_report_text(self):
+        seen = []
+
+        def commits(tickets):
+            seen.append(tickets)
+            return {7: "2026-10-18T10:10:00Z", 8: "2026-10-21T10:04:00Z"}
+
+        text = report(CUT, lambda: parse_runs(self.RAW), commits)
+        self.assertEqual(seen, [{7, 8}])
+        self.assertEqual(text.splitlines(), [
+            "Implementer timing, split at 2026-10-20T00:00:00Z",
+            "        tickets  median wall  median to first commit  no commit",
+            "before  1        30m          10m                     0",
+            "after   1        10m          4m                      0",
+        ])
+
+    def test_empty_group_shows_dash(self):
+        text = format_report(summarise([], {}, CUT), CUT)
+        self.assertIn("before  0        -", text)
 
 
 if __name__ == "__main__":
