@@ -47,9 +47,9 @@ test('overlay text names the target and the matched rules', () => {
 test('the belt reads slots, selection and hands and formats as text', () => {
   const slots = ['', 'sword', 'hoe', '', ''];
   const belt = readBelt({
-    belt_len: () => 5, belt_slot: (i) => slots[i], selected_slot: () => 1, hands: () => '', held: () => 'tool:sword',
+    belt_len: () => 5, belt_slot: (i) => slots[i], selected_slot: () => 1, hands: () => '', held: () => 'tool:sword', swing_phase: () => 0, use_phase: () => 0,
   });
-  assert.deepEqual(belt, { slots: [null, 'sword', 'hoe', null, null], selected: 1, hands: null, held: 'tool:sword' });
+  assert.deepEqual(belt, { slots: [null, 'sword', 'hoe', null, null], selected: 1, hands: null, held: 'tool:sword', swing: 0, use: 0 });
   assert.equal(formatBelt(belt), 'belt  1:- >2:sword  3:hoe  4:-  5:-\nhands empty | held tool:sword');
 });
 

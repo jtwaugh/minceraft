@@ -1,0 +1,56 @@
+# Hand animation phases (docs/design/held-and-world-items.md phase C). A
+# successful primary press swings (6 ticks, data/hands.toml), a successful
+# secondary press uses (4 ticks); the phase rises to 1 halfway and returns to 0.
+# A frame of 50 ms is one sim tick.
+
+case a sword swing runs its phase tick by tick and returns to 0
+start walk raft
+click
+lock
+spawn animal cow
+held tool:sword
+face animal
+frame 50 x2
+expect rule.primary = attack
+expect hands.swing = 0
+button down left
+frame 50
+button up left
+expect hands.swing ~ 0.3333
+frame 50
+expect hands.swing ~ 0.6667
+frame 50
+expect hands.swing ~ 1
+frame 50
+expect hands.swing ~ 0.6667
+frame 50
+expect hands.swing ~ 0.3333
+frame 50
+expect hands.swing = 0
+frame 50
+expect hands.swing = 0
+expect hands.use = 0
+
+case a hoe use runs its phase tick by tick and returns to 0
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+lock
+stand field
+expect rule.secondary = till
+expect hands.use = 0
+button down right
+frame 50
+button up right
+expect hands.use ~ 0.5
+frame 50
+expect hands.use ~ 1
+frame 50
+expect hands.use ~ 0.5
+frame 50
+expect hands.use = 0
+expect hands.swing = 0
