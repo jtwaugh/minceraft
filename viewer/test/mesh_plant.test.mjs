@@ -169,7 +169,7 @@ for (const [lower, upper] of [[B.tall_grass_double_lower, B.tall_grass_double_up
 }
 
 test('flowers and tall plants keep every vertex inside the column', () => {
-  for (const [lower, upper] of [[B.daisy, B.bluebell], [B.tall_grass_double_lower, B.tall_grass_double_upper], [B.dry_grass, B.dry_grass_tall_upper]]) {
+  for (const [lower, upper] of [[B.daisy, B.marsh_orchid], [B.daisy, B.bluebell], [B.tall_grass_double_lower, B.tall_grass_double_upper], [B.dry_grass, B.dry_grass_tall_upper]]) {
     for (const v of stalks(16, [0, 0], lower, upper).values()) {
       for (const q of [...v.lo, ...v.hi]) for (const [x, z] of q) assert.ok(x >= 0 && x <= 16 && z >= 0 && z <= 16);
     }

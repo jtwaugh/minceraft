@@ -10,7 +10,9 @@
 //
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
-import { hudLayout } from './hudlayout.js';
+import { hudLayout, PHASE_ICONS } from './hudlayout.js';
+import { drawString } from './font.js';
+import { drawPanel } from './panel.js';
 import { findTexture, textureCanvas, textureSize, interfaceScale } from './uipx.js';
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
@@ -51,7 +53,6 @@ const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font: 12px/14px ui-monospace, monospace; color: #fff; }
 #hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt > *, .slot { position: absolute; }
 #hud-cross { background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; mix-blend-mode: difference; }
-#hud-timer { background: rgba(0, 0, 0, .55); }
 #hud canvas { image-rendering: pixelated; }
 #hud-hands { text-shadow: 0 0 3px #000; }
 #hud span { white-space: nowrap; }
@@ -89,18 +90,19 @@ export function mountHud(document, set, parent = document.body, view = globalThi
         if (c) place(c, r, ox, oy);
         return c;
       };
-      const text = (str, r, parent) => {
-        const el = Object.assign(document.createElement('span'), { textContent: str });
-        el.style.left = `${r.x - parent.x}px`;
-        el.style.top = `${r.y - parent.y}px`;
-        return el;
+      const label = (name, r, parent) => {
+        const c = drawString(set, String(name), scale, document);
+        place(c, r, parent.x, parent.y);
+        return c;
       };
       place(cross, rects.crosshair);
 
       const t = rects.timer;
       place(timer, t);
+      const panel = drawPanel(set, t.w / scale, t.h / scale, scale, document);
       timer.replaceChildren(
-        t.phase ? icon(`phase_${m.timer.phase}`, t.phase, t.x, t.y) : text(m.timer.phase, t.text, t),
+        panel,
+        ...(t.phase ? [icon(PHASE_ICONS[m.timer.phase], t.phase, t.x, t.y)] : []),
         ...digitNames(m.timer.secondsLeft).map((n, i) => icon(n, t.digits[i], t.x, t.y)).filter(Boolean),
       );
 
@@ -108,7 +110,7 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       place(hands, h);
       hands.replaceChildren(...(m.hands ? [
         h.icon && icon(m.hands, h.icon, h.x, h.y),
-        h.label ? icon(`label_${m.hands}`, h.label, h.x, h.y) : text(m.hands, h.text, h),
+        h.label && h.label.w ? label(m.hands, h.label, h) : null,
       ].filter(Boolean) : []));
 
       place(hearts, rects.hearts);

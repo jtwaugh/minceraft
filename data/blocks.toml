@@ -525,6 +525,15 @@ color = "#3f7a2e"
 
 [[block]]
 id = 56
+name = "marsh_orchid"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4a6fc4"
+
+[[block]]
+id = 57
 name = "jungle_bush"
 fire = [60, 100]
 collision = "none"
