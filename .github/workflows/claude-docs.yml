@@ -121,7 +121,11 @@ jobs:
             what SECTION asks, set that phase to `done` in the header, and
             add one line under Current state naming the PRs. If something
             is still missing, leave the phase `todo` and add a
-            reconciliation note saying what.
+            reconciliation note that starts with "**SECTION still
+            incomplete (plan #PLAN).**" (SECTION and PLAN as printenv shows
+            them, e.g. "**Phase B still incomplete (plan #1173).**") and
+            says what is missing. The planner looks for that exact phrase
+            to plan the rest of the phase.
 
             Then create a branch `docs/<doc-name>-phase-done-<plan>`, commit
             only DOC, push it, and open a PR titled
