@@ -439,6 +439,7 @@ fn cold(shape: FloraShape, block: Block, upper: Option<Block>) -> [Flora; 1] {
         tint: FloraTint::None,
         cluster_scale: 8.0,
         salt: 41,
+        requires: None,
         biomes: &COLD,
     }]
 }
@@ -569,4 +570,74 @@ fn cattail_is_independent_of_region_and_flora_off_matches_empty_table() {
     }
     let off = gen(seed, -150, -150, 300, 300, &[]);
     assert_eq!(count(&off, Block::CattailLower), 0);
+}
+
+fn lily_columns(r: &Region, seed: u64) -> (usize, usize) {
+    let g = Generator::new(seed);
+    let (pad, water) = (Block::LilyPad as u8, Block::Water as u8);
+    let (mut pads, mut open_water) = (0, 0);
+    for z in r.z0..r.z0 + r.depth as i32 {
+        for x in r.x0..r.x0 + r.width as i32 {
+            let (t, h) = g.climate.at(x, z, &[], &[]);
+            for y in 1..HEIGHT - 1 {
+                let b = at(r, x, y, z);
+                if b == pad {
+                    pads += 1;
+                    assert_eq!(biome_for(t, h), Biome::Swampland, "{x},{z}");
+                    assert_eq!(at(r, x, y - 1, z), water, "{x},{y},{z}");
+                    assert_eq!(at(r, x, y + 1, z), 0, "{x},{y},{z}");
+                    let land = |dx: i32, dz: i32| {
+                        let (nx, nz) = (x + dx, z + dz);
+                        let inside = (r.x0..r.x0 + r.width as i32).contains(&nx)
+                            && (r.z0..r.z0 + r.depth as i32).contains(&nz);
+                        let n = at(
+                            r,
+                            nx.clamp(r.x0, r.x0 + r.width as i32 - 1),
+                            y - 1,
+                            nz.clamp(r.z0, r.z0 + r.depth as i32 - 1),
+                        );
+                        !inside || (n != water && n != 0)
+                    };
+                    assert!(
+                        (-4..=4).any(|dz| (-4..=4).any(|dx| land(dx, dz))),
+                        "{x},{y},{z}"
+                    );
+                } else if b == water && at(r, x, y + 1, z) == 0 {
+                    open_water += 1;
+                }
+            }
+        }
+    }
+    (pads, open_water)
+}
+
+#[test]
+fn lily_pads_sit_on_swampland_water_near_land_only() {
+    let mut pads = 0;
+    for seed in [12345u64, 9, 42] {
+        let r = gen(seed, -300, -300, 600, 600, &FLORA);
+        let (p, open) = lily_columns(&r, seed);
+        assert!(p < open, "pads must not cover all open water");
+        pads += p;
+    }
+    assert!(pads > 0, "no lily pads");
+}
+
+#[test]
+fn lily_pads_are_independent_of_region_and_flora_off_matches_empty_table() {
+    let seed = 12345;
+    let big = gen(seed, -300, -300, 600, 600, &FLORA);
+    assert!(count(&big, Block::LilyPad) > 0);
+    let part = gen(seed, -40, -60, 90, 80, &FLORA);
+    for z in part.z0..part.z0 + 80 {
+        for x in part.x0..part.x0 + 90 {
+            for y in 0..HEIGHT {
+                assert_eq!(at(&big, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+            }
+        }
+    }
+    for seed in [12345u64, 9, 42] {
+        let off = gen(seed, -150, -150, 300, 300, &[]);
+        assert_eq!(count(&off, Block::LilyPad), 0);
+    }
 }

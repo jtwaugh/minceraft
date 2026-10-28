@@ -40,6 +40,7 @@ export const B = {
   daisy: 42, bluebell: 43, tall_grass_double_lower: 44, tall_grass_double_upper: 45, berry_bush: 46,
   dry_grass: 47, dry_grass_tall_lower: 48, dry_grass_tall_upper: 49, leaf_litter: 50,
   fern_double_lower: 51, fern_double_upper: 52, cattail_lower: 53, cattail_upper: 54,
+  lily_pad: 55,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -52,13 +53,12 @@ export const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // With fast leaves, leaves count as solid too.
 const OPAQUE_FAST = flags([...SOLID, B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // Flat shapes: one up-facing cutout quad `lift` above the block's floor, tinted
-// by `tint` ('leaf'). `pad` (the same quad on a water surface) is a table
-// entry away; no block uses it yet.
+// by `tint` ('leaf'). `pad` is the same quad on a water surface.
 const SHAPES = {
   ground_cover: { lift: 1 / 16, tint: 'leaf' },
   pad: { lift: 1 / 16, tint: 'leaf' },
 };
-const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover };
+const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover, [B.lily_pad]: SHAPES.pad };
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
   B.daisy, B.bluebell, B.tall_grass_double_lower, B.tall_grass_double_upper, B.dry_grass, B.dry_grass_tall_lower, B.dry_grass_tall_upper,
@@ -229,7 +229,7 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
     case B.fern: return grass.map((v) => v * 0.88);
     case B.water: return water ?? WHITE;
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper: return dry ?? WHITE;
-    case B.oak_leaves: case B.leaf_litter: case B.berry_bush: return leaf;
+    case B.oak_leaves: case B.leaf_litter: case B.lily_pad: case B.berry_bush: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
