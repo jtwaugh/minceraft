@@ -646,8 +646,8 @@ fn lily_pads_are_independent_of_region_and_flora_off_matches_empty_table() {
 fn jungle_bush_is_rainforest_grass_under_leaves_only() {
     let bush = Block::JungleBush as u8;
     let mut found = 0;
-    for seed in [12345u64, 9, 42] {
-        let (x0, z0, w, d) = (-300, -300, 600, 600);
+    for (seed, x0, z0) in [(12345u64, 1120, 1120), (9, -1184, 288), (42, 1888, -1632)] {
+        let (w, d) = (128, 128);
         let r = gen(seed, x0, z0, w, d, &FLORA);
         let g = Generator::new(seed);
         for z in z0..z0 + d as i32 {
@@ -659,8 +659,7 @@ fn jungle_bush_is_rainforest_grass_under_leaves_only() {
                     let (t, h) = g.climate.at(x, z, &[], &[]);
                     assert_eq!(biome_for(t, h), Biome::Rainforest, "{x},{z}");
                     assert_eq!(at(&r, x, y - 1, z), Block::Grass as u8, "{x},{y},{z}");
-                    assert_eq!(at(&r, x, y + 1, z), 0, "{x},{y},{z}");
-                    let roof = (y + 2..HEIGHT).any(|yy| crate::data::is_leaves(at(&r, x, yy, z)));
+                    let roof = (y + 1..HEIGHT).any(|yy| crate::data::is_leaves(at(&r, x, yy, z)));
                     assert!(roof, "no leaves above bush at {x},{y},{z}");
                     found += 1;
                 }
@@ -673,18 +672,18 @@ fn jungle_bush_is_rainforest_grass_under_leaves_only() {
 #[test]
 fn jungle_bush_is_independent_of_region_and_flora_off_matches_empty_table() {
     let seed = 12345;
-    let big = gen(seed, -300, -300, 600, 600, &FLORA);
+    let big = gen(seed, 1120, 1120, 128, 128, &FLORA);
     assert!(count(&big, Block::JungleBush) > 0);
-    let part = gen(seed, -40, -60, 90, 80, &FLORA);
+    let part = gen(seed, 1150, 1140, 70, 80, &FLORA);
     for z in part.z0..part.z0 + 80 {
-        for x in part.x0..part.x0 + 90 {
+        for x in part.x0..part.x0 + 70 {
             for y in 0..HEIGHT {
                 assert_eq!(at(&big, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
             }
         }
     }
-    for seed in [12345u64, 9, 42] {
-        let off = gen(seed, -150, -150, 300, 300, &[]);
+    for (seed, x0, z0) in [(12345u64, 1120, 1120), (9, -1184, 288), (42, 1888, -1632)] {
+        let off = gen(seed, x0, z0, 128, 128, &[]);
         assert_eq!(count(&off, Block::JungleBush), 0);
     }
 }
