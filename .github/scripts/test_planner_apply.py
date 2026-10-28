@@ -98,6 +98,24 @@ class Apply(unittest.TestCase):
         self.assertIn("Nothing to build", self.log()[-1]["body"])
 
 
+class WithDepends(unittest.TestCase):
+    def test_keeps_existing_issue_then_adds_in_plan(self):
+        out = planner_apply.with_depends("**Depends on:** #12\n", [101])
+        self.assertEqual(out, "**Depends on:** #12, #101\n")
+
+    def test_no_duplicates(self):
+        out = planner_apply.with_depends("**Depends on:** #12, #101\n", [101])
+        self.assertEqual(out, "**Depends on:** #12, #101\n")
+
+    def test_none_stays_none(self):
+        self.assertEqual(planner_apply.with_depends("**Depends on:** none\n", []),
+                         "**Depends on:** none\n")
+
+    def test_none_with_in_plan(self):
+        self.assertEqual(planner_apply.with_depends("**Depends on:** none\n", [101]),
+                         "**Depends on:** #101\n")
+
+
 class Verify(unittest.TestCase):
     def test_plan_exists(self):
         issues = [{"title": "Plan: P", "body": "<!-- plan-source file=SPEC.md section=3 -->"}]
