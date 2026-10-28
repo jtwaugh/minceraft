@@ -6,12 +6,15 @@
 #   cluster_scale blocks per noise cell; salt unique per entry
 #   requires      optional column condition: near_water (water beside the ground
 #                 block, within near_water_radius columns)
+#   pad           ground is the water the pad floats on; land must lie within
+#                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
 
 [settings]
 patch_noise_salt = 7001
 colour_noise_salt = 7002
 near_water_radius = 1   # columns searched by requires = "near_water"
+pad_land_radius = 4     # columns searched for land by a `pad` entry
 colour_scale = 20.0     # blocks per cell of the noise that picks the winner
 
 [[flora]]
@@ -114,3 +117,13 @@ requires = "near_water"
 cluster_scale = 12.0
 salt = 10
 biomes = { Swampland = 0.300 }
+
+[[flora]]
+name = "lily_pad"
+block = "lily_pad"
+shape = "pad"
+ground = ["water"]
+tint = "leaf"
+cluster_scale = 10.0
+salt = 11
+biomes = { Swampland = 0.250 }
