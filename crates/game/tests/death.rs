@@ -229,3 +229,90 @@ fn a_death_with_a_carried_item_drops_it_and_replays_identically() {
 fn a_death_with_empty_hands_drops_nothing() {
     assert!(dropped(&session().events).is_empty());
 }
+
+/// A walker on the plateau with a loose `name` 1.5 blocks ahead of the eye.
+fn facing_loose(name: &str) -> (Walker, game::targeting::EntityId) {
+    let mut w = fresh();
+    for _ in 0..20 {
+        w.tick(&idle());
+    }
+    let id = w.spawn_item(
+        game::items::ItemInstance { item: name.into() },
+        [START[0], START[1] + 1.62, START[2] - 1.5],
+    );
+    w.tick(&idle());
+    assert_eq!(w.target(), game::targeting::Target::Entity { id });
+    (w, id)
+}
+
+fn press_interact() -> TickInput {
+    TickInput {
+        interact: true,
+        ..idle()
+    }
+}
+
+fn belt_tools(w: &Walker) -> Vec<Option<String>> {
+    let belt = &w.player_state().tool_belt;
+    belt.iter()
+        .map(|t| t.as_ref().map(|t| t.tool.clone()))
+        .collect()
+}
+
+fn pickup_run() -> (u64, Vec<GameEvent>, Vec<Option<String>>) {
+    let (mut w, id) = facing_loose("hoe");
+    w.player_state_mut().hands = Some(game::items::ItemInstance {
+        item: "wheat".into(),
+    });
+    w.player_state_mut().tool_belt[2] = None;
+    w.drain_events();
+    w.tick(&press_interact());
+    assert!(w.items().get(id).is_none());
+    assert_eq!(w.hands().map(|h| h.item.as_str()), Some("wheat"));
+    (w.world_hash(), w.drain_events(), belt_tools(&w))
+}
+
+#[test]
+fn a_loose_tool_goes_to_the_first_empty_belt_slot_even_with_full_hands() {
+    let (hash, events, belt) = pickup_run();
+    assert_eq!(belt[2].as_deref(), Some("hoe"));
+    assert_eq!(
+        events,
+        vec![GameEvent::ItemPickedUp {
+            item: "hoe".into(),
+            player: "player".into()
+        }]
+    );
+    assert_eq!(pickup_run(), (hash, events, belt), "replay is identical");
+}
+
+#[test]
+fn a_full_belt_leaves_the_loose_tool_in_place() {
+    let (mut w, id) = facing_loose("hoe");
+    for slot in 1..5 {
+        w.player_state_mut().tool_belt[slot] = Some(game::items::ToolInstance {
+            tool: "sword".into(),
+        });
+    }
+    let belt = belt_tools(&w);
+    w.drain_events();
+    w.tick(&press_interact());
+    assert!(w.items().get(id).is_some());
+    assert_eq!(belt_tools(&w), belt);
+    assert!(w.drain_events().is_empty());
+}
+
+#[test]
+fn an_ordinary_item_still_needs_empty_hands() {
+    let (mut w, id) = facing_loose("wheat");
+    w.player_state_mut().hands = Some(game::items::ItemInstance {
+        item: "stick".into(),
+    });
+    w.tick(&press_interact());
+    assert!(w.items().get(id).is_some());
+    assert_eq!(w.hands().map(|h| h.item.as_str()), Some("stick"));
+    w.player_state_mut().hands = None;
+    w.tick(&press_interact());
+    assert!(w.items().get(id).is_none());
+    assert_eq!(w.hands().map(|h| h.item.as_str()), Some("wheat"));
+}
