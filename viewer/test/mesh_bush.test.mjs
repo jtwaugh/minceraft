@@ -41,3 +41,11 @@ test('a plain bush meshes like a berry bush', () => {
   assert.equal(b.faces, 5);
   for (let i = 0; i < 5; i++) assert.deepEqual(verts(b, i), verts(a, i));
 });
+
+test('a jungle bush meshes like a berry bush', () => {
+  const f = field(1);
+  f[60] = B.stone;
+  const jungle = new Uint8Array(f).fill(B.jungle_bush, 60, 61);
+  const m = meshBlocks(ctx, jungle, tints(1), 1, 0);
+  assert.equal(m.cutout.faces, 5);
+});
