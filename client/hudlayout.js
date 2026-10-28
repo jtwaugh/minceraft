@@ -6,6 +6,7 @@
 
 import { hudScale, heartNames, digitNames } from './hud.js';
 import { textureSize } from './uipx.js';
+import { CROSSHAIR_CLEAR_MARGIN } from './hudcheck.js';
 import { measureString, stringRects } from './font.js';
 
 /** Crosshair side and the belt's distance from the viewport bottom, in CSS pixels (not scaled). */
@@ -91,15 +92,21 @@ export function hudLayout(model, set, viewport) {
   const icon = model.hands ? row(set, [model.hands], 0, 0, 0) : { rects: [], w: 0, h: 0 };
   const hasIcon = icon.rects.length > 0;
   const name = model.hands ? String(model.hands) : '';
-  const labelSize = name ? measureString(set, name, scale) : { w: 0, h: 0 };
-  const iconW = icon.w * scale, iconH = icon.h * scale;
-  const handsW = iconW + (hasIcon && labelSize.w ? LABEL_GAP * scale : 0) + labelSize.w;
-  const handsH = Math.max(iconH, labelSize.h);
+  const measure = (k) => {
+    const label = name ? measureString(set, name, k) : { w: 0, h: 0 };
+    return { label, w: icon.w * k + (hasIcon && label.w ? LABEL_GAP * k : 0) + label.w, h: Math.max(icon.h * k, label.h) };
+  };
+  // The row shrinks (in whole texels) until it clears the crosshair's clear zone above the hearts.
+  const crossBottom = Math.floor((vh + CROSSHAIR_SIZE) / 2) + CROSSHAIR_CLEAR_MARGIN;
+  let handsScale = scale;
+  while (handsScale > 1 && heartsY - measure(handsScale).h < crossBottom && measure(handsScale).h > 0) handsScale--;
+  const { label: labelSize, w: handsW, h: handsH } = measure(handsScale);
+  const iconW = icon.w * handsScale, iconH = icon.h * handsScale;
   const handsX = left + beltW - handsW;
   // Beside the hearts when they fit side by side, otherwise stacked above them.
   const beside = handsW === 0 || handsX >= left + heartsW + LABEL_GAP * scale;
   const handsY = (beside ? heartsY + heartsH : heartsY) - handsH;
-  const labelX = handsX + iconW + (hasIcon && labelSize.w ? LABEL_GAP * scale : 0);
+  const labelX = handsX + iconW + (hasIcon && labelSize.w ? LABEL_GAP * handsScale : 0);
   const labelRect = name ? rect(labelX, handsY, labelSize.w, labelSize.h) : null;
 
   return {
@@ -119,7 +126,7 @@ export function hudLayout(model, set, viewport) {
       hands: {
         ...rect(handsX, handsY, handsW, handsH),
         icon: hasIcon ? rect(handsX, handsY, iconW, iconH) : null,
-        label: labelRect && { ...labelRect, glyphs: stringRects(set, name, scale, labelX, handsY) },
+        label: labelRect && { ...labelRect, glyphs: stringRects(set, name, handsScale, labelX, handsY) },
       },
     },
   };

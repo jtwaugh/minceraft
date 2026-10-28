@@ -79,18 +79,21 @@ for (const [w, h, name] of sweep) {
     assert.deepEqual([empty.rects.hands.w, empty.rects.hands.h, empty.rects.hands.icon, empty.rects.hands.label], [0, 0, null, null]);
     const { scale, rects } = hudLayout(withTimer(7, 'sword'), set, { w, h });
     const hd = rects.hands;
-    const labelW = 'sword'.length * 5 * scale;
+    // The row shrinks in whole texels only when it would reach the crosshair's clear zone.
+    const k = hd.icon.h / 8;
+    assert.ok(Number.isInteger(k) && k >= 1 && k <= scale && (k === scale || h >= 1000));
+    const labelW = 'sword'.length * 5 * k;
     assert.equal(hd.x + hd.w, rects.belt.x + rects.belt.w);
-    assert.deepEqual([hd.w, hd.h], [8 * scale + LABEL_GAP * scale + labelW, 8 * scale]);
+    assert.deepEqual([hd.w, hd.h], [8 * k + LABEL_GAP * k + labelW, 8 * k]);
     // Beside the hearts when it fits, otherwise stacked above them; never overlapping.
     const stacked = hd.y + hd.h === rects.hearts.y;
     assert.ok(stacked || hd.y + hd.h === rects.hearts.y + rects.hearts.h);
     assert.ok(stacked || hd.x >= rects.hearts.x + rects.hearts.w);
-    assert.deepEqual(hd.icon, { x: hd.x, y: hd.y, w: 8 * scale, h: 8 * scale });
-    assert.deepEqual([hd.label.x, hd.label.y, hd.label.w, hd.label.h], [hd.x + (8 + LABEL_GAP) * scale, hd.y, labelW, 7 * scale]);
+    assert.deepEqual(hd.icon, { x: hd.x, y: hd.y, w: 8 * k, h: 8 * k });
+    assert.deepEqual([hd.label.x, hd.label.y, hd.label.w, hd.label.h], [hd.x + (8 + LABEL_GAP) * k, hd.y, labelW, 7 * k]);
     assert.equal(hd.label.glyphs.length, 5);
-    hd.label.glyphs.forEach((g, i) => assert.deepEqual([g.x, g.w], [hd.label.x + i * 5 * scale, 5 * scale]));
-    assert.equal(hd.label.glyphs.at(-1).x + 5 * scale, hd.label.x + hd.label.w);
+    hd.label.glyphs.forEach((g, i) => assert.deepEqual([g.x, g.w], [hd.label.x + i * 5 * k, 5 * k]));
+    assert.equal(hd.label.glyphs.at(-1).x + 5 * k, hd.label.x + hd.label.w);
     // The belt does not move when the hands fill.
     assert.deepEqual(rects.belt, empty.rects.belt);
   });
@@ -116,10 +119,9 @@ test('a missing phase texture falls back to text rects', () => {
   assert.equal(TEXT_H, rects.timer.text.h);
 });
 
-// At 3440x1440 (scale 24) the stacked hands row reaches the crosshair clear zone; as before, only an empty hands row fits there.
-test('the real tileset with an item in hands has no layout problems up to full HD', () => {
+test('the real tileset with an item in hands has no layout problems across the sweep', () => {
   const real = JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url), 'utf8'));
-  for (const [w, h] of sweep.slice(0, 3)) {
+  for (const [w, h] of sweep.slice(0, 4)) {
     for (const hands of ['sword', 'wooden_pickaxe']) {
       const layout = hudLayout(withTimer(42, hands), real, { w, h });
       assert.deepEqual(layoutChecks(layout, { w, h }), [], `${hands} at ${w}x${h}`);
