@@ -495,3 +495,21 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#4f8f3a"
+
+[[block]]
+id = 53
+name = "cattail_lower"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#6b7a3a"
+
+[[block]]
+id = 54
+name = "cattail_upper"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#6b7a3a"

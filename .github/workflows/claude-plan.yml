@@ -321,12 +321,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FILE: ${{ steps.result.outputs.file }}
+          DOC: ${{ matrix.target.file }}
+          SECTION: ${{ matrix.target.section }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -o pipefail
+          # Stopped: ask in an issue (one per doc and section), so the
+          # question reaches the needs-you queue and not only this summary.
           if jq -e 'has("needs_maintainer")' "$FILE" > /dev/null; then
-            { echo "### The planner stopped"; echo
-              jq -r '.needs_maintainer | .question, "", (.options[] | "- \(.)")' "$FILE"; } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+            body="$RUNNER_TEMP/stopped.md"
+            { echo "**File:** $DOC"; echo
+              jq -r '.needs_maintainer | .question, "", (.options[] | "- \(.)")' "$FILE"; echo
+              echo "The planner stopped while planning \`$DOC\` ${SECTION:-(next phase)} ([run]($RUN))."
+              echo "Once this is answered, plan it again: \`gh workflow run claude-plan.yml -f file=$DOC -f section=\"$SECTION\"\`."
+            } > "$body"
+            { echo "### The planner stopped"; echo; cat "$body"; } >> "$GITHUB_STEP_SUMMARY"
+            title="Planner stopped: $DOC ${SECTION:-next phase}"
+            kind=$(jq -r .needs_maintainer.kind "$FILE")
+            open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" \
+              --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+            if [ -n "$open" ]; then
+              gh issue edit "$open" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+            elif [ "$kind" = needs-you ]; then
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body" --label needs-you
+            else
+              python3 -I .github/scripts/planner_issue.py question --kind "$kind" --title "$title" --body-file "$body"
+            fi
+            exit 0
           fi
           python3 -I .github/scripts/planner_apply.py "$FILE" 2>&1 | tee "$RUNNER_TEMP/apply.log"
           n=$(sed -n 's/^created Plan #//p' "$RUNNER_TEMP/apply.log")

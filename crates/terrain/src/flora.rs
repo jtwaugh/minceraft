@@ -25,6 +25,13 @@ pub enum FloraTint {
     Dry,
 }
 
+/// A column condition an entry may require (`requires` in `flora.toml`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloraRequires {
+    /// A water block beside the ground block, within `FLORA_NEAR_WATER_RADIUS`.
+    NearWater,
+}
+
 /// One plant species.
 #[derive(Clone, Copy, Debug)]
 pub struct Flora {
@@ -41,6 +48,8 @@ pub struct Flora {
     pub cluster_scale: f64,
     /// Fixed per-entry salt for the hash and noise.
     pub salt: u32,
+    /// Extra condition on the column; `None` means always eligible.
+    pub requires: Option<FloraRequires>,
     /// Chance per eligible column, by biome.
     pub biomes: &'static [(Biome, f64)],
 }
@@ -89,6 +98,7 @@ pub(crate) fn place(
                         | FloraShape::GroundCover
                         | FloraShape::Bush
                 ) || !f.ground.contains(&ground)
+                    || !f.requires.is_none_or(|r| holds(world, r, x, top - 1, z))
                 {
                     continue;
                 }
@@ -129,6 +139,18 @@ pub(crate) fn place(
         }
     }
     placed
+}
+
+/// Whether the column at `(x, z)`, whose ground block is at `y`, meets `r`.
+fn holds(world: &World, r: FloraRequires, x: i32, y: i32, z: i32) -> bool {
+    match r {
+        FloraRequires::NearWater => {
+            let n = FLORA_NEAR_WATER_RADIUS;
+            (-n..=n).any(|dz| {
+                (-n..=n).any(|dx| (dx, dz) != (0, 0) && is_liquid(world.get(x + dx, y, z + dz)))
+            })
+        }
+    }
 }
 
 /// Place both halves of a two-block plant, only if the cell above the lower
@@ -198,6 +220,7 @@ mod tests {
             tint: "none".into(),
             salt: 1,
             biomes: vec![("Plains".into(), 0.5)],
+            requires: None,
         }
     }
 
@@ -238,6 +261,12 @@ mod tests {
         let mut e = entry();
         e.block = names(&["daisy", "daisy"]);
         assert!(check(&[e]).unwrap_err().contains("needs 1"));
+        let mut e = entry();
+        e.requires = Some("near_coast".into());
+        assert!(check(&[e]).unwrap_err().contains("unknown requires"));
+        let mut e = entry();
+        e.requires = Some("near_water".into());
+        assert!(check(&[e]).is_ok());
         let (mut a, mut b) = (entry(), entry());
         a.name = "a".into();
         b.name = "b".into();

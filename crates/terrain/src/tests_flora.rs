@@ -17,6 +17,7 @@ static TEST: [Flora; 2] = [
         tint: FloraTint::None,
         cluster_scale: 8.0,
         salt: 11,
+        requires: None,
         biomes: &[(Biome::Plains, 0.9), (Biome::Forest, 0.5)],
     },
     Flora {
@@ -28,6 +29,7 @@ static TEST: [Flora; 2] = [
         tint: FloraTint::None,
         cluster_scale: 8.0,
         salt: 12,
+        requires: None,
         biomes: &[(Biome::Desert, 0.9), (Biome::Taiga, 0.5)],
     },
 ];
@@ -189,6 +191,7 @@ macro_rules! plains_entry {
             tint: FloraTint::None,
             cluster_scale: 8.0,
             salt: 11,
+            requires: None,
             biomes: &[(Biome::Plains, $chance), (Biome::Forest, $chance)],
         }]
     };
@@ -238,6 +241,7 @@ static RIVALS: [Flora; 2] = [
         tint: FloraTint::None,
         cluster_scale: 8.0,
         salt: 21,
+        requires: None,
         biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
     },
     Flora {
@@ -249,6 +253,7 @@ static RIVALS: [Flora; 2] = [
         tint: FloraTint::None,
         cluster_scale: 8.0,
         salt: 22,
+        requires: None,
         biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
     },
 ];
@@ -322,6 +327,7 @@ static TALL: [Flora; 1] = [Flora {
     tint: FloraTint::Grass,
     cluster_scale: 8.0,
     salt: 31,
+    requires: None,
     biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
 }];
 
@@ -398,7 +404,8 @@ fn no_flora_where_a_trunk_or_beta_plant_occupies_the_air_cell() {
 #[test]
 fn fern_double_is_taiga_only_and_stacked() {
     let (lo, up) = (Block::FernDoubleLower as u8, Block::FernDoubleUpper as u8);
-    let mut pairs = 0;
+    // Taiga is cold, so snow replaces ferns there (D.2); any that survive
+    // (none expected until the frost_grass exception) must still be whole.
     for seed in [12345u64, 9, 42] {
         let (x0, z0, w, d) = (-200, -200, 400, 400);
         let r = gen(seed, x0, z0, w, d, &FLORA);
@@ -411,6 +418,132 @@ fn fern_double_is_taiga_only_and_stacked() {
                         let (t, h) = g.climate.at(x, z, &[], &[]);
                         assert_eq!(biome_for(t, h), Biome::Taiga, "{x},{z}");
                         assert_eq!(at(&r, x, y + 1, z), up, "{x},{y},{z}");
+                    } else if b == up {
+                        assert_eq!(at(&r, x, y - 1, z), lo, "{x},{y},{z}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+const COLD: [(Biome, f64); 2] = [(Biome::Tundra, 1e9), (Biome::Taiga, 1e9)];
+
+fn cold(shape: FloraShape, block: Block, upper: Option<Block>) -> [Flora; 1] {
+    [Flora {
+        name: "c",
+        block,
+        upper,
+        shape,
+        ground: &[Block::Grass],
+        tint: FloraTint::None,
+        cluster_scale: 8.0,
+        salt: 41,
+        biomes: &COLD,
+    }]
+}
+
+/// Over cells that are snow in the plant-free world, counts cells that are
+/// still snow and cells holding `block` instead; any other block fails, as
+/// does `upper` standing anywhere in a snow cell's column above ground.
+fn snow_cells(table: &[Flora]) -> (usize, usize) {
+    let (block, upper) = (table[0].block as u8, table[0].upper.map(|u| u as u8));
+    let (mut snow, mut held) = (0, 0);
+    for seed in [12345u64, 9, 42] {
+        let base = gen(seed, 0, 0, 128, 128, &[]);
+        let with = gen(seed, 0, 0, 128, 128, table);
+        for z in 0..128 {
+            for x in 0..128 {
+                for y in 0..HEIGHT - 1 {
+                    if at(&base, x, y, z) != Block::SnowLayer as u8 {
+                        continue;
+                    }
+                    let b = at(&with, x, y, z);
+                    if b == Block::SnowLayer as u8 {
+                        snow += 1;
+                        assert!(Some(at(&with, x, y + 1, z)) != upper || upper.is_none());
+                    } else {
+                        assert_eq!(b, block, "{x},{y},{z}");
+                        held += 1;
+                    }
+                }
+            }
+        }
+    }
+    (snow, held)
+}
+
+#[test]
+fn snow_replaces_cross_plants() {
+    let (snow, held) = snow_cells(&cold(FloraShape::Cross, Block::Daisy, None));
+    assert!(snow > 50 && held == 0, "{snow} {held}");
+}
+
+#[test]
+fn snow_replaces_both_halves_of_tall_plants() {
+    let t = cold(
+        FloraShape::TallCross,
+        Block::TallGrassDoubleLower,
+        Some(Block::TallGrassDoubleUpper),
+    );
+    let (snow, held) = snow_cells(&t);
+    assert!(snow > 50 && held == 0, "{snow} {held}");
+}
+
+#[test]
+fn snow_leaves_ground_cover_and_bush_alone() {
+    for shape in [FloraShape::GroundCover, FloraShape::Bush] {
+        let (snow, held) = snow_cells(&cold(shape, Block::Rose, None));
+        assert!(held > 50, "{shape:?} {snow} {held}");
+    }
+}
+
+#[test]
+fn snow_over_flora_is_independent_of_region() {
+    let t = cold(
+        FloraShape::TallCross,
+        Block::TallGrassDoubleLower,
+        Some(Block::TallGrassDoubleUpper),
+    );
+    let big = gen(12345, -64, -64, 192, 192, &t);
+    for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63)] {
+        let small = gen(12345, ox, oz, w, d, &t);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&small, x, y, z), at(&big, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn cattail_is_swampland_only_stacked_and_beside_water() {
+    let (lo, up) = (Block::CattailLower as u8, Block::CattailUpper as u8);
+    let mut pairs = 0;
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-300, -300, 600, 600);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT - 1 {
+                    let b = at(&r, x, y, z);
+                    if b == lo {
+                        let (t, h) = g.climate.at(x, z, &[], &[]);
+                        assert_eq!(biome_for(t, h), Biome::Swampland, "{x},{z}");
+                        assert_eq!(at(&r, x, y + 1, z), up, "{x},{y},{z}");
+                        let ground = at(&r, x, y - 1, z);
+                        assert!(ground == Block::Grass as u8 || ground == Block::Dirt as u8);
+                        let wet = |dx: i32, dz: i32| {
+                            let (nx, nz) = (x + dx, z + dz);
+                            let inside = (x0..x0 + w as i32).contains(&nx)
+                                && (z0..z0 + d as i32).contains(&nz);
+                            !inside || at(&r, nx, y - 1, nz) == Block::Water as u8
+                        };
+                        let near = (-1..=1).any(|dz| (-1..=1).any(|dx| wet(dx, dz)));
+                        assert!(near, "no water beside cattail at {x},{y},{z}");
                         pairs += 1;
                     } else if b == up {
                         assert_eq!(at(&r, x, y - 1, z), lo, "{x},{y},{z}");
@@ -419,5 +552,21 @@ fn fern_double_is_taiga_only_and_stacked() {
             }
         }
     }
-    assert!(pairs > 0, "no double ferns");
+    assert!(pairs > 0, "no cattails");
+}
+
+#[test]
+fn cattail_is_independent_of_region_and_flora_off_matches_empty_table() {
+    let seed = 12345;
+    let big = gen(seed, -150, -150, 300, 300, &FLORA);
+    let part = gen(seed, -40, -60, 90, 80, &FLORA);
+    for z in part.z0..part.z0 + 80 {
+        for x in part.x0..part.x0 + 90 {
+            for y in 0..HEIGHT {
+                assert_eq!(at(&big, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+            }
+        }
+    }
+    let off = gen(seed, -150, -150, 300, 300, &[]);
+    assert_eq!(count(&off, Block::CattailLower), 0);
 }

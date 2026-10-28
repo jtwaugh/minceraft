@@ -150,11 +150,15 @@ impl InputAccumulator {
         self.drop.press();
     }
 
-    /// Forward key went down (not a repeat). A second press within `window`
-    /// ticks of the previous one arms a sprint, reported by the next drain if
-    /// forward is still held then.
+    /// Forward key went down (not a repeat, so it was released in between). A
+    /// second press 2 to `window - 1` ticks after the previous one arms a
+    /// sprint, reported by the next drain if forward is still held then. A
+    /// window of 0 turns double-tap sprinting off.
     pub fn press_forward(&mut self, window: u32) {
-        if self.since_forward_press.is_some_and(|t| t <= window) {
+        if self
+            .since_forward_press
+            .is_some_and(|t| t >= 2 && t < window)
+        {
             self.double_tap = true;
         }
         self.since_forward_press = Some(0);
@@ -282,21 +286,31 @@ mod tests {
     }
 
     #[test]
-    fn double_tap_window_is_inclusive_and_late_press_does_not_sprint() {
-        let mut a = InputAccumulator::new();
-        tap(&mut a, 3);
-        for _ in 0..3 {
-            a.drain();
+    fn double_tap_arms_only_two_to_window_minus_one_ticks_apart() {
+        for gap in 0..10u32 {
+            let mut a = InputAccumulator::new();
+            tap(&mut a, 7);
+            for _ in 0..gap {
+                a.drain();
+            }
+            tap(&mut a, 7);
+            assert_eq!(a.drain().sprint, (2..=6).contains(&gap), "gap {gap}");
         }
-        tap(&mut a, 3);
-        assert!(a.drain().sprint);
-        let mut a = InputAccumulator::new();
-        tap(&mut a, 3);
-        for _ in 0..4 {
-            a.drain();
+    }
+
+    #[test]
+    fn window_zero_and_one_never_arm_a_sprint() {
+        for window in [0, 1] {
+            for gap in 0..12u32 {
+                let mut a = InputAccumulator::new();
+                tap(&mut a, window);
+                for _ in 0..gap {
+                    a.drain();
+                }
+                tap(&mut a, window);
+                assert!(!a.drain().sprint, "window {window} gap {gap}");
+            }
         }
-        tap(&mut a, 3);
-        assert!(!a.drain().sprint);
     }
 
     #[test]
@@ -317,7 +331,7 @@ mod tests {
             let mut out = Vec::new();
             for i in 0..30u32 {
                 if i % 3 == 0 {
-                    tap(&mut a, 3);
+                    tap(&mut a, 5);
                 }
                 if i % 9 == 0 {
                     a.set_move(0.0, 0.0);

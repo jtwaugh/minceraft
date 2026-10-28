@@ -4,11 +4,14 @@
 #   shape         cross | tall_cross | ground_cover | pad | bush
 #   tint          none | grass | leaf | dry
 #   cluster_scale blocks per noise cell; salt unique per entry
+#   requires      optional column condition: near_water (water beside the ground
+#                 block, within near_water_radius columns)
 #   biomes        biome name -> chance per eligible column (0 to 1)
 
 [settings]
 patch_noise_salt = 7001
 colour_noise_salt = 7002
+near_water_radius = 1   # columns searched by requires = "near_water"
 colour_scale = 20.0     # blocks per cell of the noise that picks the winner
 
 [[flora]]
@@ -100,3 +103,14 @@ tint = "grass"
 cluster_scale = 18.0
 salt = 9
 biomes = { Taiga = 0.025 }
+
+[[flora]]
+name = "cattail"
+block = ["cattail_lower", "cattail_upper"]
+shape = "tall_cross"
+ground = ["grass", "dirt"]
+tint = "grass"
+requires = "near_water"
+cluster_scale = 12.0
+salt = 10
+biomes = { Swampland = 0.300 }

@@ -5,7 +5,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent_results import SCHEMAS, file_follow_ups, flag_schema, validate, verify, verify_opener  # noqa: E402
+from agent_results import SCHEMAS, file_follow_ups, fill_lists, flag_schema, main, validate, verify, verify_opener  # noqa: E402
+import tempfile  # noqa: E402
 
 NM = {"kind": "decision", "question": "Which?", "options": ["a", "b"]}
 IMPL = {"pr": 5, "follow_ups": [{"title": "t", "body": "b"}], "questions": [NM], "blocked_on": [3]}
@@ -263,6 +264,36 @@ class FlagSchema(unittest.TestCase):
                 for name, field in shape["properties"].items():
                     self.assertEqual(props[name], field, (role, name))
             self.assertNotIn("'", json.dumps(flag_schema(role)))
+
+
+class FillLists(unittest.TestCase):
+    PLAN = {"title": "Plan: X", "file": "docs/design/x.md", "section": "Phase E", "notes": "No tickets."}
+
+    def test_planner_with_only_a_plan_is_valid_after_fill(self):
+        # The play-critic Phase E run: nothing to build, empty lists left out.
+        value = {"plan": dict(self.PLAN)}
+        self.assertTrue(validate("planner", value))
+        self.assertEqual(validate("planner", fill_lists("planner", value)), [])
+        self.assertEqual(value["tickets"], [])
+        self.assertEqual(value["questions"], [])
+
+    def test_missing_non_list_still_fails(self):
+        bad("implementer", fill_lists("implementer", {"questions": []}), "result.pr")
+        bad("planner", fill_lists("planner", {}), "result.plan")
+
+    def test_stopped_and_given_lists_left_alone(self):
+        self.assertEqual(fill_lists("planner", {"needs_maintainer": NM}), {"needs_maintainer": NM})
+        self.assertEqual(fill_lists("implementer", dict(IMPL)), IMPL)
+
+    def test_fill_cli_rewrites_the_file(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump({"plan": self.PLAN}, f)
+        try:
+            self.assertEqual(main(["agent_results.py", "fill", "planner", f.name]), 0)
+            with open(f.name, encoding="utf-8") as g:
+                self.assertEqual(validate("planner", g.read()), [])
+        finally:
+            os.unlink(f.name)
 
 
 if __name__ == "__main__":
