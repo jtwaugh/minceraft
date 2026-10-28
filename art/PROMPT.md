@@ -281,3 +281,15 @@ batch 14; file batches_18.json)
 dandelion_flower (a yellow head with a tan centre and a near-black
 outline, on a short green stem), rose_flower (a red bloom with a dark
 brown shadow and a near-black outline, on a short green stem with a leaf)
+
+BATCH 22: PIXEL FONT (each 4×6, transparent background; drawn by
+art/tools/draw_font.py, file batches_22.json)
+Capitals only, in the style of digit_0 to digit_9 (batch 10), which are
+the font's digits: an off-white glyph 3 pixels wide and 5 tall with a
+1-pixel near-black drop shadow to the right and below. Lower-case letters
+in a string draw with their capital glyph.
+font_a, font_b, font_c, font_d, font_e, font_f, font_g, font_h, font_i,
+font_j, font_k, font_l, font_m, font_n, font_o, font_p, font_q, font_r,
+font_s, font_t, font_u, font_v, font_w, font_x, font_y, font_z (the
+letters A to Z), font_unknown (a question mark, drawn for any character
+the font lacks)
