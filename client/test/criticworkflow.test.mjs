@@ -1,9 +1,9 @@
-// The draft scheduled critic workflow: triggers, permissions, command. Run: node --test client/test/criticworkflow.test.mjs
+// The scheduled critic workflow: triggers, permissions, command. Run: node --test client/test/criticworkflow.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const text = readFileSync(new URL('../../.github/workflow-drafts/claude-critic.yml', import.meta.url), 'utf8');
+const text = readFileSync(new URL('../../.github/workflows/claude-critic.yml', import.meta.url), 'utf8');
 const code = text.replace(/^\s*#.*$/gm, ''); // comments may mention labels and pushes
 
 test('runs weekly, on demand, and on client/ pushes to master', () => {
