@@ -10,6 +10,9 @@ enum, minItems, minimum, pattern, additionalProperties.
 (docs/design/factory-orchestrator.md Phase C, rule 4)
 
     python3 -I agent_results.py <role> < result.json   # exit 1 and errors on stderr
+    python3 -I agent_results.py fill <role> <result.json>
+        adds the `done` shape's missing list fields as [] in place (the CLI's
+        structured output lets a run leave out an empty list)
     python3 -I agent_results.py schema <role>
         prints one object schema for `--json-schema` in claude_args: every
         shape's fields, none required (validate() checks the real shape after)
@@ -238,6 +241,20 @@ def validate(role, text):
     return errors
 
 
+def fill_lists(role, value):
+    """`value` with each list field the `done` shape requires and the result
+    left out set to []: the flag schema requires nothing, so a planner with
+    nothing to build can return only its `plan`. A stopped result is left
+    alone, and other missing fields still fail validation."""
+    if not isinstance(value, dict) or "needs_maintainer" in value or role not in SCHEMAS:
+        return value
+    done = SCHEMAS[role]["done"]
+    for name in done["required"]:
+        if name not in value and done["properties"][name].get("type") == "array":
+            value[name] = []
+    return value
+
+
 def flag_schema(role):
     """One object schema covering all of a role's shapes, for the CLI's
     structured output (which wants a single top-level object)."""
@@ -376,6 +393,14 @@ def main(argv):
     if len(argv) == 3 and argv[1] == "schema":
         # Single-quoted in claude_args, so it must hold no single quote.
         print(json.dumps(flag_schema(argv[2]), separators=(",", ":")).replace("'", "\\u0027"))
+        return 0
+    if len(argv) == 4 and argv[1] == "fill":
+        try:
+            value = json.loads(open(argv[3], encoding="utf-8").read())
+        except ValueError:
+            return 0  # not JSON: validation reports it
+        with open(argv[3], "w", encoding="utf-8") as f:
+            json.dump(fill_lists(argv[2], value), f)
         return 0
     if len(argv) == 4 and argv[1] == "follow-ups":
         for title in file_follow_ups(argv[2], open(argv[3], encoding="utf-8").read()):

@@ -9,8 +9,8 @@ PR is the next step):
 - next `todo` phase has no plan;
 - next phase's newest plan is closed with every sub-issue closed (or none),
   but the phase is still `todo`. If the docs updater's note says the phase
-  is still incomplete after that plan, the tick also dispatches the planner
-  to plan what's left (`request_replan`); without that note it asks the
+  is still incomplete after a plan with tickets, the tick also dispatches
+  the planner to plan what's left (`request_replan`); without that note it asks the
   docs updater again (`request_phase_done`), since its run can be lost
   (one pending run per concurrency group) or write a note in another form.
 
@@ -81,6 +81,14 @@ def findings(snap, now=None):
         subs = [i for i in snap.issues if i.get("parent") == latest["number"]]
         if all(s["state"] == "closed" for s in subs):
             n = latest["number"]
+            built = any("spec-question" not in s.get("labels", []) for s in subs)
+            if incomplete_note(section, n) in doc.get("text", "") and not built:
+                # The planner found nothing to build and the docs updater
+                # disagrees: planning again would only repeat that, forever.
+                out.append((path, f"`{path}` {section}: plan #{n} found nothing to build, but "
+                            f"the docs updater found the phase still incomplete. Needs you: "
+                            f"do what its note asks, or mark the phase done.", None))
+                continue
             if incomplete_note(section, n) in doc.get("text", ""):
                 out.append((path, f"`{path}` {section}: plan #{n} is closed and the docs updater "
                             f"found the phase still incomplete; dispatched the planner for what's "
