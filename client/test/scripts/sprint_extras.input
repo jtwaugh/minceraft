@@ -68,3 +68,17 @@ expect sprinting = true
 frame 50 x6
 expect sprinting = true
 expect moved.z > -1
+
+case a sprint-jump keeps the sprint going
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x6
+expect sprinting = true
+press Space
+frame 50 x2
+expect sprinting = true

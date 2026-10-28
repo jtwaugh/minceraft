@@ -172,6 +172,7 @@ impl Player {
         self.vel[2] += (strafe * sin - fwd * cos) * accel;
 
         // 4. Jump.
+        let mut sprint_jumped = false;
         // In water, holding jump swims up instead (4.3).
         if in_water {
             if input.jump {
@@ -182,6 +183,7 @@ impl Player {
             // A sprint-jump pushes along the yaw facing only, whatever keys
             // are held.
             if self.sprinting {
+                sprint_jumped = true;
                 let boost = physics.sprint_jump_boost as f64;
                 self.vel[0] += boost * sin;
                 self.vel[2] -= boost * cos;
@@ -252,7 +254,8 @@ impl Player {
         self.vel[1] = (self.vel[1] - physics.gravity as f64) * physics.drag as f64;
 
         // 7. Horizontal friction.
-        let friction = if self.on_ground {
+        // A sprint-jump keeps ground drag on its jump tick (sprinting.md B).
+        let friction = if self.on_ground || sprint_jumped {
             f
         } else {
             physics.friction as f64
@@ -610,6 +613,45 @@ mod tests {
             &w,
         );
         assert!(((c[0] - d[0]) - dx).abs() < 1e-9 && ((c[2] - d[2]) - dz).abs() < 1e-9);
+    }
+
+    #[test]
+    fn sprint_jump_tick_gets_ground_drag_and_later_ticks_air_drag() {
+        let (p, w) = (phys(), floor());
+        let air = p.friction as f64;
+        let ground = (p.slipperiness * p.friction) as f64;
+        let boost = p.sprint_jump_boost as f64;
+        let jump = TickInput {
+            jump: true,
+            ..sprint_tick()
+        };
+        // Yaw 0 faces -z. A sprint-jump and a plain sprint tick differ only by
+        // the push, so with ground drag on both the gap is boost * ground.
+        let mut sj = sprinter(&p, &w);
+        let mut flat = sprinter(&p, &w);
+        sj.tick(&jump, &p, &w);
+        flat.tick(&sprint_tick(), &p, &w);
+        close(flat.vel[2] - sj.vel[2], boost * ground);
+        // Later ticks are back to air drag.
+        let v = sj.vel[2];
+        sj.tick(&TickInput::default(), &p, &w);
+        close(-sj.vel[2], -v * air);
+    }
+
+    #[test]
+    fn ordinary_jump_tick_keeps_air_drag() {
+        let (p, w) = (phys(), floor());
+        let air = p.friction as f64;
+        let ground = (p.slipperiness * p.friction) as f64;
+        let walk_jump = TickInput {
+            jump: true,
+            ..walk()
+        };
+        let mut j = grounded(&p, &w);
+        let mut flat = grounded(&p, &w);
+        j.tick(&walk_jump, &p, &w);
+        flat.tick(&walk(), &p, &w);
+        close(j.vel[2] / flat.vel[2], air / ground);
     }
 
     #[test]
