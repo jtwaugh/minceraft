@@ -534,6 +534,24 @@ color = "#4a6fc4"
 
 [[block]]
 id = 57
+name = "bush"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4f7a34"
+
+[[block]]
+id = 58
+name = "jungle_bush"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#2f6b24"
+
+[[block]]
+id = 59
 name = "large_fern"
 fire = [60, 100]
 collision = "none"
@@ -542,7 +560,7 @@ opaque_cube = false
 color = "#4a8a38"
 
 [[block]]
-id = 58
+id = 60
 name = "broadleaf"
 fire = [60, 100]
 collision = "none"

@@ -51,3 +51,34 @@ down KeyW
 frame 50 x6
 expect sprinting = false
 expect fov ~ 70
+
+# Head-on wall rule (docs/design/sprinting.md Phase B, #1331, #1334): a shallow
+# angle against the wall slides along it and keeps the sprint.
+case sliding along a wall at a shallow angle keeps the sprint
+start walk raft
+click
+lock
+runway 1
+mouse 560 0
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x2
+expect sprinting = true
+frame 50 x6
+expect sprinting = true
+expect moved.z > -1
+
+case a sprint-jump keeps the sprint going
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x6
+expect sprinting = true
+press Space
+frame 50 x2
+expect sprinting = true

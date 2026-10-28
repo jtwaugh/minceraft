@@ -5,7 +5,8 @@
 #   tint          none | grass | leaf | dry
 #   cluster_scale blocks per noise cell; salt unique per entry
 #   requires      optional column condition: near_water (water beside the ground
-#                 block, within near_water_radius columns)
+#                 block, within near_water_radius columns) | canopy (stands on the
+#                 highest grass with air above and leaves higher in the column)
 #   pad           ground is the water the pad floats on; land must lie within
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
@@ -65,7 +66,7 @@ ground = ["grass"]
 tint = "none"
 cluster_scale = 28.0
 salt = 5
-biomes = { Taiga = 0.012 }
+biomes = { Taiga = 0.012, Shrubland = 0.015 }
 
 [[flora]]
 name = "dry_grass"
@@ -75,7 +76,7 @@ ground = ["grass", "sand"]
 tint = "dry"
 cluster_scale = 16.0
 salt = 6
-biomes = { Savanna = 0.050, Desert = 0.030 }
+biomes = { Savanna = 0.050, Desert = 0.030, Shrubland = 0.015 }
 
 [[flora]]
 name = "dry_grass_tall"
@@ -139,13 +140,33 @@ salt = 12
 biomes = { Swampland = 0.020 }
 
 [[flora]]
+name = "bush"
+block = "bush"
+shape = "bush"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 20.0
+salt = 13
+biomes = { Shrubland = 0.030 }
+
+[[flora]]
+name = "jungle_bush"
+block = "jungle_bush"
+shape = "bush"
+ground = ["grass"]
+tint = "leaf"
+requires = "canopy"
+cluster_scale = 10.0
+salt = 14
+biomes = { Rainforest = 0.150 }
+
 name = "large_fern"
 block = "large_fern"
 shape = "cross"
 ground = ["grass"]
 tint = "grass"
 cluster_scale = 14.0
-salt = 13
+salt = 15
 biomes = { Rainforest = 0.040 }
 
 [[flora]]
@@ -155,5 +176,5 @@ shape = "cross"
 ground = ["grass"]
 tint = "grass"
 cluster_scale = 18.0
-salt = 14
+salt = 16
 biomes = { Rainforest = 0.030 }

@@ -35,3 +35,22 @@ test('layout.* before any layout is an error', () => {
 test('an unknown layout path is an error', () => {
   assert.throws(() => run(script('layout 1366 768\nexpect layout.bogus = 1')), /unknown path/);
 });
+
+test('layout.timer, slotnumbers and hands.label report inside, outside or missing', () => {
+  run(script('layout 1366 768\nexpect layout.timer = inside\nexpect layout.slotnumbers = inside\nexpect layout.hands.label = missing'));
+  // A 20x20 viewport cannot hold the timer box or the slot numbers.
+  run(script('layout 20 20\nexpect layout.timer = outside\nexpect layout.slotnumbers = outside'));
+});
+
+test('layout.hands.label is inside once an item is carried', () => {
+  run(parse(`case carried
+start walk raft
+click
+lock
+mouse 632 120
+frame 50 x2
+press KeyE
+frame 50 x2
+layout 1366 768
+expect layout.hands.label = inside`)[0]);
+});

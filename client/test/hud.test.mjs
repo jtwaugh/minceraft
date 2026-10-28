@@ -71,7 +71,7 @@ test('mountHud places every element from its hudLayout rectangle', async () => {
   const { hudLayout } = await import('../hudlayout.js');
   globalThis.ImageData = class { constructor(d, w, h) { Object.assign(this, { data: d, width: w, height: h }); } };
   const grid = (w, h) => Array(h).fill('a'.repeat(w));
-  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), sword: grid(8, 8), font_unknown: grid(5, 7), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
+  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), sun: grid(8, 8), crosshair: grid(7, 7), panel_c: grid(4, 4), sword: grid(8, 8), font_unknown: grid(5, 7), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
   const doc = fakeDocument();
   const view = { innerWidth: 800, innerHeight: 450 };
   const hud = mountHud(doc, set, doc.body, view);
@@ -82,28 +82,34 @@ test('mountHud places every element from its hudLayout rectangle', async () => {
     [view.innerWidth, view.innerHeight] = size;
     hud.update(m);
     const { rects } = hudLayout(m, set, { w: size[0], h: size[1] });
-    const [cross, timer, hands, hearts, beltEl] = doc.body.children[1].children;
+    const [cross, timer, hands, hearts, panelEl, beltEl] = doc.body.children[1].children;
     assert.deepEqual(box(cross), px(rects.crosshair));
+    assert.deepEqual(box(cross.children[0]), px({ ...rects.crosshair, x: 0, y: 0 }));
     assert.deepEqual(box(timer), px(rects.timer));
-    assert.deepEqual(timer.children.slice(1).map(box), rects.timer.digits.map((r) => px(r, rects.timer.x, rects.timer.y)));
+    assert.deepEqual(timer.children.slice(2).map(box), rects.timer.digits.map((r) => px(r, rects.timer.x, rects.timer.y)));
     assert.deepEqual(box(hands), px(rects.hands));
     assert.deepEqual(box(hands.children[1]), px(rects.hands.label, rects.hands.x, rects.hands.y));
     assert.equal(hands.children[1].width, rects.hands.label.w);
     assert.deepEqual(box(hearts), px(rects.hearts));
     assert.deepEqual(hearts.children.map(box), rects.heartIcons.map((r) => px(r, rects.hearts.x, rects.hearts.y)));
+    assert.deepEqual(box(panelEl), px(rects.beltPanel));
+    assert.equal(panelEl.children.length, 1);
     assert.deepEqual(box(beltEl), px(rects.belt));
     assert.deepEqual(beltEl.children.map(box), rects.slots.map((r) => px(r, rects.belt.x, rects.belt.y)));
+    // Each slot ends with its number, inside the frame.
+    beltEl.children.forEach((el, i) => assert.deepEqual(box(el.children.at(-1)), px(rects.slotNumbers[i], rects.slots[i].x, rects.slots[i].y)));
   }
 });
 
-test('a missing phase texture is text beside the digits', async () => {
-  const { hudLayout } = await import('../hudlayout.js');
+test('the timer is a panel, then the phase icon, then the digits', async () => {
+  const { mountHud } = await import('../hud.js');
+  globalThis.ImageData = class { constructor(d, w, h) { Object.assign(this, { data: d, width: w, height: h }); } };
   const grid = (w, h) => Array(h).fill('a'.repeat(w));
-  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
-  const inside = (o, r) => o.x >= r.x && o.y >= r.y && o.x + o.w <= r.x + r.w && o.y + o.h <= r.y + r.h;
-  const apart = (a, b) => a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
-  const m = hudModel({ belt, health: 20, maxHealth: 20, secondsLeft: 42 });
-  const { timer } = hudLayout(m, set, { w: 800, h: 450 }).rects;
-  assert.ok(timer.text && inside(timer.text, timer));
-  for (const d of timer.digits) assert.ok(apart(timer.text, d) && inside(d, timer));
+  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), sun: grid(8, 8), panel_c: grid(4, 4), ...Object.fromEntries(['heart_full', 'heart_half', 'heart_empty'].map((n) => [n, grid(9, 9)])), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
+  const doc = fakeDocument();
+  const hud = mountHud(doc, set, doc.body, { innerWidth: 800, innerHeight: 450 });
+  hud.update(hudModel({ belt, health: 20, maxHealth: 20, secondsLeft: 42 }));
+  const timer = doc.body.children[1].children[1];
+  assert.equal(timer.children.length, 4);
+  assert.equal(timer.children[0].tag, 'canvas');
 });

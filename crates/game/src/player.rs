@@ -172,6 +172,7 @@ impl Player {
         self.vel[2] += (strafe * sin - fwd * cos) * accel;
 
         // 4. Jump.
+        let mut sprint_jumped = false;
         // In water, holding jump swims up instead (4.3).
         if in_water {
             if input.jump {
@@ -182,6 +183,7 @@ impl Player {
             // A sprint-jump pushes along the yaw facing only, whatever keys
             // are held.
             if self.sprinting {
+                sprint_jumped = true;
                 let boost = physics.sprint_jump_boost as f64;
                 self.vel[0] += boost * sin;
                 self.vel[2] -= boost * cos;
@@ -201,10 +203,17 @@ impl Player {
         let pushed = input.move_forward != 0.0 || input.move_strafe != 0.0;
         let blocked_sideways = m.applied[0] != self.vel[0] || m.applied[2] != self.vel[2];
         // A collision that removes velocity along the facing direction ends
-        // the sprint; a strafe-only block does not.
+        // the sprint only on a head-on hit: a blocked axis whose wall normal
+        // is within the tolerance of the facing. Sliding along a wall and a
+        // strafe-only block keep it.
+        let cos_tol = (physics.sprint_wall_tolerance_degrees as f64)
+            .to_radians()
+            .cos();
+        let head_on = (m.applied[0] != self.vel[0] && sin.abs() >= cos_tol)
+            || (m.applied[2] != self.vel[2] && cos.abs() >= cos_tol);
         let lost_along_facing =
             (self.vel[0] - m.applied[0]) * sin - (self.vel[2] - m.applied[2]) * cos;
-        if lost_along_facing > 1e-6 && input.move_forward > 0.0 {
+        if lost_along_facing > 1e-6 && input.move_forward > 0.0 && head_on {
             self.sprinting = false;
         }
         for i in 0..3 {
@@ -245,7 +254,8 @@ impl Player {
         self.vel[1] = (self.vel[1] - physics.gravity as f64) * physics.drag as f64;
 
         // 7. Horizontal friction.
-        let friction = if self.on_ground {
+        // A sprint-jump keeps ground drag on its jump tick (sprinting.md B).
+        let friction = if self.on_ground || sprint_jumped {
             f
         } else {
             physics.friction as f64
@@ -410,6 +420,48 @@ mod tests {
         assert!(pl.pos[2] > -2.9);
     }
 
+    /// Sprint at `yaw_deg` for `ticks` into a long stone wall across z = -3;
+    /// the player has touched the wall if it ended up near it.
+    fn sprint_into_wall(yaw_deg: f32, ticks: usize) -> Player {
+        let (p, mut w) = (phys(), floor());
+        for x in -40..40 {
+            for y in 1..3 {
+                w.set(x, y, -3, Block::Stone);
+            }
+        }
+        let mut pl = sprinter(&p, &w);
+        let input = TickInput {
+            yaw: yaw_deg.to_radians(),
+            ..walk()
+        };
+        for _ in 0..ticks {
+            pl.tick(&input, &p, &w);
+        }
+        assert!(pl.pos[2] < -1.6, "never reached the wall: {:?}", pl.pos);
+        pl
+    }
+
+    #[test]
+    fn wall_ends_sprint_within_the_tolerance_of_head_on() {
+        // The tolerance is 30 degrees.
+        assert!(!sprint_into_wall(0.0, 80).sprinting);
+        assert!(!sprint_into_wall(29.0, 80).sprinting);
+        assert!(!sprint_into_wall(-29.0, 80).sprinting);
+    }
+
+    #[test]
+    fn wall_keeps_sprint_outside_the_tolerance() {
+        assert!(sprint_into_wall(31.0, 80).sprinting);
+        assert!(sprint_into_wall(-31.0, 80).sprinting);
+    }
+
+    #[test]
+    fn sliding_along_a_wall_keeps_sprint() {
+        let pl = sprint_into_wall(80.0, 100);
+        assert!(pl.sprinting);
+        assert!(pl.pos[0] > 5.0);
+    }
+
     #[test]
     fn sprint_request_needs_forward_and_no_sneak() {
         let (p, w) = (phys(), floor());
@@ -561,6 +613,45 @@ mod tests {
             &w,
         );
         assert!(((c[0] - d[0]) - dx).abs() < 1e-9 && ((c[2] - d[2]) - dz).abs() < 1e-9);
+    }
+
+    #[test]
+    fn sprint_jump_tick_gets_ground_drag_and_later_ticks_air_drag() {
+        let (p, w) = (phys(), floor());
+        let air = p.friction as f64;
+        let ground = (p.slipperiness * p.friction) as f64;
+        let boost = p.sprint_jump_boost as f64;
+        let jump = TickInput {
+            jump: true,
+            ..sprint_tick()
+        };
+        // Yaw 0 faces -z. A sprint-jump and a plain sprint tick differ only by
+        // the push, so with ground drag on both the gap is boost * ground.
+        let mut sj = sprinter(&p, &w);
+        let mut flat = sprinter(&p, &w);
+        sj.tick(&jump, &p, &w);
+        flat.tick(&sprint_tick(), &p, &w);
+        close(flat.vel[2] - sj.vel[2], boost * ground);
+        // Later ticks are back to air drag.
+        let v = sj.vel[2];
+        sj.tick(&TickInput::default(), &p, &w);
+        close(-sj.vel[2], -v * air);
+    }
+
+    #[test]
+    fn ordinary_jump_tick_keeps_air_drag() {
+        let (p, w) = (phys(), floor());
+        let air = p.friction as f64;
+        let ground = (p.slipperiness * p.friction) as f64;
+        let walk_jump = TickInput {
+            jump: true,
+            ..walk()
+        };
+        let mut j = grounded(&p, &w);
+        let mut flat = grounded(&p, &w);
+        j.tick(&walk_jump, &p, &w);
+        flat.tick(&walk(), &p, &w);
+        close(j.vel[2] / flat.vel[2], air / ground);
     }
 
     #[test]

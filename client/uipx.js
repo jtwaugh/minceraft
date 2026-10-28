@@ -9,15 +9,18 @@ export function uiScale(viewportW, viewportH, baseW, baseH) {
   return Number.isFinite(s) && s >= 1 ? s : 1;
 }
 
-/** The belt is 5 slots of 10 texels with 2-texel gaps. */
-export const BELT_TEXELS_W = 5 * 10 + 4 * 2;
+/** Texels of panel strip around the belt's slots, on every side. */
+export const BELT_PAD = 2;
+/** The belt is 5 slots of 10 texels with 2-texel gaps, on a strip BELT_PAD texels wider each side. */
+export const BELT_TEXELS_W = 5 * 10 + 4 * 2 + 2 * BELT_PAD;
 /** Largest share of the viewport width the belt may take; Phase B lowers this to one third. */
 export const BELT_MAX_WIDTH_FRACTION = 0.5;
 /** The layout the inventory and death screens use, in texels. */
 const PANEL_TEXELS_W = 100;
-const PANEL_TEXELS_H = 60;
+// Taller than the panels need: leaves room for the crosshair texture, drawn at this scale, above the hearts.
+const PANEL_TEXELS_H = 65;
 
-/** Shared UI scale: the largest integer >= 1 keeping the belt within its width share and the 100x60 layout (or a larger fitW x fitH layout) on screen. */
+/** Shared UI scale: the largest integer >= 1 keeping the belt within its width share and the 100x65 layout (or a larger fitW x fitH layout) on screen. */
 export function interfaceScale(viewportW, viewportH, fitW = PANEL_TEXELS_W, fitH = PANEL_TEXELS_H) {
   const belt = Math.floor((viewportW * BELT_MAX_WIDTH_FRACTION) / BELT_TEXELS_W);
   const s = Math.min(belt, uiScale(viewportW, viewportH, Math.max(fitW, PANEL_TEXELS_W), Math.max(fitH, PANEL_TEXELS_H)));

@@ -17,7 +17,7 @@ pub struct RawFlora {
 
 const SHAPES: [&str; 5] = ["cross", "tall_cross", "ground_cover", "pad", "bush"];
 /// Column conditions an entry may name in `requires`.
-pub const REQUIRES: [&str; 1] = ["near_water"];
+pub const REQUIRES: [&str; 2] = ["near_water", "canopy"];
 const TINTS: [&str; 4] = ["none", "grass", "leaf", "dry"];
 
 /// Returns the first problem in `entries` as a readable message.
