@@ -11,6 +11,7 @@ runway 12
 frame 50 x2
 expect fov ~ 70
 press KeyW
+frame 50 x2
 down KeyW
 frame 50 x2
 expect sprinting = true
@@ -28,6 +29,7 @@ click
 lock
 runway 12
 press KeyW
+frame 50 x2
 down KeyW
 frame 50 x6
 expect sprinting = true

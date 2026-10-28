@@ -16,6 +16,7 @@ expect moved.z > -1.2
 up KeyW
 runway 12
 press KeyW
+frame 50 x2
 down KeyW
 mark
 frame 50 x8
@@ -50,6 +51,7 @@ click
 lock
 runway 12
 press KeyW
+frame 50 x2
 down KeyW
 frame 50 x2
 expect sprinting = true
@@ -63,6 +65,7 @@ click
 lock
 runway 12
 press KeyW
+frame 50 x2
 down KeyW
 frame 50 x2
 expect sprinting = true
@@ -76,6 +79,7 @@ click
 lock
 runway 12
 press KeyW
+frame 50 x2
 down KeyW
 frame 50 x2
 expect sprinting = true
@@ -91,6 +95,7 @@ lock
 stand field
 frame 50 x2
 press KeyW
+frame 50 x2
 down KeyW
 frame 50 x2
 expect sprinting = true
