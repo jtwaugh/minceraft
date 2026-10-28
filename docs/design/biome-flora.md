@@ -390,9 +390,10 @@ Same framework; mostly data and art.
 - **Tundra and Ice Desert:** `frost_grass`, sparse short tufts, pale tint;
   stays when snow falls (see D.2).
 - **Coast** (any warm biome, sand at y 62 to 66 within 3 blocks of
-  water): `dune_grass`, tall and dry-tinted. There's no beach biome, so
+  water): `dune_grass`, tall and dry-tinted. "Warm" means every biome
+  except Taiga, Tundra and Ice Desert. There's no beach biome, so
   this is a column condition, not a biome; it gives every island a fringe
-  the player sees from the raft.
+  the player sees from the raft. (Decided in #1313.)
 
 ## Phase F: underwater flora (later)
 
