@@ -82,3 +82,19 @@ expect sprinting = true
 until sprinting = false
 expect sprinting = false
 expect moved.z < -5
+
+# The water rule (data/player.toml, #822): the raft scene's islet ends in the sea.
+case running off the islet into the sea ends the sprint
+start walk raft
+click
+lock
+stand field
+frame 50 x2
+press KeyW
+down KeyW
+frame 50 x2
+expect sprinting = true
+expect no event entered_water
+until events > 0
+expect event entered_water player=player
+expect sprinting = false
