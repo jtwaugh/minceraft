@@ -10,9 +10,20 @@ enum, minItems, minimum, additionalProperties.
 (docs/design/factory-orchestrator.md Phase C, rule 4)
 
     python3 -I agent_results.py <role> < result.json   # exit 1 and errors on stderr
+    python3 -I agent_results.py verify implementer <ticket> <result.json>
+        writes ok= and expected= to $GITHUB_OUTPUT (or stdout), as `expect.py ticket`
+    python3 -I agent_results.py follow-ups <ticket> <result.json>
+        files each follow_ups entry once, as a `planned` ticket, via planner_issue.py
 """
+import hashlib
 import json
+import os
+import re
+import subprocess
 import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 KINDS = ["decision", "research", "needs-you"]
 
@@ -137,7 +148,81 @@ def validate(role, text):
     return errors
 
 
+def gh(*args):
+    p = subprocess.run(["gh", *args], capture_output=True, text=True)
+    return p.returncode, p.stdout
+
+
+def verify(ticket, text, run=gh):
+    """(ok, expected) for an implementer result: it names an open PR for the
+    ticket, or it stops with a question for the maintainer."""
+    expected = f"a pull request for #{ticket}, or a comment saying why it stopped"
+    if validate("implementer", text):
+        return False, expected
+    value = json.loads(text)
+    if "needs_maintainer" in value or value["questions"]:
+        return True, expected
+    code, out = run("pr", "view", str(value["pr"]), "--json", "state,headRefName,body")
+    if code != 0:
+        return False, expected
+    pr = json.loads(out)
+    closes = re.search(rf"(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #{ticket}\b", pr.get("body") or "")
+    mine = pr["headRefName"].startswith(f"claude/issue-{ticket}-") or closes
+    return pr["state"] == "OPEN" and bool(mine), expected
+
+
+def marker(ticket, title):
+    return f"<!-- follow-up-of #{ticket} {hashlib.sha1(title.encode()).hexdigest()[:12]} -->"
+
+
+def file_follow_ups(ticket, text, run=gh, create=None):
+    """Create each follow-up of a valid implementer result once. The marker in
+    its body is how a re-run finds it. Returns the titles created."""
+    if validate("implementer", text):
+        return []
+    items = json.loads(text).get("follow_ups", [])
+    code, out = run("issue", "list", "--state", "all", "--label", "planned",
+                    "--limit", "500", "--json", "body")
+    if code != 0:
+        raise RuntimeError("could not list existing tickets")
+    seen = "\n".join(i["body"] or "" for i in json.loads(out))
+    made = []
+    for item in items:
+        m = marker(ticket, item["title"])
+        if m in seen:
+            continue
+        body = f"{item['body'].rstrip()}\n\n{m}\n"
+        (create or create_ticket)(item["title"], body)
+        made.append(item["title"])
+    return made
+
+
+def create_ticket(title, body):
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(body)
+    try:
+        subprocess.run([sys.executable, "-I", os.path.join(HERE, "planner_issue.py"),
+                        "ticket", "--title", title, "--body-file", f.name], check=True)
+    finally:
+        os.unlink(f.name)
+
+
 def main(argv):
+    if len(argv) == 5 and argv[1:3] == ["verify", "implementer"]:
+        ok, expected = verify(argv[3], open(argv[4], encoding="utf-8").read())
+        lines = [f"ok={'true' if ok else 'false'}", f"expected={expected}"]
+        print(("Found " if ok else "Missing: ") + expected, file=sys.stderr)
+        out = os.environ.get("GITHUB_OUTPUT")
+        if out:
+            with open(out, "a", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+        else:
+            print("\n".join(lines))
+        return 0
+    if len(argv) == 4 and argv[1] == "follow-ups":
+        for title in file_follow_ups(argv[2], open(argv[3], encoding="utf-8").read()):
+            print(f"created follow-up: {title}", file=sys.stderr)
+        return 0
     if len(argv) != 2:
         print("usage: agent_results.py <role> < result.json", file=sys.stderr)
         return 2
