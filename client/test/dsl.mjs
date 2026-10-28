@@ -41,7 +41,7 @@
 //                               `place air` clears it again
 //   forage                      right-click the aimed tall grass (after `stand field`, `place tall_grass`),
 //                               waiting out the cooldown after each miss, until a `foraged` event is seen
-//                               (at most 200 tries)
+//                               (at most 200 tries); `forage miss` waits for a `forage_missed` event instead
 //   runway <n>                  raft scene: stone ground n blocks long running ahead (-z) from the field's
 //                               back edge, a 2-high stone wall across its end, and the player on its
 //                               start facing along it (pitch level)
@@ -70,6 +70,7 @@
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
+// particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
 // events.foraged (`foraged` events seen since the case began),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
@@ -190,6 +191,7 @@ function read(w, path) {
     if (v === undefined) throw new Error(`unknown path '${path}'`);
     return v;
   }
+  if (path === 'particles') return s.particleCount;
   if (path === 'events.foraged') return w.events.filter((e) => e.startsWith('foraged ')).length;
   if (path === 'events') return w.events.length;
   if (path === 'sim_tick') return w.walk.sim_tick();
@@ -380,16 +382,17 @@ function step(w, { op, args }) {
       return;
     }
     case 'forage': {
-      const foraged = () => read(w, 'events.foraged');
-      for (let tries = 0; tries < 200 && !foraged(); tries++) {
+      const miss = args[0] === 'miss';
+      const done = () => (miss ? w.events.some((e) => e.startsWith('forage_missed ')) : read(w, 'events.foraged'));
+      for (let tries = 0; tries < 200 && !done(); tries++) {
         fire(document, 'mousedown', { button: BUTTONS.right });
         w.controller.frame(0.1);
         fire(document, 'mouseup', { button: BUTTONS.right });
         w.controller.frame(0.1);
-        // a miss starts the 1200-tick cooldown; wait it out (65 s at 20 Hz)
-        if (!foraged()) for (let i = 0; i < 650; i++) w.controller.frame(0.1);
+        // either outcome starts the 1200-tick cooldown; wait it out (65 s at 20 Hz)
+        if (!done()) for (let i = 0; i < 650; i++) w.controller.frame(0.1);
       }
-      if (!foraged()) throw new Error('no forage succeeded in 200 tries');
+      if (!done()) throw new Error(`no forage ${miss ? 'missed' : 'succeeded'} in 200 tries`);
       return;
     }
     case 'until': {

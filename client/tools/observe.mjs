@@ -30,7 +30,7 @@ const CLASSES = {
     'console.lines', 'cheated', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
-    'planter.ground', 'planter.crop', 'events', 'events.foraged', 'sim_tick', 'paused', 'sprinting', 'fov',
+    'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt',
     'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction',
     'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',

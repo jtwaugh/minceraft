@@ -492,7 +492,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 function render(now) {
   remeshFarm();
 
-  const { alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  const { alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
   if (regions) {
     regions.free.forEach(freeRegion);
     regions.mesh.forEach((r) => meshRegion(r));
@@ -580,6 +580,7 @@ function render(now) {
   if (scene) drawAnimals(mvp, readAnimals(walk));
   drawItems(mvp, readItems(walk), now / 1000, { yaw });
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
+  for (const { pos, size } of particles) drawBox(mvp, [...pos.map((v) => v - size), ...pos.map((v) => v + size)], true);
   if (!flying) drawHeld(proj);
   inventoryView.update(controller.state.inventory, controller.state.belt);
   deathView.update(controller.state.dead);

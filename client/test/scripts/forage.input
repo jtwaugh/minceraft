@@ -73,3 +73,28 @@ button up right
 frame 50 x2
 expect field.crop = wheat_0
 expect hands = none
+
+case a forage that misses shows live particles that expire
+start walk raft
+click
+lock
+stand field
+place tall_grass
+frame 50 x2
+expect particles = 0
+forage miss
+expect event forage_missed
+expect particles > 0
+frame 100 x10
+expect particles = 0
+
+case a forage that succeeds spawns no miss particles
+start walk raft
+click
+lock
+stand field
+place tall_grass
+frame 50 x2
+forage
+expect events.foraged = 1
+expect particles = 0
