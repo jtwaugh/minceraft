@@ -6,7 +6,7 @@ source: "#566"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
   E: todo
@@ -71,6 +71,16 @@ What exists today that this doc relies on or overlaps (checked against the code)
   in #1101 and `conflicts.py` with the resolver docs in #1107; the nits,
   Blocked-fix, retry-budget and question pieces are #896, #926, #931, #933,
   #938, #941, #942, #946, #947, #949.
+- **Phase B done (plan #1119, closed).** The store schema and invariants,
+  states and transition log, `factory-state` branch handling, ingest,
+  `store_sync`, header mirror, derived states, decisions/runs/attempts,
+  views, and the board, ready and plan-closing passes are in
+  `.github/scripts/factory_store*.py` and `factory_views.py` (PRs #1136,
+  #1141, #1142, #1143, #1162, #1167, #1170, #1179, #1180, #1181, #1193,
+  #1194, #1198; `FACTORY.md` updated in #1200). Still a maintainer step
+  (note 2): `factory-tick.yml` does not yet set `FACTORY_STORE` or fetch and
+  publish the `factory-state` branch, so the store is off until it does
+  (steps in `FACTORY.md`). `[manual check]`
 - **Not present** (the `factory-tick` workflow and the `needs-you` label
   now exist, see Phase A progress): any state store, any `factory-state`
   branch, file leases, per-transition history, a "needs
