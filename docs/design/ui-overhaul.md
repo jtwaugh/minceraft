@@ -6,7 +6,7 @@ source: "#1138"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
 ---
@@ -15,6 +15,7 @@ phases:
 
 Checked against the code:
 
+- **Phase B done.** The glyph art (#1248, #1251), the helper `client/font.js` with `client/test/font.test.mjs` (#1250) and the punctuation mapping (#1284, plan #1280) are in; `glyphName` maps A to Z, 0 to 9 and `. , : ! ? ' - / ( )`, and anything else draws `font_unknown`.
 - **Phase A done.** One scale rule, `interfaceScale` in `client/uipx.js`, is used by the HUD, inventory, death screen and menu (#1161, #1166); the `layout` results are readable from `expect` (#1163); `client/test/scripts/hudsizes.input` checks the four sizes (#1169). It caps the belt at half the viewport width (`BELT_MAX_WIDTH_FRACTION = 0.5`); the one-third/30% target from #1151 is left to Phase B.
 - **Scale (before Phase A).** `hudScale(w, h)` is `uiScale(w, h, 80, 45)` in `client/hud.js:22`. `uiScale` (`client/uipx.js:7`) returns the largest whole multiple that fits the base size. The inventory and death screen use their own `uiScale(w, h, 100, 60)` (`client/inventoryui.js:19`, `client/deathui.js:17`) and the menu uses `BASE_W` and `BASE_H` (`client/menu.js:85`). So there are three or four scale rules, not one.
 - **Layout.** `client/hudlayout.js` computes exact rectangles from `textureSize`. Hearts and belt are in one column, left-aligned and centred as a block (`hudLayout`). The timer is a box centred at the top. Words with no texture use the fallback `TEXT_CHAR_W = 8` and `TEXT_H = 14` (12px monospace).
@@ -28,7 +29,7 @@ Checked against the code:
 
 ## Reconciliation notes
 
-0. **Phase B still incomplete (plan #1173).** The glyph art is in (#1248 letters and `font_unknown`, #1251 ten punctuation glyphs: `font_period`, `font_comma`, `font_colon`, `font_exclamation`, `font_question`, `font_apostrophe`, `font_hyphen`, `font_slash`, `font_lparen`, `font_rparen`) and `client/font.js` with `client/test/font.test.mjs` is in (#1250). But `glyphName` in `client/font.js` maps only A to Z and 0 to 9, so every punctuation mark still draws `font_unknown`. Missing: map `. , : ! ? ' - / ( )` to their glyphs, with a test; then mark Phase B `done`.
+0. **Phase B was incomplete (plan #1173); fixed by #1284 (plan #1280).** Punctuation now maps to its glyphs.
 
 1. **Item name per slot.** `itemLabel` in `client/inventoryui.js` derives labels from item names; `data/items.toml` `label` is not used. The pixel font should render whatever string `itemLabel` returns, so lower case or capitals-only (open question 2) decides what `label` values are allowed.
 2. **Fixes #1003.** Section 1 says it fixes #1003 (hearts off both edges). The new scale rule and a `layout` test at the four sizes cover that; check #1003's own case when planning.
