@@ -82,6 +82,66 @@ class Fix(unittest.TestCase):
         bad("fix", {"needs_maintainer": {**NM, "question": ""}}, "result.needs_maintainer.question")
 
 
+REV = {"verdict": "ready with nits", "reviewed_commit": "abc1234",
+       "blockers": [], "nits": [{"number": 1, "text": "rename"}]}
+PLAN = {"plan": 9, "tickets": [{"title": "t", "body": "b", "files": ["a.rs"]}],
+        "questions": [{"kind": "research", "title": "q", "body": "b"}]}
+
+
+class Reviewer(unittest.TestCase):
+    def test_valid(self):
+        self.assertEqual(validate("reviewer", REV), [])
+        for v in ("blocked", "changes needed", "ready", "ready to merge"):
+            self.assertEqual(validate("reviewer", {**REV, "verdict": v}), [])
+        full = "a" * 40
+        self.assertEqual(validate("reviewer", {**REV, "reviewed_commit": full}), [])
+        blocker = {"number": 1, "text": "bug"}
+        self.assertEqual(validate("reviewer", {**REV, "blockers": [blocker]}), [])
+
+    def test_invalid(self):
+        bad("reviewer", {**REV, "verdict": "lgtm"}, "result.verdict")
+        for sha in ("abc12", "ABC1234", "g" * 8, "a" * 41, ""):
+            bad("reviewer", {**REV, "reviewed_commit": sha}, "result.reviewed_commit")
+        bad("reviewer", {**REV, "blockers": [{"text": "x"}]}, "result.blockers[0].number")
+        bad("reviewer", {**REV, "nits": [{"number": 0, "text": "x"}]}, "result.nits[0].number")
+        bad("reviewer", {k: v for k, v in REV.items() if k != "nits"}, "result.nits")
+
+    def test_stopped(self):
+        self.assertEqual(validate("reviewer", {"needs_maintainer": NM}), [])
+
+
+class Planner(unittest.TestCase):
+    def test_valid(self):
+        self.assertEqual(validate("planner", PLAN), [])
+        self.assertEqual(validate("planner", {**PLAN, "tickets": [], "questions": []}), [])
+
+    def test_invalid(self):
+        t = PLAN["tickets"][0]
+        bad("planner", {**PLAN, "tickets": [{**t, "files": []}]}, "result.tickets[0].files")
+        bad("planner", {**PLAN, "tickets": [{"title": "t", "body": "b"}]},
+            "result.tickets[0].files")
+        bad("planner", {**PLAN, "questions": [{"kind": "idea", "title": "q", "body": "b"}]},
+            "result.questions[0].kind")
+        bad("planner", {k: v for k, v in PLAN.items() if k != "plan"}, "result.plan")
+
+
+class PrOpeners(unittest.TestCase):
+    ROLES = ("docs_updater", "reconciler", "spec_editor")
+
+    def test_valid(self):
+        for role in self.ROLES:
+            self.assertEqual(validate(role, {"pr": 12}), [])
+            self.assertEqual(validate(role, {"no_pr": "nothing to change"}), [])
+            self.assertEqual(validate(role, {"needs_maintainer": NM}), [])
+
+    def test_invalid(self):
+        for role in self.ROLES:
+            bad(role, {}, "result.pr")
+            bad(role, {"pr": "12"}, "result.pr")
+            bad(role, {"no_pr": ""}, "result.no_pr")
+            bad(role, {"pr": 12, "no_pr": "why"}, "result.pr")
+
+
 class Input(unittest.TestCase):
     def test_not_json(self):
         for text in ("", "not json", "{'pr': 1}", b"{"):
