@@ -9,8 +9,10 @@ export function uiScale(viewportW, viewportH, baseW, baseH) {
   return Number.isFinite(s) && s >= 1 ? s : 1;
 }
 
-/** The belt is 5 slots of 10 texels with 2-texel gaps. */
-export const BELT_TEXELS_W = 5 * 10 + 4 * 2;
+/** Texels of panel strip around the belt's slots, on every side. */
+export const BELT_PAD = 2;
+/** The belt is 5 slots of 10 texels with 2-texel gaps, on a strip BELT_PAD texels wider each side. */
+export const BELT_TEXELS_W = 5 * 10 + 4 * 2 + 2 * BELT_PAD;
 /** Largest share of the viewport width the belt may take; Phase B lowers this to one third. */
 export const BELT_MAX_WIDTH_FRACTION = 0.5;
 /** The layout the inventory and death screens use, in texels. */

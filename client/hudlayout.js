@@ -5,7 +5,7 @@
 // item name is drawn in the pixel font (font.js).
 
 import { hudScale, heartNames, digitNames } from './hud.js';
-import { textureSize } from './uipx.js';
+import { textureSize, BELT_PAD } from './uipx.js';
 import { CROSSHAIR_CLEAR_MARGIN } from './hudcheck.js';
 import { measureString, stringRects } from './font.js';
 
@@ -42,10 +42,10 @@ function row(set, names, x, y, gap) {
 }
 
 /**
- * `{ scale, rects }` for a `hudModel` result: `rects.crosshair`, `rects.belt` (the whole row),
+ * `{ scale, rects }` for a `hudModel` result: `rects.crosshair`, `rects.belt` (the slot row), `rects.beltPanel` (the strip around it), `rects.slotNumbers` (one glyph rect per slot),
  * `rects.slots` (one per slot) and `rects.hearts` (the whole row) plus `rects.heartIcons`,
  * `rects.timer` (box centred at the top, with `phase` and `digits` rects inside) and `rects.hands`
- * (icon and label rects, the label with one rect per glyph; zero-sized when empty). The belt and hearts share a centred column;
+ * (icon and label rects, the label with one rect per glyph; zero-sized when empty). The belt strip and hearts share a centred column;
  * the hearts sit above it on its left edge and the hands above it on its right edge, or above the hearts
  * when the two would not fit side by side.
  */
@@ -63,16 +63,25 @@ export function hudLayout(model, set, viewport) {
   const heartRow = places(heartNames(model.hearts), 0, HEART_GAP);
   const beltW = beltRow.r.w * scale, beltH = beltRow.r.h * scale;
   const heartsW = heartRow.r.w * scale, heartsH = heartRow.r.h * scale;
-  const colW = Math.max(beltW, heartsW);
+  // The slots sit on a strip BELT_PAD texels wider on every side; the strip's bottom is at the margin.
+  const pad = BELT_PAD * scale;
+  const panelW = beltW + 2 * pad, panelH = beltH + 2 * pad;
+  const colW = Math.max(panelW, heartsW);
   const left = Math.floor((vw - colW) / 2);
-  const beltY = vh - BOTTOM_MARGIN - beltH;
-  const heartsY = beltY - HEARTS_BELT_GAP * scale - heartsH;
+  const panelY = vh - BOTTOM_MARGIN - panelH;
+  const beltX = left + pad, beltY = panelY + pad;
+  const heartsY = panelY - HEARTS_BELT_GAP * scale - heartsH;
 
   const place = (r, x, y) => r.rects.map((q) => {
     const g = grow(q);
     return rect(x + g.x, y + g.y, g.w, g.h);
   });
-  const slots = place(beltRow.r, left, beltY);
+  const slots = place(beltRow.r, beltX, beltY);
+  // Slot n (1 to N) shows its digit, one texel in from the frame's top left corner.
+  const slotNumbers = slots.map((r, i) => {
+    const n = (i + 1) % 10;
+    return { ...stringRects(set, String(n), scale, r.x + scale, r.y + scale)[0], n };
+  });
   const heartIcons = place(heartRow.r, left, heartsY);
 
   const phaseName = PHASE_ICONS[model.timer.phase];
@@ -102,7 +111,7 @@ export function hudLayout(model, set, viewport) {
   while (handsScale > 1 && heartsY - measure(handsScale).h < crossBottom && measure(handsScale).h > 0) handsScale--;
   const { label: labelSize, w: handsW, h: handsH } = measure(handsScale);
   const iconW = icon.w * handsScale, iconH = icon.h * handsScale;
-  const handsX = left + beltW - handsW;
+  const handsX = left + panelW - handsW;
   // Beside the hearts when they fit side by side, otherwise stacked above them.
   const beside = handsW === 0 || handsX >= left + heartsW + LABEL_GAP * scale;
   const handsY = (beside ? heartsY + heartsH : heartsY) - handsH;
@@ -113,8 +122,10 @@ export function hudLayout(model, set, viewport) {
     scale,
     rects: {
       crosshair: rect(Math.floor((vw - CROSSHAIR_SIZE) / 2), Math.floor((vh - CROSSHAIR_SIZE) / 2), CROSSHAIR_SIZE, CROSSHAIR_SIZE),
-      belt: rect(left, beltY, beltW, beltH),
+      belt: rect(beltX, beltY, beltW, beltH),
+      beltPanel: rect(left, panelY, panelW, panelH),
       slots,
+      slotNumbers,
       hearts: rect(left, heartsY, heartsW, heartsH),
       heartIcons,
       timer: {
@@ -124,6 +135,7 @@ export function hudLayout(model, set, viewport) {
       },
       hands: {
         ...rect(handsX, handsY, handsW, handsH),
+        scale: handsScale,
         icon: hasIcon ? rect(handsX, handsY, iconW, iconH) : null,
         label: labelRect && { ...labelRect, glyphs: stringRects(set, name, handsScale, labelX, handsY) },
       },

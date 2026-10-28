@@ -18,7 +18,7 @@ test('uiScale is an integer >= 1 for any viewport', () => {
 const HEARTS_TEXELS_W = 20 / 2 * 8 + (20 / 2 - 1) * 2;
 
 test('interfaceScale keeps the belt within its width share and the hearts on screen', () => {
-  assert.equal(BELT_TEXELS_W, 58);
+  assert.equal(BELT_TEXELS_W, 62);
   for (const [w, h] of [[390, 844], [1366, 768], [1920, 1080], [3440, 1440], [0, 0], [100, 50]]) {
     const s = interfaceScale(w, h);
     assert.ok(Number.isInteger(s) && s >= 1, `${w}x${h} -> ${s}`);

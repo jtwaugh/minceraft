@@ -51,7 +51,7 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
 
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font: 12px/14px ui-monospace, monospace; color: #fff; }
-#hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt > *, .slot { position: absolute; }
+#hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot { position: absolute; }
 #hud-cross { background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; mix-blend-mode: difference; }
 #hud canvas { image-rendering: pixelated; }
 #hud-hands { text-shadow: 0 0 3px #000; }
@@ -73,8 +73,8 @@ export function mountHud(document, set, parent = document.body, view = globalThi
   root.id = 'hud';
   const make = (id) => Object.assign(document.createElement('div'), { id });
   const cross = make('hud-cross'), timer = make('hud-timer'), hands = make('hud-hands');
-  const hearts = make('hud-hearts'), belt = make('hud-belt');
-  root.append(cross, timer, hands, hearts, belt);
+  const hearts = make('hud-hearts'), beltPanel = make('hud-belt-panel'), belt = make('hud-belt');
+  root.append(cross, timer, hands, hearts, beltPanel, belt);
   parent.append(style, root);
   let last = '';
   return {
@@ -90,8 +90,8 @@ export function mountHud(document, set, parent = document.body, view = globalThi
         if (c) place(c, r, ox, oy);
         return c;
       };
-      const label = (name, r, parent) => {
-        const c = drawString(set, String(name), scale, document);
+      const label = (name, r, parent, k) => {
+        const c = drawString(set, String(name), k, document);
         place(c, r, parent.x, parent.y);
         return c;
       };
@@ -110,11 +110,15 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       place(hands, h);
       hands.replaceChildren(...(m.hands ? [
         h.icon && icon(m.hands, h.icon, h.x, h.y),
-        h.label && h.label.w ? label(m.hands, h.label, h) : null,
+        h.label && h.label.w ? label(m.hands, h.label, h, h.scale) : null,
       ].filter(Boolean) : []));
 
       place(hearts, rects.hearts);
       hearts.replaceChildren(...heartNames(m.hearts).map((n, i) => icon(n, rects.heartIcons[i], rects.hearts.x, rects.hearts.y)).filter(Boolean));
+
+      const bp = rects.beltPanel;
+      place(beltPanel, bp);
+      beltPanel.replaceChildren(drawPanel(set, bp.w / scale, bp.h / scale, scale, document));
 
       place(belt, rects.belt);
       belt.replaceChildren(...m.slots.map((slot, i) => {
@@ -130,6 +134,12 @@ export function mountHud(document, set, parent = document.body, view = globalThi
           const f = textureSize(set, v.frame), tx = textureSize(set, v.icon);
           const ic = icon(v.icon, { x: Math.floor((f.w - tx.w) / 2) * scale, y: Math.floor((f.h - tx.h) / 2) * scale, w: tx.w * scale, h: tx.h * scale }, 0, 0);
           if (ic) el.append(ic);
+        }
+        const num = rects.slotNumbers[i];
+        if (num.glyph) {
+          const digit = drawString(set, String(num.n), scale, document);
+          place(digit, num, r.x, r.y);
+          el.append(digit);
         }
         return el;
       }));

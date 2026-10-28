@@ -19,7 +19,7 @@ expect layout.belt.fraction <= 0.5
 case hud fits full HD (1920x1080)
 start walk
 layout 1920 1080
-expect layout.scale = 16
+expect layout.scale = 15
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
 

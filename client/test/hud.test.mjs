@@ -82,7 +82,7 @@ test('mountHud places every element from its hudLayout rectangle', async () => {
     [view.innerWidth, view.innerHeight] = size;
     hud.update(m);
     const { rects } = hudLayout(m, set, { w: size[0], h: size[1] });
-    const [cross, timer, hands, hearts, beltEl] = doc.body.children[1].children;
+    const [cross, timer, hands, hearts, panelEl, beltEl] = doc.body.children[1].children;
     assert.deepEqual(box(cross), px(rects.crosshair));
     assert.deepEqual(box(timer), px(rects.timer));
     assert.deepEqual(timer.children.slice(2).map(box), rects.timer.digits.map((r) => px(r, rects.timer.x, rects.timer.y)));
@@ -91,8 +91,12 @@ test('mountHud places every element from its hudLayout rectangle', async () => {
     assert.equal(hands.children[1].width, rects.hands.label.w);
     assert.deepEqual(box(hearts), px(rects.hearts));
     assert.deepEqual(hearts.children.map(box), rects.heartIcons.map((r) => px(r, rects.hearts.x, rects.hearts.y)));
+    assert.deepEqual(box(panelEl), px(rects.beltPanel));
+    assert.equal(panelEl.children.length, 1);
     assert.deepEqual(box(beltEl), px(rects.belt));
     assert.deepEqual(beltEl.children.map(box), rects.slots.map((r) => px(r, rects.belt.x, rects.belt.y)));
+    // Each slot ends with its number, inside the frame.
+    beltEl.children.forEach((el, i) => assert.deepEqual(box(el.children.at(-1)), px(rects.slotNumbers[i], rects.slots[i].x, rects.slots[i].y)));
   }
 });
 
