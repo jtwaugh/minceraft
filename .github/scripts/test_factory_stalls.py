@@ -58,9 +58,20 @@ class Test(unittest.TestCase):
 
     def test_closed_plan_without_tickets(self):
         # A plan that found nothing to build waits for the docs updater too.
-        r = [x for x in reasons(load()) if "#287" in x]
+        r = [a.reason for a in stalls(load()) if a.kind == "report" and "#287" in a.reason]
         self.assertEqual(len(r), 1)
         self.assertIn('no "Phase 7 still incomplete (plan #287)" note', r[0])
+
+    def test_lost_docs_run_is_asked_again_once(self):
+        # The docs updater's run for the plan was cancelled (one pending run
+        # per concurrency group), or wrote its note in another form.
+        s = load()
+        acts = [a for a in stalls(s) if "#287" in a.reason]
+        self.assertEqual([(a.kind, a.target) for a in acts],
+                         [("request_phase_done", "issue#287"), ("report", "docs/design/basic-gameplay.md")])
+        self.assertEqual(acts[0].payload, {"file": "docs/design/basic-gameplay.md", "section": "Phase 7"})
+        tick(s, [stalls], FakeBackend())
+        self.assertFalse(any("#287" in a.reason for a in stalls(s)))
 
     def test_still_incomplete_note_replans_once(self):
         s = load()
@@ -137,7 +148,7 @@ class Test(unittest.TestCase):
     def test_idempotent(self):
         s = load()
         s.branches.append("docs/x-sync")
-        self.assertEqual(len(tick(s, [stalls], FakeBackend())), 5)
+        self.assertEqual(len(tick(s, [stalls], FakeBackend())), 6)
         self.assertEqual(tick(s, [stalls], FakeBackend()), [])
 
 
