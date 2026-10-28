@@ -96,6 +96,11 @@ def close_answered(plan):
                    check=True, capture_output=True)
 
 
+def incomplete_note(section, plan):
+    """The phrase the docs updater writes when `plan` left `section` unfinished."""
+    return f"{section} still incomplete (plan #{plan})"
+
+
 def still_incomplete(path, section, plan):
     """Whether the docs updater found `section` unfinished after `plan`: its
     reconciliation note says "<section> still incomplete (plan #<plan>)"."""
@@ -103,7 +108,7 @@ def still_incomplete(path, section, plan):
         text = open(path, encoding="utf-8").read()
     except FileNotFoundError:
         return False
-    return f"{section} still incomplete (plan #{plan})" in text
+    return incomplete_note(section, plan) in text
 
 
 def next_phase(path, plans):

@@ -4,10 +4,11 @@ import os
 import socket
 import sys
 import unittest
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_stalls import stalls  # noqa: E402
-from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
+from factory_tick import DESIGN_DIR, FakeBackend, Snapshot, load_docs, tick  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "history.json")
 
@@ -55,6 +56,55 @@ class Test(unittest.TestCase):
                 i["state"] = "open"
         self.assertFalse(any("#287" in x for x in reasons(s)))
 
+    def test_closed_plan_without_tickets(self):
+        # A plan that found nothing to build waits for the docs updater too.
+        r = [x for x in reasons(load()) if "#287" in x]
+        self.assertEqual(len(r), 1)
+        self.assertIn('no "Phase 7 still incomplete (plan #287)" note', r[0])
+
+    def test_still_incomplete_note_replans_once(self):
+        s = load()
+        doc = next(d for d in s.docs if d["file"] == "docs/design/basic-gameplay.md")
+        doc["text"] = "**Phase 7 still incomplete (plan #287).** The cue is missing."
+        acts = [a for a in stalls(s) if "#287" in a.reason]
+        self.assertEqual([a.kind for a in acts], ["request_replan", "report"])
+        self.assertEqual(acts[0].payload, {"file": "docs/design/basic-gameplay.md"})
+        self.assertIn("dispatched the planner", acts[1].reason)
+        # Reported: not dispatched again on the next tick, even if no plan appeared.
+        tick(s, [stalls], FakeBackend())
+        self.assertFalse(any("#287" in a.reason for a in stalls(s)))
+        # The note must name this plan: an older plan's note doesn't count.
+        t = load()
+        next(d for d in t.docs if d["file"] == doc["file"])["text"] = \
+            "Phase 7 still incomplete (plan #28)."
+        self.assertNotIn("request_replan", [a.kind for a in stalls(t)])
+
+    def test_just_closed_plan_waits_for_docs_updater(self):
+        s = load()
+        plan = next(p for p in s.plans if p["number"] == 287)
+        plan["closed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertFalse(any("#287" in r for r in reasons(s)))
+        plan["closed_at"] = "2026-01-01T00:00:00Z"
+        self.assertTrue(any("#287" in r for r in reasons(s)))
+
+    def test_open_docs_pr_skips_doc(self):
+        s = load()
+        s.prs.append({"number": 3, "state": "open", "head": "docs/basic-gameplay-phase-done-287",
+                      "files": []})
+        self.assertFalse(any("basic-gameplay.md" in r for r in reasons(s)))
+
+    def test_load_docs_reads_the_repo(self):
+        docs = {d["file"]: d for d in load_docs(DESIGN_DIR)}
+        self.assertNotIn("docs/design/README.md", docs)
+        d = docs["docs/design/factory-orchestrator.md"]
+        self.assertEqual(d["status"], "accepted")
+        self.assertIn("A", d["phases"])
+        self.assertIn("## Reconciliation notes", d["text"])
+
+    def test_load_docs_refuses_empty(self):
+        with self.assertRaises(RuntimeError):
+            load_docs(os.path.join(DESIGN_DIR, "no-such-dir"))
+
     def test_leftover_branches(self):
         s = load()
         s.branches += ["docs/basic-gameplay-sync"]
@@ -87,7 +137,7 @@ class Test(unittest.TestCase):
     def test_idempotent(self):
         s = load()
         s.branches.append("docs/x-sync")
-        self.assertEqual(len(tick(s, [stalls], FakeBackend())), 4)
+        self.assertEqual(len(tick(s, [stalls], FakeBackend())), 5)
         self.assertEqual(tick(s, [stalls], FakeBackend()), [])
 
 

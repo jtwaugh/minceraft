@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_backend import FIX_WORKFLOW, GhBackend  # noqa: E402
+from factory_backend import FIX_WORKFLOW, PLAN_WORKFLOW, GhBackend  # noqa: E402
 from factory_fix import marker  # noqa: E402
 from factory_tick import Action, Snapshot  # noqa: E402
 
@@ -55,6 +55,16 @@ class Test(unittest.TestCase):
         b, calls = backend()
         b.apply(snap(comments=[{"body": marker(9, "old0000", "nits")}]), FIX)
         self.assertEqual(len(calls), 2)
+
+    def test_request_replan_dispatches_planner_once(self):
+        b, calls = backend()
+        s = snap()
+        doc = "docs/design/x.md"
+        b.apply(s, Action("request_replan", doc, {"file": doc}, "m"))
+        self.assertEqual(calls, [["workflow", "run", PLAN_WORKFLOW, "--repo", "o/r", "-f", f"file={doc}"]])
+        s.reported.add((doc, "m"))  # the report beside it
+        b.apply(s, Action("request_replan", doc, {"file": doc}, "m"))
+        self.assertEqual(len(calls), 1)
 
     def test_open_question_creates_then_updates(self):
         b, calls = backend()
