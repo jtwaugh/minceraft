@@ -8,10 +8,11 @@
 //     box      [minx, miny, minz, maxx, maxy, maxz] to outline, or null
 //     primary, secondary, last   { index, action } of the matched rule, or null
 //   formatAim(aim) -> overlay lines
-//   readBelt(walk) -> { slots, selected, hands, held }
+//   readBelt(walk) -> { slots, selected, hands, held, swing, use }
 //     slots    tool name per belt slot, or null for an empty slot
 //     hands    the carried item's name, or null
 //     held     what interaction rules see: empty | tool:<name> | item:<name>
+//     swing, use  hand animation phases: 0 idle, 1 mid-animation, back to 0
 //   formatBelt(belt) -> overlay lines (a minimum readout; the real HUD is Phase 8)
 //   spawnTestItems(walk) puts a few loose items on the raft scene's islet
 //   readAnimals(walk) -> [{ id, species, pos, facing, size, hurt, dying }]
@@ -61,7 +62,7 @@ export function formatAim(aim) {
 export function readBelt(walk) {
   const slots = [];
   for (let i = 0; i < walk.belt_len(); i++) slots.push(walk.belt_slot(i) || null);
-  return { slots, selected: walk.selected_slot(), hands: walk.hands() || null, held: walk.held() };
+  return { slots, selected: walk.selected_slot(), hands: walk.hands() || null, held: walk.held(), swing: walk.swing_phase(), use: walk.use_phase() };
 }
 
 export function formatBelt(belt) {

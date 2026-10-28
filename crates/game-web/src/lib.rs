@@ -534,6 +534,16 @@ impl Walk {
         }
     }
 
+    /// Primary swing phase: 0 idle, 1 mid-swing, back to 0.
+    pub fn swing_phase(&self) -> f32 {
+        self.0.swing_phase()
+    }
+
+    /// Secondary use phase: 0 idle, 1 mid-use, back to 0.
+    pub fn use_phase(&self) -> f32 {
+        self.0.use_phase()
+    }
+
     /// The block id at a world position, farm overlay included.
     pub fn block_at(&self, x: i32, y: i32, z: i32) -> u32 {
         self.0.block_at(x, y, z) as u32
