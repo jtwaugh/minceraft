@@ -14,7 +14,9 @@ A design doc's next phase is the first phase its header marks `todo`, in
 header order. It is due unless a "Plan:" issue for it is open (being
 built), or a closed one had tickets or found nothing to build (both wait
 for the docs updater to mark the phase done). A closed plan that only
-raised questions, all now answered, is planned again. So phases are
+raised questions, all now answered, is planned again, and so is a closed
+plan with tickets once the docs updater has noted "<section> still
+incomplete (plan #<n>)" in the doc: the planner then plans what's left. So phases are
 planned one at a time, each once the previous one is marked done.
 """
 import json
@@ -94,6 +96,16 @@ def close_answered(plan):
                    check=True, capture_output=True)
 
 
+def still_incomplete(path, section, plan):
+    """Whether the docs updater found `section` unfinished after `plan`: its
+    reconciliation note says "<section> still incomplete (plan #<plan>)"."""
+    try:
+        text = open(path, encoding="utf-8").read()
+    except FileNotFoundError:
+        return False
+    return f"{section} still incomplete (plan #{plan})" in text
+
+
 def next_phase(path, plans):
     status, phases = header(path)
     if status != "accepted":
@@ -116,6 +128,10 @@ def next_phase(path, plans):
     # Only the newest plan for this phase decides; older ones are history.
     latest = max(mine, key=lambda p: p["number"])
     v = plan_verdict(latest)
+    if v == "built" and latest["state"] == "closed" and still_incomplete(path, section, latest["number"]):
+        log(f"{path}: {section}'s plan #{latest['number']} closed but the phase is still incomplete; "
+            "planning what's left.")
+        return {"file": path, "section": section}
     if v == "built":
         log(f"{path}: {section} has tickets (#{latest['number']}); waiting for the phase to be marked done.")
         return None
