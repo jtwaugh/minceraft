@@ -439,7 +439,6 @@ fn cold(shape: FloraShape, block: Block, upper: Option<Block>) -> [Flora; 1] {
         tint: FloraTint::None,
         cluster_scale: 8.0,
         salt: 41,
-        requires: None,
         biomes: &COLD,
         requires: None,
     }]
