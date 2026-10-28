@@ -291,5 +291,9 @@ in a string draw with their capital glyph.
 font_a, font_b, font_c, font_d, font_e, font_f, font_g, font_h, font_i,
 font_j, font_k, font_l, font_m, font_n, font_o, font_p, font_q, font_r,
 font_s, font_t, font_u, font_v, font_w, font_x, font_y, font_z (the
-letters A to Z), font_unknown (a question mark, drawn for any character
+letters A to Z), punctuation drawn the same way: font_period, font_comma,
+font_colon, font_exclamation, font_question, font_apostrophe, font_hyphen,
+font_slash, font_lparen, font_rparen (. , : ! ? ' - / ( ); these cover the
+punctuation in current client strings (hint line, "Hands: ...", "Test play
+(alpha)"); a space has no texture), font_unknown (a question mark, drawn for any character
 the font lacks)
