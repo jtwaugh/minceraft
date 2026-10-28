@@ -71,10 +71,10 @@ test('farColor: water darkens with depth, ignores biome', () => {
 
 test('farMesh colours do not depend on the grid origin; skirt copies its border', () => {
   const a = farMesh(makeGrid(0, 0, 5, 4), undefined, PAL);
-  const b = farMesh(makeGrid(1600, -320, 5, 4), { x: 7, y: 3, z: 9 }, PAL);
+  const g = makeGrid(0, 0, 5, 4);
+  const b = farMesh({ ...g, x0: 1600, z0: -320 }, { x: 7, y: 3, z: 9 }, PAL);
   assert.equal(a.color.length, a.biome.length * 3);
-  assert.equal(a.color.length, b.color.length);
-  assert.deepEqual(a.color.slice(0, 5 * 4 * 3).length, 60);
+  assert.deepEqual([...a.color], [...b.color]);
   assert.equal(farMesh(makeGrid(0, 0, 3, 3)).color, null);
   for (let v = 0; v < a.biome.length; v++) {
     assert.deepEqual([...a.color.slice(v * 3, v * 3 + 3)], farColor(a.top[v], a.biome[v], PAL));
