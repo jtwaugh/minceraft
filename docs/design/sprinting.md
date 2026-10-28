@@ -6,7 +6,7 @@ source: "#808"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
 ---
 
 ## Current state
@@ -47,6 +47,11 @@ Phase A plan #815 closed (PRs #842, #868, #876, #877, #902, #908):
   `bindings.rs` (Phase B, question 2).
 - Water ending a sprint now has an input-script case (plan #1289, PR #1299,
   `client/test/scripts/sprint.input`), so Phase A's end conditions are all covered.
+- Phase B plan #1391 closed (PRs #1400, #1403): the raft rule is built in
+  `walk.rs` (a sprint ends on boarding or at the helm and cannot start there;
+  the islet and runway still sprint) and covered by
+  `client/test/scripts/sprint_raft.input`. With plans #1326 and #1377, every
+  Phase B decision (window, jump boost and drag, wall tolerance, FOV, raft) is built.
 - Research spec-questions #819 and #820 and decisions #821 and #822 are closed.
 
 ## Reconciliation notes
