@@ -440,6 +440,8 @@ pub struct Dispatcher {
     pub last_rule: Option<usize>,
     /// Attacks that landed in the most recent `dispatch` call.
     pub hits: Vec<Hit>,
+    /// Buttons whose press matched a rule in the most recent `dispatch` call.
+    pub succeeded: Vec<Button>,
 }
 
 impl Dispatcher {
@@ -456,6 +458,7 @@ impl Dispatcher {
     ) -> Vec<ActionKind> {
         let mut ran = Vec::new();
         self.hits.clear();
+        self.succeeded.clear();
         for (pressed, button) in [
             (input.primary, Button::Primary),
             (input.secondary, Button::Secondary),
@@ -470,6 +473,7 @@ impl Dispatcher {
             let resolved = resolve(&rules.rules, &ctx);
             self.last_rule = resolved.map(|r| r.rule_index);
             if let Some(r) = resolved {
+                self.succeeded.push(button);
                 ran.push(run_action(r.action, &ctx, damage, &mut self.hits));
             }
         }

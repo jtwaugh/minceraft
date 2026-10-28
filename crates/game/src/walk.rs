@@ -12,6 +12,7 @@ use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
 use crate::forage::{Forage, ForageConfig, Forager};
 use crate::growth::grow_crops;
+use crate::hands::{Hands, HandsConfig};
 use crate::harvest::{crop_name, tile_crop_state};
 use crate::input::TickInput;
 use crate::interactions::{
@@ -182,6 +183,8 @@ pub struct Walker {
     entities: Vec<TargetableEntity>,
     rules: Interactions,
     dispatcher: Dispatcher,
+    /// Swing and use animation counters.
+    anim: Hands,
     items: ItemStore,
     animals: AnimalStore,
     forager: Forager,
@@ -239,6 +242,10 @@ impl Walker {
             entities: Vec::new(),
             rules: Interactions::default_rules(),
             dispatcher: Dispatcher::default(),
+            anim: Hands::new(
+                HandsConfig::default_from_data()
+                    .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+            ),
             items: ItemStore::new(ItemEntityConfig::default_from_data(), FIRST_ITEM_ID),
             animals: AnimalStore::new(
                 Animals::default_animals(),
@@ -613,6 +620,10 @@ impl Walker {
         self.run_queued_commands();
         self.look_yaw = input.yaw;
         self.sim_tick += 1;
+        self.anim.advance();
+        if self.player.dead {
+            self.anim.clear();
+        }
         grow_crops(&mut self.world, &self.crops, GROWTH_SEED, self.sim_tick);
         let entities = self.all_entities();
         let before = self.movement_state();
@@ -853,6 +864,16 @@ impl Walker {
         std::mem::take(&mut self.events)
     }
 
+    /// Primary swing animation: 0 at rest, up to 1, back to 0.
+    pub fn swing_phase(&self) -> f32 {
+        self.anim.swing_phase()
+    }
+
+    /// Secondary use animation: 0 at rest, up to 1, back to 0.
+    pub fn use_phase(&self) -> f32 {
+        self.anim.use_phase()
+    }
+
     /// The carried item, if any.
     pub fn hands(&self) -> Option<&ItemInstance> {
         self.state.hands.as_ref()
@@ -912,6 +933,13 @@ impl Walker {
         let ran = self
             .dispatcher
             .dispatch(&self.rules, &pressed, &ctx, damage);
+        // The animations follow the action's success, not the press.
+        for button in &self.dispatcher.succeeded {
+            match button {
+                Button::Primary => self.anim.start_swing(),
+                Button::Secondary => self.anim.start_use(),
+            }
+        }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
             let outcome = self.forager.forage(pos, self.sim_tick);
             if outcome == Forage::Miss {
@@ -3485,6 +3513,90 @@ mod tests {
             item: "seeds".into(),
         });
         assert!(swings(&mut w, &level_click()).is_empty());
+    }
+
+    fn swing_phases(w: &mut Walker, input: &TickInput, ticks: u32) -> Vec<f32> {
+        let idle = TickInput::default();
+        (0..ticks)
+            .map(|i| {
+                w.tick(if i == 0 { input } else { &idle });
+                w.swing_phase()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_successful_primary_runs_the_swing_over_the_data_duration() {
+        let n = HandsConfig::default_from_data().unwrap().swing_ticks;
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.player_state_mut().select(1);
+        w.tick(&look(0.0, false));
+        assert_eq!((w.swing_phase(), w.use_phase()), (0.0, 0.0));
+        let phases = swing_phases(&mut w, &level_click(), n);
+        assert!(phases[0] > 0.0 && phases[0] < phases[1], "{phases:?}");
+        assert_eq!(phases.iter().cloned().fold(0.0, f32::max), 1.0);
+        assert_eq!(phases[n as usize - 1], 0.0);
+        assert!(phases[..n as usize - 1].iter().all(|&p| p > 0.0));
+        assert_eq!(w.use_phase(), 0.0);
+    }
+
+    #[test]
+    fn pressing_at_nothing_does_not_animate() {
+        let mut w = settled();
+        w.tick(&TickInput {
+            primary: true,
+            ..look(1.2, false)
+        });
+        assert_eq!(w.swing_phase(), 0.0);
+    }
+
+    #[test]
+    fn a_successful_secondary_runs_the_use_motion_only() {
+        let n = HandsConfig::default_from_data().unwrap().use_ticks;
+        let mut w = grass_floor_walker(1);
+        w.tick(&down(true, true));
+        assert!(tilled(&w, 0));
+        assert!(w.use_phase() > 0.0);
+        assert_eq!(w.swing_phase(), 0.0);
+        for _ in 1..n {
+            w.tick(&TickInput::default());
+        }
+        assert_eq!(w.use_phase(), 0.0);
+    }
+
+    #[test]
+    fn carrying_stows_the_tool_so_primary_does_not_swing() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.player_state_mut().select(1);
+        w.state.hands = Some(seeds());
+        w.tick(&level_click());
+        assert_eq!(w.swing_phase(), 0.0);
+    }
+
+    #[test]
+    fn a_new_hit_during_a_swing_restarts_it() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.player_state_mut().select(1);
+        w.tick(&level_click());
+        let first = w.swing_phase();
+        w.tick(&TickInput::default());
+        w.tick(&level_click());
+        assert_eq!(w.swing_phase(), first);
+    }
+
+    #[test]
+    fn death_stops_the_animation() {
+        let mut w = settled();
+        w.set_entities(vec![stub_animal()]);
+        w.player_state_mut().select(1);
+        w.tick(&level_click());
+        assert!(w.swing_phase() > 0.0);
+        w.player.dead = true;
+        w.tick(&level_click());
+        assert_eq!((w.swing_phase(), w.use_phase()), (0.0, 0.0));
     }
 
     fn fatal_fall() -> Walker {
