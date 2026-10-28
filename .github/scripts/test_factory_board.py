@@ -73,6 +73,29 @@ class Test(unittest.TestCase):
         self.assertEqual([(a.kind, a.target, a.payload) for a in acts],
                          [("set_status", "issue#1", {"status": "Approved"})])
 
+    def test_local_ticket_without_pr_is_with_maintainer(self):
+        s = snap([issue(1, ["planned", "factory", "local"])], [card(1, "Approved")])
+        self.assertEqual([(a.kind, a.payload) for a in board_pass(s)],
+                         [("set_waiting", {"text": "maintainer"}),
+                          ("set_status", {"status": "With maintainer"})])
+        s = snap([issue(1, ["planned", "factory", "local"])],
+                 [card(1, "With maintainer", waiting="maintainer")])
+        self.assertEqual(board_pass(s), [])
+
+    def test_local_ticket_falls_back_without_the_column(self):
+        s = snap([issue(1, ["factory", "local"])], [card(1, "Approved", waiting="maintainer")],
+                 meta={"options": project_board.STATUSES})
+        self.assertEqual(board_pass(s), [])
+        self.assertEqual(project_board.issue_status(
+            {"number": 1, "title": "T", "labels": [{"name": "factory"}, {"name": "local"}]}, {})[0],
+            "With maintainer")
+
+    def test_local_ticket_with_pr_keeps_pr_status(self):
+        pr = {"number": 5, "head": "claude/issue-1-x", "status": ("Nits", "n")}
+        s = snap([issue(1, ["factory", "local"])], [card(1, "Approved"), card(5, "Nits", kind="PullRequest")], prs=[pr])
+        self.assertEqual([(a.kind, a.payload) for a in board_pass(s)],
+                         [("set_status", {"status": "Nits"})])
+
     def test_dragged_to_idea_becomes_label_action(self):
         s = snap([issue(3, ["planned", "factory"])], [card(3, "Idea")])
         acts = board_pass(s)

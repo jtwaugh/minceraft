@@ -41,7 +41,8 @@ import tickets  # noqa: E402  (dependency and file-overlap rules)
 
 REPO = os.environ["GITHUB_REPOSITORY"]
 STATUSES = ["Inbox", "Approved", "Blocked", "Nits", "Ready for Merge", "Done"]
-OPTIONAL = {"Submitted": "Approved", "Idea": "Inbox"}  # status: what to use if the board lacks it
+OPTIONAL = {"Submitted": "Approved", "Idea": "Inbox",
+            "With maintainer": "Approved"}  # status: what to use if the board lacks it
 # Check runs from agent and housekeeping jobs, not checks on the code.
 AGENT_JOBS = {"implement", "start", "edit-spec", "reconcile", "plan-source",
               "phase-done", "drift", "pick", "plan", "find", "resolve"}
@@ -141,6 +142,8 @@ def issue_status(issue, pr_by_ticket):
     if pr:
         return pr_status(pr)
     labels = {l["name"] for l in issue.get("labels", [])}
+    if "factory" in labels and "local" in labels:
+        return "With maintainer", "local ticket, no PR; the factory won't start it"
     if "factory" in labels:
         return "Approved", "approved, no PR yet"
     return "Inbox", "not approved yet"

@@ -42,6 +42,12 @@ def apply(s, actions):
 
 
 class Test(unittest.TestCase):
+    def test_stored_local_ticket_is_with_maintainer(self):
+        s = stored_snap([issue(11, ["planned", "factory", "local"], parent=10)], [card(11, "Approved")])
+        apply(s, board_pass(s))
+        self.assertEqual((s.board[0]["status"], s.board[0]["waiting"]), ("With maintainer", "maintainer"))
+        self.assertEqual(board_pass(s), [])
+
     def test_stored_ticket_matches_render(self):
         s = stored_snap([ticket(11), ticket(12, "**Depends on:** #11")],
                         [card(11, "Inbox"), card(12, "Approved")])
