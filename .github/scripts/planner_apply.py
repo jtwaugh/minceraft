@@ -81,13 +81,17 @@ def apply(text, run=agent_results.gh, script=None):
         return None
     plan_no = create("plan", plan["title"], source_line(plan) + "\n\nCreating tickets.\n",
                      script=script)
-    made = []
-    for t in result["tickets"]:
-        body = with_depends(t["body"], [made[d - 1][0] for d in t["depends_on"]])
-        made.append((create("ticket", t["title"], body, script=script), t))
-    asked = [(create("question", q["title"], q["body"], ["--kind", q["kind"]], script=script), q)
-             for q in result["questions"]]
-    create("edit-plan", "", plan_body(plan, made, asked), [str(plan_no)], script=script)
+    try:
+        made = []
+        for t in result["tickets"]:
+            body = with_depends(t["body"], [made[d - 1][0] for d in t["depends_on"]])
+            made.append((create("ticket", t["title"], body, script=script), t))
+        asked = [(create("question", q["title"], q["body"], ["--kind", q["kind"]], script=script), q)
+                 for q in result["questions"]]
+        create("edit-plan", "", plan_body(plan, made, asked), [str(plan_no)], script=script)
+    except subprocess.CalledProcessError as e:
+        raise ValueError(f"{(e.stderr or '').strip()}\nPlan #{plan_no} was left open with the "
+                         "\"Creating tickets.\" body; close it before rerunning.") from e
     return plan_no
 
 
@@ -99,6 +103,9 @@ def main(argv):
         n = apply(open(argv[1], encoding="utf-8").read())
     except ValueError as e:
         print(e, file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as e:
+        print((e.stderr or "").strip(), file=sys.stderr)
         return 1
     print(f"created Plan #{n}" if n else "created nothing", file=sys.stderr)
     return 0
