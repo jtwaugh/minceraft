@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
   E: todo
 ---
@@ -81,6 +81,14 @@ What exists today that this doc relies on or overlaps (checked against the code)
   (note 2): `factory-tick.yml` does not yet set `FACTORY_STORE` or fetch and
   publish the `factory-state` branch, so the store is off until it does
   (steps in `FACTORY.md`). `[manual check]`
+- **Phase C done (plan #1217, closed).** Result schemas and validator
+  (`agent_results.py`, PRs #1232, #1234), question issues from
+  `needs_maintainer` (#1235), implementer result checks (#1236), planner,
+  docs updater, reconciler and spec editor results (#1240, #1241, #1261),
+  the structured reviewer verdict in `review_gate.py` (#1238), the workflows
+  returning JSON (#1254 to #1258), and `expect.py` and the verdict regexes
+  deleted (#1265; `/override` kept). `review_gate.py` still has one `RESULT`
+  regex that finds the JSON block in the comment.
 - **Not present** (the `factory-tick` workflow and the `needs-you` label
   now exist, see Phase A progress): any state store, any `factory-state`
   branch, file leases, per-transition history, a "needs
