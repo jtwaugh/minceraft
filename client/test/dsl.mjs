@@ -351,7 +351,7 @@ function step(w, { op, args }) {
       if (!['field', 'planter', 'helm', 'deck'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm|deck (raft scene only)');
       if (args[0] === 'deck') {
         const [hx, hy, hz] = w.scene.helm;
-        w.walk.teleport(hx + 0.5, hy, hz + 1.5);
+        w.walk.teleport(hx + 0.5, hy + 1, hz + 1.5);
         w.controller.frame(0.05);
         return;
       }
