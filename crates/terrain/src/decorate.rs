@@ -661,13 +661,16 @@ pub(crate) fn snow_column(world: &mut World, x: i32, z: i32, flora: &[Flora]) ->
     if t >= 0.5 {
         return false;
     }
-    // Snow replaces `cross` and `tall_cross` plants (both halves); other
-    // flora keep their cell and get no snow.
+    // Snow replaces `cross` and `tall_cross` plants (both halves) unless
+    // `snow_stays`; other flora keep their cell and get no snow.
     let here = world.get(x, top, z);
     if here != AIR {
         let Some(f) = flora.iter().find(|f| f.block as u8 == here) else {
             return false;
         };
+        if f.snow_stays {
+            return false;
+        }
         match f.shape {
             FloraShape::Cross => {}
             FloraShape::TallCross => {

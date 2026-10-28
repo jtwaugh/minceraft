@@ -1,0 +1,18 @@
+{
+ "Batch 31": {
+  "title": "Biome flora: tundra frost grass",
+  "tiles": false,
+  "textures": {
+   "frost_grass": [
+    "........",
+    ".e...e..",
+    ".e.e.e..",
+    "ece3e3.e",
+    "e3e3e3e.",
+    "3e3939e3",
+    ".3e9e39.",
+    "..38.8.."
+   ]
+  }
+ }
+}

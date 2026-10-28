@@ -576,3 +576,12 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#e0709a"
+
+[[block]]
+id = 62
+name = "frost_grass"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#b9cfc4"

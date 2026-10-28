@@ -18,6 +18,7 @@ static TEST: [Flora; 2] = [
         cluster_scale: 8.0,
         salt: 11,
         requires: None,
+        snow_stays: false,
         biomes: &[(Biome::Plains, 0.9), (Biome::Forest, 0.5)],
     },
     Flora {
@@ -30,6 +31,7 @@ static TEST: [Flora; 2] = [
         cluster_scale: 8.0,
         salt: 12,
         requires: None,
+        snow_stays: false,
         biomes: &[(Biome::Desert, 0.9), (Biome::Taiga, 0.5)],
     },
 ];
@@ -192,6 +194,7 @@ macro_rules! plains_entry {
             cluster_scale: 8.0,
             salt: 11,
             requires: None,
+            snow_stays: false,
             biomes: &[(Biome::Plains, $chance), (Biome::Forest, $chance)],
         }]
     };
@@ -242,6 +245,7 @@ static RIVALS: [Flora; 2] = [
         cluster_scale: 8.0,
         salt: 21,
         requires: None,
+        snow_stays: false,
         biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
     },
     Flora {
@@ -254,6 +258,7 @@ static RIVALS: [Flora; 2] = [
         cluster_scale: 8.0,
         salt: 22,
         requires: None,
+        snow_stays: false,
         biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
     },
 ];
@@ -328,6 +333,7 @@ static TALL: [Flora; 1] = [Flora {
     cluster_scale: 8.0,
     salt: 31,
     requires: None,
+    snow_stays: false,
     biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
 }];
 
@@ -441,6 +447,7 @@ fn cold(shape: FloraShape, block: Block, upper: Option<Block>) -> [Flora; 1] {
         salt: 41,
         biomes: &COLD,
         requires: None,
+        snow_stays: false,
     }]
 }
 
@@ -820,6 +827,49 @@ fn rainforest_plants_stand_on_grass_in_rainforest_and_are_region_independent() {
         );
     }
     assert!(nlf > 0 && nbl > 0, "{nlf} large ferns, {nbl} broadleaf");
+}
+
+#[test]
+fn snow_stays_plants_survive_snow_and_other_cross_plants_do_not() {
+    let mut t = cold(FloraShape::Cross, Block::Daisy, None);
+    t[0].snow_stays = true;
+    let (snow, held) = snow_cells(&t);
+    assert!(held > 50, "{snow} {held}");
+}
+
+#[test]
+fn frost_grass_is_tundra_and_ice_desert_only_and_region_independent() {
+    let fg = Block::FrostGrass as u8;
+    let mut n = 0;
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-512, -512, 1024, 1024);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT {
+                    if at(&r, x, y, z) != fg {
+                        continue;
+                    }
+                    let (t, h) = g.climate.at(x, z, &[], &[]);
+                    let b = biome_for(t, h);
+                    assert!(matches!(b, Biome::Tundra | Biome::IceDesert), "{x},{z}");
+                    assert_ne!(at(&r, x, y, z), Block::SnowLayer as u8);
+                    n += 1;
+                }
+            }
+        }
+        let part = gen(seed, -40, -60, 90, 80, &FLORA);
+        for z in part.z0..part.z0 + 80 {
+            for x in part.x0..part.x0 + 90 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&r, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+        assert_eq!(count(&gen(seed, x0, z0, w, d, &[]), Block::FrostGrass), 0);
+    }
+    assert!(n > 0, "no frost grass");
 }
 
 #[test]
