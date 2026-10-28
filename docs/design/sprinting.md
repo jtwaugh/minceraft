@@ -139,6 +139,8 @@ the reference version in section 3). (Decided in #822.)
 placeholder values with researched ones once `SPEC.md` has them. The
 double-tap window stays a fixed value in `data/input.toml`, not a user
 setting. Done when each decided behaviour has an input script.
+For the sprint-jump, ground drag applies on the jump tick for sprint-jumps
+only; ordinary jumps keep the drag they have today. (Decided in #1332.)
 A wall ends a sprint only on a head-on hit: the facing within a small angular
 tolerance of the wall's normal. The tolerance is this game's own tunable in
 `data/player.toml`, with no parity claim; contact outside it, such as sliding
