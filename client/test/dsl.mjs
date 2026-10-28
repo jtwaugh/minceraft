@@ -70,6 +70,7 @@
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
+// layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
 // events.foraged (`foraged` events seen since the case began),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
@@ -260,7 +261,14 @@ function layout(w, args) {
   const viewport = { w: vw, h: vh };
   const { scale, rects } = hudLayout(w.controller.state.hud, tileset, viewport);
   const result = { scale, rects, problems: layoutChecks({ scale, rects }, viewport) };
-  w.layout = { scale, problems: result.problems.length, 'belt.w': rects.belt.w, 'belt.fraction': rects.belt.w / vw };
+  const where = (rs) => {
+    if (!rs.length || rs.some((r) => !r || !(r.w > 0 && r.h > 0))) return 'missing';
+    return rs.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= vw && r.y + r.h <= vh) ? 'inside' : 'outside';
+  };
+  w.layout = {
+    scale, problems: result.problems.length, 'belt.w': rects.belt.w, 'belt.fraction': rects.belt.w / vw,
+    timer: where([rects.timer]), slotnumbers: where(rects.slotNumbers), 'hands.label': where([rects.hands.label]),
+  };
   return result;
 }
 
