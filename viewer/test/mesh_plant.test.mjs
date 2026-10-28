@@ -175,3 +175,13 @@ test('flowers and tall plants keep every vertex inside the column', () => {
     }
   }
 });
+
+test('large_fern and broadleaf draw as grass-tinted crossed quads', () => {
+  const size = 4;
+  for (const b of [B.large_fern, B.broadleaf]) {
+    const blocks = meadow(size);
+    for (let c = 0; c < size * size; c++) blocks[c * H + 60] = b;
+    const m = meshBlocks(ctx, blocks, tints(size), size, 0);
+    assert.equal(m.cutout.faces, size * size * 4);
+  }
+});
