@@ -32,7 +32,7 @@ const CLASSES = {
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt',
-    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction',
+    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction', 'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
     'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
 };
