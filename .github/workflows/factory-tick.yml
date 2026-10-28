@@ -63,11 +63,14 @@ jobs:
       - name: Let a burst of events settle
         if: github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
         run: sleep 60
-      # Always master's scripts, whatever the event.
+      # Always master's scripts, whatever the event, and the design docs the
+      # stall pass reads (factory_tick.load_docs fails without them).
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            docs/design
       # ETags from earlier ticks (.github/scripts/gh_cache.py): an unchanged
       # read comes back 304, which doesn't count against the rate limit.
       - name: Restore the read cache

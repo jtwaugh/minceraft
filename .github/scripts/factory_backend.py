@@ -25,6 +25,7 @@ from factory_tick import Backend, FakeBackend  # noqa: E402
 START_WORKFLOW = "claude.yml"
 START_MARKER = "<!-- factory-auto-start --> Dependencies closed; starting automatically (factory tick)."
 DOCS_WORKFLOW = "claude-docs.yml"
+PLAN_WORKFLOW = "claude-plan.yml"
 FIX_WORKFLOW = "claude-fix.yml"
 
 
@@ -122,8 +123,8 @@ class GhBackend(Backend):
         if k == "open_question":
             found = self._question(snapshot, action)
             return found is not None and found.get("body") == p["body"]
-        if k in ("report", "request_phase_done"):
-            return (action.target, action.reason if k == "report" else k) in snapshot.reported
+        if k in ("report", "request_replan", "request_phase_done"):
+            return (action.target, k if k == "request_phase_done" else action.reason) in snapshot.reported
         return False
 
     def _question(self, snapshot, action):
@@ -238,6 +239,10 @@ class GhBackend(Backend):
                 self.failed.append((action, str(e)))
         elif k == "request_phase_done":
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
+        elif k == "request_replan":
+            # No section: the planner picks the phase and skips it if a plan
+            # appeared since (plan_targets.py).
+            self._gh("workflow", "run", PLAN_WORKFLOW, "--repo", r, "-f", f"file={p['file']}")
         elif k == "start_fix":
             # Dispatch first: a marker without a run would read as a fix in progress.
             self._gh("workflow", "run", FIX_WORKFLOW, "--repo", r, "-f", f"pr={n}", "-f", f"task={p['task']}")

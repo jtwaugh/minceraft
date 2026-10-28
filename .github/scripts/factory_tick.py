@@ -27,7 +27,7 @@ REPORT_TITLE = "Factory: stalled work"  # the one issue the report pass keeps
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # "add_label", "set_parent", "start_ticket", "close_issue", "request_phase_done", "report", "create_issue", ...
+    kind: str  # "add_label", "set_parent", "start_ticket", "close_issue", "request_phase_done", "request_replan", "report", "create_issue", ...
     target: str  # "issue#12"
     payload: dict = field(default_factory=dict, hash=False, compare=False)
     reason: str = ""
@@ -85,9 +85,10 @@ class Snapshot:
         one network read per path per run. Issues are read incrementally
         (`read_issues`). The board is read when PROJECT_TOKEN and
         PROJECT_NUMBER are set, unless every read came back unchanged after
-        a clean tick (`unchanged`). Docs: later."""
+        a clean tick (`unchanged`). Docs come from the checkout (`load_docs`)."""
         import gh_cache
         snap = cls()
+        snap.docs = load_docs(DESIGN_DIR)
         gh_cache.begin()
         get, paged = gh_cache.get, gh_cache.get_all
 
@@ -99,6 +100,7 @@ class Snapshot:
             labels = [lb["name"] for lb in i["labels"]]
             snap.issues.append({
                 "number": i["number"], "title": i["title"], "state": i["state"],
+                "state_reason": i.get("state_reason"), "closed_at": i.get("closed_at"),
                 "labels": labels,
                 "kind": ("plan" if i["title"].startswith("Plan:") else
                          "report" if i["title"] == REPORT_TITLE else
@@ -197,6 +199,29 @@ def load_merged_prs(repo, get, now=None):
             out.append({"number": p["number"], "base": p["base"]["ref"],
                         "body": p.get("body") or "", "merged_at": merged})
     return out
+
+
+DESIGN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "docs", "design")
+
+
+def load_docs(root):
+    """{"file", "status", "phases", "text"} for every design doc under `root`.
+    Raises if there are none: the stall and doc invariant checks would pass
+    silently on an empty list (the tick's checkout must include the docs)."""
+    from plan_targets import header
+    docs = []
+    for name in sorted(os.listdir(root) if os.path.isdir(root) else []):
+        if not name.endswith(".md") or name == "README.md":
+            continue
+        path = os.path.join(root, name)
+        status, phases = header(path)
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        docs.append({"file": f"docs/design/{name}", "status": status,
+                     "phases": dict(phases), "text": text})
+    if not docs:
+        raise RuntimeError(f"no design docs under {root}; check the tick's checkout")
+    return docs
 
 
 LOG_LINES = 40  # of a failed check's log kept for the fix task
@@ -325,15 +350,17 @@ def read_issues(repo, state, paged, now=None):
 
 
 # The issue fields the loader reads, kept between ticks.
-KEEP = ("number", "title", "state", "labels", "body", "parent_issue_url", "pull_request", "updated_at")
+KEEP = ("number", "title", "state", "state_reason", "closed_at", "labels", "body",
+        "parent_issue_url", "pull_request", "updated_at")
 
 
 def unchanged(stats, state):
     """True when this tick can stop after reading: every read came back 304,
     the last tick applied nothing and failed nothing, and this isn't a
     scheduled or hand-started tick (those always run in full, as a safety
-    net). The passes are level-triggered and none reads the clock, so the
-    same input gives the same (empty) result."""
+    net). The passes are level-triggered and only the stall pass's grace
+    period reads the clock, which the scheduled ticks pick up, so the same
+    input gives the same (empty) result."""
     return (os.environ.get("GITHUB_EVENT_NAME") not in FULL_EVENTS
             and stats["requests"] > 0 and stats["requests"] == stats["not_modified"]
             and state.get("last_tick_clean") is True)
@@ -424,6 +451,8 @@ class FakeBackend(Backend):
                     "labels": action.payload.get("labels", [action.payload["label"]]),
                     "kind": "question",
                     "body": action.payload["body"]})
+        elif action.kind == "request_replan":
+            pass  # the report beside it records it
         elif action.kind == "report":
             snapshot.reported.add((action.target, action.reason))
         elif action.kind == "create_issue":
