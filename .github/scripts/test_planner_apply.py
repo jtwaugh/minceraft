@@ -83,6 +83,16 @@ class Apply(unittest.TestCase):
         self.assertIsNone(self.run_apply({"needs_maintainer": nm}))
         self.assertEqual(self.log(), [])
 
+    def test_ticket_failure_names_the_plan_left_open(self):
+        with open(self.script, "w") as f:
+            f.write(FAKE.replace("print(", 'if "B" in a:\n    sys.stderr.write("Ticket not created: bad\\n")'
+                                 '\n    sys.exit(1)\nprint(', 1))
+        with self.assertRaises(ValueError) as cm:
+            self.run_apply(PLAN)
+        self.assertIn("Ticket not created: bad", str(cm.exception))
+        self.assertIn("Plan #101 was left open", str(cm.exception))
+        self.assertEqual([e["mode"] for e in self.log()], ["plan", "ticket", "ticket"])
+
     def test_no_tickets(self):
         self.run_apply({**PLAN, "tickets": [], "questions": []})
         self.assertIn("Nothing to build", self.log()[-1]["body"])
