@@ -1,0 +1,23 @@
+{
+ "Batch 23": {
+  "title": "HUD",
+  "tiles": false,
+  "textures": {
+   "crosshair": [
+    "...e...",
+    "...e...",
+    "...e...",
+    "eee.eee",
+    "...e...",
+    "...e...",
+    "...e..."
+   ]
+  },
+  "sizes": {
+   "crosshair": [
+    7,
+    7
+   ]
+  }
+ }
+}
