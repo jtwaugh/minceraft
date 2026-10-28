@@ -206,6 +206,7 @@ class SkipTest(unittest.TestCase):
                "FACTORY_HTTP_CACHE": os.path.join(d, "c.json"), "PROJECT_TOKEN": "p", "PROJECT_NUMBER": "1"}
         fake = Fake({"repos/o/r/issues?state=all&sort=created&direction=asc&per_page=100": [],
                      "repos/o/r/pulls?state=open&per_page=100": [],
+                     "repos/o/r/pulls?state=closed&sort=updated&direction=desc&per_page=100": [],
                      "repos/o/r/contents/.github/CODEOWNERS": {},
                      "repos/o/r/actions/workflows/ci.yml/runs?branch=master&event=push&status=completed&per_page=30": {},
                      "repos/o/r/git/matching-refs/heads/docs": [],
