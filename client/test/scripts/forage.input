@@ -98,3 +98,48 @@ frame 50 x2
 forage
 expect events.foraged = 1
 expect particles = 0
+
+case foraged seeds grow to wheat that is picked and drops produce
+start walk raft
+click
+lock
+press Backquote
+type give tool hoe
+press Enter
+frame 50 x2
+lock
+stand field
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.ground != grass
+press Digit1
+place tall_grass
+frame 50 x20
+expect held = empty
+forage
+frame 50 x20
+place air
+frame 50 x2
+press KeyE
+frame 50 x2
+# seeds are the same item whatever their source
+expect hands = seeds
+expect held = item:seeds
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect field.crop = wheat_0
+expect hands = none
+until field.crop = wheat_7
+expect held = empty
+expect items = 3
+button down right
+frame 50 x2
+button up right
+frame 50
+expect field.crop = air
+expect field.ground != grass
+expect items > 3
