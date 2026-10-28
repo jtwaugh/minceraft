@@ -15,7 +15,8 @@
 //               face; 0 on every other face. The client sways with it, and
 //               fades only weights >= 128 (plants, not leaves); the viewer
 //               ignores it
-//   byte  15    padding
+//   byte  15    water depth uint8: on water faces, the water blocks from the face's
+//               block down to the first non-water block, capped at 255; 0 elsewhere
 //
 // Positions are local to the meshed area: x and z from 0 to size, y the
 // world y. The renderer adds a per-mesh offset.
@@ -311,7 +312,7 @@ class Quads {
   constructor() { this.buf = new ArrayBuffer(VERTEX_BYTES * 4 * 1024); this.n = 0; this.view(); }
   view() { this.i16 = new Int16Array(this.buf); this.u8 = new Uint8Array(this.buf); }
   // `tint` is one [r, g, b] (0-1) for all four vertices, or four of them.
-  quad(x, y, z, p, uv, layer, k, tint, top = null, ao = null) {
+  quad(x, y, z, p, uv, layer, k, tint, top = null, ao = null, depth = 0) {
     if ((this.n + 4) * VERTEX_BYTES > this.buf.byteLength) {
       const nb = new ArrayBuffer(this.buf.byteLength * 2);
       new Uint8Array(nb).set(this.u8); this.buf = nb; this.view();
@@ -329,6 +330,7 @@ class Quads {
       this.u8[o + 10] = r; this.u8[o + 11] = g; this.u8[o + 12] = b;
       this.u8[o + 13] = ao ? ao[j] : 0;
       this.u8[o + 14] = top ? top[j] : 0;
+      this.u8[o + 15] = depth;
     }
     this.n += 4;
   }
@@ -376,7 +378,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
     ? 0 : blocks[col(x, z) + y];
   const out = [new Quads(), new Quads(), new Quads(), new Quads()]; // opaque, water, ice, cutout
   // One face of the box lo..hi (block-local) for face f.
-  const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0, ao = null, weight = 0) => {
+  const boxFace = (L, x, y, z, f, lo, hi, layer, tint, vr = 0, ao = null, weight = 0, depth = 0) => {
     let p = f.c.map((c) => c.map((v, j) => lo[j] + v * (hi[j] - lo[j])));
     let uv = p.map((q) => faceUV(f, q, vr));
     if (typeof tint === 'function') tint = p.map((q) => tint(Math.round(q[0]), Math.round(q[2])));
@@ -386,7 +388,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       p = rot(p); uv = rot(uv); ao = rot(ao);
       if (Array.isArray(tint[0])) tint = rot(tint);
     }
-    out[L].quad(x, y, z, p, uv, layer, f.s * (0.75 + y / 256), tint, weight ? [weight, weight, weight, weight] : null, ao);
+    out[L].quad(x, y, z, p, uv, layer, f.s * (0.75 + y / 256), tint, weight ? [weight, weight, weight, weight] : null, ao, depth);
   };
   // AO level 0-3 of each corner of face f of the block at (x, y, z): the
   // opaque blocks among the two side neighbours and the diagonal, on the
@@ -458,7 +460,9 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         if (b === B.water) {
           // water: only next to air, plants or leaves (not water, ice or solids)
           if (n === B.water || n === B.ice || SOLID_N[n]) continue;
-          boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
+          let depth = 1;
+          while (depth < 255 && y - depth >= 0 && blocks[base + y - depth] === B.water) depth++;
+          boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint, 0, null, 0, depth);
         } else if (b === B.ice) {
           if (n === B.ice || SOLID_N[n]) continue;
           boxFace(2, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
