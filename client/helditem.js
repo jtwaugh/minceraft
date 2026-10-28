@@ -25,6 +25,12 @@ export const HELD_SCALE = 0.4;
 export const HELD_TILT_YAW = 25;
 export const HELD_TILT_ROLL = 20;
 
+// Pose at phase 1 of the swing and of the use, mirrored from data/hands.toml.
+export const HELD_SWING_OFFSET = [-0.2, 0.1, -0.1];
+export const HELD_SWING_PITCH = 50;
+export const HELD_USE_OFFSET = [-0.05, 0.05, -0.1];
+export const HELD_USE_PITCH = 15;
+
 /** The held thing's boxes: the flat sprite of its icon, as for world items. */
 export function heldBoxes(held) {
   const tex = heldTextureName(held);
@@ -34,12 +40,15 @@ export function heldBoxes(held) {
 }
 
 /**
- * The held thing's draw at rest: null when the hands are empty, otherwise
+ * The held thing's draw: null when the hands are empty, otherwise
  * `{ key, model }`. `key` names the icon; `model` is a column-major camera-space
  * matrix (x right, y up, -z ahead) for the unit box of heldBoxes: scaled,
- * yawed, rolled, then moved to the lower right of the view.
+ * yawed, rolled, then moved to the lower right of the view. `swing` and `use`
+ * are the hand animation phases (0 idle, 1 mid-animation); each adds its offset
+ * and a pitch about the sprite's centre, scaled by the phase. At 0 and 0 this is
+ * the resting pose.
  */
-export function heldDraw(held) {
+export function heldDraw(held, swing = 0, use = 0) {
   const key = heldTextureName(held);
   if (!key) return null;
   const s = HELD_SCALE;
@@ -52,5 +61,15 @@ export function heldDraw(held) {
     s * sy, 0, s * cy, 0,
     HELD_OFFSET[0], HELD_OFFSET[1], HELD_OFFSET[2], 1,
   ]);
+  const pitch = ((HELD_SWING_PITCH * swing + HELD_USE_PITCH * use) * Math.PI) / 180;
+  if (pitch !== 0) {
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    for (let c = 0; c < 12; c += 4) {
+      const y = model[c + 1], z = model[c + 2];
+      model[c + 1] = cp * y - sp * z;
+      model[c + 2] = sp * y + cp * z;
+    }
+  }
+  for (let i = 0; i < 3; i++) model[12 + i] += HELD_SWING_OFFSET[i] * swing + HELD_USE_OFFSET[i] * use;
   return { key, model };
 }

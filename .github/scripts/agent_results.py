@@ -10,10 +10,12 @@ enum, minItems, minimum, pattern, additionalProperties.
 (docs/design/factory-orchestrator.md Phase C, rule 4)
 
     python3 -I agent_results.py <role> < result.json   # exit 1 and errors on stderr
-    python3 -I agent_results.py verify implementer <ticket> <result.json>
-        writes ok= and expected= to $GITHUB_OUTPUT (or stdout), as `expect.py ticket`
-    python3 -I agent_results.py verify planner <file> <result.json>
-        the same for `expect.py plan`: a Plan issue for <file> exists
+    python3 -I agent_results.py verify <role> <arg> <result.json>
+        role implementer (arg: ticket), planner (arg: design-doc file),
+        docs_updater (arg: plan issue), reconciler or spec_editor (arg: the
+        issue it answered). Writes ok= and expected= to $GITHUB_OUTPUT (or
+        stdout), as `expect.py ticket`; for planner, ok means a Plan issue for
+        the file exists
     python3 -I agent_results.py follow-ups <ticket> <result.json>
         files each follow_ups entry once, as a `planned` ticket, via planner_issue.py
 """
@@ -272,6 +274,36 @@ def verify_planner(path, text, run=gh):
                for i in json.loads(out)), expected
 
 
+# Branch each PR-opening role works on: a pattern for the head ref, given arg.
+# The docs updater adds a suffix (-v2, -r2) when an old branch has the name.
+OPENER_BRANCH = {
+    "docs_updater": lambda arg: rf"docs/.*phase-done-{re.escape(arg)}(-[a-z0-9]+)?",
+    "reconciler": lambda arg: r"design/.*",
+    "spec_editor": lambda arg: r"spec/.*",
+}
+
+
+def verify_opener(role, arg, text, run=gh):
+    """(ok, expected) for a docs updater, reconciler or spec editor result: it
+    names a pull request on the role's branch, says why it opened none, or
+    stops with a question for the maintainer."""
+    expected = {
+        "docs_updater": f"a pull request marking plan #{arg}'s phase done, or why none",
+        "reconciler": f"a design-doc pull request for #{arg}, or why none",
+        "spec_editor": f"a spec pull request for #{arg}, or why none",
+    }.get(role, "")
+    if role not in OPENER_BRANCH or validate(role, text):
+        return False, expected
+    value = json.loads(text)
+    if "needs_maintainer" in value or "no_pr" in value:
+        return True, expected
+    code, out = run("pr", "view", str(value["pr"]), "--json", "headRefName")
+    if code != 0:
+        return False, expected
+    ref = json.loads(out)["headRefName"]
+    return bool(re.fullmatch(OPENER_BRANCH[role](arg), ref)), expected
+
+
 def marker(ticket, title):
     return f"<!-- follow-up-of #{ticket} {hashlib.sha1(title.encode()).hexdigest()[:12]} -->"
 
@@ -309,9 +341,14 @@ def create_ticket(title, body):
 
 
 def main(argv):
-    if len(argv) == 5 and argv[1] == "verify" and argv[2] in ("implementer", "planner"):
-        check_fn = verify if argv[2] == "implementer" else verify_planner
-        ok, expected = check_fn(argv[3], open(argv[4], encoding="utf-8").read())
+    if len(argv) == 5 and argv[1] == "verify":
+        text = open(argv[4], encoding="utf-8").read()
+        if argv[2] == "implementer":
+            ok, expected = verify(argv[3], text)
+        elif argv[2] == "planner":
+            ok, expected = verify_planner(argv[3], text)
+        else:
+            ok, expected = verify_opener(argv[2], argv[3], text)
         lines = [f"ok={'true' if ok else 'false'}", f"expected={expected}"]
         print(("Found " if ok else "Missing: ") + expected, file=sys.stderr)
         out = os.environ.get("GITHUB_OUTPUT")

@@ -256,7 +256,7 @@ function drawItems(mvp, items, timeSeconds, camera) {
 // cleared first, so it never clips into blocks in front of the player.
 const heldModels = {};
 function drawHeld(proj) {
-  const d = heldDraw(controller.state.belt.held);
+  const d = heldDraw(controller.state.belt.held, controller.state.belt.swing, controller.state.belt.use);
   if (!d) return;
   gl.clear(gl.DEPTH_BUFFER_BIT);
   gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.depthMask(true);
