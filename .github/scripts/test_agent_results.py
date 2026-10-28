@@ -84,7 +84,8 @@ class Fix(unittest.TestCase):
 
 REV = {"verdict": "ready with nits", "reviewed_commit": "abc1234",
        "blockers": [], "nits": [{"number": 1, "text": "rename"}]}
-PLAN = {"plan": 9, "tickets": [{"title": "t", "body": "b", "files": ["a.rs"]}],
+PLAN = {"plan": {"title": "Plan: x", "file": "SPEC.md", "section": "1", "notes": ""},
+        "tickets": [{"title": "t", "body": "b", "files": ["a.rs"], "depends_on": []}],
         "questions": [{"kind": "research", "title": "q", "body": "b"}]}
 
 
@@ -123,6 +124,8 @@ class Planner(unittest.TestCase):
         bad("planner", {**PLAN, "questions": [{"kind": "idea", "title": "q", "body": "b"}]},
             "result.questions[0].kind")
         bad("planner", {k: v for k, v in PLAN.items() if k != "plan"}, "result.plan")
+        bad("planner", {**PLAN, "tickets": [{**t, "depends_on": [1]}]},
+            "result.tickets[0].depends_on")
 
 
 class PrOpeners(unittest.TestCase):
