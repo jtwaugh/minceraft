@@ -441,6 +441,7 @@ fn cold(shape: FloraShape, block: Block, upper: Option<Block>) -> [Flora; 1] {
         salt: 41,
         requires: None,
         biomes: &COLD,
+        requires: None,
     }]
 }
 
