@@ -1,0 +1,51 @@
+# Sprinting is land only (docs/design/sprinting.md Phase B, section 4). It ends
+# when the player boards the raft and cannot start on the deck or at the helm.
+# (Boarding itself is covered by a unit test in walk.rs: `stand` teleports,
+# which resets the player's sprint, so no script can show a sprint ending.)
+# The mouse turns the player round (to face south, away from the helm cell,
+# which would end a sprint by a head-on hit) so only the deck rule can end it.
+
+case a double-tap on the deck does not start a sprint
+start walk raft
+click
+lock
+stand deck
+mouse 1257 0
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x4
+expect sprinting = false
+
+case a double-tap at the helm does not start a sprint
+start walk raft
+click
+lock
+stand helm
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x4
+expect sprinting = false
+
+case sprinting on the islet still works
+start walk raft
+click
+lock
+stand planter
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x2
+expect sprinting = true
+
+case sprinting on the runway still works
+start walk raft
+click
+lock
+runway 12
+press KeyW
+frame 50 x2
+down KeyW
+frame 50 x4
+expect sprinting = true

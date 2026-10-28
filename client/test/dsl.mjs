@@ -36,6 +36,7 @@
 //   stand field                 teleport onto the raft scene's field and look straight down
 //   stand planter               the same, on the islet's first planter
 //   stand helm                  teleport onto the raft's helm cell, level gaze
+//   stand deck                  teleport onto the raft's deck, a cell south of the helm, level gaze
 //   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
 //                               looks at after `stand field`; `place tall_grass` puts tall grass there,
 //                               `place air` clears it again
@@ -347,7 +348,13 @@ function step(w, { op, args }) {
       return;
     }
     case 'stand': {
-      if (!['field', 'planter', 'helm'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm (raft scene only)');
+      if (!['field', 'planter', 'helm', 'deck'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm|deck (raft scene only)');
+      if (args[0] === 'deck') {
+        const [hx, hy, hz] = w.scene.helm;
+        w.walk.teleport(hx + 0.5, hy + 1, hz + 1.5);
+        w.controller.frame(0.05);
+        return;
+      }
       if (args[0] === 'helm') {
         const [hx, hy, hz] = w.scene.helm;
         w.walk.teleport(hx + 0.5, hy + 1, hz + 0.5);
