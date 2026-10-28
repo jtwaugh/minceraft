@@ -189,7 +189,8 @@ import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext
 import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool } from './pool.js';
-import { FOG_GLSL } from './fog.js';
+import { FOG_GLSL, FAR_FOG_END, farCutRadius } from './fog.js';
+import { farMesh } from './farmesh.js';
 import { SKY_GLSL } from './sky.js';
 import { WATER_GLSL, WATER_DEPTH_GLSL } from './water.js';
 import { buildMips, buildMips1 } from './mips.js';
@@ -619,7 +620,7 @@ function shader(type, src) {
 }
 
 function initGL() {
-  progs = { cut: program(true), solid: program(false), sky: skyProgram() };
+  progs = { cut: program(true), solid: program(false), sky: skyProgram(), far: farProgram() };
   useProg(progs.cut);
 }
 
@@ -702,6 +703,62 @@ function program(cut) {
   gl.uniform1i(gl.getUniformLocation(prog, 'tintTex'), 1);
   prog.locs = new Map();
   return prog;
+}
+
+// Far terrain: position + vertex colour, fogged by FAR_FOG_END toward the
+// chunks' fog colour, and discarded inside farCut (horizontal distance from the eye).
+function farProgram() {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, `#version 300 es
+    layout(location=0) in vec3 pos;
+    layout(location=1) in vec3 col;
+    uniform mat4 mvp;
+    out vec3 vpos; out vec3 vcol;
+    void main() { vpos = pos; vcol = col; gl_Position = mvp * vec4(pos, 1.0); }`));
+  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, `#version 300 es
+    precision highp float;
+    in vec3 vpos; in vec3 vcol;
+    uniform vec3 camPos; uniform vec3 fogColor; uniform vec3 sunDir;
+    uniform float fogFar; uniform float farCut;
+    out vec4 o;
+    ${FOG_GLSL}
+    ${SKY_GLSL}
+    void main() {
+      vec3 d = vpos - camPos;
+      if (length(d.xz) < farCut) discard;
+      float f = fogAmount(length(d), fogFar);
+      o = vec4(mix(vcol, skyColor(fogColor, normalize(d), sunDir), f), 1.0);
+    }`));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  p.locs = new Map();
+  return p;
+}
+
+// Upload the far mesh for the flyover's survey, in the flyover's eye coordinates.
+function uploadFar(grid, origin) {
+  const palette = { sand: COLORS[B.sand], snow: COLORS[B.snow_layer], grass: COLORS[B.grass], desert: BIOME.desert, snowy: SNOWY };
+  const m = farMesh(grid, origin, palette);
+  const vao = gl.createVertexArray(), bufs = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufs[0]); gl.bufferData(gl.ARRAY_BUFFER, m.positions, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bufs[1]); gl.bufferData(gl.ARRAY_BUFFER, m.color, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufs[2]); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m.indices, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, bufs, count: m.indices.length };
+}
+
+function drawFar(far) {
+  useProg(progs.far);
+  setU('fogFar', FAR_FOG_END);
+  setU('farCut', farCutRadius(VIEW.fogEnd));
+  gl.disable(gl.CULL_FACE); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  gl.bindVertexArray(far.vao);
+  gl.drawElements(gl.TRIANGLES, far.count, gl.UNSIGNED_INT, 0);
+  gl.bindVertexArray(null);
+  gl.enable(gl.CULL_FACE);
 }
 
 // Full-screen sky pass: one triangle, each pixel's view direction rebuilt from
@@ -1432,6 +1489,7 @@ function cancelPrep() {
   if (!prep) return;
   prep.job?.cancel();
   prep.player?.dispose();
+  if (prep.far) { gl.deleteVertexArray(prep.far.vao); prep.far.bufs.forEach((b) => gl.deleteBuffer(b)); }
   prep = null;
 }
 
@@ -1594,6 +1652,11 @@ function renderFly(f) {
   setU('fogColor', skyC);
   setU('sunDir', SUN_DIR);
   drawSky(view, 1.0, FLY_W / FLY_H);
+  setU('camPos', eye);
+  setU('mvp', new Float32Array(mvp));
+  // one-off survey mesh until the far layer streams: after the sky, before the chunks
+  prep.far ||= uploadFar(prep.plan.survey, { x: o[0], y: 64, z: o[2] });
+  drawFar(prep.far);
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE);
   useProg(progs.cut);
   setU('mvp', new Float32Array(mvp));

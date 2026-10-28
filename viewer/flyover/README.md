@@ -197,6 +197,18 @@ frustum and nearer than solid fog. They're drawn nearest first:
 2. the cut-outs (leaves, plants);
 3. water and ice, back to front.
 
+### The far terrain is a separate program with its own fog
+
+`renderFly` draws the survey's far mesh (`farmesh.js`) after the sky and
+before the chunks, with `FAR_FOG_END` (500) instead of `VIEW.fogEnd`. The
+fragment shader discards anything whose horizontal distance from the eye is
+under `VIEW.fogEnd - 16`, so the chunks never fight it for depth; the
+chunks' culling and fog are untouched. The far mesh also has to be drawn
+with face culling off (its skirt faces outward, its surface faces up, and
+the winding was not checked against GL's convention). For now it is built
+once from the plan's 2048-block survey, so it only reaches 500 blocks while
+the camera is within about 500 blocks of the survey's edge.
+
 ### Chunk seams: mesh with a one-block ring
 
 Meshing each chunk on its own draws walls of water and stone along every
