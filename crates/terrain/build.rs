@@ -79,6 +79,9 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
             shape: f["shape"].as_str().expect("flora shape").to_string(),
             tint: f["tint"].as_str().expect("flora tint").to_string(),
             salt: int(f, "salt"),
+            requires: f
+                .get("requires")
+                .map(|r| r.as_str().expect("requires string").to_string()),
             biomes: f["biomes"]
                 .as_table()
                 .expect("biomes table")
@@ -99,6 +102,8 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     }
     let scale = num(&doc["settings"]["colour_scale"]);
     writeln!(out, "pub const FLORA_COLOUR_SCALE: f64 = {scale:?};").unwrap();
+    let radius = int(&doc["settings"], "near_water_radius");
+    writeln!(out, "pub const FLORA_NEAR_WATER_RADIUS: i32 = {radius};").unwrap();
     writeln!(out, "pub static FLORA: [Flora; {}] = [", raw.len()).unwrap();
     for (f, r) in list.iter().zip(&raw) {
         let ground: Vec<String> = r.ground.iter().map(blk).collect();
@@ -111,9 +116,12 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
             .block
             .get(1)
             .map_or("None".into(), |u| format!("Some({})", blk(u)));
+        let requires = r.requires.as_deref().map_or("None".into(), |c| {
+            format!("Some(FloraRequires::{})", camel(c))
+        });
         writeln!(
             out,
-            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, biomes: &[{}] }},",
+            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, requires: {requires}, biomes: &[{}] }},",
             r.name,
             blk(&r.block[0]),
             camel(&r.shape),

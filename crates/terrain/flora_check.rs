@@ -11,9 +11,13 @@ pub struct RawFlora {
     pub tint: String,
     pub salt: i64,
     pub biomes: Vec<(String, f64)>,
+    /// Optional column condition, one of `REQUIRES`.
+    pub requires: Option<String>,
 }
 
 const SHAPES: [&str; 5] = ["cross", "tall_cross", "ground_cover", "pad", "bush"];
+/// Column conditions an entry may name in `requires`.
+pub const REQUIRES: [&str; 1] = ["near_water"];
 const TINTS: [&str; 4] = ["none", "grass", "leaf", "dry"];
 
 /// Returns the first problem in `entries` as a readable message.
@@ -26,6 +30,11 @@ pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> R
             return Err(format!("flora {n}: bad shape or tint"));
         } else if e.block.len() != want {
             return Err(format!("flora {n}: {} needs {want} block(s)", e.shape));
+        }
+        if let Some(r) = &e.requires {
+            if !REQUIRES.contains(&r.as_str()) {
+                return Err(format!("flora {n}: unknown requires {r:?}"));
+            }
         }
         for b in e.block.iter().chain(&e.ground) {
             if !blocks.contains(b) {
