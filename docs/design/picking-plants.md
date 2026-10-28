@@ -1,6 +1,6 @@
 ---
 title: Picking plants and the seed loop
-status: accepted
+status: done
 scope: game
 source: "#503"
 superseded_by: ""
