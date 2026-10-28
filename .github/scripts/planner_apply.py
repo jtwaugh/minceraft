@@ -39,7 +39,11 @@ def open_plan_exists(plan, run=agent_results.gh):
 
 
 def with_depends(body, numbers):
-    line = "**Depends on:** " + (", ".join(f"#{n}" for n in numbers) or "none")
+    """Keep the issue numbers the header already names, then add the in-plan ones."""
+    m = DEPENDS.search(body)
+    kept = re.findall(r"#(\d+)", m.group(0)) if m else []
+    merged = list(dict.fromkeys([*kept, *map(str, numbers)]))
+    line = "**Depends on:** " + (", ".join(f"#{n}" for n in merged) or "none")
     return DEPENDS.sub(lambda _: line, body, count=1) if DEPENDS.search(body) else body
 
 
