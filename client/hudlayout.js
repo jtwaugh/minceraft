@@ -1,12 +1,12 @@
 // Pure HUD geometry: integer-pixel rectangles for the crosshair, belt and hearts, from the HUD
 // model, the tileset and the viewport. No DOM; imports only the pixel-art helpers. The constants
-// below are the positions `mountHud`'s CSS fixes today. The timer and hands labels (phase word, item name)
-// are textures named `phase_<phase>` and `label_<item>` (docs/design/play-critic-agent.md, note 7); a
-// missing texture is drawn as text, which
-// takes `rects.timer.text` / `rects.hands.text` in the same row.
+// below are the positions `mountHud`'s CSS fixes today. The timer's phase word is a texture named
+// `phase_<phase>` (docs/design/play-critic-agent.md, note 7); a missing texture is drawn as text, which
+// takes `rects.timer.text` in the same row. The hands' item name is drawn in the pixel font (font.js).
 
 import { hudScale, heartNames, digitNames } from './hud.js';
 import { textureSize } from './uipx.js';
+import { measureString, stringRects } from './font.js';
 
 /** Crosshair side and the belt's distance from the viewport bottom, in CSS pixels (not scaled). */
 export const CROSSHAIR_SIZE = 16;
@@ -45,8 +45,9 @@ function row(set, names, x, y, gap) {
  * `{ scale, rects }` for a `hudModel` result: `rects.crosshair`, `rects.belt` (the whole row),
  * `rects.slots` (one per slot) and `rects.hearts` (the whole row) plus `rects.heartIcons`,
  * `rects.timer` (box centred at the top, with `phase` and `digits` rects inside) and `rects.hands`
- * (icon and label rects; zero-sized when empty), bottom-aligned just above the hearts and
- * left-aligned with the belt. Hearts sit above the belt, both left-aligned in a column centred horizontally.
+ * (icon and label rects, the label with one rect per glyph; zero-sized when empty). The belt and hearts share a centred column;
+ * the hearts sit above it on its left edge and the hands above it on its right edge, or above the hearts
+ * when the two would not fit side by side.
  */
 export function hudLayout(model, set, viewport) {
   const { w: vw, h: vh } = viewport;
@@ -86,16 +87,20 @@ export function hudLayout(model, set, viewport) {
   const timerLeft = timerX + TIMER_PAD_X * scale, timerTop = TOP_MARGIN + TIMER_PAD_Y * scale;
   const timerParts = place(timerRow, timerLeft + (hasPhase ? 0 : digitsX), timerTop);
 
-  const handNames = model.hands ? [model.hands, `label_${model.hands}`] : [];
-  const handRow = row(set, handNames, 0, 0, LABEL_GAP);
-  const hasIcon = model.hands && textureSize(set, model.hands) !== null;
-  const hasLabel = model.hands && textureSize(set, `label_${model.hands}`) !== null;
-  // An item with no label texture is named in text, after the icon (or alone).
-  const handText = model.hands && !hasLabel ? String(model.hands).length * TEXT_CHAR_W : 0;
-  const textX = handRow.w ? handRow.w * scale + LABEL_GAP * scale : 0;
-  const handsH = Math.max(handRow.h * scale, handText ? TEXT_H : 0);
-  const handsY = heartsY - handsH;
-  const handParts = place(handRow, left, handsY);
+  // The hands sit above the belt, right-aligned with it; the label is the item name in the pixel font.
+  const icon = model.hands ? row(set, [model.hands], 0, 0, 0) : { rects: [], w: 0, h: 0 };
+  const hasIcon = icon.rects.length > 0;
+  const name = model.hands ? String(model.hands) : '';
+  const labelSize = name ? measureString(set, name, scale) : { w: 0, h: 0 };
+  const iconW = icon.w * scale, iconH = icon.h * scale;
+  const handsW = iconW + (hasIcon && labelSize.w ? LABEL_GAP * scale : 0) + labelSize.w;
+  const handsH = Math.max(iconH, labelSize.h);
+  const handsX = left + beltW - handsW;
+  // Beside the hearts when they fit side by side, otherwise stacked above them.
+  const beside = handsW === 0 || handsX >= left + heartsW + LABEL_GAP * scale;
+  const handsY = (beside ? heartsY + heartsH : heartsY) - handsH;
+  const labelX = handsX + iconW + (hasIcon && labelSize.w ? LABEL_GAP * scale : 0);
+  const labelRect = name ? rect(labelX, handsY, labelSize.w, labelSize.h) : null;
 
   return {
     scale,
@@ -112,10 +117,9 @@ export function hudLayout(model, set, viewport) {
         digits: timerParts.slice(hasPhase ? 1 : 0),
       },
       hands: {
-        ...rect(left, handsY, handText ? textX + handText : handRow.w * scale, handsH),
-        text: handText ? rect(left + textX, handsY, handText, TEXT_H) : null,
-        icon: hasIcon ? handParts[0] : null,
-        label: handParts[hasIcon ? 1 : 0] ?? null,
+        ...rect(handsX, handsY, handsW, handsH),
+        icon: hasIcon ? rect(handsX, handsY, iconW, iconH) : null,
+        label: labelRect && { ...labelRect, glyphs: stringRects(set, name, scale, labelX, handsY) },
       },
     },
   };
