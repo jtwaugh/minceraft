@@ -201,10 +201,17 @@ impl Player {
         let pushed = input.move_forward != 0.0 || input.move_strafe != 0.0;
         let blocked_sideways = m.applied[0] != self.vel[0] || m.applied[2] != self.vel[2];
         // A collision that removes velocity along the facing direction ends
-        // the sprint; a strafe-only block does not.
+        // the sprint only on a head-on hit: a blocked axis whose wall normal
+        // is within the tolerance of the facing. Sliding along a wall and a
+        // strafe-only block keep it.
+        let cos_tol = (physics.sprint_wall_tolerance_degrees as f64)
+            .to_radians()
+            .cos();
+        let head_on = (m.applied[0] != self.vel[0] && sin.abs() >= cos_tol)
+            || (m.applied[2] != self.vel[2] && cos.abs() >= cos_tol);
         let lost_along_facing =
             (self.vel[0] - m.applied[0]) * sin - (self.vel[2] - m.applied[2]) * cos;
-        if lost_along_facing > 1e-6 && input.move_forward > 0.0 {
+        if lost_along_facing > 1e-6 && input.move_forward > 0.0 && head_on {
             self.sprinting = false;
         }
         for i in 0..3 {
@@ -408,6 +415,48 @@ mod tests {
         }
         assert!(!pl.sprinting);
         assert!(pl.pos[2] > -2.9);
+    }
+
+    /// Sprint at `yaw_deg` for `ticks` into a long stone wall across z = -3;
+    /// the player has touched the wall if it ended up near it.
+    fn sprint_into_wall(yaw_deg: f32, ticks: usize) -> Player {
+        let (p, mut w) = (phys(), floor());
+        for x in -40..40 {
+            for y in 1..3 {
+                w.set(x, y, -3, Block::Stone);
+            }
+        }
+        let mut pl = sprinter(&p, &w);
+        let input = TickInput {
+            yaw: yaw_deg.to_radians(),
+            ..walk()
+        };
+        for _ in 0..ticks {
+            pl.tick(&input, &p, &w);
+        }
+        assert!(pl.pos[2] < -1.6, "never reached the wall: {:?}", pl.pos);
+        pl
+    }
+
+    #[test]
+    fn wall_ends_sprint_within_the_tolerance_of_head_on() {
+        // The tolerance is 30 degrees.
+        assert!(!sprint_into_wall(0.0, 80).sprinting);
+        assert!(!sprint_into_wall(29.0, 80).sprinting);
+        assert!(!sprint_into_wall(-29.0, 80).sprinting);
+    }
+
+    #[test]
+    fn wall_keeps_sprint_outside_the_tolerance() {
+        assert!(sprint_into_wall(31.0, 80).sprinting);
+        assert!(sprint_into_wall(-31.0, 80).sprinting);
+    }
+
+    #[test]
+    fn sliding_along_a_wall_keeps_sprint() {
+        let pl = sprint_into_wall(80.0, 100);
+        assert!(pl.sprinting);
+        assert!(pl.pos[0] > 5.0);
     }
 
     #[test]
