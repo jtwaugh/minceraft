@@ -45,7 +45,6 @@ OPTIONAL = {"Submitted": "Approved", "Idea": "Inbox"}  # status: what to use if 
 # Check runs from agent and housekeeping jobs, not checks on the code.
 AGENT_JOBS = {"implement", "start", "edit-spec", "reconcile", "plan-source",
               "phase-done", "drift", "pick", "plan", "find", "resolve"}
-NITS = re.compile(r"Verdict:\s*\**\s*ready,? with nits", re.I)
 
 
 READ_ENV = dict(os.environ, GH_TOKEN=os.environ.get("PROJECT_TOKEN") or os.environ.get("GH_TOKEN", ""))
@@ -129,7 +128,7 @@ def pr_status(pr):
         return "Submitted", "checks or review still running"
     verdict = review_gate.latest_verdict(comments)
     if verdict and verdict[1] and pr["head"]["sha"].startswith(verdict[1]) \
-            and NITS.search(verdict[2].get("body") or ""):
+            and review_gate.has_nits(verdict[2].get("body") or ""):
         return "Nits", "reviewer: ready, with nits"
     return "Ready for Merge", why
 

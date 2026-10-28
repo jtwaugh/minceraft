@@ -17,7 +17,7 @@ enum, minItems, minimum, pattern, additionalProperties.
         role implementer (arg: ticket), planner (arg: design-doc file),
         docs_updater (arg: plan issue), reconciler or spec_editor (arg: the
         issue it answered). Writes ok= and expected= to $GITHUB_OUTPUT (or
-        stdout), as `expect.py ticket`; for planner, ok means a Plan issue for
+        stdout); for planner, ok means a Plan issue for
         the file exists
     python3 -I agent_results.py follow-ups <ticket> <result.json>
         files each follow_ups entry once, as a `planned` ticket, via planner_issue.py

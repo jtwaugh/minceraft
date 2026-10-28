@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
 from factory_blocked import blocked  # noqa: E402
 import json  # noqa: E402
-from factory_fix import result_marker, results, stop_marker, stops  # noqa: E402
+from factory_fix import result_marker, results  # noqa: E402
 from factory_nits import nits  # noqa: E402
 from factory_questions import link_questions, questions  # noqa: E402
 from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
@@ -15,9 +15,10 @@ from factory_tick import FakeBackend, Snapshot, tick  # noqa: E402
 SHA = "a" * 40
 
 
-def snap(kind, text, sha=SHA, **pr):
+def snap(kind, question, sha=SHA, options=("X", "Y"), **pr):
+    nm = {"kind": kind, "question": question, "options": list(options)}
     comment = {"user": "claude[bot]", "created_at": "2026-01-01T00:00:00Z",
-               "body": f"{stop_marker(9, sha, kind)}\n{text}"}
+               "body": f"{result_marker(9, sha)}\n```json\n{json.dumps({'needs_maintainer': nm})}\n```"}
     base = {"number": 9, "head": "claude/issue-7-20260101-0000", "sha": SHA, "body": "",
             "runs": [], "comments": [comment], "mergeable_state": "dirty",
             "head_time": "2026-01-01T00:00:00Z", "head_author": "claude[bot]",
@@ -32,11 +33,9 @@ def run(s):
 
 
 def result_snap(kind, sha=SHA, options=("X", "Y"), result=None):
-    nm = {"kind": kind, "question": "Spec 3.2 says X and Y.", "options": list(options)}
-    body = json.dumps(result or {"needs_maintainer": nm})
-    s = snap(kind, "", sha=SHA)
-    s.prs[0]["comments"] = [{"user": "claude[bot]", "created_at": "2026-01-01T00:00:00Z",
-                             "body": f"{result_marker(9, sha)}\n```json\n{body}\n```"}]
+    s = snap(kind, "Spec 3.2 says X and Y.", sha=sha, options=options)
+    if result:
+        s.prs[0]["comments"][0]["body"] = f"{result_marker(9, sha)}\n```json\n{json.dumps(result)}\n```"
     return s
 
 
@@ -46,7 +45,7 @@ class TestResult(unittest.TestCase):
                              ("research", ["spec-question", "research"]),
                              ("needs-you", ["needs-you"])):
             s = result_snap(kind)
-            old = snap(kind, "Spec 3.2 says X and Y.\n\nA: X\nB: Y")
+            old = snap(kind, "Spec 3.2 says X and Y.")
             run(old)
             self.assertEqual([x.kind for x in run(s)], ["open_question"])
             self.assertEqual(s.issues[-1], old.issues[-1])
@@ -68,7 +67,7 @@ class TestResult(unittest.TestCase):
 
 class Test(unittest.TestCase):
     def asked(self, kind, labels, starts, ends):
-        s = snap(kind, "Spec 3.2 says X and Y.\n\nA: X\nB: Y")
+        s = snap(kind, "Spec 3.2 says X and Y.")
         a = run(s)
         self.assertEqual([x.kind for x in a], ["open_question"])  # and no start_fix
         q = s.issues[-1]
@@ -92,7 +91,7 @@ class Test(unittest.TestCase):
         self.asked("needs-you", ["needs-you"], "<!-- factory-question", "once this is closed.")
 
     def test_decision_names_its_file(self):
-        s = snap("decision", "**File:** docs/design/x.md\nWhich?\nA: 1")
+        s = snap("decision", "**File:** docs/design/x.md\nWhich?", options=("1",))
         run(s)
         self.assertTrue(s.issues[-1]["body"].startswith("**File:** docs/design/x.md\n"))
 
@@ -109,7 +108,7 @@ class Test(unittest.TestCase):
     def test_text_change_updates(self):
         s = snap("needs-you", "?")
         run(s)
-        s.prs[0]["comments"][0]["body"] += " more"
+        s.prs[0]["comments"][0]["body"] = s.prs[0]["comments"][0]["body"].replace('"?"', '"? more"')
         self.assertEqual([x.kind for x in run(s)], ["update_issue"])
 
     def test_link_once_and_closing_resumes(self):
@@ -134,10 +133,6 @@ class Test(unittest.TestCase):
         self.assertEqual(nits(s), [])
         s.issues[1]["state"] = "closed"
         self.assertEqual([x.kind for x in nits(s)], ["start_fix"])
-
-    def test_parse(self):
-        c = [{"body": stop_marker(9, SHA, "research") + "\nq"}]
-        self.assertEqual(stops(c), [(9, SHA, "research", "q")])
 
 
 if __name__ == "__main__":

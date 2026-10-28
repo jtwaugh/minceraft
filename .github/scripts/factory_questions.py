@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Tick pass: a fix run's stop marker becomes one question issue.
+"""Tick pass: a fix run's stop result becomes one question issue.
 
 A fix run that cannot go on (ambiguous spec, disagreement with a reviewer
 blocker, a conflict needing a real decision, a change outside the
-implementation lane, a PR that cannot fit 200 lines) posts a comment
-starting `<!-- factory-fix-stop pr=N sha=<head> kind=<decision|research|needs-you> -->`
-followed by the question and its options. For each ticket PR the pass reads
-the trusted comments for a marker naming the current head and emits one
+implementation lane, a PR that cannot fit 200 lines) posts a validated result
+comment (`factory_fix.results`) whose `needs_maintainer` holds the kind, question
+and options. For each ticket PR the pass reads the trusted comments for a result
+naming the current head and emits one
 `open_question`: `spec-question` plus `decision` or `research` when the spec
 or a design doc is the problem, else `needs-you`. The issue is keyed by
 ticket, PR and kind, so a later tick updates it (and never opens a second).
@@ -21,7 +21,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_fix import results, stops  # noqa: E402
+from factory_fix import results  # noqa: E402
 from factory_rerun import is_ticket_pr, ticket_of  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
@@ -40,21 +40,17 @@ def key_of(ticket, pr_number, kind):
 
 
 def result_text(nm):
-    """The question and its lettered options, in the shape of a stop marker's text."""
+    """The question and its lettered options, as the question issue shows them."""
     options = "\n".join(f"{chr(65 + n)}: {o}" for n, o in enumerate(nm["options"]))
     return f"{nm['question']}\n\n{options}".strip()
 
 
 def current_stop(pr):
-    """(kind, text) of the newest stop naming this PR's head, or None. A validated
-    result comment with `needs_maintainer` wins over a stop marker."""
+    """(kind, text) of the newest stop naming this PR's head, or None: a validated
+    fix result comment with `needs_maintainer`."""
     stopped = [r["needs_maintainer"] for n, sha, r in results(pr.get("comments", []))
                if n == pr["number"] and sha == pr["sha"] and "needs_maintainer" in r]
-    if stopped:
-        return stopped[-1]["kind"], result_text(stopped[-1])
-    found = [(k, t) for n, sha, k, t in stops(pr.get("comments", []))
-             if n == pr["number"] and sha == pr["sha"]]
-    return found[-1] if found else None
+    return (stopped[-1]["kind"], result_text(stopped[-1])) if stopped else None
 
 
 def has_open_question(snap, pr, cause=""):

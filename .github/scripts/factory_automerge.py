@@ -36,30 +36,19 @@ from tickets import ticket_numbers  # noqa: E402
 
 HOLD = "hold"
 BOT = "claude[bot]"
-VERDICT = re.compile(r"Verdict:\s*\**\s*(Ready,? with nits|Ready|Blocked|changes needed)", re.I)
-REVIEWED = re.compile(r"Reviewed commit:\s*`?([0-9a-f]{7,40})", re.I)
 
 
 def verdict_of(comments, head):
     """The reviewer's newest verdict as {"kind": ready|nits|blocked, "current":
-    whether it names `head`}, or None. `comments` are REST issue comments; the
-    reviewer workflow's own comment counts when it holds a valid result."""
-    newest = None
+    whether it names `head`}, or None. `comments` are REST issue comments."""
     import review_gate
-    for c in comments:
-        login = (c.get("user") or {}).get("login")
-        if login != BOT and not (login == review_gate.ACTIONS
-                                 and review_gate.structured_verdict(c.get("body") or "")):
-            continue
-        m = VERDICT.search(c.get("body") or "")
-        if m and (newest is None or c["updated_at"] > newest[0]["updated_at"]):
-            newest = (c, m.group(1).lower())
-    if newest is None:
+    found = review_gate.latest_verdict(comments)
+    if found is None:
         return None
-    c, word = newest
-    kind = "nits" if "nits" in word else "blocked" if word in ("blocked", "changes needed") else "ready"
-    r = REVIEWED.search(c.get("body") or "")
-    return {"kind": kind, "current": bool(r and head.startswith(r.group(1).lower()))}
+    kind, commit, c = found
+    if kind == "ready" and review_gate.has_nits(c.get("body") or ""):
+        kind = "nits"
+    return {"kind": kind, "current": head.startswith(commit)}
 
 
 def codeowner_patterns(text):
