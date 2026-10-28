@@ -2,7 +2,10 @@
 # CLAUDE.md. It comments; it can't approve or merge. Its verdict ("Ready",
 # "Ready, with nits" or "Blocked") becomes the review-verdict status
 # (review-gate.yml), so a block stops the merge until it is fixed and
-# re-reviewed, or the maintainer comments /override <reason>. A re-review
+# re-reviewed, or the maintainer comments /override <reason>. The verdict
+# is JSON against the reviewer schema (agent_results.py); this workflow
+# validates it and posts the summary comment from it, with the JSON block
+# the gate reads (decided in #1218). A re-review
 # checks its earlier points and the new commits only, so fixing nits
 # converges instead of turning up new ones on every push.
 name: Claude reviewer
@@ -50,13 +53,11 @@ jobs:
       # failing test instead of describing it.
       - uses: ./.github/actions/toolchain
 
-      - name: Note the start time
-        id: start
-        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
         uses: ./.github/actions/claude-deps
+      - id: schema
+        run: echo "json=$(python3 -I .github/scripts/agent_results.py schema reviewer)" >> "$GITHUB_OUTPUT"
       - id: claude
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         with:
@@ -191,31 +192,71 @@ jobs:
             If you can't make it fail, say so, and ask yourself whether it
             is really a blocker.
 
-            Use inline comments for specific lines. Finish with one summary
-            comment, posted with `gh pr comment --body-file <file>`, that
-            starts with exactly these two lines:
-
-            Verdict: <Ready | Ready, with nits | Blocked>
-            Reviewed commit: `${{ github.event.pull_request.head.sha }}`
-
-            Then, on a re-review, a **Since last review** list (one line per
-            earlier point: fixed, answered, or still open). Then, if
-            Blocked, a numbered **Blockers** list, each with its file and
-            line and its evidence; then **Nits**, if any; then **Notes**, if
-            any. Keep the checks you passed to one short line.
+            Use inline comments for specific lines. Your result is the
+            verdict: `{"verdict": "ready" | "ready with nits" | "blocked",
+            "reviewed_commit": "${{ github.event.pull_request.head.sha }}",
+            "blockers": [{"number": 1, "text": ...}], "nits": [...]}`, each
+            blocker's text with its file and line and its evidence. This
+            workflow posts the summary comment: the verdict, the reviewed
+            commit, the numbered **Blockers** and **Nits** from your result,
+            then the file `review.md` (write it with the Write tool in the
+            repository root). Put in review.md only, on a re-review, a
+            **Since last review** list (one line per earlier point: fixed,
+            answered, or still open), then **Notes**, if any, and the checks
+            you passed in one short line. Don't post a summary comment
+            yourself.
           claude_args: |
             --max-turns 60
-            --allowedTools "Write,Edit,Bash(cargo test:*),Bash(./build.sh:*),Bash(node --test:*),mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+            --json-schema '${{ steps.schema.outputs.json }}'
+            --allowedTools "Write,Edit,Bash(cargo test:*),Bash(./build.sh:*),Bash(node --test:*),mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
             --append-system-prompt "Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message."
 
+      # The summary comment's text, from the result: the verdict and
+      # reviewed-commit lines, the blockers and nits, then Claude's review.md.
+      - name: Write the review comment
+        id: review
+        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
+        env:
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          out="$RUNNER_TEMP/review.md"
+          : > "$out"
+          printf '%s' "$RESULT" > "$RUNNER_TEMP/verdict.json"
+          jq -r 'select(.verdict) |
+            "Verdict: \(if .verdict == "blocked" or .verdict == "changes needed" then "Blocked"
+                        elif .verdict == "ready with nits" then "Ready, with nits" else "Ready" end)",
+            "Reviewed commit: `\(.reviewed_commit)`", "",
+            (if (.blockers | length) > 0 then "**Blockers**", "",
+              (.blockers[] | "\(.number). \(.text | gsub("\n"; "\n   "))"), "" else empty end),
+            (if (.nits | length) > 0 then "**Nits**", "",
+              (.nits[] | "\(.number). \(.text | gsub("\n"; "\n   "))"), "" else empty end)' \
+            "$RUNNER_TEMP/verdict.json" >> "$out" 2>/dev/null || true
+          [ -s "$out" ] && [ -f review.md ] && cat review.md >> "$out"
+          echo "file=$out" >> "$GITHUB_OUTPUT"
       # Claude exits "successfully" even when it gives up, so check for the
       # result itself; a miss fails the job (and says so where given).
+      - name: Post the review
+        id: result
+        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
+        uses: ./.github/actions/agent-result
+        with:
+          role: reviewer
+          result: ${{ steps.claude.outputs.structured_output }}
+          comment-on: ${{ github.event.pull_request.number }}
+          marker: pr=${{ github.event.pull_request.number }} sha=${{ github.event.pull_request.head.sha }}
+          header-file: ${{ steps.review.outputs.file }}
       - name: Check the run left its result
         id: check
         if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 -B .github/scripts/expect.py review "${{ github.event.pull_request.number }}" "${{ steps.start.outputs.at }}"
+          VALID: ${{ steps.result.outputs.valid }}
+          FILE: ${{ steps.result.outputs.file }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          reviewed=$(jq -r '.reviewed_commit // ""' "$FILE" 2>/dev/null || true)
+          ok=false
+          if [ "$VALID" = true ] && [ -n "$reviewed" ] && [[ "$HEAD" == "$reviewed"* ]]; then ok=true; fi
+          { echo "ok=$ok"; echo "expected=a valid verdict for ${HEAD:0:7}"; } >> "$GITHUB_OUTPUT"
       - name: Report the run
         if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
         uses: ./.github/actions/claude-report
