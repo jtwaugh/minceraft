@@ -1,0 +1,18 @@
+{
+ "Batch 30": {
+  "title": "Biome flora: desert cactus flower",
+  "tiles": false,
+  "textures": {
+   "cactus_flower": [
+    "........",
+    "...ff...",
+    "..fddf..",
+    "..fddf..",
+    "...ff...",
+    "....9...",
+    "........",
+    "........"
+   ]
+  }
+ }
+}
