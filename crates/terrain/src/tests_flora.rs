@@ -641,3 +641,46 @@ fn lily_pads_are_independent_of_region_and_flora_off_matches_empty_table() {
         assert_eq!(count(&off, Block::LilyPad), 0);
     }
 }
+
+#[test]
+fn rainforest_plants_stand_on_grass_in_rainforest_and_are_region_independent() {
+    let (lf, bl) = (Block::LargeFern as u8, Block::Broadleaf as u8);
+    let (mut nlf, mut nbl) = (0, 0);
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-512, -512, 1024, 1024);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT {
+                    let b = at(&r, x, y, z);
+                    if b != lf && b != bl {
+                        continue;
+                    }
+                    let (t, h) = g.climate.at(x, z, &[], &[]);
+                    assert_eq!(biome_for(t, h), Biome::Rainforest, "{x},{z}");
+                    assert_eq!(at(&r, x, y - 1, z), Block::Grass as u8, "{x},{y},{z}");
+                    if b == lf {
+                        nlf += 1;
+                    } else {
+                        nbl += 1;
+                    }
+                }
+            }
+        }
+        let part = gen(seed, -40, -60, 90, 80, &FLORA);
+        for z in part.z0..part.z0 + 80 {
+            for x in part.x0..part.x0 + 90 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&r, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+        let off = gen(seed, x0, z0, w, d, &[]);
+        assert_eq!(
+            count(&off, Block::LargeFern) + count(&off, Block::Broadleaf),
+            0
+        );
+    }
+    assert!(nlf > 0 && nbl > 0, "{nlf} large ferns, {nbl} broadleaf");
+}

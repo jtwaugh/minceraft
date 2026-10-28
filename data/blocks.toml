@@ -522,3 +522,21 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#3f7a2e"
+
+[[block]]
+id = 56
+name = "large_fern"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4a8a38"
+
+[[block]]
+id = 57
+name = "broadleaf"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#3f8a32"

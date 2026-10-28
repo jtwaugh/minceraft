@@ -127,3 +127,23 @@ tint = "leaf"
 cluster_scale = 10.0
 salt = 11
 biomes = { Swampland = 0.250 }
+
+[[flora]]
+name = "large_fern"
+block = "large_fern"
+shape = "cross"
+ground = ["grass"]
+tint = "grass"
+cluster_scale = 14.0
+salt = 12
+biomes = { Rainforest = 0.040 }
+
+[[flora]]
+name = "broadleaf"
+block = "broadleaf"
+shape = "cross"
+ground = ["grass"]
+tint = "grass"
+cluster_scale = 18.0
+salt = 13
+biomes = { Rainforest = 0.030 }
