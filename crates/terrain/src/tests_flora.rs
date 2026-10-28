@@ -641,3 +641,50 @@ fn lily_pads_are_independent_of_region_and_flora_off_matches_empty_table() {
         assert_eq!(count(&off, Block::LilyPad), 0);
     }
 }
+
+#[test]
+fn jungle_bush_is_rainforest_grass_under_leaves_only() {
+    let bush = Block::JungleBush as u8;
+    let mut found = 0;
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-300, -300, 600, 600);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT - 1 {
+                    if at(&r, x, y, z) != bush {
+                        continue;
+                    }
+                    let (t, h) = g.climate.at(x, z, &[], &[]);
+                    assert_eq!(biome_for(t, h), Biome::Rainforest, "{x},{z}");
+                    assert_eq!(at(&r, x, y - 1, z), Block::Grass as u8, "{x},{y},{z}");
+                    assert_eq!(at(&r, x, y + 1, z), 0, "{x},{y},{z}");
+                    let roof = (y + 2..HEIGHT).any(|yy| crate::data::is_leaves(at(&r, x, yy, z)));
+                    assert!(roof, "no leaves above bush at {x},{y},{z}");
+                    found += 1;
+                }
+            }
+        }
+    }
+    assert!(found > 0, "no jungle bushes");
+}
+
+#[test]
+fn jungle_bush_is_independent_of_region_and_flora_off_matches_empty_table() {
+    let seed = 12345;
+    let big = gen(seed, -300, -300, 600, 600, &FLORA);
+    assert!(count(&big, Block::JungleBush) > 0);
+    let part = gen(seed, -40, -60, 90, 80, &FLORA);
+    for z in part.z0..part.z0 + 80 {
+        for x in part.x0..part.x0 + 90 {
+            for y in 0..HEIGHT {
+                assert_eq!(at(&big, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+            }
+        }
+    }
+    for seed in [12345u64, 9, 42] {
+        let off = gen(seed, -150, -150, 300, 300, &[]);
+        assert_eq!(count(&off, Block::JungleBush), 0);
+    }
+}

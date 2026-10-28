@@ -30,3 +30,11 @@ test('bushes do not hide the solid faces next to them', () => {
   const tops = [...Array(m.opaque.faces).keys()].filter((i) => verts(m.opaque, i).every((v) => v.y === 60 * 16));
   assert.equal(tops.length, 16);
 });
+
+test('a jungle bush meshes like a berry bush', () => {
+  const f = field(1);
+  f[60] = B.stone;
+  const jungle = new Uint8Array(f).fill(B.jungle_bush, 60, 61);
+  const m = meshBlocks(ctx, jungle, tints(1), 1, 0);
+  assert.equal(m.cutout.faces, 5);
+});

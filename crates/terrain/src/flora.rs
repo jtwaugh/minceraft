@@ -2,7 +2,7 @@
 //! `build.rs`), and the column-local placement pass that reads it
 //! (docs/design/biome-flora.md D.2).
 
-use crate::data::{blocks_movement, is_liquid, Biome, Block};
+use crate::data::{blocks_movement, is_leaves, is_liquid, Biome, Block};
 use crate::decorate::World;
 use crate::noise::{hash_f64, mix64, OctavePerlin, Rng};
 use crate::{AIR, HEIGHT};
@@ -30,6 +30,9 @@ pub enum FloraTint {
 pub enum FloraRequires {
     /// A water block beside the ground block, within `FLORA_NEAR_WATER_RADIUS`.
     NearWater,
+    /// Grass with air above it and leaves higher in the same column; the
+    /// entry stands on that grass, not on the column's top block.
+    Canopy,
 }
 
 /// One plant species.
@@ -90,8 +93,17 @@ pub(crate) fn place(
             let ground = Block::from_u8(world.get(x, top - 1, z));
             let biome = world.biome(x, z);
             // Entries that could grow here, with their chance in this biome.
-            let mut eligible: Vec<(usize, f64)> = Vec::new();
+            let mut eligible: Vec<(usize, f64, i32)> = Vec::new();
+            let mut under = None;
             for (i, f) in table.iter().enumerate() {
+                let (top, ground) = if f.requires == Some(FloraRequires::Canopy) {
+                    match *under.get_or_insert_with(|| under_canopy(world, x, z)) {
+                        Some(y) => (y, Block::Grass),
+                        None => continue,
+                    }
+                } else {
+                    (top, ground)
+                };
                 if !matches!(
                     f.shape,
                     FloraShape::Cross
@@ -104,7 +116,7 @@ pub(crate) fn place(
                     continue;
                 }
                 if let Some(&(_, chance)) = f.biomes.iter().find(|(b, _)| *b == biome) {
-                    eligible.push((i, chance));
+                    eligible.push((i, chance, top));
                 }
             }
             // The colour noise picks one winner, weighted by chance, so
@@ -123,7 +135,7 @@ pub(crate) fn place(
                     }
                 }
             }
-            let Some((i, chance)) = pick else {
+            let Some((i, chance, top)) = pick else {
                 continue;
             };
             let f = &table[i];
@@ -192,6 +204,7 @@ fn place_pad(
 /// Whether the column at `(x, z)`, whose ground block is at `y`, meets `r`.
 fn holds(world: &World, r: FloraRequires, x: i32, y: i32, z: i32) -> bool {
     match r {
+        FloraRequires::Canopy => true,
         FloraRequires::NearWater => {
             let n = FLORA_NEAR_WATER_RADIUS;
             (-n..=n).any(|dz| {
@@ -199,6 +212,20 @@ fn holds(world: &World, r: FloraRequires, x: i32, y: i32, z: i32) -> bool {
             })
         }
     }
+}
+
+/// Height of the air cell above the highest grass block that has air directly
+/// above it and leaves somewhere higher in the column.
+fn under_canopy(world: &World, x: i32, z: i32) -> Option<i32> {
+    let mut leaves = false;
+    for y in (1..HEIGHT as i32 - 1).rev() {
+        let b = world.get(x, y, z);
+        if leaves && b == Block::Grass as u8 && world.get(x, y + 1, z) == AIR {
+            return Some(y + 1);
+        }
+        leaves |= is_leaves(b);
+    }
+    None
 }
 
 /// Place both halves of a two-block plant, only if the cell above the lower
