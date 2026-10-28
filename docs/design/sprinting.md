@@ -156,6 +156,24 @@ along a wall, does not end the sprint. (Decided in #1331, #1334.)
    place the player in water), then mark Phase A `done`. Plan #815 noted its
    tickets assumed water does not end a sprint, which is why none covers it.
 
+## Reconciliation notes (phase-done, Phase B)
+
+10. **Phase B still incomplete (plan #1326).** Plan #1326's tickets (#1327,
+   #1329, #1330) closed: the double-tap window of n-1 ticks, the sprint-jump
+   push (`sprint_jump_boost` in `data/player.toml`, `player.rs`) and input
+   scripts (`sprint_ref.input`, `sprint_extras.input`). The decisions made
+   in its questions were not built, and no ticket covered them:
+   - Head-on wall rule (#1331, #1334): `Player::tick` still ends a sprint on
+     any loss of velocity along the facing (`lost_along_facing`); there is no
+     angular tolerance tunable in `data/player.toml`, and no input script for
+     sliding along a wall.
+   - Jump-tick drag (#1332): sprint-jumps should apply ground drag on the
+     jump tick, ordinary jumps keeping today's drag; `player.rs` has no such
+     distinction.
+   - Raft (#1333): a sprint should end on boarding the raft or at the helm
+     and not start on the raft scene; `walk.rs` and `raft.rs` do not clear or
+     block `Player.sprinting`.
+
 ## Open questions
 
 2. **Camera.** Match the original's FOV change while sprinting? A: yes, with a
