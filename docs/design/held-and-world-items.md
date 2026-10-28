@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
 ---
 
 ## Current state
@@ -23,7 +23,7 @@ Checked against the code:
 - The model drawer is unshaded and unfogged, and its atlas packs model faces plus any texture named in `textureNames` (`packAtlas`), so item icons can be packed into it. Its fragment shader discards texels with alpha under 0.5.
 - View bobbing is a documented default in `docs/design/basic-gameplay.md` section 3, but no bob is implemented in `client/` (`basic-gameplay.md` Phase 1 note says bobbing and hand rendering were left for later).
 
-Phase A (item entities in the world) is done: `Walk::items()` and `item_names()` in `crates/game-web/src/lib.rs` (#1164), `readItems` in `client/overlay.js` (#1165), item icons packed into the model atlas (#1168), `itemPose` in `client/itemmodel.js` (#1172), and `drawItems` in every scene plus `client/test/scripts/items.input` (#1182). Phase B (held item) is done: held string to icon name (#1192), held mesh and resting pose (#1195), the held item drawn in its own pass (#1196), and the `held.drawn` expectation with `client/test/scripts/helddraw.input` (#1197). Phase C is not started.
+Phase A (item entities in the world) is done: `Walk::items()` and `item_names()` in `crates/game-web/src/lib.rs` (#1164), `readItems` in `client/overlay.js` (#1165), item icons packed into the model atlas (#1168), `itemPose` in `client/itemmodel.js` (#1172), and `drawItems` in every scene plus `client/test/scripts/items.input` (#1182). Phase B (held item) is done: held string to icon name (#1192), held mesh and resting pose (#1195), the held item drawn in its own pass (#1196), and the `held.drawn` expectation with `client/test/scripts/helddraw.input` (#1197). Phase C (swing and use) is done: sim animation counter and `data/hands.toml` (#1233), animation phases exposed through `game-web` and the input-script DSL (#1237), and the held item's pose following swing and use (#1239, `client/test/scripts/swing.input`). Tickets #1209 (bob) and #1210 (empty-hand art) closed with no PR: decisions #1204 and #1205 say Phase C plans no bob and no empty-hand art.
 
 ## Reconciliation notes
 
