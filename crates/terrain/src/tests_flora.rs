@@ -823,6 +823,48 @@ fn rainforest_plants_stand_on_grass_in_rainforest_and_are_region_independent() {
 }
 
 #[test]
+fn cactus_flowers_sit_on_cactus_tops_in_desert_and_are_region_independent() {
+    let cf = Block::CactusFlower as u8;
+    let mut n = 0;
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-512, -512, 1024, 1024);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT {
+                    if at(&r, x, y, z) != cf {
+                        continue;
+                    }
+                    let (t, h) = g.climate.at(x, z, &[], &[]);
+                    assert_eq!(biome_for(t, h), Biome::Desert, "{x},{z}");
+                    assert_eq!(at(&r, x, y - 1, z), Block::Cactus as u8, "{x},{y},{z}");
+                    assert_eq!(at(&r, x, y + 1, z), crate::AIR, "{x},{y},{z}");
+                    n += 1;
+                }
+            }
+        }
+        let part = gen(seed, -40, -60, 90, 80, &FLORA);
+        let off = gen(seed, x0, z0, w, d, &[]);
+        assert_eq!(count(&off, Block::CactusFlower), 0);
+        for z in part.z0..part.z0 + 80 {
+            for x in part.x0..part.x0 + 90 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&r, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+                    // Cactus blocks are the same with flora off.
+                    assert_eq!(
+                        at(&r, x, y, z) == Block::Cactus as u8,
+                        at(&off, x, y, z) == Block::Cactus as u8,
+                        "{x},{y},{z}"
+                    );
+                }
+            }
+        }
+    }
+    assert!(n > 0, "no cactus flowers");
+}
+
+#[test]
 fn tulips_grow_in_seasonal_forest_in_same_colour_drifts() {
     let tulips = [
         Block::TulipRed as u8,

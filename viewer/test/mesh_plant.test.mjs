@@ -186,6 +186,14 @@ test('large_fern and broadleaf draw as grass-tinted crossed quads', () => {
   }
 });
 
+test('cactus_flower draws as crossed quads', () => {
+  const size = 4;
+  const blocks = meadow(size);
+  for (let c = 0; c < size * size; c++) blocks[c * H + 60] = B.cactus_flower;
+  const m = meshBlocks(ctx, blocks, tints(size), size, 0);
+  assert.equal(m.cutout.faces, size * size * 4);
+});
+
 test('tulips draw as crossed quads', () => {
   const size = 4;
   for (const b of [B.tulip_red, B.tulip_salmon, B.tulip_yellow]) {

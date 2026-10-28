@@ -181,13 +181,23 @@ salt = 16
 biomes = { Rainforest = 0.030 }
 
 [[flora]]
+name = "cactus_flower"
+block = "cactus_flower"
+shape = "cross"
+ground = ["cactus"]
+tint = "none"
+cluster_scale = 12.0
+salt = 17
+biomes = { Desert = 0.300 }
+
+[[flora]]
 name = "tulip_red"
 block = "tulip_red"
 shape = "cross"
 ground = ["grass"]
 tint = "none"
 cluster_scale = 14.0
-salt = 17
+salt = 18
 biomes = { "Seasonal Forest" = 0.020 }
 
 [[flora]]
@@ -197,7 +207,7 @@ shape = "cross"
 ground = ["grass"]
 tint = "none"
 cluster_scale = 14.0
-salt = 18
+salt = 19
 biomes = { "Seasonal Forest" = 0.020 }
 
 [[flora]]
@@ -207,5 +217,5 @@ shape = "cross"
 ground = ["grass"]
 tint = "none"
 cluster_scale = 14.0
-salt = 19
+salt = 20
 biomes = { "Seasonal Forest" = 0.020 }
