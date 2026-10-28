@@ -37,6 +37,9 @@ VERDICT = re.compile(
     r"Verdict:\s*\**\s*(blocked|ready,? with nits|ready to merge|ready|changes needed)", re.I
 )
 REVIEWED = re.compile(r"Reviewed commit:\s*`?([0-9a-f]{7,40})", re.I)
+# The reviewer's validated result: a marker comment holding one JSON block
+# (docs/design/factory-orchestrator.md Phase C, decided in #1218).
+RESULT = re.compile(r"<!-- factory-result role=reviewer\b[^>]*-->\s*```json\s*(.*?)```", re.S)
 OVERRIDE = re.compile(r"^\s*/override\b[ \t]*(.*)", re.S)
 
 
@@ -69,21 +72,38 @@ def set_status(sha, state, description, url):
     print(f"{sha[:7]}: {state}: {description}")
 
 
+def structured_verdict(body):
+    """(kind, reviewed_sha) from a valid reviewer result in the comment, or None."""
+    import agent_results
+    for m in RESULT.finditer(body):
+        if agent_results.validate("reviewer", m[1]):
+            continue
+        value = json.loads(m[1])
+        if "verdict" in value:
+            kind = "blocked" if value["verdict"] in ("blocked", "changes needed") else "ready"
+            return kind, value["reviewed_commit"].lower()
+    return None
+
+
 def latest_verdict(comments):
-    """The reviewer's newest verdict comment as (kind, reviewed_sha, comment), or None."""
+    """The reviewer's newest verdict comment as (kind, reviewed_sha, comment), or None.
+    A structured result wins over the `Verdict:` line (the fallback) in one comment."""
     found = None
     for c in comments:
         if c["user"]["login"] != BOT:
             continue
         body = c.get("body") or ""
-        m = VERDICT.search(body)
-        if not m:
-            continue
-        word = m.group(1).lower()
-        kind = "blocked" if word in ("blocked", "changes needed") else "ready"
-        r = REVIEWED.search(body)
+        parsed = structured_verdict(body)
+        if parsed is None:
+            m = VERDICT.search(body)
+            if not m:
+                continue
+            word = m.group(1).lower()
+            kind = "blocked" if word in ("blocked", "changes needed") else "ready"
+            r = REVIEWED.search(body)
+            parsed = (kind, r.group(1).lower() if r else None)
         if found is None or c["updated_at"] > found[2]["updated_at"]:
-            found = (kind, r.group(1).lower() if r else None, c)
+            found = (*parsed, c)
     return found
 
 
