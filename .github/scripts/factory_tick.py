@@ -51,6 +51,7 @@ class Snapshot:
     unchanged: bool = False  # every read was a 304 after a clean tick: nothing to do
     implementer_runs: list = field(default_factory=list)  # claude.yml runs: display_title, status, created_at
     stray: dict = field(default_factory=dict)  # ticket -> claude/issue-<n>- branches with work and no PR
+    done_prs: list = field(default_factory=list)  # numbers of closed or merged PRs (a dependency on one is met)
     store: object = None  # open state store (sqlite connection); None without $FACTORY_STORE
 
     @classmethod
@@ -89,6 +90,8 @@ class Snapshot:
 
         for i in read_issues(repo, gh_cache.state, paged):
             if i.get("pull_request"):
+                if i["state"] == "closed":
+                    snap.done_prs.append(i["number"])
                 continue
             labels = [lb["name"] for lb in i["labels"]]
             snap.issues.append({

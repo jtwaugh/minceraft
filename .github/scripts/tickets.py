@@ -100,9 +100,8 @@ def depends_error(body):
 def deps(body):
     body = body or ""
     found = set()
-    for line in body.splitlines():
-        if "Depends on:" in line:
-            found.update(int(n) for n in re.findall(r"#(\d+)", line))
+    for m in DEPENDS.finditer(body):
+        found.update(int(n) for n in re.findall(r"#(\d+)", m.group(1)))
     for m in re.finditer(r"[Bb]locked by ([^\n]*)", body):
         found.update(int(n) for n in re.findall(r"#(\d+)", m.group(1)))
     return found

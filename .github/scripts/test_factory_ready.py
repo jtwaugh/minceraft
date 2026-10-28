@@ -65,6 +65,16 @@ class Test(unittest.TestCase):
                   issue(3, state="closed", labels=())])
         self.assertEqual(started(s), [])
 
+    def test_merged_pr_dependency_is_closed(self):
+        s = snap([issue(1, "**Depends on:** #12"), issue(2, "**Depends on:** #13")])
+        s.done_prs = [12]
+        self.assertEqual(started(s), ["issue#1"])
+
+    def test_prose_mentioning_label_is_not_a_dependency(self):
+        body = "**Depends on:** none\n\nDepends on: #5 is wrong\n- [ ] Depends on: #6 read\n"
+        s = snap([issue(1, body), issue(5, labels=()), issue(6, labels=())])
+        self.assertEqual(started(s), ["issue#1"])
+
     def test_fixture_519(self):
         s = Snapshot.from_fixture(os.path.join(HERE, "fixtures", "history.json"))
         self.assertNotIn("issue#519", started(s))
