@@ -90,3 +90,13 @@ tint = "leaf"
 cluster_scale = 14.0
 salt = 8
 biomes = { Forest = 0.120, "Seasonal Forest" = 0.150 }
+
+[[flora]]
+name = "fern_double"
+block = ["fern_double_lower", "fern_double_upper"]
+shape = "tall_cross"
+ground = ["grass"]
+tint = "grass"
+cluster_scale = 18.0
+salt = 9
+biomes = { Taiga = 0.025 }
