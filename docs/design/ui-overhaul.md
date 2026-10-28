@@ -28,6 +28,8 @@ Checked against the code:
 
 ## Reconciliation notes
 
+0. **Phase B still incomplete (plan #1173).** The glyph art is in (#1248 letters and `font_unknown`, #1251 ten punctuation glyphs: `font_period`, `font_comma`, `font_colon`, `font_exclamation`, `font_question`, `font_apostrophe`, `font_hyphen`, `font_slash`, `font_lparen`, `font_rparen`) and `client/font.js` with `client/test/font.test.mjs` is in (#1250). But `glyphName` in `client/font.js` maps only A to Z and 0 to 9, so every punctuation mark still draws `font_unknown`. Missing: map `. , : ! ? ' - / ( )` to their glyphs, with a test; then mark Phase B `done`.
+
 1. **Item name per slot.** `itemLabel` in `client/inventoryui.js` derives labels from item names; `data/items.toml` `label` is not used. The pixel font should render whatever string `itemLabel` returns, so lower case or capitals-only (open question 2) decides what `label` values are allowed.
 2. **Fixes #1003.** Section 1 says it fixes #1003 (hearts off both edges). The new scale rule and a `layout` test at the four sizes cover that; check #1003's own case when planning.
 3. **`#1137` is separate.** The first-person held item and world item entities are out of scope; this doc only restyles existing HUD content.
