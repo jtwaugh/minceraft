@@ -160,6 +160,7 @@ cluster_scale = 10.0
 salt = 14
 biomes = { Rainforest = 0.150 }
 
+[[flora]]
 name = "large_fern"
 block = "large_fern"
 shape = "cross"
