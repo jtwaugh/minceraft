@@ -69,11 +69,14 @@ def _wanted(snap):
         if "idea" in labels:
             want[key] = ("Idea", "labelled idea", "")
             continue
+        pr = by_ticket.get(i["number"])
+        if not pr and {"factory", "local"} <= labels:
+            want[key] = ("With maintainer", "local ticket, no PR", "maintainer")
+            continue
         view = stored.get(str(i["number"]))
         if view:
             want[key] = (view["status"], f"store: {view['state']}", view["waiting"])
             continue
-        pr = by_ticket.get(i["number"])
         if pr:
             if pr["status"]:
                 want[key] = (*pr["status"], "")
