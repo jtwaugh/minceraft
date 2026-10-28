@@ -5,7 +5,7 @@ scope: game
 source: "#808"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
 ---
 
@@ -45,6 +45,8 @@ Phase A plan #815 closed (PRs #842, #868, #876, #877, #902, #908):
   covers speed, double-tap, slow tap, release, sneak and wall.
 - `[sprint]` also has `fov_extra_degrees` and `fov_ease_seconds` in
   `bindings.rs` (Phase B, question 2).
+- Water ending a sprint now has an input-script case (plan #1289, PR #1299,
+  `client/test/scripts/sprint.input`), so Phase A's end conditions are all covered.
 - Research spec-questions #819 and #820 and decisions #821 and #822 are closed.
 
 ## Reconciliation notes
@@ -138,7 +140,7 @@ the reference version in section 3). (Decided in #822.)
 
 ## Reconciliation notes (phase-done, Phase A)
 
-9. **Phase A still incomplete.** Phase A is done when input scripts show every
+9. **Resolved (plan #1289, PR #1299).** Was: Phase A still incomplete. Phase A is done when input scripts show every
    listed end condition ending a sprint. `client/test/scripts/sprint.input`
    has cases for release, sneak and wall, but none for water; the water rule
    (`player.rs`, decided placeholder in #822) is covered only by Rust unit
