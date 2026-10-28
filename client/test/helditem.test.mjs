@@ -72,3 +72,41 @@ test('held pose tunables match data/held.toml', async () => {
   assert.equal(h.HELD_TILT_YAW, num('tilt_yaw'));
   assert.equal(h.HELD_TILT_ROLL, num('tilt_roll'));
 });
+
+test('hand pose tunables match data/hands.toml', async () => {
+  const h = await import('../helditem.js');
+  const toml = readFileSync(new URL('../../data/hands.toml', import.meta.url), 'utf8');
+  const num = (k) => +toml.match(new RegExp(`^${k} = (\\S+)`, 'm'))[1];
+  assert.deepEqual(h.HELD_SWING_OFFSET, [num('swing_offset_x'), num('swing_offset_y'), num('swing_offset_z')]);
+  assert.equal(h.HELD_SWING_PITCH, num('swing_pitch'));
+  assert.deepEqual(h.HELD_USE_OFFSET, [num('use_offset_x'), num('use_offset_y'), num('use_offset_z')]);
+  assert.equal(h.HELD_USE_PITCH, num('use_pitch'));
+});
+
+test('heldDraw at phase 0 is exactly the resting matrix', async () => {
+  const { heldDraw } = await import('../helditem.js');
+  const rest = heldDraw('tool:sword');
+  assert.deepEqual([...heldDraw('tool:sword', 0, 0).model], [...rest.model]);
+});
+
+test('heldDraw follows the curve between 0 and 1', async () => {
+  const h = await import('../helditem.js');
+  const rest = h.heldDraw('tool:sword').model;
+  for (const t of [0.25, 0.5, 0.75, 1]) {
+    const m = h.heldDraw('tool:sword', t, 0).model;
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(m[12 + i] - (rest[12 + i] + h.HELD_SWING_OFFSET[i] * t)) < 1e-6, `swing ${t} offset ${i}`);
+    // pitch: the x column's y/z components rotate by t * pitch
+    const a = (h.HELD_SWING_PITCH * t * Math.PI) / 180;
+    assert.ok(Math.abs(m[1] - (Math.cos(a) * rest[1] - Math.sin(a) * rest[2])) < 1e-6, `swing ${t} pitch`);
+    assert.ok(Math.abs(m[2] - (Math.sin(a) * rest[1] + Math.cos(a) * rest[2])) < 1e-6, `swing ${t} pitch z`);
+    const u = h.heldDraw('tool:sword', 0, t).model;
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(u[12 + i] - (rest[12 + i] + h.HELD_USE_OFFSET[i] * t)) < 1e-6, `use ${t} offset ${i}`);
+  }
+});
+
+test('swing moves the held item further than use', async () => {
+  const { heldDraw } = await import('../helditem.js');
+  const rest = heldDraw('item:seeds').model;
+  const dist = (m) => Math.hypot(...[...m].map((v, i) => v - rest[i]));
+  for (const t of [0.25, 0.5, 1]) assert.ok(dist(heldDraw('item:seeds', t, 0).model) > dist(heldDraw('item:seeds', 0, t).model), String(t));
+});
