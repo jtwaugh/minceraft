@@ -21,7 +21,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_fix import stops  # noqa: E402
+from factory_fix import results, stops  # noqa: E402
 from factory_rerun import is_ticket_pr, ticket_of  # noqa: E402
 from factory_tick import Action  # noqa: E402
 
@@ -39,8 +39,19 @@ def key_of(ticket, pr_number, kind):
     return f"<!-- factory-question ticket={ticket} pr={pr_number} cause=stop-{kind} -->"
 
 
+def result_text(nm):
+    """The question and its lettered options, in the shape of a stop marker's text."""
+    options = "\n".join(f"{chr(65 + n)}: {o}" for n, o in enumerate(nm["options"]))
+    return f"{nm['question']}\n\n{options}".strip()
+
+
 def current_stop(pr):
-    """(kind, text) of the newest stop marker naming this PR's head, or None."""
+    """(kind, text) of the newest stop naming this PR's head, or None. A validated
+    result comment with `needs_maintainer` wins over a stop marker."""
+    stopped = [r["needs_maintainer"] for n, sha, r in results(pr.get("comments", []))
+               if n == pr["number"] and sha == pr["sha"] and "needs_maintainer" in r]
+    if stopped:
+        return stopped[-1]["kind"], result_text(stopped[-1])
     found = [(k, t) for n, sha, k, t in stops(pr.get("comments", []))
              if n == pr["number"] and sha == pr["sha"]]
     return found[-1] if found else None

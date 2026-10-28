@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent_results import validate  # noqa: E402
+from agent_results import file_follow_ups, validate, verify  # noqa: E402
 
 NM = {"kind": "decision", "question": "Which?", "options": ["a", "b"]}
 IMPL = {"pr": 5, "follow_ups": [{"title": "t", "body": "b"}], "questions": [NM], "blocked_on": [3]}
@@ -155,6 +155,66 @@ class Input(unittest.TestCase):
 
     def test_unknown_role(self):
         self.assertIn("unknown role", validate("nobody", "{}")[0])
+
+
+def fake_gh(pr=None, existing=()):
+    def run(*args):
+        if args[:2] == ("pr", "view"):
+            return (0, json.dumps(pr)) if pr else (1, "")
+        if args[:2] == ("issue", "list"):
+            return 0, json.dumps([{"body": b} for b in existing])
+        raise AssertionError(args)
+    return run
+
+
+OPEN_PR = {"state": "OPEN", "headRefName": "claude/issue-7-20261028-0000", "body": ""}
+
+
+PR_ONLY = {**IMPL, "questions": []}
+
+
+class Verify(unittest.TestCase):
+    def ok(self, value, **kw):
+        return verify("7", value if isinstance(value, str) else json.dumps(value), fake_gh(**kw))[0]
+
+    def test_pr_result(self):
+        self.assertTrue(self.ok(PR_ONLY, pr=OPEN_PR))
+        self.assertTrue(self.ok(PR_ONLY, pr={**OPEN_PR, "headRefName": "x", "body": "Closes #7"}))
+
+    def test_pr_not_for_ticket_or_not_open(self):
+        self.assertFalse(self.ok(PR_ONLY, pr={**OPEN_PR, "headRefName": "x"}))
+        self.assertFalse(self.ok(PR_ONLY, pr={**OPEN_PR, "state": "MERGED"}))
+        self.assertFalse(self.ok(PR_ONLY))
+
+    def test_stopped(self):
+        self.assertTrue(self.ok({"needs_maintainer": NM}))
+        self.assertTrue(self.ok({**IMPL, "pr": 99, "questions": [NM]}))
+
+    def test_empty_or_invalid(self):
+        for text in ("", "{}", "not json", '{"pr": "x"}'):
+            self.assertFalse(self.ok(text, pr=OPEN_PR))
+
+
+class FollowUps(unittest.TestCase):
+    def test_created_once(self):
+        made, bodies = [], []
+
+        def create(title, body):
+            made.append(title)
+            bodies.append(body)
+        text = json.dumps({**IMPL, "follow_ups": [{"title": "a", "body": "B"}, {"title": "b", "body": "C"}]})
+        self.assertEqual(file_follow_ups("7", text, fake_gh(), create), ["a", "b"])
+        self.assertEqual(file_follow_ups("7", text, fake_gh(existing=bodies), create), [])
+        self.assertEqual(made, ["a", "b"])
+
+    def test_same_title_other_ticket(self):
+        made = []
+        text = json.dumps(IMPL)
+        file_follow_ups("7", text, fake_gh(), lambda t, b: made.append(b))
+        self.assertEqual(file_follow_ups("8", text, fake_gh(existing=made), lambda t, b: None), ["t"])
+
+    def test_invalid_result_creates_nothing(self):
+        self.assertEqual(file_follow_ups("7", "{}", fake_gh(), None), [])
 
 
 if __name__ == "__main__":

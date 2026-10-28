@@ -17,6 +17,7 @@ pub mod farm;
 pub mod forage;
 pub mod growth;
 pub mod growth_odds;
+pub mod hands;
 pub mod harvest;
 pub mod input;
 pub mod interactions;
