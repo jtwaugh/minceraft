@@ -7,14 +7,14 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
 ---
 
 ## Current state
 
 - Phase A is done: the dead flag, `PlayerDied` / `PlayerRespawned` events, the `respawn` command and the replay state landed in #841, #875, #881 and #897 (plan #817); `crates/game/tests/death.rs` covers death, respawn and replay.
 - Phase B is done: `Walk.dead()` (#936), the death mode in `client/input.js` and `controller.js` with `client/test/scripts/death.input` (#939), `controller.respawn()` (#950) and the death screen panel `client/deathui.js` with a respawn button, mounted in `scene.js` (#951); plan #918. Layout is the Open question 1 default (title and one respawn button). The "like Minecraft's" look stays a `[manual check]`.
-- Phase C is partly done: the hands item is dropped at the death position as an item entity with `ItemDropped` source `"death"` (#1022, plan #999; `crates/game/src/walk.rs`, `crates/game/tests/death.rs`). The other Phase C answers (#955, #957, #958, #959) are the Phase A/B defaults and need no code. The belt part is not built; see Reconciliation note 13.
+- Phase C is done: the hands item is dropped at the death position as an item entity with `ItemDropped` source `"death"` (#1022, plan #999); loose tools can be picked up onto the belt (#1328) and the belt's tools drop on death, leaving the belt empty after respawn (#1361); plan #1314 (`crates/game/src/walk.rs`, `crates/game/tests/death.rs`). The other Phase C answers (#955, #957, #958, #959) are the Phase A/B defaults and need no code. Reconciliation note 13 is resolved by these PRs.
 > **Reconciler:** the bullets from "Player health exists" down to "Replays" were written before Phase A. Phases A and B added the dead flag, `PlayerDied` / `PlayerRespawned`, a `respawn` command, replay state and the death screen (first two bullets), so "nothing reads a 0 health" and "no death event" no longer hold. Phase C is still unbuilt: no `"death"` source for `ItemDropped` exists in `crates/game`, so items are still kept on death.
 
 - Player health exists: `crates/game/src/player.rs` has `Player.health` (starts at `physics.max_health`, 20) and fall damage saturates it at 0 (`update_fall`, tested by `drop_from(100.0, &w).health == 0`). Nothing reads a 0 health: no dead flag, no event, input still drives the player.
