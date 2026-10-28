@@ -1,6 +1,6 @@
 ---
 title: Held items and items in the world
-status: accepted
+status: done
 scope: game
 source: "#1137"
 superseded_by: ""
