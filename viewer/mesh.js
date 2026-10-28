@@ -40,8 +40,8 @@ export const B = {
   daisy: 42, bluebell: 43, tall_grass_double_lower: 44, tall_grass_double_upper: 45, berry_bush: 46,
   dry_grass: 47, dry_grass_tall_lower: 48, dry_grass_tall_upper: 49, leaf_litter: 50,
   fern_double_lower: 51, fern_double_upper: 52, cattail_lower: 53, cattail_upper: 54,
-  lily_pad: 55, marsh_orchid: 56, bush: 57, jungle_bush: 58, large_fern: 59, broadleaf: 60, cactus_flower: 61,
-  tulip_red: 62, tulip_salmon: 63, tulip_yellow: 64,
+  lily_pad: 55, marsh_orchid: 56, bush: 57, jungle_bush: 58, large_fern: 59, broadleaf: 60, cactus_flower: 61, frost_grass: 62,
+  tulip_red: 63, tulip_salmon: 64, tulip_yellow: 65,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -63,7 +63,7 @@ const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover, [B.lily_pad]: SHAPES.pa
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
   B.daisy, B.bluebell, B.marsh_orchid, B.tall_grass_double_lower, B.tall_grass_double_upper, B.dry_grass, B.dry_grass_tall_lower, B.dry_grass_tall_upper,
-  B.fern_double_lower, B.fern_double_upper, B.cattail_lower, B.cattail_upper, B.large_fern, B.broadleaf, B.cactus_flower, B.tulip_red, B.tulip_salmon, B.tulip_yellow,
+  B.fern_double_lower, B.fern_double_upper, B.cattail_lower, B.cattail_upper, B.large_fern, B.broadleaf, B.cactus_flower, B.frost_grass, B.tulip_red, B.tulip_salmon, B.tulip_yellow,
   B.wheat_0, B.wheat_1, B.wheat_2, B.wheat_3, B.wheat_4, B.wheat_5, B.wheat_6, B.wheat_7]);
 
 // Upper blocks of two-block plants.

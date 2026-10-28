@@ -7,6 +7,7 @@
 #   requires      optional column condition: near_water (water beside the ground
 #                 block, within near_water_radius columns) | canopy (stands on the
 #                 highest grass with air above and leaves higher in the column)
+#   snow_stays    optional bool: a cross plant the snow pass leaves standing (no snow in its cell)
 #   pad           ground is the water the pad floats on; land must lie within
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
@@ -191,13 +192,24 @@ salt = 17
 biomes = { Desert = 0.300 }
 
 [[flora]]
+name = "frost_grass"
+block = "frost_grass"
+shape = "cross"
+ground = ["grass", "sand"]
+tint = "none"
+snow_stays = true   # D.2: survives the snow pass; its cell gets no snow
+cluster_scale = 12.0
+salt = 18
+biomes = { Tundra = 0.040, "Ice Desert" = 0.020 }
+
+[[flora]]
 name = "tulip_red"
 block = "tulip_red"
 shape = "cross"
 ground = ["grass"]
 tint = "none"
 cluster_scale = 14.0
-salt = 18
+salt = 19
 biomes = { "Seasonal Forest" = 0.020 }
 
 [[flora]]
@@ -207,7 +219,7 @@ shape = "cross"
 ground = ["grass"]
 tint = "none"
 cluster_scale = 14.0
-salt = 19
+salt = 20
 biomes = { "Seasonal Forest" = 0.020 }
 
 [[flora]]
@@ -217,5 +229,5 @@ shape = "cross"
 ground = ["grass"]
 tint = "none"
 cluster_scale = 14.0
-salt = 20
+salt = 21
 biomes = { "Seasonal Forest" = 0.020 }

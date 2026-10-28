@@ -53,6 +53,8 @@ pub struct Flora {
     pub salt: u32,
     /// Extra condition on the column; `None` means always eligible.
     pub requires: Option<FloraRequires>,
+    /// A `cross` or `tall_cross` plant the snow pass leaves standing, with no snow in its cell.
+    pub snow_stays: bool,
     /// Chance per eligible column, by biome.
     pub biomes: &'static [(Biome, f64)],
 }
@@ -296,6 +298,7 @@ mod tests {
             salt: 1,
             biomes: vec![("Plains".into(), 0.5)],
             requires: None,
+            snow_stays: false,
         }
     }
 
