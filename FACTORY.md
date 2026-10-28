@@ -153,17 +153,32 @@ cannot see it. On top of that:
   game. Questions that need such facts are labelled `research` and answered
   on the laptop.
 
-### 3. Three sources of truth, kept apart
+### 3. Sources of truth, kept apart
 
 | Source | Says | Written by |
 |---|---|---|
 | [`SPEC.md`](SPEC.md) | How Beta terrain behaves | The maintainer, from local research |
-| [`docs/design/`](docs/design/) | What we want to build on top | The maintainer's ideas, reconciled by agents |
+| [`docs/design/`](docs/design/) headers | Each doc's status and phase states | The maintainer's ideas, reconciled by agents; changed only by merged PRs |
+| The state store | Plans, tickets, dependencies, decisions, runs and attempts | The tick, the store's only writer |
 | The code | What exists now | Agents, through reviewed PRs |
 
 A design doc never restates Beta behaviour; it cites SPEC sections. The
 gap between a doc and the code is exactly what the planner turns into
 tickets.
+
+The store is a SQLite file on the `factory-state` branch
+([`factory_store.py`](.github/scripts/factory_store.py)). The headers still
+own docs and phases, because a human merge is the acceptance; the store only
+mirrors them. Issues, labels and the project board are views: the board's
+Status and "Waiting on" for a stored ticket are rendered from the store
+([`factory_views.py`](.github/scripts/factory_views.py)), so a lost card can
+be redrawn. The tick reads back only human inputs: the `factory` label,
+`/decide`, merges and closed issues. Ticket text in GitHub still carries the
+Spec, Depends on and Files lines the planner writes; the tick copies them
+into the store once ([`factory_ingest.py`](.github/scripts/factory_ingest.py)).
+The store starts with the next plan: plans at or below the cutoff recorded
+on the first ingest, with their tickets, finish under the old rules (markers
+and sub-issues, below) and are never stored.
 
 ### 4. Ask, don't guess
 
@@ -294,9 +309,12 @@ automation can read it.
 Workflows fail, get cancelled, or run twice. The planner creates its
 "Plan:" issue first, with a hidden marker naming the document and phase,
 and only then the tickets; the next run sees the marker and doesn't plan
-the same phase again. Ticket progress lives in GitHub's sub-issues, not a
-hand-maintained checklist. The mechanical parts are plain scripts, not
-agents, so they behave the same every time: choosing what to plan
+the same phase again. For a plan in the store, ticket progress is the
+store's ticket states and the plan closes when they are all done; for older
+plans it lives in GitHub's sub-issues, not a hand-maintained checklist.
+
+The mechanical parts are plain scripts, not agents, so they behave the same
+every time: choosing what to plan
 ([`plan_targets.py`](.github/scripts/plan_targets.py)), attaching tickets
 to their plan ([`attach_subissues.py`](.github/scripts/attach_subissues.py)),
 and deciding which tickets are unblocked
@@ -402,6 +420,14 @@ docs/design/                    design docs (README.md: format and lifecycle)
 .github/scripts/pr_size.py      reviewable lines in a change
 .github/scripts/factory_tick.py the tick: snapshot, passes, backend
 .github/scripts/factory_*.py    the tick's passes (ready, rerun, plans, board, stalls, invariants, report)
+.github/scripts/factory_store.py          the SQLite schema (docs, plans, tickets, dependencies, decisions, runs, attempts)
+.github/scripts/factory_store_history.py  ticket and plan states, the transition log, why-stuck
+.github/scripts/factory_store_states.py   derives each ticket's state from the snapshot
+.github/scripts/factory_store_records.py  records decisions, runs and attempts
+.github/scripts/factory_store_sync.py     opens, syncs and publishes the store each tick ($FACTORY_STORE)
+.github/scripts/factory_ingest.py         copies new plans and tickets into the store (the cutoff)
+.github/scripts/factory_views.py          renders board status, waiting text and labels from the store
+.github/scripts/factory_state_branch.py   fetches and publishes the store on the factory-state branch
 .github/scripts/planner_issue.py  the only way agents file plans, tickets and questions
 .github/workflows/
   ci.yml                        checks on every PR
@@ -416,7 +442,28 @@ docs/design/                    design docs (README.md: format and lifecycle)
   claude-docs.yml               docs updater
 ```
 
+## Maintainer steps for the store
+
+Agents cannot edit workflows or branch protection, so these are yours, in
+order. Until all three are done the store is not in use: with `$FACTORY_STORE`
+unset every store pass is skipped and the tick behaves as before.
+
+1. Create the `factory-state` branch (it may start empty; the first publish
+   adds a root commit if it is missing).
+2. Exempt the tick's identity from branch protection on `factory-state`.
+3. Edit `factory-tick.yml`: let the job write contents to that branch, call
+   `fetch` from `factory_state_branch.py` before the tick, set
+   `FACTORY_STORE` to the fetched file, and call `publish` after it.
+
 ## Not built yet
+
+- **File leases in the store:** the ready pass still reads each ticket's
+  predicted files (copied into the store at ingest) and the files of open
+  PRs; there is no lease table yet.
+- **Labels written from the store:** views render the labels the tick
+  manages, but only the board's Status and "Waiting on" are read from them
+  so far. The board pass still splits `in_review` into Blocked, Nits and
+  Ready for Merge itself, since the store holds no PR or review facts.
 
 - **Golden hashes:** recorded hashes of generated worlds, so CI rather than
   the PR description catches any change to world output.
