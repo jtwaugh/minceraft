@@ -513,3 +513,12 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#6b7a3a"
+
+[[block]]
+id = 55
+name = "lily_pad"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#3f7a2e"
