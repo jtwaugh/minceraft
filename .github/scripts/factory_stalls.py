@@ -10,7 +10,9 @@ PR is the next step):
 - next phase's newest plan is closed with every sub-issue closed (or none),
   but the phase is still `todo`. If the docs updater's note says the phase
   is still incomplete after that plan, the tick also dispatches the planner
-  to plan what's left (`request_replan`).
+  to plan what's left (`request_replan`); without that note it asks the
+  docs updater again (`request_phase_done`), since its run can be lost
+  (one pending run per concurrency group) or write a note in another form.
 
 Leftover `docs/*` branches the docs updater would want to create again (an
 open plan's phase-done branch, any `-sync` branch) are reported too.
@@ -35,8 +37,9 @@ def messages(snap):
 
 
 def findings(snap, now=None):
-    """(target, message, replan) for every stall; replan is whether the
-    planner should be dispatched for the doc."""
+    """(target, message, retry) for every stall; retry is "replan" (dispatch
+    the planner for the doc), ("phase_done", plan, section) (dispatch the
+    docs updater for the plan) or None."""
     now = now or datetime.now(timezone.utc)
     open_prs = [p for p in snap.prs if p.get("state", "open") == "open"]
     busy = {f for p in open_prs for f in p.get("files", [])}
@@ -58,7 +61,7 @@ def findings(snap, now=None):
         if not phases:
             out.append((path, f"`{path}` has no phases, so the planner skips it. "
                         f"Run the reconciler on it to add them: "
-                        f"`gh workflow run claude-docs.yml -f path={path}`.", False))
+                        f"`gh workflow run claude-docs.yml -f path={path}`.", None))
             continue
         todo = [p for p, s in phases.items() if s == "todo"]
         if not todo:
@@ -67,7 +70,7 @@ def findings(snap, now=None):
         these = [p for p in mine if p["plan_source"].get("section") == section]
         if not these:
             out.append((path, f"`{path}` {section} has no plan. "
-                        f"`gh workflow run {PLAN_WORKFLOW} -f file={path}`.", False))
+                        f"`gh workflow run {PLAN_WORKFLOW} -f file={path}`.", None))
             continue
         latest = max(these, key=lambda p: p["number"])
         if latest["state"] != "closed" or latest.get("state_reason") == "not_planned":
@@ -82,34 +85,38 @@ def findings(snap, now=None):
                 out.append((path, f"`{path}` {section}: plan #{n} is closed and the docs updater "
                             f"found the phase still incomplete; dispatched the planner for what's "
                             f"left. If no new plan appears, `gh workflow run {PLAN_WORKFLOW} "
-                            f"-f file={path}`.", True))
+                            f"-f file={path}`.", "replan"))
                 continue
             out.append((path, f"`{path}` {section}: plan #{n} is closed but the phase "
-                        f"is still `todo`, with no \"{incomplete_note(section, n)}\" note. "
-                        f"Check the doc's Reconciliation notes, add that note so the planner "
-                        f"plans what's missing, or mark the phase done.", False))
+                        f"is still `todo`, with no \"{incomplete_note(section, n)}\" note; "
+                        f"asked the docs updater again. If no phase-done PR appears, "
+                        f"`gh workflow run claude-docs.yml -f plan={n}`.", ("phase_done", n, section)))
     branches = {b for b in snap.branches if b.startswith("docs/")} - heads
     for name, n in open_plans:
         b = f"docs/{name}-phase-done-{n}"
         if b in branches:
             out.append((b, f"Branch `{b}` is left over; delete it before plan #{n} closes, "
-                        f"or the docs updater can't push its phase-done PR.", False))
+                        f"or the docs updater can't push its phase-done PR.", None))
     for b in sorted(x for x in branches if x.endswith("-sync")):
         out.append((b, f"Branch `{b}` is left over; delete it, or the next drift run can't push.",
-                    False))
+                    None))
     from factory_rerun import messages as rerun_messages
-    return out + [(t, m, False) for t, m in rerun_messages(snap)]
+    return out + [(t, m, None) for t, m in rerun_messages(snap)]
 
 
 def stalls(snap):
-    """Pass: `report` actions for stalls not yet reported, each re-plan
+    """Pass: `report` actions for stalls not yet reported, each retry
     dispatched first. Once reported a stall isn't dispatched again, so a
-    re-plan that makes no plan stays in the report instead of looping."""
+    retry that changes nothing stays in the report instead of looping."""
     out = []
-    for target, msg, replan in findings(snap):
+    for target, msg, retry in findings(snap):
         if (target, msg) in snap.reported:
             continue
-        if replan:
+        if retry == "replan":
             out.append(Action("request_replan", target, {"file": target}, msg))
+        elif retry:
+            _, n, section = retry
+            out.append(Action("request_phase_done", f"issue#{n}",
+                              {"file": target, "section": section}, msg))
         out.append(Action("report", target, {"kind": "stalled"}, msg))
     return out

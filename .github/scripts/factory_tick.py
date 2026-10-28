@@ -326,18 +326,19 @@ def read_issues(repo, state, paged, now=None):
     ticks); a tick asks only for what was updated since the newest
     `updated_at` it has seen, which is one free 304 when nothing changed. A
     full re-read happens with no saved list, on scheduled or hand-started
-    ticks, and at least hourly, so anything `since` can miss (a deleted or
-    transferred issue) is corrected within the hour."""
+    ticks, at least hourly, so anything `since` can miss (a deleted or
+    transferred issue) is corrected within the hour, and when `KEEP` has
+    changed, so a saved list never lacks a field the passes read."""
     now = now or datetime.now(timezone.utc)
     saved = state.get("issues")
     full_at = state.get("issues_full_at", "")
     full = (not saved or os.environ.get("GITHUB_EVENT_NAME") in FULL_EVENTS
-            or not full_at
+            or not full_at or state.get("issues_keep") != list(KEEP)
             or (now - datetime.fromisoformat(full_at)).total_seconds() > FULL_EVERY)
     if full:
         issues = {}
         fetched = paged(f"repos/{repo}/issues?state=all&sort=created&direction=asc")
-        state["issues_full_at"] = now.isoformat()
+        state["issues_full_at"], state["issues_keep"] = now.isoformat(), list(KEEP)
     else:
         issues = dict(saved)
         fetched = paged(f"repos/{repo}/issues?state=all&sort=updated&direction=asc"
