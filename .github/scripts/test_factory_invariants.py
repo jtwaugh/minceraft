@@ -41,6 +41,27 @@ class Test(unittest.TestCase):
         s.issues[0]["state"] = "closed"  # then it's the supersede pass's
         self.assertEqual([v for v in check(s) if v.kind == "duplicate-prs"], [])
 
+    def test_closes_merged_to_non_master(self):
+        t = {"number": 900, "title": "t", "state": "open", "kind": "ticket",
+             "labels": [], "body": "", "parent": None}
+        pr = {"number": 905, "base": "factory-c/x", "body": "Closes #900", "merged_at": "2026-10-20T00:00:00Z"}
+        s = Snapshot(issues=[t], merged_prs=[pr])
+        want = [("closes-merged-to-non-master", "issue#900")]
+        got = lambda: [(v.kind, v.subject) for v in check(s) if v.kind == "closes-merged-to-non-master"]
+        self.assertEqual(got(), want)
+        detail = [v for v in check(s) if v.kind == "closes-merged-to-non-master"][0].detail
+        self.assertIn("#905", detail)
+        self.assertIn("factory-c/x", detail)
+        self.assertEqual(check(s), check(s))  # stable
+        pr["base"] = "master"
+        self.assertEqual(got(), [])
+        pr["base"] = "factory-c/x"
+        t["state"] = "closed"
+        self.assertEqual(got(), [])
+        t["state"] = "open"
+        s.merged_prs = []  # an unmerged closed PR is never loaded
+        self.assertEqual(got(), [])
+
     def test_orphan_tickets(self):
         k = keys(load())
         for n in (452, 500, 521):

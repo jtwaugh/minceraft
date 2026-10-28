@@ -52,14 +52,17 @@ class Snapshot:
     implementer_runs: list = field(default_factory=list)  # claude.yml runs: display_title, status, created_at
     stray: dict = field(default_factory=dict)  # ticket -> claude/issue-<n>- branches with work and no PR
     done_prs: list = field(default_factory=list)  # numbers of closed or merged PRs (a dependency on one is met)
+    merged_prs: list = field(default_factory=list)  # recently merged PRs: number, base, body, merged_at
     store: object = None  # open state store (sqlite connection); None without $FACTORY_STORE
 
     @classmethod
     def from_dict(cls, d):
         issues = d.get("issues", [])
         plans = d.get("plans") or [i for i in issues if i.get("kind") == "plan"]
-        return cls(issues, d.get("prs", []), plans, d.get("docs", []),
+        snap = cls(issues, d.get("prs", []), plans, d.get("docs", []),
                    d.get("branches", []), d.get("board", []), {"loaded": True})
+        snap.merged_prs = d.get("merged_prs", [])
+        return snap
 
     def mark_reported(self):
         """Findings already in the open report issue count as reported."""
@@ -125,6 +128,7 @@ class Snapshot:
                      "labels": [lb["name"] for lb in p.get("labels") or []],
                      "draft": bool(p.get("draft")), "created_at": p.get("created_at", "")}
                     for p in paged(f"repos/{repo}/pulls?state=open")]
+        snap.merged_prs = load_merged_prs(repo, get)
         from factory_automerge import codeowner_patterns
         from factory_fix import verdict
         from factory_rerun import is_ticket_pr
@@ -179,7 +183,23 @@ class Snapshot:
         return snap
 
 
-LOG_LINES = 40  # of a failed check's log kept for the fix task
+MERGED_PR_DAYS = 30  # how far back merged PRs are read (at most one page of 100)
+
+
+def load_merged_prs(repo, get, now=None):
+    """Recently merged PRs: number, base, body, merge time. One cached read."""
+    now = now or datetime.now(timezone.utc)
+    page = get(f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100")
+    out = []
+    for p in page if isinstance(page, list) else []:
+        merged = p.get("merged_at")
+        if merged and (now - datetime.fromisoformat(merged.replace("Z", "+00:00"))).days <= MERGED_PR_DAYS:
+            out.append({"number": p["number"], "base": p["base"]["ref"],
+                        "body": p.get("body") or "", "merged_at": merged})
+    return out
+
+
+LOG_LINES = 40 # of a failed check's log kept for the fix task
 
 
 def load_blocked_facts(repo, pr, comments, get):
