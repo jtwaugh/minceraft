@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent_results import file_follow_ups, validate, verify  # noqa: E402
+from agent_results import file_follow_ups, validate, verify, verify_opener  # noqa: E402
 
 NM = {"kind": "decision", "question": "Which?", "options": ["a", "b"]}
 IMPL = {"pr": 5, "follow_ups": [{"title": "t", "body": "b"}], "questions": [NM], "blocked_on": [3]}
@@ -193,6 +193,40 @@ class Verify(unittest.TestCase):
     def test_empty_or_invalid(self):
         for text in ("", "{}", "not json", '{"pr": "x"}'):
             self.assertFalse(self.ok(text, pr=OPEN_PR))
+
+
+def head(ref):
+    return {"state": "MERGED", "headRefName": ref, "body": ""}
+
+
+class VerifyOpener(unittest.TestCase):
+    def ok(self, role, arg, value, ref=None):
+        run = fake_gh(pr=head(ref) if ref else None)
+        return verify_opener(role, arg, json.dumps(value), run)[0]
+
+    def test_docs_updater_branches(self):
+        for ref in ("docs/x-phase-done-5", "docs/phase-done-5-v2", "docs/phase-done-5-r2"):
+            self.assertTrue(self.ok("docs_updater", "5", {"pr": 9}, ref), ref)
+        for ref in ("docs/phase-done-55", "docs/phase-done-6", "docs/phase-done-5-a.b", "feature/phase-done-5"):
+            self.assertFalse(self.ok("docs_updater", "5", {"pr": 9}, ref), ref)
+
+    def test_reconciler_and_spec_editor(self):
+        self.assertTrue(self.ok("reconciler", "3", {"pr": 9}, "design/foo"))
+        self.assertFalse(self.ok("reconciler", "3", {"pr": 9}, "spec/foo"))
+        self.assertTrue(self.ok("spec_editor", "3", {"pr": 9}, "spec/q3"))
+        self.assertFalse(self.ok("spec_editor", "3", {"pr": 9}, "design/foo"))
+
+    def test_no_pr_or_stopped(self):
+        for role in ("docs_updater", "reconciler", "spec_editor"):
+            self.assertTrue(self.ok(role, "3", {"no_pr": "nothing to do"}))
+            self.assertTrue(self.ok(role, "3", {"needs_maintainer": NM}))
+
+    def test_missing_or_invalid(self):
+        for role in ("docs_updater", "reconciler", "spec_editor"):
+            self.assertFalse(self.ok(role, "3", {"pr": 9}))
+            self.assertFalse(self.ok(role, "3", {}, "design/x"))
+            self.assertFalse(self.ok(role, "3", {"pr": 9, "no_pr": "x"}, "design/x"))
+        self.assertFalse(self.ok("reviewer", "3", {"pr": 9}, "design/x"))
 
 
 class FollowUps(unittest.TestCase):
