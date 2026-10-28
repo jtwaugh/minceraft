@@ -6,12 +6,26 @@ import { findTexture, textureSize } from './uipx.js';
 
 const UNKNOWN = 'font_unknown';
 
+const PUNCTUATION = {
+  '.': 'font_period',
+  ',': 'font_comma',
+  ':': 'font_colon',
+  '!': 'font_exclamation',
+  '?': 'font_question',
+  "'": 'font_apostrophe',
+  '-': 'font_hyphen',
+  '/': 'font_slash',
+  '(': 'font_lparen',
+  ')': 'font_rparen',
+};
+
 /** Texture name for a character: capitals-only font, so lower case uses the capital glyph; space is null. */
 function glyphName(set, ch) {
   const c = ch.toUpperCase();
   let name = null;
   if (c >= 'A' && c <= 'Z' && c.length === 1) name = `font_${c.toLowerCase()}`;
   else if (c >= '0' && c <= '9' && c.length === 1) name = `digit_${c}`;
+  else name = PUNCTUATION[c] ?? null;
   return name && findTexture(set, name) ? name : UNKNOWN;
 }
 

@@ -43,3 +43,17 @@ test('drawString sizes the canvas and paints unknown glyphs in their own colour'
   assert.equal(c.style.imageRendering, 'pixelated');
   assert.deepEqual(fills, [['#ffffff', 3, 0, 3, 3], ['#ffffff', 6, 0, 3, 3], ['#ff0000', 15, 0, 3, 3], ['#ff0000', 18, 0, 3, 3]]);
 });
+
+test('punctuation maps to its glyph, or font_unknown when the tileset lacks it', () => {
+  const marks = {
+    '.': 'font_period', ',': 'font_comma', ':': 'font_colon', '!': 'font_exclamation', '?': 'font_question',
+    "'": 'font_apostrophe', '-': 'font_hyphen', '/': 'font_slash', '(': 'font_lparen', ')': 'font_rparen',
+  };
+  const textures = { font_unknown: cell('b') };
+  for (const name of Object.values(marks)) textures[name] = cell('a');
+  const full = { palette: set.palette, batches: { one: { textures } } };
+  for (const [ch, glyph] of Object.entries(marks)) {
+    assert.equal(stringRects(full, ch, 1)[0].glyph, glyph, ch);
+    assert.equal(stringRects(set, ch, 1)[0].glyph, 'font_unknown', `${ch} missing`);
+  }
+});
