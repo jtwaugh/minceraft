@@ -7,18 +7,20 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
   E: todo
 ---
 
 ## Current state
 
-Checked against `master` (ba3a7e9). Phase B is done; Phases C to E are not built and stay `todo`.
+Checked against `master` (ba3a7e9). Phases A to C are done; Phases D and E are not built and stay `todo`.
 
 - **Phase A is done:** the viewer (PRs #248, #250, #252) and the client (PR #520, ticket #505) both use radial fog with the shared curve in `viewer/fog.js`, trilinear and anisotropic filtering, texel snapping and the tint weight (plan #242).
 
 - **Phase B is done** (plan #537): shared mip builder `viewer/mips.js` (PR #555), used by the client's `client/tiles.js` (PR #560) and the viewer's `loadTextures` with a separate R8 tint array (PR #562, decision #538); alpha-to-coverage cutout in viewer and client (PR #550); per-block UV variation by world coordinate with the `origin` option of `meshBlocks` (PR #556), passed by all callers (PR #604); tested in `viewer/test/mesh_uv.test.mjs` and `client/test/meshorigin.test.mjs`. The `[manual check]` criteria (canopy sparkle, 1-block pattern) were not judged here.
+
+- **Phase C is done** (plan #1291; earlier plan #619): vertex AO (PRs #688, #692, #694), sky gradient, sky pass and directional fog (PRs #691, #701, #724), water Fresnel (PRs #702, #725), and water colour and alpha by depth: the mesher writes depth into byte 15 (PR #1300), the viewer shader maps it (PR #1324) and the client shader reuses the mapping (PR #1350). C.4 (linear-colour fog) is optional and not built. The `[manual check]` criteria were not judged here.
 
 - **F1** holds: `viewer/index.html` sets `vdist = gl_Position.w` (~line 636)
   and fogs with a linear ramp from 0.55 to 1.15 × `fogFar` (~line 650).
@@ -42,7 +44,7 @@ Checked against `master` (ba3a7e9). Phase B is done; Phases C to E are not built
 
 ## Reconciliation notes
 
-- **Phase C is still incomplete (plan #619 closed; water depth missing).**
+- **Phase C was incomplete (resolved by plan #1291, now `done`; water depth missing at the time).**
   Built: C.1 vertex AO (PRs #688, #692, #694; `viewer/mesh.js`,
   `viewer/test/mesh_ao.test.mjs`), C.2 sky gradient, sky pass and
   directional fog (PRs #691, #701, #724; `viewer/sky.js`), and the C.3
