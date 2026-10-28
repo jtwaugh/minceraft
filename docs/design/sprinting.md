@@ -134,9 +134,10 @@ files the `research` spec-questions of section 3 (what the original does, per
 the reference version in section 3). (Decided in #822.)
 
 **Phase B.** Section 3 items that wait on open questions: camera FOV change
-(question 2), raft and water behaviour (question 3), and a configurable window
-(question 4), plus replacing placeholder values with researched ones once
-`SPEC.md` has them. Done when each decided behaviour has an input script.
+(question 2), raft and water behaviour (question 3), plus replacing placeholder values with researched ones once
+`SPEC.md` has them. The double-tap window stays a fixed value in
+`data/input.toml`, not a user setting. Done when each decided behaviour has an
+input script. (Decided in #1334.)
 
 ## Reconciliation notes (phase-done, Phase A)
 
@@ -156,5 +157,3 @@ the reference version in section 3). (Decided in #822.)
    entering water? A: land only; sprint ends on entering water or boarding.
    B: works everywhere the player walks, and ends in water. C: as the original
    (needs research).
-4. **Double-tap window.** A: fixed value in `data/input.toml` (not a user
-   setting). B: a user setting in the menu.
