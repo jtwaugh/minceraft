@@ -323,6 +323,22 @@ impl PlayerState {
         }
     }
 
+    /// The first empty belt slot after slot 0, which is the empty hand.
+    pub fn first_empty_belt_slot(&self) -> Option<usize> {
+        (1..BELT_SLOTS).find(|&i| self.tool_belt[i].is_none())
+    }
+
+    /// Put tool `name` in the first empty belt slot; false if the belt is full.
+    pub fn stow_tool(&mut self, name: String) -> bool {
+        match self.first_empty_belt_slot() {
+            Some(i) => {
+                self.tool_belt[i] = Some(ToolInstance { tool: name });
+                true
+            }
+            None => false,
+        }
+    }
+
     /// What interaction rules see: the carried item if the hands are
     /// non-empty (tools are stowed), else the selected tool, else `Empty`.
     pub fn held_thing(&self) -> HeldThing {
