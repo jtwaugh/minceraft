@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent_results import file_follow_ups, validate, verify, verify_opener  # noqa: E402
+from agent_results import SCHEMAS, file_follow_ups, flag_schema, validate, verify, verify_opener  # noqa: E402
 
 NM = {"kind": "decision", "question": "Which?", "options": ["a", "b"]}
 IMPL = {"pr": 5, "follow_ups": [{"title": "t", "body": "b"}], "questions": [NM], "blocked_on": [3]}
@@ -252,6 +252,17 @@ class FollowUps(unittest.TestCase):
 
     def test_invalid_result_creates_nothing(self):
         self.assertEqual(file_follow_ups("7", "{}", fake_gh(), None), [])
+
+
+class FlagSchema(unittest.TestCase):
+    def test_every_shape_fits(self):
+        """Each shape's fields are in the one flag schema, and it quotes safely."""
+        for role, shapes in SCHEMAS.items():
+            props = flag_schema(role)["properties"]
+            for shape in shapes.values():
+                for name, field in shape["properties"].items():
+                    self.assertEqual(props[name], field, (role, name))
+            self.assertNotIn("'", json.dumps(flag_schema(role)))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,9 @@ enum, minItems, minimum, pattern, additionalProperties.
 (docs/design/factory-orchestrator.md Phase C, rule 4)
 
     python3 -I agent_results.py <role> < result.json   # exit 1 and errors on stderr
+    python3 -I agent_results.py schema <role>
+        prints one object schema for `--json-schema` in claude_args: every
+        shape's fields, none required (validate() checks the real shape after)
     python3 -I agent_results.py verify <role> <arg> <result.json>
         role implementer (arg: ticket), planner (arg: design-doc file),
         docs_updater (arg: plan issue), reconciler or spec_editor (arg: the
@@ -235,6 +238,18 @@ def validate(role, text):
     return errors
 
 
+def flag_schema(role):
+    """One object schema covering all of a role's shapes, for the CLI's
+    structured output (which wants a single top-level object)."""
+    props = {}
+    for shape in SCHEMAS[role].values():
+        props.update(shape["properties"])
+    shapes = "; ".join(f"{name}: {', '.join(shape['required'])}"
+                       for name, shape in SCHEMAS[role].items())
+    return {"type": "object", "properties": props, "additionalProperties": False,
+            "description": f"Exactly one of these field sets ({shapes})."}
+
+
 def gh(*args):
     p = subprocess.run(["gh", *args], capture_output=True, text=True)
     return p.returncode, p.stdout
@@ -357,6 +372,10 @@ def main(argv):
                 f.write("\n".join(lines) + "\n")
         else:
             print("\n".join(lines))
+        return 0
+    if len(argv) == 3 and argv[1] == "schema":
+        # Single-quoted in claude_args, so it must hold no single quote.
+        print(json.dumps(flag_schema(argv[2]), separators=(",", ":")).replace("'", "\\u0027"))
         return 0
     if len(argv) == 4 and argv[1] == "follow-ups":
         for title in file_follow_ups(argv[2], open(argv[3], encoding="utf-8").read()):

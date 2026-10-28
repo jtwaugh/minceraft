@@ -83,12 +83,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      - name: Note the start time
-        id: start
-        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
         uses: ./.github/actions/claude-deps
+      - id: schema
+        run: echo "json=$(python3 -I .github/scripts/agent_results.py schema docs_updater)" >> "$GITHUB_OUTPUT"
       - id: claude
         uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1, 2026-10-15
         env:
@@ -127,8 +126,14 @@ jobs:
             Then create a branch `docs/<doc-name>-phase-done-<plan>`, commit
             only DOC, push it, and open a PR titled
             "Design: <title>: <SECTION> done" (or "... still incomplete").
+
+            Your result (this workflow posts it on the plan): `{"pr": <number>}`
+            for the PR you opened, `{"no_pr": "<why>"}` if DOC needed no
+            change, or `{"needs_maintainer": {"kind", "question", "options"}}`
+            if you stopped.
           claude_args: |
             --max-turns 40
+            --json-schema '${{ steps.schema.outputs.json }}'
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(printenv:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api repos/${{ github.repository }}/issues/*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git checkout -b:*),Bash(git add docs/design/*),Bash(git commit:*),Bash(git push -u origin docs/*),Bash(git push origin docs/*),Bash(gh pr create:*),Bash(cat:*),Bash(printf:*),Bash(ls:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
             --append-system-prompt "Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message."
 
@@ -137,9 +142,13 @@ jobs:
       - name: Check the run left its result
         id: check
         if: ${{ !cancelled() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 -B .github/scripts/expect.py phase-done "${{ needs.plan-source.outputs.plan }}" "${{ steps.start.outputs.at }}"
+        uses: ./.github/actions/agent-result
+        with:
+          role: docs_updater
+          result: ${{ steps.claude.outputs.structured_output }}
+          comment-on: ${{ needs.plan-source.outputs.plan }}
+          marker: plan=${{ needs.plan-source.outputs.plan }}
+          verify: ${{ needs.plan-source.outputs.plan }}
       - name: Report the run
         if: ${{ !cancelled() }}
         uses: ./.github/actions/claude-report

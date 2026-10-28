@@ -29,6 +29,8 @@ import time
 REPO = os.environ["GITHUB_REPOSITORY"]
 MAINTAINER = "jtwaugh"
 BOT = "claude[bot]"
+# The reviewer workflow posts the structured result with its own token.
+ACTIONS = "github-actions[bot]"
 CONTEXT = "review-verdict"
 # Same paths the reviewer workflow ignores (claude-review.yml, paths-ignore).
 NO_REVIEW = re.compile(r"^(SPEC\.md|docs/design/.*)$")
@@ -87,13 +89,16 @@ def structured_verdict(body):
 
 def latest_verdict(comments):
     """The reviewer's newest verdict comment as (kind, reviewed_sha, comment), or None.
-    A structured result wins over the `Verdict:` line (the fallback) in one comment."""
+    A structured result wins over the `Verdict:` line (the fallback) in one comment;
+    the workflow's own comments count only for a structured result."""
     found = None
     for c in comments:
-        if c["user"]["login"] != BOT:
+        if c["user"]["login"] not in (BOT, ACTIONS):
             continue
         body = c.get("body") or ""
         parsed = structured_verdict(body)
+        if parsed is None and c["user"]["login"] == ACTIONS:
+            continue
         if parsed is None:
             m = VERDICT.search(body)
             if not m:
