@@ -44,7 +44,11 @@ jobs:
       # PR, so they never push to the branch at the same time.
       group: claude-${{ inputs.pr }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    # Agent runs can move to a self-hosted runner: set the repo variable
+    # FACTORY_RUNNER to a JSON label or list ("warm", ["self-hosted", "x"]).
+    # Unset, it's ubuntu-latest. test_factory_runner_policy.py keeps it off
+    # fork-reachable jobs.
+    runs-on: ${{ fromJSON(vars.FACTORY_RUNNER || '"ubuntu-latest"') }}
     timeout-minutes: 60
     permissions:
       contents: write
