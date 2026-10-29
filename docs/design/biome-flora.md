@@ -396,7 +396,10 @@ Same framework; mostly data and art.
   water): `dune_grass`, tall and dry-tinted. "Warm" means every biome
   except Taiga, Tundra and Ice Desert. There's no beach biome, so
   this is a column condition, not a biome; it gives every island a fringe
-  the player sees from the raft. (Decided in #1313.)
+  the player sees from the raft. "Within 3 blocks of water" means a water
+  block at the sand block's y or one block below (y-1 to y), in any column
+  of the square of 3 columns around it (Chebyshev distance, not a circle).
+  (Decided in #1313 and #1410.)
 
 ## Phase F: underwater flora (later)
 
