@@ -612,3 +612,21 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#e8c33a"
+
+[[block]]
+id = 66
+name = "dune_grass_lower"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#b8a45a"
+
+[[block]]
+id = 67
+name = "dune_grass_upper"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#b8a45a"
