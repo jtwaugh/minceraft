@@ -33,6 +33,10 @@ pub enum FloraRequires {
     /// Grass with air above it and leaves higher in the same column; the
     /// entry stands on that grass, not on the column's top block.
     Canopy,
+    /// Sand at y `FLORA_COAST_MIN_Y` to `FLORA_COAST_MAX_Y` with water at the
+    /// sand's y or one below in any column of the square `FLORA_COAST_RADIUS`
+    /// columns around it (Chebyshev distance).
+    Coast,
 }
 
 /// One plant species.
@@ -207,6 +211,16 @@ fn place_pad(
 fn holds(world: &World, r: FloraRequires, x: i32, y: i32, z: i32) -> bool {
     match r {
         FloraRequires::Canopy => true,
+        FloraRequires::Coast => {
+            let n = FLORA_COAST_RADIUS;
+            world.get(x, y, z) == Block::Sand as u8
+                && (FLORA_COAST_MIN_Y..=FLORA_COAST_MAX_Y).contains(&y)
+                && (-n..=n).any(|dz| {
+                    (-n..=n).any(|dx| {
+                        (y - 1..=y).any(|wy| world.get(x + dx, wy, z + dz) == Block::Water as u8)
+                    })
+                })
+        }
         FloraRequires::NearWater => {
             let n = FLORA_NEAR_WATER_RADIUS;
             (-n..=n).any(|dz| {
@@ -268,6 +282,42 @@ mod flora_check;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A 21 by 21 world with sand at (10, sand_y, 10) and one water block at `water`.
+    fn coast(sand_y: i32, water: (i32, i32, i32)) -> bool {
+        let mut blocks = alloc::vec![0u8; 21 * 21 * HEIGHT];
+        let mut w = World::for_test(&mut blocks, 21, 21);
+        w.set(10, sand_y, 10, Block::Sand as u8);
+        w.set(water.0, water.1, water.2, Block::Water as u8);
+        holds(&w, FloraRequires::Coast, 10, sand_y, 10)
+    }
+
+    #[test]
+    fn coast_reaches_three_columns_in_a_square() {
+        assert!(coast(64, (13, 64, 13)));
+        assert!(coast(64, (7, 63, 10)));
+        assert!(!coast(64, (14, 64, 10)));
+        assert!(!coast(64, (10, 64, 14)));
+        assert!(!coast(64, (14, 64, 14)));
+    }
+
+    #[test]
+    fn coast_water_must_be_at_sand_y_or_one_below() {
+        assert!(coast(64, (11, 64, 10)));
+        assert!(coast(64, (11, 63, 10)));
+        assert!(!coast(64, (11, 65, 10)));
+        assert!(!coast(64, (11, 62, 10)));
+    }
+
+    #[test]
+    fn coast_sand_must_be_at_y_62_to_66() {
+        for y in [62, 66] {
+            assert!(coast(y, (11, y, 10)), "{y}");
+        }
+        for y in [61, 67] {
+            assert!(!coast(y, (11, y, 10)), "{y}");
+        }
+    }
 
     use super::flora_check::{validate, RawFlora};
 

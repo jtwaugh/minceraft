@@ -972,3 +972,48 @@ fn tulips_grow_in_seasonal_forest_in_same_colour_drifts() {
         "{rate} vs {chance} over {pairs}"
     );
 }
+
+#[test]
+fn dune_grass_is_on_coastal_sand_in_warm_biomes_and_region_independent() {
+    let (lo, up) = (Block::DuneGrassLower as u8, Block::DuneGrassUpper as u8);
+    let mut n = 0;
+    for seed in [12345u64, 9, 42] {
+        let (x0, z0, w, d) = (-512, -512, 1024, 1024);
+        let r = gen(seed, x0, z0, w, d, &FLORA);
+        let g = Generator::new(seed);
+        for z in z0..z0 + d as i32 {
+            for x in x0..x0 + w as i32 {
+                for y in 1..HEIGHT - 1 {
+                    let b = at(&r, x, y, z);
+                    if b == lo {
+                        let (t, h) = g.climate.at(x, z, &[], &[]);
+                        let biome = biome_for(t, h);
+                        assert!(
+                            !matches!(biome, Biome::Taiga | Biome::Tundra | Biome::IceDesert),
+                            "{x},{z}"
+                        );
+                        assert_eq!(at(&r, x, y + 1, z), up, "{x},{y},{z}");
+                        assert_eq!(at(&r, x, y - 1, z), Block::Sand as u8);
+                        assert!((62..=66).contains(&((y - 1) as i32)), "{x},{y},{z}");
+                        n += 1;
+                    } else if b == up {
+                        assert_eq!(at(&r, x, y - 1, z), lo, "{x},{y},{z}");
+                    }
+                }
+            }
+        }
+        let part = gen(seed, -40, -60, 90, 80, &FLORA);
+        for z in part.z0..part.z0 + 80 {
+            for x in part.x0..part.x0 + 90 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&r, x, y, z), at(&part, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+        assert_eq!(
+            count(&gen(seed, x0, z0, w, d, &[]), Block::DuneGrassLower),
+            0
+        );
+    }
+    assert!(n > 0, "no dune grass");
+}

@@ -107,6 +107,10 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     writeln!(out, "pub const FLORA_COLOUR_SCALE: f64 = {scale:?};").unwrap();
     let radius = int(&doc["settings"], "near_water_radius");
     writeln!(out, "pub const FLORA_NEAR_WATER_RADIUS: i32 = {radius};").unwrap();
+    for k in ["coast_radius", "coast_min_y", "coast_max_y"] {
+        let v = int(&doc["settings"], k);
+        writeln!(out, "pub const FLORA_{}: i32 = {v};", k.to_uppercase()).unwrap();
+    }
     let radius = int(&doc["settings"], "pad_land_radius");
     writeln!(out, "pub const FLORA_PAD_LAND_RADIUS: i32 = {radius};").unwrap();
     writeln!(out, "pub static FLORA: [Flora; {}] = [", raw.len()).unwrap();

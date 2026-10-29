@@ -193,6 +193,22 @@ pub(crate) struct World<'a> {
 }
 
 impl<'a> World<'a> {
+    /// A world over `blocks` (laid out as a region of `w` by `d` columns at the origin).
+    #[cfg(test)]
+    pub(crate) fn for_test(blocks: &'a mut [u8], w: i32, d: i32) -> World<'a> {
+        World {
+            blocks,
+            x0: 0,
+            z0: 0,
+            w,
+            d,
+            temp: &[],
+            biome: &[],
+            protected: None,
+            pending: Vec::new(),
+        }
+    }
+
     #[inline]
     fn col(&self, x: i32, z: i32) -> Option<usize> {
         let (dx, dz) = (x.wrapping_sub(self.x0), z.wrapping_sub(self.z0));
