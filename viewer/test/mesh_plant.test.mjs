@@ -145,7 +145,8 @@ function stalks(size, origin, lower, upper) {
 
 const names = Object.fromEntries(Object.entries(B).map(([k, v]) => [v, k]));
 for (const [lower, upper] of [[B.tall_grass_double_lower, B.tall_grass_double_upper], [B.dry_grass_tall_lower, B.dry_grass_tall_upper],
-  [B.fern_double_lower, B.fern_double_upper], [B.cattail_lower, B.cattail_upper]]) {
+  [B.fern_double_lower, B.fern_double_upper], [B.cattail_lower, B.cattail_upper],
+  [B.dune_grass_lower, B.dune_grass_upper]]) {
   test(`${names[upper]} matches the offset and mirror of ${names[lower]}`, () => {
     const s = stalks(16, [0, 0], lower, upper);
     for (const v of s.values()) {
