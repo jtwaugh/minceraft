@@ -39,6 +39,26 @@ def header(body, label):
     return re.findall(rf"^\*\*{re.escape(label)}:\*\*(.*)$", body, re.M)
 
 
+def chain(deps, lookup, limit=100):
+    """`deps` and everything they depend on, following each issue's Depends
+    on line, so a ticket may name a file an earlier ticket in its chain
+    creates, not only a direct dependency (#1470, #1493)."""
+    out, seen, todo = [], set(), list(deps)
+    while todo and len(out) < limit:
+        issue = todo.pop(0)
+        if issue["number"] in seen:
+            continue
+        seen.add(issue["number"])
+        out.append(issue)
+        for line in header(issue.get("body") or "", "Depends on"):
+            for n in map(int, re.findall(r"#(\d+)", line)):
+                if n not in seen:
+                    dep = lookup(n)
+                    if dep is not None and "pull_request" not in dep:
+                        todo.append(dep)
+    return out
+
+
 def ticket_errors(body, lookup, exists):
     """Reasons `body` isn't a ticket the factory can schedule. `lookup(n)`
     returns issue n as the REST API does, or None; `exists(path)` says
@@ -68,7 +88,7 @@ def ticket_errors(body, lookup, exists):
                               "after its tickets; name the tickets instead")
             else:
                 deps.append(issue)
-    from_deps = {p for d in deps for p, _ in PATH.findall(d.get("body") or "")}
+    from_deps = {p for d in chain(deps, lookup) for p, _ in PATH.findall(d.get("body") or "")}
     for line in header(body, "Files"):
         paths = PATH.findall(line)
         if not paths:
