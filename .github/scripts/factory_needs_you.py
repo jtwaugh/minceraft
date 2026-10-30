@@ -28,12 +28,14 @@ A ticket shows its PR's reason. Drafts, `hold`, `local` and `superseded`
 items are left alone: the maintainer already chose to park them.
 """
 import os
+import re
 import sys
 import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from factory_automerge import owned, why_not  # noqa: E402
+from factory_config import NEEDS_YOU_ALERT_HOURS  # noqa: E402
 from factory_rerun import FAILED, is_ticket_pr, ticket_of  # noqa: E402
 from factory_tick import REPORT_TITLE, Action  # noqa: E402
 
@@ -158,8 +160,8 @@ def age_text(seconds):
     return "waiting <1h" if hours < 1 else f"waiting {hours}h" if hours < 48 else f"waiting {hours // 24}d"
 
 
-def ages(snap, items, now):
-    """{target: text} for each waiting item: time since it started waiting
+def waits(snap, items, now):
+    """{target: seconds} for each waiting item: time since it started waiting
     (store), else since it was created."""
     created = {f"issue#{i['number']}": i.get("created_at") for i in snap.issues}
     created.update({f"pr#{p['number']}": p.get("created_at") for p in snap.prs})
@@ -170,22 +172,41 @@ def ages(snap, items, now):
             record_wait(snap.store, n, True, items[t][0], now)
         for n in sorted(waiting_subjects(snap.store) - set(nums.values())):
             record_wait(snap.store, n, False, "no longer waits on you", now)
-        return {t: age_text(time_in_state(snap.store, n, now, "needs_you")) for t, n in nums.items()}
-    return {t: age_text(now - c) for t in items if (c := since(created.get(t))) is not None}
+        return {t: time_in_state(snap.store, n, now, "needs_you") for t, n in nums.items()}
+    return {t: now - c for t in items if (c := since(created.get(t))) is not None}
 
 
-def queue_body(items, ages=None):
+def overdue(seconds):
+    return seconds > NEEDS_YOU_ALERT_HOURS * 3600
+
+
+def queue_body(items, ages=None, late=()):
     if not items:
         return ""
     lines = []
     for t, (why, n) in sorted(items.items(), key=lambda kv: (-kv[1][1], kv[0])):
         ref = "#" + t.split("#")[1]
         lines.append(f"- {ref}: {why}" + (f" (blocks {n} ticket{'s' * (n != 1)})" if n else "")
-                     + (f" ({ages[t]})" if t in (ages or {}) else ""))
+                     + (f" ({age_text(ages[t])})" if t in (ages or {}) else "")
+                     + (" **overdue**" if t in late else ""))
     return ("Everything the factory can't move until you act, most-blocking first. "
             f"The same items carry the `{LABEL}` label. Rewritten by the factory tick "
             "(`.github/scripts/factory_needs_you.py`), closed when nothing waits.\n\n"
             + "\n".join(lines) + "\n")
+
+
+def alert_marker(target, start):
+    return f"<!-- needs-you-alert {target} since={int(start)} -->"
+
+
+def alerted(queue, target, start):
+    """True if the queue issue already carries an alert for this wait: the
+    same item, and a start within a minute (a later wait starts later)."""
+    for c in queue.get("comments", []):
+        for t, at in re.findall(r"<!-- needs-you-alert (\S+) since=(\d+) -->", c.get("body", "")):
+            if t == target and abs(int(at) - start) < 60:
+                return True
+    return False
 
 
 def needs_you(snap):
@@ -199,7 +220,10 @@ def needs_you(snap):
         out.append(Action("add_label", t, {"label": LABEL}, items[t][0]))
     for t in sorted(labelled - items.keys()):
         out.append(Action("remove_label", t, {"label": LABEL}, "nothing waits on you here now"))
-    text = queue_body(items, ages(snap, items, clock()))
+    now = clock()
+    secs = waits(snap, items, now)
+    late = {t for t, w in secs.items() if overdue(w)}
+    text = queue_body(items, secs, late)
     mine = sorted((i for i in snap.issues if i["title"] == QUEUE_TITLE and i["state"] == "open"),
                   key=lambda i: i["number"])
     if not mine:
@@ -212,4 +236,12 @@ def needs_you(snap):
     elif mine[0].get("body") != text:
         out.append(Action("update_issue", f"issue#{mine[0]['number']}", {"body": text},
                           f"{len(items)} item(s) wait on you"))
+    if mine:
+        for t in sorted(late):
+            start = now - secs[t]
+            if not alerted(mine[0], t, start):
+                body = (f"{alert_marker(t, start)}\n#{t.split('#')[1]} has waited on you "
+                        f"{age_text(secs[t])[8:]} (alert after {NEEDS_YOU_ALERT_HOURS}h): {items[t][0]}")
+                out.append(Action("comment", f"issue#{mine[0]['number']}", {"body": body},
+                                  f"{t} is overdue"))
     return out

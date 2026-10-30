@@ -155,7 +155,8 @@ class Test(unittest.TestCase):
                  [pr(9, 7, "blocked", created_at="2026-10-27T00:00:00Z")])
         with mock.patch("factory_needs_you.clock", lambda: t0 + 10 * 86400 + 600):
             run(s)
-            self.assertEqual(run(s), [])  # second tick: same text, no rewrite
+            run(s)  # the overdue alerts, once the queue exists
+            self.assertEqual(run(s), [])  # third tick: same text, no rewrite
         body = next(i for i in s.issues if i["title"] == QUEUE_TITLE)["body"]
         self.assertIn("#9: Reviewer blocked it", body)
         self.assertIn("(waiting 3d)", body)  # the PR's created_at
@@ -182,6 +183,40 @@ class Test(unittest.TestCase):
             run(s)
         body = next(i for i in s.issues if i["title"] == QUEUE_TITLE and i["state"] == "open")["body"]
         self.assertIn("(waiting <1h)", body)  # the clock restarted
+
+    def test_overdue_item_alerts_once_per_wait(self):
+        import factory_store
+        from factory_config import NEEDS_YOU_ALERT_HOURS as LIMIT
+        s = snap([ticket(7), ticket(8, ["planned"])], [pr(9, 7, "blocked")])
+        s.store = factory_store.open(":memory:")
+        now = [1_000_000.0]
+
+        def alerts():
+            queue = next(i for i in s.issues if i["title"] == QUEUE_TITLE)
+            return [c["body"] for c in queue.get("comments", [])]
+
+        with mock.patch("factory_needs_you.clock", lambda: now[0]):
+            run(s)  # opens the queue
+            now[0] += (LIMIT - 1) * 3600
+            run(s)
+            self.assertEqual(alerts(), [])  # under the threshold
+            now[0] += 2 * 3600
+            run(s)
+            run(s)
+            now[0] += 600
+            run(s)
+            self.assertEqual(len(alerts()), 3)  # #8, #7 and PR #9: once each, over three ticks
+            self.assertTrue(any("issue#7" in a and "Reviewer blocked" in a for a in alerts()))
+            body = next(i for i in s.issues if i["title"] == QUEUE_TITLE)["body"]
+            self.assertEqual(body.count("**overdue**"), 3)
+            s.prs[0]["verdict"]["kind"] = "ready"  # #7 can move: cleared
+            run(s)
+            s.prs[0]["verdict"]["kind"] = "blocked"
+            run(s)
+            self.assertEqual(len(alerts()), 3)  # waiting again, not yet late
+            now[0] += (LIMIT + 1) * 3600
+            run(s)
+            self.assertEqual(len(alerts()), 5)  # the new wait alerts again (#7 and PR #9)
 
 
 if __name__ == "__main__":
