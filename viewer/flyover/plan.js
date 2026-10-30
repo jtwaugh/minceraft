@@ -573,12 +573,17 @@ export function buildPath(keys, ground, { clearance = 7, cruise = 30, fps = 30 }
 // (radians), aspect ratio, and the distance where fog reaches full sky colour.
 export const VIEW = { fovY: 1.0, aspect: 16 / 9, fogEnd: 196 };
 export const CHUNK = 64;
+// Blocks added above the survey's highest point in a chunk for tree tops. The
+// survey records the ground; the tallest trees (big oaks, tall spruces) stand
+// well over 10 blocks above it, and a loose box only loads a few extra chunks.
+export const TREE_CLEARANCE = 24;
 
 /**
  * Which 64x64 chunks the camera can see, and when. Samples the path every
- * `step` seconds and keeps chunks with a point (5 x 5 per chunk, at the
- * terrain surface and 10 blocks above it) inside the view frustum before the
- * fog, plus every chunk within `near` blocks of the camera. Each interval is
+ * `step` seconds and keeps chunks whose box (survey minimum to maximum
+ * height over the chunk, at least sea level, plus TREE_CLEARANCE) meets the
+ * view frustum and lies within VIEW.fogEnd of the eye (radial distance to the
+ * box), plus every chunk within `near` blocks of the camera. Each interval is
  * padded by `pad` seconds. Terrain occlusion is not tested: the camera flies
  * above the ground and some part of nearly every chunk in view shows (see
  * README). `full` is the first time (padded the same way) the camera comes
@@ -588,7 +593,23 @@ export const CHUNK = 64;
 export const FULL_DETAIL = 80;
 export function visibilitySchedule(path, g, { step = 0.25, pad = 1, near = 40, margin = 4 } = {}) {
   const tanV = Math.tan(VIEW.fovY / 2), tanH = tanV * VIEW.aspect, far = VIEW.fogEnd;
-  const seen = new Map();
+  const seen = new Map(), spans = new Map();
+  // lowest and highest survey height over the chunk (never below sea level),
+  // plus tree clearance on top
+  const span = (cx, cz) => {
+    const k = cx + ',' + cz;
+    let s = spans.get(k);
+    if (!s) {
+      let lo = Infinity, hi = SEA;
+      for (let x = cx * CHUNK; x <= (cx + 1) * CHUNK + g.step; x += g.step)
+        for (let z = cz * CHUNK; z <= (cz + 1) * CHUNK + g.step; z += g.step) {
+          const h = heightAt(g, Math.min(x, (cx + 1) * CHUNK), Math.min(z, (cz + 1) * CHUNK));
+          lo = Math.min(lo, h); hi = Math.max(hi, h);
+        }
+      spans.set(k, s = [Math.max(SEA, lo), hi + TREE_CLEARANCE]);
+    }
+    return s;
+  };
   const mark = (cx, cz, t, d) => {
     const k = cx + ',' + cz;
     let e = seen.get(k);
@@ -600,12 +621,17 @@ export function visibilitySchedule(path, g, { step = 0.25, pad = 1, near = 40, m
     const f = norm3(target.map((v, i) => v - eye[i]));
     const r = norm3([-f[2], 0, f[0]]);
     const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
-    const inView = (x, y, z) => {
-      const d = [x - eye[0], y - eye[1], z - eye[2]];
-      const zz = d[0] * f[0] + d[1] * f[1] + d[2] * f[2];
-      if (zz < 0.3 || zz > far) return false;
-      return Math.abs(d[0] * r[0] + d[1] * r[1] + d[2] * r[2]) <= zz * tanH + margin &&
-        Math.abs(d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) <= zz * tanV + margin;
+    // inward side planes as (normal . d + margin >= 0); a box is in view if its
+    // best corner passes all four and it reaches past the near plane
+    const planes = [
+      [f[0] * tanH - r[0], f[1] * tanH - r[1], f[2] * tanH - r[2]],
+      [f[0] * tanH + r[0], f[1] * tanH + r[1], f[2] * tanH + r[2]],
+      [f[0] * tanV - u[0], f[1] * tanV - u[1], f[2] * tanV - u[2]],
+      [f[0] * tanV + u[0], f[1] * tanV + u[1], f[2] * tanV + u[2]],
+    ];
+    const boxInView = (lo, hi) => {
+      const best = (n) => [0, 1, 2].reduce((s, a) => s + n[a] * (n[a] >= 0 ? hi[a] - eye[a] : lo[a] - eye[a]), 0);
+      return best(f) >= 0.3 && planes.every((n) => best(n) + margin >= 0);
     };
     for (let cz = Math.floor((eye[2] - far) / CHUNK); cz <= Math.floor((eye[2] + far) / CHUNK); cz++)
       for (let cx = Math.floor((eye[0] - far) / CHUNK); cx <= Math.floor((eye[0] + far) / CHUNK); cx++) {
@@ -613,12 +639,10 @@ export function visibilitySchedule(path, g, { step = 0.25, pad = 1, near = 40, m
         const dz = Math.max(cz * CHUNK - eye[2], 0, eye[2] - (cz + 1) * CHUNK);
         const d = Math.hypot(dx, dz);
         if (d > far) continue;
-        let vis = d <= near;
-        for (let a = 0; a <= 4 && !vis; a++) for (let b = 0; b <= 4 && !vis; b++) {
-          const x = cx * CHUNK + a * 16, z = cz * CHUNK + b * 16, y = Math.max(SEA, heightAt(g, x, z)) + 2;
-          vis = inView(x, y, z) || inView(x, y + 10, z);
-        }
-        if (vis) mark(cx, cz, t, d);
+        const [y0, y1] = span(cx, cz);
+        const dy = Math.max(y0 - eye[1], 0, eye[1] - y1);
+        if (Math.hypot(d, dy) > far) continue;
+        if (d <= near || boxInView([cx * CHUNK, y0, cz * CHUNK], [(cx + 1) * CHUNK, y1, (cz + 1) * CHUNK])) mark(cx, cz, t, d);
       }
   }
   return [...seen.values()].map((e) => ({ ...e, first: Math.max(0, e.first - pad), last: Math.min(path.duration, e.last + pad),

@@ -86,8 +86,14 @@ node viewer/flyover/preview.mjs 2026 0 0 route.ppm   # plan only, no browser
    result (`plan.coverage`, with the `first` second each feature is in view),
    and the page lists it under the view as chapters you can seek to.
 9. **Visibility schedule** (`visibilitySchedule`): from the path sampled every
-   0.25 s, each 64×64 chunk with any point inside the 16:9 view before the fog
-   gets a `first` and `last` time in view, padded by 1 s. That's 72–141 chunks
+   0.25 s, each 64×64 chunk whose box meets the 16:9 view frustum and lies
+   within `VIEW.fogEnd` of the eye (straight-line distance to the box) gets a
+   `first` and `last` time in view, padded by 1 s. The box runs from the
+   survey's lowest to highest height over the chunk (at least sea level) plus
+   `TREE_CLEARANCE` (24 blocks: the survey sees only ground, and the tallest
+   trees stand well over 10 blocks above it; a loose box costs a few extra
+   chunks, a tight one pops trees in). Chunks within `near` blocks always
+   count. That's 72–141 chunks
    per flight. The player loads chunks in order of `first`, keeps 8 s ahead,
    and frees each chunk 2 s after its `last`. The clock only runs while
    everything in view now is loaded (after a start or seek, everything for
@@ -316,6 +322,13 @@ crawl, so flights came out at 170–290 s. Two changes fixed it:
 - per-shot speeds raised by 1.4×.
 
 Feature scores also needed caps: a large overhang cluster once scored 5,399.
+
+### The box test is not a superset of the old point test
+
+On seeds 12345, 9 and 42 every chunk the old 25-point test scheduled is still
+scheduled, but a few intervals got shorter (by 0.25 to 0.5 s, and once 3.9 s
+on seed 9). The new distance limit is 3D, so a chunk far below a high camera
+now drops out sooner; the old one measured only the horizontal distance.
 
 ### Testing in a browser without the extension
 
