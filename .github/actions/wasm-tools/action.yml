@@ -28,12 +28,21 @@ runs:
       shell: bash
       env:
         BINARYEN_VERSION: ${{ inputs.binaryen }}
+        PLATFORM: ${{ runner.os }}-${{ runner.arch }}
       run: |
         set -euo pipefail
+        # Binaryen's asset name for this runner (a warm worker may be a Mac).
+        case "$PLATFORM" in
+          Linux-X64) asset=x86_64-linux ;;
+          Linux-ARM64) asset=aarch64-linux ;;
+          macOS-X64) asset=x86_64-macos ;;
+          macOS-ARM64) asset=arm64-macos ;;
+          *) echo "::error::no binaryen release for $PLATFORM"; exit 1 ;;
+        esac
         dir=~/.cache/wasm-tools
         mkdir -p "$dir/bin"
         cp "$(command -v wasm-pack)" "$dir/bin/"
-        curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/binaryen-${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
+        curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/binaryen-${BINARYEN_VERSION}-${asset}.tar.gz" \
           | tar xz -C "$dir"
 
     - shell: bash
