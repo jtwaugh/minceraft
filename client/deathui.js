@@ -9,6 +9,9 @@
 
 import { panelImage, PANEL_TEXELS } from './inventoryui.js';
 import { interfaceScale } from './uipx.js';
+import { drawString } from './font.js';
+import { panelImage as statePanel } from './panel.js';
+import { PALETTE, buttonCss } from './uistyle.js';
 
 export const DEATH_TITLE = 'You died';
 export const DEATH_RESPAWN = 'Respawn';
@@ -24,16 +27,18 @@ export function deathModel() {
   ];
 }
 
+const BUTTON_ID = '#death-respawn';
 const CSS = `
-#death { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: rgba(60, 0, 0, 0.5); font: 12px/1.2 ui-monospace, monospace; color: #fff; image-rendering: pixelated; }
+#death { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; background: ${PALETTE.deathDim}; color: ${PALETTE.text}; image-rendering: pixelated; }
 #death[hidden] { display: none; }
 #death-panel { box-sizing: border-box; border-style: solid; border-image-slice: ${PANEL_TEXELS}; border-image-repeat: stretch; image-rendering: pixelated; display: flex; flex-direction: column; align-items: center; }
-#death-respawn { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; text-shadow: 0 0 3px #000; }
+#death canvas { display: block; }
 `;
 
 export function mountDeath(document, set, controller, parent = document.body, view = globalThis) {
   const style = document.createElement('style');
   style.textContent = CSS;
+  const buttonStyle = document.createElement('style');
   const root = document.createElement('div');
   root.id = 'death';
   root.hidden = true;
@@ -42,13 +47,13 @@ export function mountDeath(document, set, controller, parent = document.body, vi
   const els = deathModel().map((m) => {
     const el = document.createElement(m.kind === 'button' ? 'button' : 'div');
     el.id = m.id;
-    el.textContent = m.text;
+    el.setAttribute('aria-label', m.text);
     return el;
   });
   els[1].addEventListener('click', () => controller.respawn());
   panel.append(...els);
   root.append(panel);
-  parent.append(style, root);
+  parent.append(style, buttonStyle, root);
   let last = '';
   return {
     update(dead) {
@@ -62,7 +67,8 @@ export function mountDeath(document, set, controller, parent = document.body, vi
       panel.style.borderWidth = `${PANEL_TEXELS * scale}px`;
       panel.style.padding = `${pad}px`;
       panel.style.gap = `${pad}px`;
-      panel.style.fontSize = `${4 * scale}px`;
+      els.forEach((el, i) => el.replaceChildren(drawString(set, deathModel()[i].text, scale, document)));
+      buttonStyle.textContent = buttonCss(BUTTON_ID, scale, statePanel(document, set, 'raised'), statePanel(document, set, 'pressed'));
     },
   };
 }
