@@ -16,7 +16,8 @@
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, * as game from './pkg/game_web.js';
-import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, variantTable, quadIndices, columnTints, meshBlocks, ramp3 } from '../viewer/mesh.js';
+import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendContext, variantTable, quadIndices, columnTints, ramp3 } from '../viewer/mesh.js';
+import { meshBlocksWasm } from '../viewer/meshwasm.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
@@ -400,7 +401,7 @@ function meshRegion({ rx, rz }, remesh = false) {
   const blocks = padRegion((a, b) => walk.region_blocks(a, b), rx, rz, REGION_SIZE);
   const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE, blendRadius);
   if (rx === 0 && rz === 0 && !skyReady) skyColor = skyTarget = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
-  const m = meshBlocks(ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });
+  const m = meshBlocksWasm(terrain, ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });
   const parts = {};
   for (const k of Object.keys(meshes)) {
     const part = upload(m[k], [x, 0, z]);
@@ -438,7 +439,7 @@ if (scene) {
     const blocks = seaBlocks.slice();
     const t = walk.farm_tiles();
     for (let i = 0; i < t.length; i += 4) blocks[((t[i + 2] - min) * size + t[i] - min) * 128 + t[i + 1]] = t[i + 3];
-    const m = meshBlocks(ctx, blocks, tints, size, 0, { origin: [min, min] });
+    const m = meshBlocksWasm(terrain, ctx, blocks, tints, size, 0, { origin: [min, min] });
     for (const k of Object.keys(meshes)) {
       for (const old of seaParts[k]) { gl.deleteVertexArray(old.vao); gl.deleteBuffer(old.buf); }
       meshes[k] = seaParts[k] = [upload(m[k], offset)].filter(Boolean);

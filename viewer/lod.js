@@ -45,13 +45,14 @@ export function downsampleBlocks(blocks, size, pad = 0) {
  * each cell's first column, with no corner blend). `origin` is the world
  * (x, z) of the first column and must be even, so cells line up with those of
  * neighbouring areas. Leaves are meshed as fast leaves. Positions, and meanY
- * and minY, are in blocks.
+ * and minY, are in blocks. `mesher` is meshBlocks or a function with its
+ * arguments and result (the wasm one, meshwasm.js).
  */
-export function meshHalf(ctx, blocks, tints, size, pad = 0, { origin = [0, 0], greedy = true } = {}) {
+export function meshHalf(ctx, blocks, tints, size, pad = 0, { origin = [0, 0], greedy = true, mesher = meshBlocks } = {}) {
   const { cells, size: cs, pad: cp } = downsampleBlocks(blocks, size, pad);
   const pick = (a) => a && Array.from({ length: cs * cs }, (_, c) => a[(Math.floor(c / cs) * 2) * size + (c % cs) * 2]);
   const ct = { grass: pick(tints.grass), leaf: pick(tints.leaf), water: pick(tints.water), dry: pick(tints.dry) };
-  const m = meshBlocks(ctx, cells, ct, cs, cp, { fast: true, origin: [origin[0] >> 1, origin[1] >> 1], greedy });
+  const m = mesher(ctx, cells, ct, cs, cp, { fast: true, origin: [origin[0] >> 1, origin[1] >> 1], greedy });
   for (const k of ['opaque', 'cutout', 'water', 'ice']) {
     const i16 = new Int16Array(m[k].verts);
     for (let v = 0; v < m[k].faces * 4; v++) for (let j = 0; j < 3; j++) i16[v * 8 + j] *= 2;
