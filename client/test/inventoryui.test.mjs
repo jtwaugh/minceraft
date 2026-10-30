@@ -8,8 +8,8 @@ test('inventoryScale is an integer >= 1 for any viewport', () => {
     const s = inventoryScale(w, h);
     assert.ok(Number.isInteger(s) && s >= 1, `${w}x${h} -> ${s}`);
   }
-  assert.equal(inventoryScale(1920, 1080), 15);
-  assert.equal(inventoryScale(1920, 300), 4);
+  assert.equal(inventoryScale(1920, 1080), 6);
+  assert.equal(inventoryScale(1920, 300), 1);
 });
 
 test('itemLabel turns names into display text', () => {

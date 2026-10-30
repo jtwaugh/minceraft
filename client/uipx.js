@@ -19,11 +19,14 @@ export const BELT_MAX_WIDTH_FRACTION = 0.5;
 const PANEL_TEXELS_W = 100;
 // Taller than the panels need: leaves room for the crosshair texture, drawn at this scale, above the hearts.
 const PANEL_TEXELS_H = 65;
+/** The viewport is always at least this many texels tall, so the UI stays small on large screens (6 at 1080p). */
+export const MIN_VIEW_TEXELS_H = 160;
 
-/** Shared UI scale: the largest integer >= 1 keeping the belt within its width share and the 100x65 layout (or a larger fitW x fitH layout) on screen. */
+/** Shared UI scale: the largest integer >= 1 keeping the belt within its width share, the viewport MIN_VIEW_TEXELS_H texels tall, and the 100x65 layout (or a larger fitW x fitH layout) on screen. */
 export function interfaceScale(viewportW, viewportH, fitW = PANEL_TEXELS_W, fitH = PANEL_TEXELS_H) {
   const belt = Math.floor((viewportW * BELT_MAX_WIDTH_FRACTION) / BELT_TEXELS_W);
-  const s = Math.min(belt, uiScale(viewportW, viewportH, Math.max(fitW, PANEL_TEXELS_W), Math.max(fitH, PANEL_TEXELS_H)));
+  const tall = Math.floor(viewportH / MIN_VIEW_TEXELS_H);
+  const s = Math.min(belt, tall, uiScale(viewportW, viewportH, Math.max(fitW, PANEL_TEXELS_W), Math.max(fitH, PANEL_TEXELS_H)));
   return Number.isFinite(s) && s >= 1 ? s : 1;
 }
 
