@@ -59,3 +59,32 @@ test('wordmark is used when the tileset has it, text h1 otherwise', async () => 
   assert.equal(wordmarkTexels({ batches: {} }), null);
   assert.equal(WORDMARK, 'wordmark');
 });
+
+test('styleMenu sets the button variables and generates raised and pressed CSS', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { styleMenu, BUTTON_SELECTOR } = await import('../menu.js');
+  const set = JSON.parse(await readFile(new URL('../../viewer/textures.json', import.meta.url)));
+  const vars = {}, sheets = {};
+  globalThis.ImageData ??= class { constructor(data, w, h) { this.data = data; this.width = w; this.height = h; } };
+  const canvas = () => ({
+    width: 0, height: 0, style: {},
+    getContext: () => ({ drawImage() {}, fillRect() {}, putImageData() {}, createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }) }),
+    toDataURL: () => 'data:x',
+  });
+  const doc = {
+    documentElement: { style: { setProperty: (k, v) => { vars[k] = v; } } },
+    body: { classList: { add() {} } },
+    head: { appendChild: (el) => { sheets[el.id] = el; } },
+    getElementById: (id) => sheets[id] ?? null,
+    querySelector: () => null,
+    createElement: (tag) => (tag === 'canvas' ? canvas() : { id: '', textContent: '' }),
+  };
+  assert.equal(styleMenu(doc, { innerWidth: 1366, innerHeight: 768 }, set), true);
+  assert.match(vars['--btn-raised'], /^url\(/);
+  assert.match(vars['--btn-pressed'], /^url\(/);
+  const css = sheets['menu-buttons'].textContent;
+  assert.ok(css.includes(`${BUTTON_SELECTOR}:active`));
+  assert.match(css, /border-image-source/);
+  styleMenu(doc, { innerWidth: 1920, innerHeight: 1080 }, set);
+  assert.equal(Object.keys(sheets).length, 1);
+});
