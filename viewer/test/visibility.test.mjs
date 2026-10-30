@@ -46,3 +46,21 @@ test('the distance limit is radial in 3D', () => {
   assert.ok(has(visibilitySchedule(still([0, 90, 32], [1, 0, 0]), grid(), opts), 2, 0));
   assert.ok(!has(visibilitySchedule(still([0, 260, 32], [0.64, -0.77, 0]), grid(), opts), 2, 0));
 });
+
+test('chunks first seen from afar are half detail until the swap', () => {
+  // fly level along +x at 20 blocks per second, from inside chunk 0
+  const path = { duration: 12, at: (t) => { const eye = [32 + 20 * t, 90, 32]; return { eye, target: [eye[0] + 50, 90, 32] }; } };
+  const s = visibilitySchedule(path, grid(), { near: 0, margin: 0 });
+  const e = (cx) => s.find((c) => c.cx === cx && c.cz === 0);
+  assert.equal(e(0).half, false);
+  const far = s.filter((c) => c.half);
+  assert.ok(far.length > 0);
+  for (const c of far) {
+    // swapped to full detail after it first shows, with time to load before the camera is within FULL_DETAIL
+    assert.ok(c.full > c.first && c.full < Infinity || c.full === Infinity);
+  }
+  const swapped = far.find((c) => c.full < Infinity);
+  assert.ok(swapped, 'a far-first chunk the camera reaches');
+  assert.ok(swapped.full - swapped.first >= 1);
+  assert.ok(!s.some((c) => c.half && c.first === 0 && c.cx < 2));
+});

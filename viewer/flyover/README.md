@@ -194,6 +194,17 @@ instead of 2 MB. The player requests the full-detail mesh `LOOKAHEAD`
 seconds before `full` and swaps it in when it arrives. The clock waits for
 it, as it waits for any chunk.
 
+### Half-resolution chunks
+
+A chunk first seen from beyond `HALF_DETAIL` (120) blocks has `half: true`
+in its schedule entry and is meshed with `meshHalf` (`lod.js`) until `full`,
+the same moment fast leaves are swapped. The swap replaces the `loaded` entry
+only when the full mesh has arrived, so the half mesh is drawn until then:
+no gap and no double draw. A chunk seen near first never goes half.
+Pitfalls: the one-block pad ring is lost when halved (pad 1 becomes 0 cells),
+so a half chunk draws its edge faces against air; they sit in fog. `origin`
+must be even, which chunk corners are.
+
 ### Drawing order and culling
 
 Each frame `renderFly` draws only the chunks whose box is inside the view
