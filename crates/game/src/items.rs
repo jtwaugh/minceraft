@@ -404,6 +404,22 @@ mod tests {
     }
 
     #[test]
+    fn fish_catches_load_and_can_be_carried() {
+        use crate::commands::{give_command, Registry};
+        use crate::input::TickInput;
+        let items = Items::default_items();
+        for name in ["raw_salmon", "raw_tuna", "raw_mackerel", "raw_squid"] {
+            assert!(items.has_item(name), "{name}");
+            let mut w = crate::walk::Walker::new([0.5, 5.0, 0.5]).unwrap();
+            w.set_commands(Registry::new(vec![give_command()]).unwrap());
+            w.submit_command(&format!("give item {name}"));
+            w.tick(&TickInput::default());
+            assert_eq!(w.drain_command_output(), vec![format!("gave item {name}")]);
+            assert_eq!(w.hands().unwrap().item, name);
+        }
+    }
+
+    #[test]
     fn flowers_are_pickable_and_nothing_else_is() {
         let items = Items::default_items();
         assert_eq!(items.pick_item("dandelion"), Some("dandelion_flower"));

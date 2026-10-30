@@ -5,6 +5,7 @@
 export const ITEM_TEXTURES = [
   'seeds', 'raw_beef', 'leather', 'raw_pork', 'raw_chicken', 'feather',
   'dandelion_flower', 'rose_flower', 'wheat',
+  'raw_salmon', 'raw_tuna', 'raw_mackerel', 'raw_squid',
 ];
 
 /** The icon texture name for item `name`, or null for an unknown item (drawn grey). */

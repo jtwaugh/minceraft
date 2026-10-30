@@ -92,6 +92,24 @@ cooldown_ticks = 1200
 name = "wheat"
 label = "Wheat"
 
+# Fish catches (docs/design/fish-and-fishing.md section 2). A squid killed with
+# the sword gives raw_squid the same way a fish gives its raw item.
+[[item]]
+name = "raw_salmon"
+label = "Raw salmon"
+
+[[item]]
+name = "raw_tuna"
+label = "Raw tuna"
+
+[[item]]
+name = "raw_mackerel"
+label = "Raw mackerel"
+
+[[item]]
+name = "raw_squid"
+label = "Raw squid"
+
 # Tilling grass with the hoe (section 9.1). This is Mince Raft's own value;
 # research in #289 may change it.
 [till]
