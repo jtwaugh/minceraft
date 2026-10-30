@@ -8,7 +8,6 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 12px/1.4 ui-monospace, monospace; }
   #gl { display: block; width: 100vw; height: 100vh; }
   #overlay { position: fixed; top: 8px; left: 8px; margin: 0; padding: 4px 8px; color: #fff; background: rgba(0, 0, 0, .55); pointer-events: none; }
-  #hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 6px 12px; color: #fff; background: rgba(0, 0, 0, .55); pointer-events: none; }
   #console { position: fixed; bottom: 8px; left: 8px; right: 8px; pointer-events: none; }
   #console-out { padding: 0 4px; white-space: pre-wrap; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   #console-input { box-sizing: border-box; width: 100%; padding: 4px 8px; font: inherit; color: #fff; background: rgba(0, 0, 0, .7); border: 1px solid #888; outline: none; pointer-events: auto; }
@@ -17,7 +16,6 @@
 <body>
 <canvas id="gl"></canvas>
 <pre id="overlay">loading…</pre>
-<div id="hint">Click to look around. WASD move, Space jump (fly: up), Shift sneak (fly: down), F walk/fly, Esc releases the mouse.</div>
 <script type="module" src="./scene.js"></script>
 </body>
 </html>
