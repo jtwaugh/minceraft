@@ -19,6 +19,9 @@
   body.styled section { width: calc(60 * var(--px)); margin: 0 auto calc(4 * var(--px)); text-align: left;
     border: calc(4 * var(--px)) solid transparent; border-image: var(--panel) 4 fill / calc(4 * var(--px)) stretch;
     image-rendering: pixelated; }
+  /* The text stays in the h1 for accessibility; the wordmark is its background. */
+  body.styled h1.wordmark { width: var(--wordmark-w); height: var(--wordmark-h); margin: 0 auto calc(8 * var(--px)); overflow: hidden;
+    text-indent: -999em; white-space: nowrap; text-shadow: none; background: var(--wordmark) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; }
   body.styled h2 { margin: 0; font-size: calc(5 * var(--px)); }
   body.styled a { color: #fff; text-shadow: var(--px) var(--px) #000; }
   body.styled ul { font-size: calc(3.5 * var(--px)); }
