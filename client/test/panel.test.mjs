@@ -60,3 +60,28 @@ test('drawPanel sizes the canvas and paints cropped tiles from the right offset'
   assert.equal(fills.length, 64);
   assert.deepEqual(fills.filter((f) => f[0] === '#ff0000').map((f) => f.slice(1, 3)), [[0, 0], [8, 0], [0, 8], [8, 8]]);
 });
+
+const tile = (c) => Array(4).fill(c.repeat(4));
+const setOf = (names) => ({ palette: { a: '#fff' }, batches: { b: { textures: Object.fromEntries(names.map((n) => [n, tile('a')])) } } });
+const SUFFIXES = ['tl', 't', 'tr', 'l', 'c', 'r', 'bl', 'b', 'br'];
+
+test('panelNames picks pressed tiles only when the whole set exists', async () => {
+  const { panelNames } = await import('../panel.js');
+  const raised = SUFFIXES.map((s) => `panel_${s}`), pressed = SUFFIXES.map((s) => `panel_pressed_${s}`);
+  const both = setOf([...raised, ...pressed]);
+  assert.deepEqual(panelNames(both).flat(), raised);
+  assert.deepEqual(panelNames(both, 'raised').flat(), raised);
+  assert.deepEqual(panelNames(both, 'pressed').flat(), pressed);
+  assert.deepEqual(panelNames(setOf(raised), 'pressed').flat(), raised);
+  assert.deepEqual(panelNames(setOf([...raised, ...pressed.slice(1)]), 'pressed').flat(), raised);
+});
+
+test('panelImage draws nine tiles and falls back without pressed ones', async () => {
+  const { panelImage } = await import('../panel.js');
+  globalThis.ImageData = class { constructor(d, w, h) { this.data = d; this.width = w; this.height = h; } };
+  const drawn = [];
+  const doc = { createElement: () => ({ style: {}, getContext: () => ({ putImageData() {}, drawImage: (_t, x, y) => drawn.push([x, y]) }), toDataURL: () => 'url' }) };
+  assert.equal(panelImage(doc, setOf(SUFFIXES.map((s) => `panel_${s}`)), 'pressed'), 'url');
+  assert.equal(drawn.length, 9);
+  delete globalThis.ImageData;
+});

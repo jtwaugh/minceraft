@@ -2,11 +2,12 @@
 // is DOM-free so node tests can cover it; the DOM part only runs in a browser.
 import { ALPHA, menuEntries } from './scenes.js';
 import { textureCanvas, interfaceScale } from './uipx.js';
+import { panelImage } from './panel.js';
 
 // Nine-slice panel pieces, 4x4 texels each, and the water tile the sea scrolls.
 export const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
 export const SEA_TILE = 'water_0';
-const PANEL_TEXELS = 4, SEA_TEXELS = 8;
+const SEA_TEXELS = 8;
 // Layout the pixel scale is chosen for, in texels.
 const BASE_W = 160, BASE_H = 120;
 
@@ -62,18 +63,6 @@ export function renderMenu(doc, root, model) {
   }
 }
 
-
-/** Composes the 3x3 panel pieces into one canvas, for use as a CSS border-image. */
-function panelImage(doc, set) {
-  const n = PANEL_TEXELS, canvas = doc.createElement('canvas');
-  canvas.width = canvas.height = 3 * n;
-  const ctx = canvas.getContext('2d');
-  PANEL.forEach((row, y) => row.forEach((name, x) => {
-    const tile = textureCanvas(set, name, doc);
-    if (tile) ctx.drawImage(tile, x * n, y * n);
-  }));
-  return canvas.toDataURL();
-}
 
 /** Menu scale: the shared rule, bounded so the 160x120 layout fits. */
 export function menuScale(viewportW, viewportH) {
