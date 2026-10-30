@@ -18,6 +18,11 @@ opt-level = 3
 [profile.release.package.terrain]
 opt-level = 3
 
+# The block mesher runs per chunk in the viewer's workers; at opt-level "z"
+# it is no faster than the JS mesher.
+[profile.release.package.mesh]
+opt-level = 3
+
 # Tests and dev builds generate a lot of terrain, which is ~20x slower
 # unoptimised. Optimise just the generator (and the layout crate on top of
 # it); everything else keeps fast debug builds. Debug assertions and

@@ -1,11 +1,15 @@
 //! Core of `meshBlocks` in `viewer/mesh.js`: one quad per visible face of full
 //! cubes, ice, water, leaves, cacti, bushes and snow layers, with climate tints
-//! and per-block tile variants, cross plants and flat shapes. AO and greedy
-//! merging come later; here AO is 0.
+//! and per-block tile variants, cross plants, flat shapes and vertex AO on
+//! full cubes and leaves. Flat-tinted water tops always merge into rectangles,
+//! as in the JS; with `greedy`, so do untinted cube faces of one AO level.
+use crate::ao::{face_ao, flips, rot};
+use crate::greedy::{merge, GRID_AXES};
 use crate::plants::cross;
 use crate::shapes::{bounds, box_hidden, face_corners, flat, flat_lift, is_box, LEAF_WEIGHT};
 use crate::tables::{face_uv, CROSS, FACES, VARIES};
 use crate::{js_round, pick_layer, variant_at, Quads, Tint, Tints, Variants};
+use alloc::vec::Vec;
 
 /// Column height in blocks.
 pub const H: usize = 128;
@@ -36,6 +40,48 @@ fn layer_of(face_layer: &[u8], b: u8, dy: i32, fast: bool) -> u8 {
     face_layer[if fast { 768 } else { 0 } + b as usize * 3 + face]
 }
 
+/// The water tint of column (x, z) as bytes, if all four corners agree
+/// (`waterTint` in `viewer/mesh.js`).
+fn water_tint(tints: &Tints, x: usize, z: usize) -> Option<[u8; 3]> {
+    let key = |t: [f64; 3]| t.map(|v| js_round(v * 255.0) as u8);
+    match tints.block(WATER, x, z) {
+        None => Some([255; 3]),
+        Some(t) if !tints.corners => Some(key(t)),
+        Some(_) => {
+            let k = key(tints.vertex(WATER, x, z, 0, 0));
+            [(0, 1), (1, 1), (1, 0)]
+                .iter()
+                .all(|&(a, b)| key(tints.vertex(WATER, x, z, a, b)) == k)
+                .then_some(k)
+        }
+    }
+}
+
+/// A water-top cell waiting to be merged: equal cells share a quad.
+#[derive(PartialEq)]
+struct WaterTop {
+    layer: u8,
+    depth: u8,
+    tint: [u8; 3],
+}
+
+/// An untinted cube-face cell waiting to be merged. Cells with equal layer,
+/// shade byte, AO level and UV variant share a quad, which takes the first
+/// cell's unrounded shade `k`.
+struct FaceCell {
+    layer: u8,
+    shade: i64,
+    ao: u8,
+    vr: u32,
+    k: f64,
+}
+
+impl PartialEq for FaceCell {
+    fn eq(&self, o: &Self) -> bool {
+        (self.layer, self.shade, self.ao, self.vr) == (o.layer, o.shade, o.ao, o.vr)
+    }
+}
+
 /// The four vertex buffers of a meshed area plus the surface statistics.
 pub struct Mesh {
     pub opaque: Quads,
@@ -51,12 +97,13 @@ pub struct Mesh {
 /// is read for culling. Solid ground is clipped 8 blocks under the lowest
 /// surface. `tints` are for the inner columns. Positions are local to the area
 /// (x and z from 0, y the world y); `origin` is the world x and z of block
-/// (0, 0), which picks the tile variants.
+/// (0, 0), which picks the tile variants. `greedy` merges untinted cube faces.
 pub fn mesh_blocks(
     blocks: &[u8],
     size: usize,
     pad: usize,
     fast: bool,
+    greedy: bool,
     face_layer: &[u8],
     tints: &Tints,
     origin: [i32; 2],
@@ -100,6 +147,11 @@ pub fn mesh_blocks(
         mean_y: sum_y as f64 / (size * size) as f64,
         min_y,
     };
+    // y -> per-column water-top cells, in the order the y values first appear
+    let mut water_tops: Vec<(usize, Vec<Option<WaterTop>>)> = Vec::new();
+    // (face, plane) -> grid of cube-face cells, in first-seen order; `slot` finds them
+    let mut face_cells: Vec<((usize, usize), Vec<Option<FaceCell>>)> = Vec::new();
+    let mut slot = alloc::vec![usize::MAX; FACES.len() * H.max(size)];
     for z in 0..size {
         for x in 0..size {
             let base = col(x, z);
@@ -134,14 +186,29 @@ pub fn mesh_blocks(
                     continue;
                 }
                 let bx = bounds(b);
-                for f in &FACES {
+                for (fi, f) in FACES.iter().enumerate() {
                     let (d, s) = (&f.d, f.s);
-                    let c = &face_corners(f, bx);
+                    let mut c = face_corners(f, bx);
                     if y == y0 && d[1] < 0 {
                         continue;
                     }
                     let n = at(x as i32 + d[0], y as i32 + d[1], z as i32 + d[2]);
-                    let (mut depth, mut weight) = (0u8, None);
+                    let (mut depth, mut weight, mut ao) = (0u8, None, None);
+                    let vr = if VARIES[b as usize] {
+                        variant_at(origin[0] + x as i32, y as i32, origin[1] + z as i32)
+                    } else {
+                        0
+                    };
+                    let mut layer = layer_of(face_layer, b, d[1], fast);
+                    if b == GRASS && d[1] > 0 {
+                        layer = pick_layer(
+                            variants,
+                            layer,
+                            origin[0] + x as i32,
+                            y as i32,
+                            origin[1] + z as i32,
+                        );
+                    }
                     let quads = match b {
                         WATER => {
                             if n == WATER || n == ICE || solid(n) {
@@ -152,6 +219,20 @@ pub fn mesh_blocks(
                                 k += 1;
                             }
                             depth = k as u8;
+                            if let Some(tint) = water_tint(tints, x, z).filter(|_| d[1] > 0) {
+                                let layer = layer_of(face_layer, b, 1, fast);
+                                let i = match water_tops.iter().position(|e| e.0 == y) {
+                                    Some(i) => i,
+                                    None => {
+                                        water_tops
+                                            .push((y, (0..size * size).map(|_| None).collect()));
+                                        water_tops.len() - 1
+                                    }
+                                };
+                                water_tops[i].1[z * size + x] =
+                                    Some(WaterTop { layer, depth, tint });
+                                continue;
+                            }
                             &mut out.water
                         }
                         ICE => {
@@ -175,7 +256,34 @@ pub fn mesh_blocks(
                             if solid(n) {
                                 continue;
                             }
-                            if LEAVES.contains(&b) && !fast {
+                            let p = [x as i32, y as i32, z as i32];
+                            let a = face_ao(f, p, |x, y, z| solid(at(x, y, z)));
+                            ao = Some(a);
+                            let cut_leaf = LEAVES.contains(&b) && !fast;
+                            let untinted = tints.block(b, x, z).is_none();
+                            if greedy && !cut_leaf && untinted && a.iter().all(|&v| v == a[0]) {
+                                let [pa, ua, va] = GRID_AXES[fi];
+                                let (u_n, at3) = (if ua == 1 { H } else { size }, [x, y, z]);
+                                let v_n = if va == 1 { H } else { size };
+                                let key = fi * H.max(size) + at3[pa];
+                                if slot[key] == usize::MAX {
+                                    slot[key] = face_cells.len();
+                                    let grid = (0..u_n * v_n).map(|_| None).collect();
+                                    face_cells.push(((fi, at3[pa]), grid));
+                                }
+                                let k = s * (0.75 + y as f64 / 256.0);
+                                let shade = js_round(k * 128.0) as i64;
+                                let cell = FaceCell {
+                                    layer,
+                                    shade,
+                                    ao: a[0],
+                                    vr,
+                                    k,
+                                };
+                                face_cells[slot[key]].1[at3[va] * u_n + at3[ua]] = Some(cell);
+                                continue;
+                            }
+                            if cut_leaf {
                                 weight = Some([LEAF_WEIGHT; 4]);
                                 &mut out.cutout
                             } else {
@@ -183,23 +291,8 @@ pub fn mesh_blocks(
                             }
                         }
                     };
-                    let vr = if VARIES[b as usize] {
-                        variant_at(origin[0] + x as i32, y as i32, origin[1] + z as i32)
-                    } else {
-                        0
-                    };
-                    let uv = c.map(|q| face_uv(f, q, vr, [1.0; 3]));
-                    let mut layer = layer_of(face_layer, b, d[1], fast);
-                    if b == GRASS && d[1] > 0 {
-                        layer = pick_layer(
-                            variants,
-                            layer,
-                            origin[0] + x as i32,
-                            y as i32,
-                            origin[1] + z as i32,
-                        );
-                    }
-                    let tint = match tints.block(b, x, z) {
+                    let mut uv = c.map(|q| face_uv(f, q, vr, [1.0; 3]));
+                    let mut tint = match tints.block(b, x, z) {
                         None => Tint::One([1.0; 3]),
                         Some(flat) if !tints.corners => Tint::One(flat),
                         Some(_) => Tint::Four(c.map(|q| {
@@ -207,20 +300,55 @@ pub fn mesh_blocks(
                             tints.vertex(b, x, z, o[0], o[1])
                         })),
                     };
+                    if let Some(a) = ao.filter(|&a| flips(a)) {
+                        (c, uv, ao) = (rot(c), rot(uv), Some(rot(a)));
+                        if let Tint::Four(t) = tint {
+                            tint = Tint::Four(rot(t));
+                        }
+                    }
                     quads.quad(
                         [x as f64, y as f64, z as f64],
-                        c,
+                        &c,
                         &uv,
                         layer,
                         s * (0.75 + y as f64 / 256.0),
                         &tint,
                         weight,
-                        None,
+                        ao,
                         depth,
                     );
                 }
             }
         }
+    }
+    let top = &FACES[0];
+    for (y, cells) in &water_tops {
+        merge(cells, size, size, |x, z, w, h, cell| {
+            let p = top
+                .c
+                .map(|v| [(v[0] as usize * w) as f64, 1.0, (v[2] as usize * h) as f64]);
+            let uv = p.map(|v| [v[0], v[2]]);
+            let tint = Tint::One(cell.tint.map(|v| v as f64 / 255.0));
+            let k = top.s * (0.75 + *y as f64 / 256.0);
+            let at = [x as f64, *y as f64, z as f64];
+            out.water
+                .quad(at, &p, &uv, cell.layer, k, &tint, None, None, cell.depth);
+        });
+    }
+    for ((fi, plane), cells) in &face_cells {
+        let (f, [pa, ua, va]) = (&FACES[*fi], GRID_AXES[*fi]);
+        let u_n = if ua == 1 { H } else { size };
+        let v_n = if va == 1 { H } else { size };
+        merge(cells, u_n, v_n, |u, v, w, h, cell| {
+            let (mut at3, mut e) = ([0.0; 3], [1.0; 3]);
+            (at3[pa], at3[ua], at3[va]) = (*plane as f64, u as f64, v as f64);
+            (e[ua], e[va]) = (w as f64, h as f64);
+            let p = f.c.map(|q| [0, 1, 2].map(|j| f64::from(q[j]) * e[j]));
+            let uv = p.map(|q| face_uv(f, q, cell.vr, e));
+            let (tint, ao) = (Tint::One([1.0; 3]), Some([cell.ao; 4]));
+            out.opaque
+                .quad(at3, &p, &uv, cell.layer, cell.k, &tint, None, ao, 0);
+        });
     }
     out
 }
@@ -260,6 +388,7 @@ mod tests {
             1,
             0,
             false,
+            false,
             &layers(),
             &Tints::NONE,
             [0, 0],
@@ -280,6 +409,7 @@ mod tests {
                 &b,
                 2,
                 0,
+                false,
                 false,
                 &layers(),
                 &Tints::NONE,
@@ -304,6 +434,7 @@ mod tests {
                 2,
                 1,
                 false,
+                false,
                 &layers(),
                 &Tints::NONE,
                 [0, 0],
@@ -323,6 +454,7 @@ mod tests {
             &b,
             2,
             0,
+            false,
             false,
             &layers(),
             &Tints::NONE,
@@ -347,13 +479,14 @@ mod tests {
             2,
             1,
             false,
+            false,
             &layers(),
             &Tints::NONE,
             [0, 0],
             &Variants::NONE,
         );
-        // tops 4, sides of the 2x2x3 column: 4 sides * 2 * 3
-        assert_eq!(m.water.faces(), 4 + 24);
+        // one merged 2x2 top, sides of the 2x2x3 column: 4 sides * 2 * 3
+        assert_eq!(m.water.faces(), 1 + 24);
         let max = m.water.bytes().chunks(16).map(|v| v[15]).max().unwrap();
         assert_eq!(max, 3);
     }
@@ -365,6 +498,7 @@ mod tests {
             &b,
             1,
             0,
+            false,
             false,
             &layers(),
             &Tints::NONE,
@@ -388,6 +522,7 @@ mod tests {
             1,
             0,
             false,
+            false,
             &layers(),
             &Tints::NONE,
             [0, 0],
@@ -403,6 +538,7 @@ mod tests {
             1,
             0,
             true,
+            false,
             &layers(),
             &Tints::NONE,
             [0, 0],
@@ -412,6 +548,100 @@ mod tests {
             (fast.ice.faces(), fast.opaque.faces(), fast.cutout.faces()),
             (4, 12, 0)
         );
+    }
+
+    #[test]
+    fn ao_flips_the_diagonal_of_a_top_face() {
+        // stone at (1, 40, 1) with one stone above-diagonal at (0, 41, 2): the
+        // top's corner (0, 1) has AO 1, so its quad starts at that corner
+        let b = world(3, 0, |x, z, y| match (x, z, y) {
+            (1, 1, 40) | (0, 2, 41) => STONE,
+            _ => 0,
+        });
+        let m = mesh_blocks(
+            &b,
+            3,
+            0,
+            false,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
+        let top = m
+            .opaque
+            .bytes()
+            .chunks(64)
+            .find(|q| {
+                q.chunks(16)
+                    .all(|v| i16::from_le_bytes([v[2], v[3]]) == 41 * 16)
+            })
+            .filter(|q| i16::from_le_bytes([q[0], q[1]]) >= 16)
+            .unwrap();
+        let ao: Vec<u8> = top.chunks(16).map(|v| v[13]).collect();
+        assert_eq!(ao, [1, 0, 0, 0]);
+        let first = [0, 4].map(|o| i16::from_le_bytes([top[o], top[o + 1]]) / 16);
+        assert_eq!(first, [1, 2]);
+    }
+
+    /// Top quads of a 1-block-thick strip of `b` along x from world x = `x0`, greedy.
+    fn greedy_tops(b: u8, x0: i32, n: usize) -> usize {
+        let blocks = world(n, 0, |_, _, y| if y == 40 { b } else { 0 });
+        let m = mesh_blocks(
+            &blocks,
+            n,
+            0,
+            false,
+            true,
+            &layers(),
+            &Tints::NONE,
+            [x0, 0],
+            &Variants::NONE,
+        );
+        m.opaque
+            .bytes()
+            .chunks(64)
+            .filter(|q| {
+                q.chunks(16)
+                    .all(|v| i16::from_le_bytes([v[2], v[3]]) == 41 * 16)
+            })
+            .count()
+    }
+
+    #[test]
+    fn greedy_merges_equal_variants_only() {
+        // dirt has no variants: one top for the whole 4x4 area
+        assert_eq!(greedy_tops(crate::tables::b::DIRT, 0, 4), 1);
+        // stone varies: two neighbours merge only when their variants match
+        let v = |x| variant_at(x, 40, 0);
+        let same = (-500..500).find(|&x| v(x) == v(x + 1)).unwrap();
+        let diff = (-500..500).find(|&x| v(x) != v(x + 1)).unwrap();
+        let pair = |x0| {
+            let blocks = world(
+                2,
+                0,
+                |x, z, y| if y == 40 && z == 0 && x < 2 { STONE } else { 0 },
+            );
+            let m = mesh_blocks(
+                &blocks,
+                2,
+                0,
+                false,
+                true,
+                &layers(),
+                &Tints::NONE,
+                [x0, 0],
+                &Variants::NONE,
+            );
+            m.opaque
+                .bytes()
+                .chunks(64)
+                .filter(|q| q[2..4] == (41i16 * 16).to_le_bytes())
+                .count()
+        };
+        assert_eq!(pair(same), 1);
+        assert_eq!(pair(diff), 2);
     }
 
     #[test]
@@ -434,6 +664,7 @@ mod tests {
                 4,
                 1,
                 false,
+                false,
                 &layers(),
                 &Tints::NONE,
                 [0, 0],
@@ -443,6 +674,7 @@ mod tests {
                 &b,
                 4,
                 1,
+                false,
                 false,
                 &layers(),
                 &Tints::NONE,
@@ -470,7 +702,17 @@ mod tests {
             corners: false,
             colors: &[],
         };
-        let m = mesh_blocks(&b, 1, 0, false, &layers(), &col, [0, 0], &Variants::NONE);
+        let m = mesh_blocks(
+            &b,
+            1,
+            0,
+            false,
+            false,
+            &layers(),
+            &col,
+            [0, 0],
+            &Variants::NONE,
+        );
         assert!(m
             .opaque
             .bytes()
@@ -485,7 +727,17 @@ mod tests {
             corners: true,
             colors: &[],
         };
-        let m = mesh_blocks(&b, 1, 0, false, &layers(), &cor, [0, 0], &Variants::NONE);
+        let m = mesh_blocks(
+            &b,
+            1,
+            0,
+            false,
+            false,
+            &layers(),
+            &cor,
+            [0, 0],
+            &Variants::NONE,
+        );
         // top face: corners (0,0) (0,1) (1,1) (1,0) in vertex order
         let top = &m.opaque.bytes()[..64];
         let rgb: Vec<[u8; 3]> = top.chunks(16).map(|v| [v[10], v[11], v[12]]).collect();
@@ -511,6 +763,7 @@ mod tests {
                 &a,
                 2,
                 0,
+                false,
                 false,
                 &fl,
                 &Tints::NONE,

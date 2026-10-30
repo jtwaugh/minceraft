@@ -1,12 +1,7 @@
 // Byte parity of the Rust mesher (via wasm) with meshBlocks in mesh.js on real
 // decorated regions.
 //
-// Not compared yet, because the Rust mesher doesn't have them (later tickets
-// remove these restrictions one by one):
-//  - ambient occlusion: byte 13 is zeroed, and quads are rotated to a canonical
-//    first vertex, since AO can flip a quad's diagonal;
-//  - greedy merging: off in JS; water tops are always merged in JS when the
-//    tint is flat, so without corners horizontal water quads are left out.
+// Compared with greedy merging on and off.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -29,19 +24,12 @@ const KEEP = new Set([B.air, B.dirt, B.grass, B.stone, B.sand, B.gravel, B.water
   B.leaf_litter, B.lily_pad]);
 const restrict = (blocks) => blocks.map((b) => (KEEP.has(b) || CROSS[b] ? b : B.air));
 
-// Quads of a part as canonical strings: AO zeroed, rotated to start at the smallest vertex.
-function quads(p, skipFlat) {
+// Quads of a part as strings, vertex order kept.
+function quads(p) {
   const u8 = new Uint8Array(p.verts), out = [];
   for (let q = 0; q < p.faces; q++) {
-    const vs = [0, 1, 2, 3].map((j) => {
-      const v = u8.slice((q * 4 + j) * VERTEX_BYTES, (q * 4 + j + 1) * VERTEX_BYTES);
-      v[13] = 0;
-      return v;
-    });
-    if (skipFlat && vs.every((v) => v[2] === vs[0][2] && v[3] === vs[0][3])) continue;
-    let s = 0;
-    for (let j = 1; j < 4; j++) if (vs[j].join() < vs[s].join()) s = j;
-    out.push([0, 1, 2, 3].map((j) => vs[(s + j) % 4].join()).join(';'));
+    const vs = [0, 1, 2, 3].map((j) => u8.slice((q * 4 + j) * VERTEX_BYTES, (q * 4 + j + 1) * VERTEX_BYTES));
+    out.push(vs.map((v) => v.join()).join(';'));
   }
   return out.sort();
 }
@@ -60,19 +48,38 @@ function randomTints(size, corners) {
 for (const seed of [12345n, 9n, 42n]) {
   for (const fast of [false, true]) {
     for (const corners of [false, true]) {
-      test(`wasm mesher matches meshBlocks, seed ${seed}${fast ? ', fast' : ''}${corners ? ', corners' : ''}`, () => {
-        const size = 32, pad = 1, w = size + 2 * pad;
-        const blocks = restrict(wasm.generate_region_decorated(seed, -pad, -pad, w, w));
-        const tints = randomTints(size, corners);
-        const origin = [Number(seed) * 3 - 1000, -77 - Number(seed)]; // negative and positive world coordinates
-        const js = meshBlocks(ctx, blocks, tints, size, pad, { fast, greedy: false, origin });
-        const rs = meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { fast, greedy: false, origin });
-        assert.equal(rs.minY, js.minY);
-        assert.equal(rs.meanY, js.meanY);
-        for (const k of ['opaque', 'cutout', 'ice']) assert.deepEqual(quads(rs[k]), quads(js[k]), k);
-        assert.deepEqual(quads(rs.water, !corners), quads(js.water, !corners), 'water');
-        assert.ok(rs.opaque.faces > 0);
-      });
+      for (const greedy of [false, true]) {
+        test(`wasm mesher matches meshBlocks, seed ${seed}${fast ? ', fast' : ''}${corners ? ', corners' : ''}${greedy ? ', greedy' : ''}`, () => {
+          const size = 32, pad = 1, w = size + 2 * pad;
+          const blocks = restrict(wasm.generate_region_decorated(seed, -pad, -pad, w, w));
+          const tints = randomTints(size, corners);
+          const origin = [Number(seed) * 3 - 1000, -77 - Number(seed)]; // negative and positive world coordinates
+          const js = meshBlocks(ctx, blocks, tints, size, pad, { fast, greedy, origin });
+          const rs = meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { fast, greedy, origin });
+          assert.equal(rs.minY, js.minY);
+          assert.equal(rs.meanY, js.meanY);
+          for (const k of ['opaque', 'cutout', 'water', 'ice']) assert.deepEqual(quads(rs[k]), quads(js[k]), k);
+          assert.ok(rs.opaque.faces > 0);
+          if (greedy) assert.ok(rs.opaque.faces < meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { fast, greedy: false, origin }).opaque.faces);
+        });
+      }
     }
   }
+}
+
+// Open ocean: water tops merge into the same rectangles as in JS.
+for (const corners of [false, true]) {
+  test(`wasm mesher merges ocean water tops like meshBlocks${corners ? ', corners' : ''}`, () => {
+    const size = 32, pad = 1, w = size + 2 * pad, origin = [2048, 1024];
+    const blocks = wasm.generate_region_decorated(12345n, origin[0] - pad, origin[1] - pad, w, w);
+    const col = () => Array(size * size).fill([0.2, 0.4, 0.8]);
+    const grid = () => Float32Array.from({ length: (size + 1) * (size + 1) * 3 }, (_, i) => [0.2, 0.4, 0.8][i % 3]);
+    const tints = { grass: col(), leaf: col(), water: col(), dry: col() };
+    if (corners) tints.corners = { n: size + 1, grass: grid(), leaf: grid(), water: grid(), dry: grid() };
+    const js = meshBlocks(ctx, blocks, tints, size, pad, { origin });
+    const rs = meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { origin });
+    assert.equal(rs.water.faces, js.water.faces);
+    assert.ok(js.water.faces < size * size / 4, `${js.water.faces} water quads`);
+    assert.deepEqual(quads(rs.water), quads(js.water));
+  });
 }

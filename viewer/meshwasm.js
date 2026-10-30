@@ -1,5 +1,6 @@
 // The Rust block mesher (crates/mesh) behind the same call shape as meshBlocks
-// in mesh.js. Not used by the viewer or client yet.
+// in mesh.js. The viewer's chunk workers (worker.js) mesh with it; the client
+// still uses meshBlocks.
 import { VERTEX_BYTES } from './mesh.js';
 
 const FAST = 1, GREEDY = 2, CORNERS = 4;
