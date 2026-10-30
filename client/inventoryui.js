@@ -11,6 +11,8 @@
 import { inventoryModel } from './inventory.js';
 import { textureCanvas, textureSize, interfaceScale } from './uipx.js';
 import { panelImage, PANEL_TILE } from './panel.js';
+import { drawString } from './font.js';
+import { PALETTE } from './uistyle.js';
 
 export { panelImage };
 export const PANEL_TEXELS = PANEL_TILE;
@@ -25,20 +27,25 @@ export function itemLabel(name) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** The hands line: what is held, or "empty". */
+export function handsText(label) {
+  return label ? `Hands: ${label}` : 'Hands: empty';
+}
+
 /** Panel size in texels: a row of slots with `pad` texels around and between them. */
 export function panelSize(slotCount, slotW, slotH, pad) {
   return { w: slotCount * slotW + (slotCount + 1) * pad, h: slotH + 2 * pad };
 }
 
 const CSS = `
-#inventory { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font: 12px/1.2 ui-monospace, monospace; color: #fff; image-rendering: pixelated; }
+#inventory { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; color: ${PALETTE.text}; image-rendering: pixelated; }
 #inventory[hidden] { display: none; }
 #inventory-panel { box-sizing: border-box; border-style: solid; border-image-slice: ${PANEL_TEXELS}; border-image-repeat: stretch; image-rendering: pixelated; display: flex; flex-direction: column; align-items: center; }
 #inventory-belt { display: flex; }
 .inv-slot { position: relative; display: flex; flex-direction: column; align-items: center; }
 .inv-frame { position: relative; }
 .inv-frame canvas { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
-.inv-label { text-shadow: 0 0 3px #000; min-height: 1.2em; }
+.inv-label canvas, #inventory-hands canvas { filter: drop-shadow(0 0 3px ${PALETTE.textShadow}); }
 `;
 
 export function mountInventory(document, set, parent = document.body, view = globalThis) {
@@ -69,13 +76,19 @@ export function mountInventory(document, set, parent = document.body, view = glo
         c.style.height = `${h * scale}px`;
         return c;
       };
-      const span = (cls, text) => Object.assign(document.createElement('div'), { className: cls, textContent: text ?? '' });
+      const text = (cls, str) => {
+        const el = Object.assign(document.createElement('div'), { className: cls });
+        const c = drawString(set, str ?? '', scale, document);
+        el.style.minHeight = `${c.height}px`;
+        el.append(c);
+        return el;
+      };
       panel.style.borderImageSource = `url(${panelImage(document, set)})`;
       panel.style.borderWidth = `${PANEL_TEXELS * scale}px`;
       panel.style.padding = `${pad * scale}px`;
       panel.style.gap = `${pad * scale}px`;
       belt.style.gap = `${pad * scale}px`;
-      hands.textContent = model.hands.label ? `Hands: ${model.hands.label}` : 'Hands: empty';
+      hands.replaceChildren(...text('inv-hands-text', handsText(model.hands.label)).children);
       belt.replaceChildren(...model.slots.map((s) => {
         const el = document.createElement('div');
         el.className = s.selected ? 'inv-slot selected' : 'inv-slot';
@@ -91,7 +104,7 @@ export function mountInventory(document, set, parent = document.body, view = glo
           ic.style.top = `${Math.floor((slot.h - t.h) / 2) * scale}px`;
           frame.append(ic);
         }
-        el.append(frame, span('inv-label', s.label));
+        el.append(frame, text('inv-label', s.label));
         return el;
       }));
     },
