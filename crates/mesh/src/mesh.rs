@@ -1,7 +1,9 @@
 //! Core of `meshBlocks` in `viewer/mesh.js`: one quad per visible face of full
-//! cubes, ice and water, with climate tints. Leaves, cacti, bushes, snow,
-//! plants, AO, greedy merging and UV variants come later; here AO is 0.
-use crate::{Quads, Tint, Tints};
+//! cubes, ice and water, with climate tints and per-block tile variants.
+//! Leaves, cacti, bushes, snow, plants, AO and greedy merging come later; here
+//! AO is 0.
+use crate::tables::{face_uv, FACES, VARIES};
+use crate::{pick_layer, variant_at, Quads, Tint, Tints, Variants};
 
 /// Column height in blocks.
 pub const H: usize = 128;
@@ -9,56 +11,13 @@ pub const H: usize = 128;
 pub const AIR: u8 = 0;
 pub const WATER: u8 = 6;
 pub const ICE: u8 = 7;
+const GRASS: u8 = 3;
 /// Full cubes that hide the faces next to them (`SOLID` in `viewer/mesh.js`).
 const SOLID: [u8; 18] = [
     1, 2, 3, 4, 5, 8, 9, 10, 23, 25, 26, 27, 28, 29, 30, 39, 40, 41,
 ];
 /// Oak, birch and spruce leaves: solid only with `fast`.
 const LEAVES: [u8; 3] = [11, 12, 13];
-
-/// Face normal, corner offsets and shade, in the order of `FACES` in `viewer/mesh.js`:
-/// top, bottom, +x, -x, +z, -z.
-const FACES: [([i32; 3], [[f64; 3]; 4], f64); 6] = [
-    (
-        [0, 1, 0],
-        [[0., 1., 0.], [0., 1., 1.], [1., 1., 1.], [1., 1., 0.]],
-        1.0,
-    ),
-    (
-        [0, -1, 0],
-        [[0., 0., 0.], [1., 0., 0.], [1., 0., 1.], [0., 0., 1.]],
-        0.5,
-    ),
-    (
-        [1, 0, 0],
-        [[1., 0., 0.], [1., 1., 0.], [1., 1., 1.], [1., 0., 1.]],
-        0.8,
-    ),
-    (
-        [-1, 0, 0],
-        [[0., 0., 0.], [0., 0., 1.], [0., 1., 1.], [0., 1., 0.]],
-        0.65,
-    ),
-    (
-        [0, 0, 1],
-        [[0., 0., 1.], [1., 0., 1.], [1., 1., 1.], [0., 1., 1.]],
-        0.9,
-    ),
-    (
-        [0, 0, -1],
-        [[0., 0., 0.], [0., 1., 0.], [1., 1., 0.], [1., 0., 0.]],
-        0.6,
-    ),
-];
-
-/// Texture coordinates of a unit-face corner (variant 0).
-fn face_uv(d: [i32; 3], [a, b, c]: [f64; 3]) -> [f64; 2] {
-    if d[1] != 0 {
-        [a, c]
-    } else {
-        [if d[0] != 0 { c } else { a }, 1.0 - b]
-    }
-}
 
 /// Texture layer of a face: `face_layer` is indexed `block * 3 + (0 top, 1 side,
 /// 2 bottom)`, with the fast-leaves copy from 768 on.
@@ -86,7 +45,9 @@ pub struct Mesh {
 /// Mesh `blocks`, laid out `((z * w) + x) * 128 + y` for `w = size + 2 * pad`
 /// columns; only the inner `size` x `size` columns are meshed and the pad ring
 /// is read for culling. Solid ground is clipped 8 blocks under the lowest
-/// surface. `tints` are for the inner columns. Positions are local to the area (x and z from 0, y the world y).
+/// surface. `tints` are for the inner columns. Positions are local to the area
+/// (x and z from 0, y the world y); `origin` is the world x and z of block
+/// (0, 0), which picks the tile variants.
 pub fn mesh_blocks(
     blocks: &[u8],
     size: usize,
@@ -94,6 +55,8 @@ pub fn mesh_blocks(
     fast: bool,
     face_layer: &[u8],
     tints: &Tints,
+    origin: [i32; 2],
+    variants: &Variants,
 ) -> Mesh {
     let w = size + 2 * pad;
     let col = |x: usize, z: usize| ((z + pad) * w + x + pad) * H;
@@ -141,7 +104,9 @@ pub fn mesh_blocks(
                 if b != WATER && b != ICE && !SOLID.contains(&b) {
                     continue;
                 }
-                for (d, c, s) in &FACES {
+                for f in &FACES {
+                    let (d, s) = (&f.d, f.s);
+                    let c = &f.c.map(|q| q.map(f64::from));
                     if y == y0 && d[1] < 0 {
                         continue;
                     }
@@ -172,7 +137,22 @@ pub fn mesh_blocks(
                             &mut out.opaque
                         }
                     };
-                    let uv = c.map(|q| face_uv(*d, q));
+                    let vr = if VARIES[b as usize] {
+                        variant_at(origin[0] + x as i32, y as i32, origin[1] + z as i32)
+                    } else {
+                        0
+                    };
+                    let uv = c.map(|q| face_uv(f, q, vr, [1.0; 3]));
+                    let mut layer = layer_of(face_layer, b, d[1], fast);
+                    if b == GRASS && d[1] > 0 {
+                        layer = pick_layer(
+                            variants,
+                            layer,
+                            origin[0] + x as i32,
+                            y as i32,
+                            origin[1] + z as i32,
+                        );
+                    }
                     let tint = match tints.block(b, x, z) {
                         None => Tint::One([1.0; 3]),
                         Some(flat) if !tints.corners => Tint::One(flat),
@@ -184,7 +164,7 @@ pub fn mesh_blocks(
                         [x as f64, y as f64, z as f64],
                         c,
                         &uv,
-                        layer_of(face_layer, b, d[1], fast),
+                        layer,
                         s * (0.75 + y as f64 / 256.0),
                         &tint,
                         None,
@@ -228,7 +208,16 @@ mod tests {
     #[test]
     fn single_cube_has_six_faces_and_clips_nothing() {
         let b = world(1, 0, |_, _, y| if y == 40 { STONE } else { 0 });
-        let m = mesh_blocks(&b, 1, 0, false, &layers(), &Tints::NONE);
+        let m = mesh_blocks(
+            &b,
+            1,
+            0,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
         assert_eq!(m.opaque.faces(), 6);
         assert_eq!(m.min_y, 40);
         assert_eq!(m.mean_y, 40.0);
@@ -240,9 +229,18 @@ mod tests {
         let b = world(2, 0, |_, _, y| if y == 40 { STONE } else { 0 });
         // top 4, bottom 4 (y0 is 32, so the bottom shows), outer sides 8
         assert_eq!(
-            mesh_blocks(&b, 2, 0, false, &layers(), &Tints::NONE)
-                .opaque
-                .faces(),
+            mesh_blocks(
+                &b,
+                2,
+                0,
+                false,
+                &layers(),
+                &Tints::NONE,
+                [0, 0],
+                &Variants::NONE
+            )
+            .opaque
+            .faces(),
             4 + 4 + 8
         );
         // a solid pad ring hides the four outer sides
@@ -254,9 +252,18 @@ mod tests {
             }
         });
         assert_eq!(
-            mesh_blocks(&b, 2, 1, false, &layers(), &Tints::NONE)
-                .opaque
-                .faces(),
+            mesh_blocks(
+                &b,
+                2,
+                1,
+                false,
+                &layers(),
+                &Tints::NONE,
+                [0, 0],
+                &Variants::NONE
+            )
+            .opaque
+            .faces(),
             4 + 4
         );
     }
@@ -265,7 +272,16 @@ mod tests {
     fn clips_below_y0() {
         // surface at 40 everywhere, stone from 0: only y >= 32 is meshed
         let b = world(2, 0, |_, _, y| if y <= 40 { STONE } else { 0 });
-        let m = mesh_blocks(&b, 2, 0, false, &layers(), &Tints::NONE);
+        let m = mesh_blocks(
+            &b,
+            2,
+            0,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
         // 4 tops + 4 columns of sides, 9 blocks (32..=40) tall, 2 per side * 4 sides
         assert_eq!(m.opaque.faces(), 4 + 4 * 2 * 9);
     }
@@ -279,7 +295,16 @@ mod tests {
             (0..=1, 0..=1, 41..=43) => WATER,
             _ => 0,
         });
-        let m = mesh_blocks(&b, 2, 1, false, &layers(), &Tints::NONE);
+        let m = mesh_blocks(
+            &b,
+            2,
+            1,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
         // tops 4, sides of the 2x2x3 column: 4 sides * 2 * 3
         assert_eq!(m.water.faces(), 4 + 24);
         let max = m.water.bytes().chunks(16).map(|v| v[15]).max().unwrap();
@@ -289,7 +314,16 @@ mod tests {
     #[test]
     fn water_depth_counts_down_the_column() {
         let b = world(1, 0, |_, _, y| if y >= 1 { WATER } else { STONE });
-        let m = mesh_blocks(&b, 1, 0, false, &layers(), &Tints::NONE);
+        let m = mesh_blocks(
+            &b,
+            1,
+            0,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
         let max = m.water.bytes().chunks(16).map(|v| v[15]).max().unwrap();
         assert_eq!(max, 127);
     }
@@ -302,10 +336,28 @@ mod tests {
             42 => LEAF,
             _ => 0,
         });
-        let slow = mesh_blocks(&b, 1, 0, false, &layers(), &Tints::NONE);
+        let slow = mesh_blocks(
+            &b,
+            1,
+            0,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
         assert_eq!((slow.ice.faces(), slow.opaque.faces()), (5, 6));
         // fast leaves are solid: they hide the ice top but are not drawn
-        let fast = mesh_blocks(&b, 1, 0, true, &layers(), &Tints::NONE);
+        let fast = mesh_blocks(
+            &b,
+            1,
+            0,
+            true,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
         assert_eq!(
             (fast.ice.faces(), fast.opaque.faces(), fast.cutout.faces()),
             (4, 6, 0)
@@ -327,8 +379,26 @@ mod tests {
         let a = world(4, 1, f);
         let b = world(4, 1, |x, z, y| f(x + 5, z + 5, y)); // same terrain at another origin (period 5)
         let (ma, mb) = (
-            mesh_blocks(&a, 4, 1, false, &layers(), &Tints::NONE),
-            mesh_blocks(&b, 4, 1, false, &layers(), &Tints::NONE),
+            mesh_blocks(
+                &a,
+                4,
+                1,
+                false,
+                &layers(),
+                &Tints::NONE,
+                [0, 0],
+                &Variants::NONE,
+            ),
+            mesh_blocks(
+                &b,
+                4,
+                1,
+                false,
+                &layers(),
+                &Tints::NONE,
+                [0, 0],
+                &Variants::NONE,
+            ),
         );
         assert_eq!(ma.opaque.bytes(), mb.opaque.bytes());
         assert_eq!(ma.water.bytes(), mb.water.bytes());
@@ -350,7 +420,7 @@ mod tests {
             corners: false,
             colors: &[],
         };
-        let m = mesh_blocks(&b, 1, 0, false, &layers(), &col);
+        let m = mesh_blocks(&b, 1, 0, false, &layers(), &col, [0, 0], &Variants::NONE);
         assert!(m
             .opaque
             .bytes()
@@ -365,10 +435,61 @@ mod tests {
             corners: true,
             colors: &[],
         };
-        let m = mesh_blocks(&b, 1, 0, false, &layers(), &cor);
+        let m = mesh_blocks(&b, 1, 0, false, &layers(), &cor, [0, 0], &Variants::NONE);
         // top face: corners (0,0) (0,1) (1,1) (1,0) in vertex order
         let top = &m.opaque.bytes()[..64];
         let rgb: Vec<[u8; 3]> = top.chunks(16).map(|v| [v[10], v[11], v[12]]).collect();
         assert_eq!(rgb, [[128; 3], [128; 3], [128; 3], [0, 255, 0]]);
+    }
+
+    #[test]
+    fn variants_follow_the_world_coordinate() {
+        // two 2x2 areas of stone and grass; the second starts one block east
+        let f = |x: i32, y: usize| match (x, y) {
+            (_, 40) => crate::tables::b::GRASS,
+            (_, 39) => STONE,
+            _ => 0,
+        };
+        let a = world(2, 0, |x, _, y| f(x, y));
+        let tops = |origin| {
+            let v = [3.0, 0.6, 0.8, 1.0, 0., 0., 0., 0., 0.];
+            let mut table = alloc::vec![0.0; 256 * 9];
+            table[10 * 9..11 * 9].copy_from_slice(&v);
+            let mut fl = layers();
+            fl[crate::tables::b::GRASS as usize * 3] = 10;
+            let m = mesh_blocks(
+                &a,
+                2,
+                0,
+                false,
+                &fl,
+                &Tints::NONE,
+                origin,
+                &Variants(&table),
+            );
+            // per block (x, z) in world coordinates: bytes of the top face (uv and layer)
+            m.opaque
+                .bytes()
+                .chunks(64)
+                .filter(|q| q[8] >= 10 && q[8] < 13)
+                .map(|q| {
+                    let wx = i16::from_le_bytes([q[0], q[1]]) / 16 + origin[0] as i16;
+                    let wz = i16::from_le_bytes([q[4], q[5]]) / 16 + origin[1] as i16;
+                    (
+                        wx,
+                        wz,
+                        q.iter().skip(6).take(3).copied().collect::<Vec<u8>>(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        // all tiles are distinguished only by (uv, layer), so compare the world block (1, 0)
+        // seen from origin (0, 0) as block (1, 0) and from origin (1, 0) as block (0, 0)
+        let at = |v: &Vec<(i16, i16, Vec<u8>)>, x, z| {
+            v.iter().find(|e| e.0 == x && e.1 == z).map(|e| e.2.clone())
+        };
+        let (p, q) = (tops([0, 0]), tops([1, 0]));
+        assert_eq!(at(&p, 1, 0), at(&q, 1, 0));
+        assert!(at(&p, 1, 0).is_some());
     }
 }
