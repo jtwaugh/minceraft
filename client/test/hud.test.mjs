@@ -82,20 +82,29 @@ test('mountHud places every element from its hudLayout rectangle', async () => {
     [view.innerWidth, view.innerHeight] = size;
     hud.update(m);
     const { rects } = hudLayout(m, set, { w: size[0], h: size[1] });
-    const [cross, timer, hands, hearts, panelEl, beltEl] = doc.body.children[1].children;
+    const [cross, timer, hands, hearts, panelEl, beltEl, handsPanelEl, handsSlotEl] = doc.body.children[1].children;
     assert.deepEqual(box(cross), px(rects.crosshair));
     assert.deepEqual(box(cross.children[0]), px({ ...rects.crosshair, x: 0, y: 0 }));
     assert.deepEqual(box(timer), px(rects.timer));
     assert.deepEqual(timer.children.slice(2).map(box), rects.timer.digits.map((r) => px(r, rects.timer.x, rects.timer.y)));
     assert.deepEqual(box(hands), px(rects.hands));
-    assert.deepEqual(box(hands.children[1]), px(rects.hands.label, rects.hands.x, rects.hands.y));
-    assert.equal(hands.children[1].width, rects.hands.label.w);
+    assert.equal(hands.children.length, 1);
+    assert.deepEqual(box(hands.children[0]), px(rects.hands.label, rects.hands.x, rects.hands.y));
+    assert.equal(hands.children[0].width, rects.hands.label.w);
+    // The held item is drawn inside its own slot frame, on its own strip.
+    assert.deepEqual(box(handsPanelEl), px(rects.handsPanel));
+    assert.equal(handsPanelEl.children.length, 1);
+    const hs = rects.handsSlot;
+    assert.deepEqual(box(handsSlotEl), px(hs));
+    assert.deepEqual(handsSlotEl.children.map(box), [px({ ...hs, x: 0, y: 0 }), px(hs.icon, hs.x, hs.y)]);
     assert.deepEqual(box(hearts), px(rects.hearts));
     assert.deepEqual(hearts.children.map(box), rects.heartIcons.map((r) => px(r, rects.hearts.x, rects.hearts.y)));
     assert.deepEqual(box(panelEl), px(rects.beltPanel));
     assert.equal(panelEl.children.length, 1);
     assert.deepEqual(box(beltEl), px(rects.belt));
     assert.deepEqual(beltEl.children.map(box), rects.slots.map((r) => px(r, rects.belt.x, rects.belt.y)));
+    // Each slot's frame, icon and number are placed absolutely inside it, not left in the flow.
+    assert.match(doc.body.children[0].textContent, /\.slot > \*[^{]*\{ position: absolute; \}/);
     // Each slot ends with its number, inside the frame.
     beltEl.children.forEach((el, i) => assert.deepEqual(box(el.children.at(-1)), px(rects.slotNumbers[i], rects.slots[i].x, rects.slots[i].y)));
   }
