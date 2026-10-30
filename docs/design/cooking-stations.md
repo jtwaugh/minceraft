@@ -87,7 +87,7 @@ Add to `data/blocks.toml` (all full collision, all part of the raft mask when st
 | `chest` | Storage, stocked with the day's supplies | new: `chest_top`, `chest_side`, `chest_front` |
 | `plate_rack` | Dispenser of clean plates | new |
 
-Extend `raft_start` so the starting deck has at least: one butcher block, one griddle, two counters, two chests and one plate rack. The `crate` cell in today's `raft_start` becomes a chest, and `crate` is not added as a block (the existing `crate_*` art stays unused). The deck may grow from 5 by 5 to fit them; world-layout's exclusion and validation must follow.
+Extend `raft_start` so the starting deck has at least: one butcher block, one griddle, two counters, two chests and one plate rack. The `crate` cell in today's `raft_start` becomes a chest, and `crate` is not added as a block (the existing `crate_*` art stays unused). The deck may grow from 5 by 5 to fit them; world-layout's exclusion and validation must follow. The chest has a fixed facing: `chest_front` is on the +Z face in raft-local coordinates, and the layout places chests so that face points at the deck. (Decided in #1542.)
 
 Stations are not breakable or movable in this idea.
 
@@ -252,10 +252,6 @@ Add to basic-gameplay section 11:
    - A. Keep id 28 `crate` in `data/blocks.toml`, unused by any structure (stable ids, `crate_*` art stays).
    - B. Delete the block and renumber nothing; leave id 28 unused.
    - C. Delete it and shift later ids (breaks saved edits and tests; not recommended).
-2. **Which way does the chest face?** (note 11)
-   - A. Fixed: `chest_front` is on the +Z face in raft-local coordinates, and the layout places chests so that face points at the deck.
-   - B. Add a facing to the block placement in `raft_start` (a palette variant such as `chest_n`, `chest_e`).
-   - C. No front for v0: all four sides use `chest_side`; `chest_front` is drawn later.
 3. **What is "the first day of the week" for weekly supply?** (note 8)
    - A. The first gathering phase after the level loads (no week structure exists yet).
    - B. Wait for the weekend screen design before building weekly supply; build only "every day" now.
