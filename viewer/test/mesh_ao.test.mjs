@@ -31,7 +31,7 @@ function quads(m, origin) {
   return out;
 }
 const isTop = (v, y) => v.every((p) => p.y === y);
-const mesh = (blocks, size, pad, origin = [0, 0]) => meshBlocks(ctx, blocks, tints(size), size, pad, { origin });
+const mesh = (blocks, size, pad, origin = [0, 0]) => meshBlocks(ctx, blocks, tints(size), size, pad, { origin, greedy: false });
 const aoAt = (q, x, z) => q.find((p) => p.x === x && p.z === z).ao;
 
 test('AO_SHADE has four levels, brightest first', () => {

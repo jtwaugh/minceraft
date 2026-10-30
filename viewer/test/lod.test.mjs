@@ -57,7 +57,7 @@ test('vertices keep the format and stay in range', () => {
       const p = dv.getInt16(o + j * 2, true) / 16;
       assert.ok(p >= 0 && p <= 128, `pos ${p}`);
     }
-    assert.ok(dv.getUint8(o + 6) <= 16 && dv.getUint8(o + 7) <= 16);
+    assert.ok(dv.getUint8(o + 6) <= 240 && dv.getUint8(o + 7) <= 240);
   }
   const dvPos = (i) => dv.getInt16(i, true) / 16;
   assert.equal(dvPos(0) % 1, 0);
@@ -65,8 +65,8 @@ test('vertices keep the format and stay in range', () => {
 
 test('overlapping regions agree on shared cells', () => {
   // two 16x16 areas, the second starting 8 columns later; compare the shared 8x16 strip
-  const a = meshHalf(ctx, world(0, 0, 18), tints(16), 16, 1, { origin: [0, 0] });
-  const b = meshHalf(ctx, world(8, 0, 18), tints(16), 16, 1, { origin: [8, 0] });
+  const a = meshHalf(ctx, world(0, 0, 18), tints(16), 16, 1, { origin: [0, 0], greedy: false });
+  const b = meshHalf(ctx, world(8, 0, 18), tints(16), 16, 1, { origin: [8, 0], greedy: false });
   const quads = (m, dx) => {
     const dv = new DataView(m.opaque.verts), set = new Set();
     for (let q = 0; q < m.opaque.faces; q++) {

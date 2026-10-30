@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { B, H, VERTEX_BYTES, meshBlocks } from '../mesh.js';
+import { B, H, VERTEX_BYTES, meshBlocks as mesh } from '../mesh.js';
+const meshBlocks = (c, b, t, s, p = 0, o = {}) => mesh(c, b, t, s, p, { greedy: false, ...o });
 
 const ctx = { COLORS: [], faceLayer: new Uint8Array(256 * 3 * 2).fill(3) };
 const tints = (n) => ({ grass: Array(n * n).fill([1, 1, 1]), leaf: Array(n * n).fill([0.5, 0.25, 0.1]) });

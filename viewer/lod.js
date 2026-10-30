@@ -47,11 +47,11 @@ export function downsampleBlocks(blocks, size, pad = 0) {
  * neighbouring areas. Leaves are meshed as fast leaves. Positions, and meanY
  * and minY, are in blocks.
  */
-export function meshHalf(ctx, blocks, tints, size, pad = 0, { origin = [0, 0] } = {}) {
+export function meshHalf(ctx, blocks, tints, size, pad = 0, { origin = [0, 0], greedy = true } = {}) {
   const { cells, size: cs, pad: cp } = downsampleBlocks(blocks, size, pad);
   const pick = (a) => a && Array.from({ length: cs * cs }, (_, c) => a[(Math.floor(c / cs) * 2) * size + (c % cs) * 2]);
   const ct = { grass: pick(tints.grass), leaf: pick(tints.leaf), water: pick(tints.water), dry: pick(tints.dry) };
-  const m = meshBlocks(ctx, cells, ct, cs, cp, { fast: true, origin: [origin[0] >> 1, origin[1] >> 1] });
+  const m = meshBlocks(ctx, cells, ct, cs, cp, { fast: true, origin: [origin[0] >> 1, origin[1] >> 1], greedy });
   for (const k of ['opaque', 'cutout', 'water', 'ice']) {
     const i16 = new Int16Array(m[k].verts);
     for (let v = 0; v < m[k].faces * 4; v++) for (let j = 0; j < 3; j++) i16[v * 8 + j] *= 2;
