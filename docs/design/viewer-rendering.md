@@ -338,8 +338,9 @@ Show terrain beyond the fog instead of empty sky.
 1. **Allocation-free mesher (F7).** Precompute face corner and UV tables
    per face and box shape; write vertices straight into the `Int16Array`
    and `Uint8Array` views; compute tints once per column, not per block.
-   Moving `meshBlocks` into the wasm crate is the bigger option (see Open
-   question 3).
+   The mesher moves from JS into Rust/wasm, in `crates/web` or a new crate
+   (not `crates/terrain`, which stays `no_std`); each PR reports the gzipped
+   wasm size before and after. (Decided in #1451.)
 2. **Greedy meshing for water tops**, then other opaque faces. Merge
    neighbouring faces with the same layer, shade, tint and AO.
    - UVs are uint8 in 1/16 block and the array uses `REPEAT`, so a merged
@@ -373,9 +374,6 @@ Show terrain beyond the fog instead of empty sky.
    A. Yes, recording only.
    B. Yes, a viewer setting.
    C. No.
-3. **Mesher language.** A. Keep it in JS and remove the allocations.
-   B. Move it to Rust/wasm, which shares code with the eventual game client
-   but grows the wasm (sizes must be reported in PRs).
 4. **Distant-terrain colour.** A. Biome surface colour only. B. Sample the
    decorated map tiles where they exist (more accurate near the map, but
    only covers the map's 1024×1024 blocks).
