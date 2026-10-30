@@ -66,10 +66,13 @@ def history(store, subject):
                          (subject,)).fetchall()
 
 
-def _latest(store, subject):
-    _subject(store, subject)
-    return store.execute("SELECT state, reason, at FROM transitions WHERE subject = ? AND kind = 'transition' "
-                         "ORDER BY seq DESC LIMIT 1", (subject,)).fetchone()
+def _latest(store, subject, kind="transition"):
+    if kind == "transition":
+        _subject(store, subject)
+    else:
+        store.execute(_TABLE)
+    return store.execute("SELECT state, reason, at FROM transitions WHERE subject = ? AND kind = ? "
+                         "ORDER BY seq DESC LIMIT 1", (subject, kind)).fetchone()
 
 
 def why_stuck(store, subject):
@@ -78,7 +81,29 @@ def why_stuck(store, subject):
     return row[:2] if row else None
 
 
-def time_in_state(store, subject, now):
+def time_in_state(store, subject, now, kind="transition"):
     """Seconds since the latest transition, or None if it never moved."""
-    row = _latest(store, subject)
+    row = _latest(store, subject, kind)
     return now - row[2] if row else None
+
+
+def record_wait(store, subject, waiting, reason, at):
+    """Log that an issue or PR number started (or stopped) waiting on the
+    maintainer: kind 'needs_you', state 'waiting' or 'cleared'. Any number
+    will do, ticket or not. False if it is already in that state."""
+    state = "waiting" if waiting else "cleared"
+    row = _latest(store, subject, "needs_you")
+    if (row[0] if row else "cleared") == state:
+        return False
+    with store:
+        store.execute("INSERT INTO transitions (subject, kind, state, reason, at) VALUES (?, 'needs_you', ?, ?, ?)",
+                      (subject, state, reason, at))
+    return True
+
+
+def waiting_subjects(store):
+    """Numbers whose latest 'needs_you' row says waiting."""
+    store.execute(_TABLE)
+    return {r[0] for r in store.execute(
+        "SELECT subject FROM transitions t WHERE kind = 'needs_you' AND state = 'waiting' "
+        "AND seq = (SELECT MAX(seq) FROM transitions WHERE subject = t.subject AND kind = 'needs_you')")}

@@ -174,6 +174,13 @@ class IncrementalTest(unittest.TestCase):
         self.assertNotIn("user", second[0])  # only the fields the loader reads are kept
         self.assertNotIn("since=", asked[2])  # the hourly full re-read
 
+    def test_created_at_survives_read_issues(self):
+        import factory_tick
+        raw = dict(self.issue(1, "x"), created_at="2026-10-20T00:00:00Z")
+        with mock.patch.dict(os.environ, {"GITHUB_EVENT_NAME": "workflow_run"}):
+            got = factory_tick.read_issues("o/r", {}, lambda p: [raw])
+        self.assertEqual(got[0]["created_at"], "2026-10-20T00:00:00Z")
+
     def test_scheduled_and_hand_started_ticks_read_everything(self):
         import factory_tick
         state = {"issues": {"1": self.issue(1, "x")}, "issues_since": "x",
