@@ -37,7 +37,7 @@ use layout::Layout;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
-use terrain::{Block, Region, HEIGHT};
+use terrain::{Block, Collision, Region, HEIGHT};
 
 /// Side of the square column cells the lookup index is split into.
 const CELL: i64 = 16;
@@ -404,14 +404,17 @@ impl Walker {
         self.world.base().loaded().collect()
     }
 
-    /// A walker with its feet at `feet` over a streamed world: the player's
-    /// region and its neighbours are loaded now, and regions load and unload
-    /// as the player crosses borders (radii from `data/streaming.toml`).
+    /// A walker over a streamed world, standing on the surface of the column
+    /// under `feet` (whose height is ignored), which is also where `respawn`
+    /// puts it. The player's region and its neighbours are loaded now, and
+    /// regions load and unload as the player crosses borders (radii from
+    /// `data/streaming.toml`).
     pub fn with_layout(layout: Layout, feet: [f64; 3]) -> Result<Walker, String> {
         let mut w = Walker::new(feet).map_err(|e| e.to_string())?;
         let mut streamer = Streamer::new(layout, StreamConfig::default_from_data()?);
         streamer.update(feet, w.world.base_mut());
         w.streamer = Some(streamer);
+        w.spawn = w.teleport_to_surface(feet[0].floor() as i32, feet[2].floor() as i32)?;
         Ok(w)
     }
 
@@ -1224,9 +1227,10 @@ impl Walker {
             .liquid
     }
 
-    /// Put the player standing on the highest non-air block of column
-    /// `(x, z)`, streaming that column's region in first. Errors, changing
-    /// nothing, if the column is not in a loaded region.
+    /// Put the player standing on the highest block of column `(x, z)` that
+    /// has a collision box or is liquid (so not in a flower), streaming that
+    /// column's region in first. Errors, changing nothing, if the column is
+    /// not in a loaded region.
     pub fn teleport_to_surface(&mut self, x: i32, z: i32) -> Result<[f64; 3], String> {
         let (cx, cz) = (x as f64 + 0.5, z as f64 + 0.5);
         if let Some(s) = &mut self.streamer {
@@ -1238,7 +1242,10 @@ impl Walker {
         }
         let top = (0..HEIGHT as i32)
             .rev()
-            .find(|&y| self.world.block_at(x, y, z) != Block::Air)
+            .find(|&y| {
+                let info = self.world.block_at(x, y, z).info();
+                info.collision != Collision::None || info.liquid
+            })
             .ok_or_else(|| format!("nothing to stand on at {x} {z}"))?;
         let feet = [cx, top as f64 + 1.0, cz];
         self.teleport(feet);
