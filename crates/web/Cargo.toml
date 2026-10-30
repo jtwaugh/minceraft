@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 [dependencies]
 terrain = { path = "../terrain" }
 layout = { path = "../layout", default-features = false }
+mesh = { path = "../mesh" }
 wasm-bindgen = "0.2"
 
 [package.metadata.wasm-pack.profile.release]

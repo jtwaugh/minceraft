@@ -11,6 +11,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use layout::{Habitats, Layout};
 use terrain::Biases;
+mod mesh;
 use wasm_bindgen::prelude::*;
 
 /// Terrain-only block bytes for a `w x d` region at world `(x0, z0)`.

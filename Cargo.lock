@@ -129,6 +129,7 @@ name = "terrain-web"
 version = "0.1.0"
 dependencies = [
  "layout",
+ "mesh",
  "terrain",
  "wasm-bindgen",
 ]
