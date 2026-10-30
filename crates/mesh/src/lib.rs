@@ -9,6 +9,7 @@ extern crate alloc;
 
 mod mesh;
 pub mod quads;
+pub mod shapes;
 pub mod tables;
 pub mod tint;
 
