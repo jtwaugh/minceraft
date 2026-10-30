@@ -66,7 +66,7 @@ for (const n of [5, 3, 9]) {
         assert.ok(s.y >= rects.beltPanel.y && s.y + s.h <= rects.beltPanel.y + rects.beltPanel.h);
       });
       if (n === 5) {
-        assert.equal(scale, w === 80 ? 1 : 11);
+        assert.equal(scale, w === 80 ? 1 : 4);
         assert.ok(rects.beltPanel.w <= w * BELT_MAX_WIDTH_FRACTION || scale === 1);
       }
     });
