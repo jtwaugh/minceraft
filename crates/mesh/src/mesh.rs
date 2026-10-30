@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn water_depth_caps_at_255() {
+    fn water_depth_counts_down_the_column() {
         let b = world(1, 0, |_, _, y| if y >= 1 { WATER } else { STONE });
         let m = mesh_blocks(&b, 1, 0, false, &layers());
         let max = m.water.bytes().chunks(16).map(|v| v[15]).max().unwrap();
