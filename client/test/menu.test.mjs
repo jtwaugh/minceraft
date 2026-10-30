@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hudScale } from '../hud.js';
-import { menuModel, menuScale, menuDebug, PANEL, SEA_TILE } from '../menu.js';
+import { menuModel, menuScale, menuDebug, PANEL, SEA_TILE, WORDMARK, wordmarkTexels } from '../menu.js';
 import { SCENES } from '../scenes.js';
 
 test('menu links are relative and cover every scene', () => {
@@ -45,4 +45,17 @@ test('menuScale follows hudScale and never overflows the 160x120 layout', () => 
     assert.ok(160 * s <= w && 120 * s <= h, `${w}x${h} -> ${s}`);
   }
   assert.equal(menuScale(3440, 1440), 12);
+});
+
+test('wordmark is used when the tileset has it, text h1 otherwise', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const set = JSON.parse(await readFile(new URL('../../viewer/textures.json', import.meta.url)));
+  const size = wordmarkTexels(set);
+  assert.ok(size && size.w > 0 && size.h > 0);
+  for (const [w, h] of [[390, 844], [1366, 768], [1920, 1080], [3440, 1440]]) {
+    const s = menuScale(w, h);
+    assert.ok(size.w * s <= w, `${w}x${h}: wordmark ${size.w * s} wide`);
+  }
+  assert.equal(wordmarkTexels({ batches: {} }), null);
+  assert.equal(WORDMARK, 'wordmark');
 });

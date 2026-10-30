@@ -1,12 +1,13 @@
 // Root menu page logic (docs/design/root-menu.md section 1). The link-building
 // is DOM-free so node tests can cover it; the DOM part only runs in a browser.
 import { ALPHA, menuEntries } from './scenes.js';
-import { textureCanvas, interfaceScale } from './uipx.js';
+import { textureCanvas, textureSize, interfaceScale } from './uipx.js';
 import { panelImage } from './panel.js';
 
 // Nine-slice panel pieces, 4x4 texels each, and the water tile the sea scrolls.
 export const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
 export const SEA_TILE = 'water_0';
+export const WORDMARK = 'wordmark';
 const SEA_TEXELS = 8;
 // Layout the pixel scale is chosen for, in texels.
 const BASE_W = 160, BASE_H = 120;
@@ -69,6 +70,11 @@ export function menuScale(viewportW, viewportH) {
   return interfaceScale(viewportW, viewportH, BASE_W, BASE_H);
 }
 
+/** Wordmark size in texels, or null when the tileset lacks it (the text h1 stays). */
+export function wordmarkTexels(set) {
+  return textureSize(set, WORDMARK);
+}
+
 /**
  * Switches the rendered menu to the tile-drawn look. Everything is set as CSS
  * variables on the root, so the plain links keep working if this is skipped.
@@ -82,6 +88,14 @@ export function styleMenu(doc, win, set) {
   style.setProperty('--panel', `url(${panelImage(doc, set)})`);
   style.setProperty('--sea', `url(${sea.toDataURL()})`);
   style.setProperty('--sea-size', `${SEA_TEXELS * scale}px`);
+  const mark = wordmarkTexels(set);
+  const h1 = doc.querySelector('h1');
+  if (mark && h1) {
+    style.setProperty('--wordmark', `url(${textureCanvas(set, WORDMARK, doc).toDataURL()})`);
+    style.setProperty('--wordmark-w', `${mark.w * scale}px`);
+    style.setProperty('--wordmark-h', `${mark.h * scale}px`);
+  }
+  h1?.classList.toggle('wordmark', Boolean(mark));
   doc.body.classList.add('styled');
   return true;
 }
