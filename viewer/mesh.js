@@ -310,6 +310,16 @@ export const LEAF_WEIGHT = 64;
 const BUSH_INSET = 2 / 16;
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 
+// Largest merged water-top quad side: uv is uint8 in 1/16, so 15 blocks fit.
+const WATER_MERGE_MAX = 15;
+// The tint bytes "r,g,b" of a water block's tint if all four corners agree, else null.
+function waterTint(tint) {
+  const key = (t) => t.map((v) => Math.round(v * 255)).join();
+  if (typeof tint !== 'function') return key(tint);
+  const k = key(tint(0, 0));
+  return [[0, 1], [1, 1], [1, 0]].every(([a, b]) => key(tint(a, b)) === k) ? k : null;
+}
+
 // Growable quad buffer in the packed vertex format.
 class Quads {
   constructor() { this.buf = new ArrayBuffer(VERTEX_BYTES * 4 * 1024); this.n = 0; this.view(); }
@@ -407,6 +417,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       return q(sa, 0) + q(0, sb) + q(sa, sb);
     });
   };
+  const waterTops = new Map(); // y -> per-column water-top cell (or null), merged after the main loop
   const FULL_LO = [0, 0, 0], FULL_HI = [1, 1, 1];
   const CACTUS_LO = [CACTUS_INSET, 0, CACTUS_INSET], CACTUS_HI = [1 - CACTUS_INSET, 1, 1 - CACTUS_INSET];
   const BUSH_LO = [BUSH_INSET, 0, BUSH_INSET], BUSH_HI = [1 - BUSH_INSET, 1 - BUSH_INSET, 1 - BUSH_INSET];
@@ -465,7 +476,12 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           if (n === B.water || n === B.ice || SOLID_N[n]) continue;
           let depth = 1;
           while (depth < 255 && y - depth >= 0 && blocks[base + y - depth] === B.water) depth++;
-          boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint, 0, null, 0, depth);
+          const flatTint = f.d[1] > 0 && waterTint(tint);
+          if (flatTint) {
+            let tops = waterTops.get(y);
+            if (!tops) waterTops.set(y, tops = new Array(size * size).fill(null));
+            tops[c] = { key: `${layer},${depth},${flatTint}`, layer, depth, tint: flatTint.split(',').map((v) => v / 255) };
+          } else boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint, 0, null, 0, depth);
         } else if (b === B.ice) {
           if (n === B.ice || SOLID_N[n]) continue;
           boxFace(2, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
@@ -491,6 +507,25 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           boxFace(cutLeaf ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr, faceAO(x, y, z, f), cutLeaf ? LEAF_WEIGHT : 0);
         }
       }
+    }
+  }
+  // Water tops: merge runs of equal cells (same layer, depth and tint) into
+  // rectangles of at most WATER_MERGE_MAX blocks a side.
+  for (const [y, cells] of waterTops) {
+    const done = new Uint8Array(size * size), top = FACES[0];
+    for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
+      const c = z * size + x, cell = cells[c];
+      if (!cell || done[c]) continue;
+      const same = (i) => cells[i] && !done[i] && cells[i].key === cell.key;
+      let w = 1, h = 1;
+      while (w < WATER_MERGE_MAX && x + w < size && same(c + w)) w++;
+      outer: while (h < WATER_MERGE_MAX && z + h < size) {
+        for (let i = 0; i < w; i++) if (!same(c + h * size + i)) break outer;
+        h++;
+      }
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) done[c + j * size + i] = 1;
+      const p = top.c.map((v) => [v[0] * w, 1, v[2] * h]);
+      out[1].quad(x, y, z, p, p.map((v) => [v[0], v[2]]), cell.layer, top.s * (0.75 + y / 256), cell.tint, null, null, cell.depth);
     }
   }
   const [opaque, water, ice, cutout] = out.map((q) => q.done());
