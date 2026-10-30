@@ -5,7 +5,7 @@
 // F swaps walking and flying while the pointer is locked, keeping the position.
 //
 //   const c = createController({ input, walk, fly, clock, document, flying });
-//   c.frame(dtSeconds)  -> { ticks, alpha, eye, yaw, pitch, fov, flying, aim, belt, hud, underwater, events }
+//   c.frame(dtSeconds, snow?)  -> { ticks, alpha, eye, yaw, pitch, fov, flying, aim, belt, hud, underwater, events }
 //                          (aim and belt as in overlay.js; the walking player's, stale while flying)
 //   c.submitConsole(line)  queue the line on the walk, close the console, relock the pointer
 //   c.closeConsole()       close the console without submitting; the pointer stays unlocked
@@ -24,8 +24,9 @@
 // `events` is the sim's events since the previous frame (every tick of this one),
 // oldest first, as `name key=value ...` strings; each is delivered once.
 //
-// `particles` is the live particle list (particles.js: a burst per `forage_missed` event),
-// `particleCount` its length; scene.js only draws it.
+// `particles` is the live particle list (particles.js: a burst per `forage_missed` event,
+// and flakes off snowy foliage when `frame` gets `snow` ({ cells, phase }: snowOnFoliage cells
+// and the sway phase, null while motion is reduced)), `particleCount` its length; scene.js only draws it.
 //
 // `underwater` is whether the drawn eye is in a water cell, in either mode;
 // scene.js switches the fog and tint on it.
@@ -81,7 +82,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
 
   return {
     state,
-    frame(dt) {
+    frame(dt, snow = null) {
       if (!walk.dead()) respawning = false;
       const dead = walk.dead() && !respawning;
       if (dead !== input.dead) input.setDead(dead);
@@ -108,6 +109,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
       const events = Array.from(walk.drain_events());
       particles.spawnMisses(events);
+      if (snow) particles.spawnSnow(snow.cells, eye, snow.phase, dt);
       particles.update(dt);
       Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, events, particles: particles.list, particleCount: particles.count });
       return state;

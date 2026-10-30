@@ -27,6 +27,12 @@ const SOLID: [u8; 18] = [
 /// Oak, birch and spruce leaves: solid only with `fast`.
 const LEAVES: [u8; 3] = [11, 12, 13];
 
+/// Whether `b` sways in the wind, so a snow layer on it sways too: cutout
+/// leaves (not with `fast`) and bushes.
+fn sways_under(b: u8, fast: bool) -> bool {
+    (LEAVES.contains(&b) && !fast) || matches!(b, 46 | 57 | 58)
+}
+
 /// Texture layer of a face: `face_layer` is indexed `block * 3 + (0 top, 1 side,
 /// 2 bottom)`, with the fast-leaves copy from 768 on.
 fn layer_of(face_layer: &[u8], b: u8, dy: i32, fast: bool) -> u8 {
@@ -245,7 +251,10 @@ pub fn mesh_blocks(
                             if box_hidden(b, d[1], n, solid(n)) {
                                 continue;
                             }
-                            if b == CACTUS || b == SNOW_LAYER {
+                            // snow on swaying foliage sways with it (`swaysUnder` in viewer/mesh.js)
+                            let on_foliage =
+                                b == SNOW_LAYER && y > 0 && sways_under(blocks[base + y - 1], fast);
+                            if b == CACTUS || (b == SNOW_LAYER && !on_foliage) {
                                 &mut out.opaque
                             } else {
                                 weight = Some([LEAF_WEIGHT; 4]);
@@ -548,6 +557,40 @@ mod tests {
             (fast.ice.faces(), fast.opaque.faces(), fast.cutout.faces()),
             (4, 12, 0)
         );
+    }
+
+    #[test]
+    fn snow_on_foliage_sways_with_it() {
+        let snow_on = |under: u8, fast: bool| {
+            let b = world(1, 0, |_, _, y| match y {
+                40 => STONE,
+                41 => under,
+                42 => SNOW_LAYER,
+                _ => 0,
+            });
+            let l = layers();
+            mesh_blocks(
+                &b,
+                1,
+                0,
+                fast,
+                false,
+                &l,
+                &Tints::NONE,
+                [0, 0],
+                &Variants::NONE,
+            )
+        };
+        // stone (6 faces) stays opaque; leaves (5: the stone hides the bottom) and snow (6) cut out
+        let m = snow_on(LEAF, false);
+        assert_eq!((m.opaque.faces(), m.cutout.faces()), (6, 11));
+        assert!(m.cutout.bytes().chunks(16).all(|v| v[14] == LEAF_WEIGHT));
+        // a bush sways even with fast leaves
+        let m = snow_on(57, true);
+        assert_eq!((m.opaque.faces(), m.cutout.faces()), (6, 11));
+        // snow on stone, or on fast (still) leaves, stays opaque
+        assert_eq!(snow_on(STONE, false).cutout.faces(), 0);
+        assert_eq!(snow_on(LEAF, true).cutout.faces(), 0);
     }
 
     #[test]
