@@ -34,3 +34,8 @@ test('prompt gives the finding schema fields and layout sweep', () => {
     assert.ok(prompt.includes(s), s);
   }
 });
+
+test('prompt says a repro needs an expect line that holds', () => {
+  assert.match(prompt, /at least one `expect` line/);
+  assert.match(prompt, /without one is always dropped/);
+});

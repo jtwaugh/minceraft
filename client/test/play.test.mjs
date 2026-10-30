@@ -86,6 +86,16 @@ test('player mode returns layout results and still refuses debug paths', () => {
   } finally { state.session.close(); }
 });
 
+test('player mode can expect on the last layout, so layout findings can be verified', () => {
+  const state = started();
+  try {
+    const { layout } = handle(state, { exec: 'layout 1366 768' });
+    const r = handle(state, { exec: `expect layout.scale = ${layout.scale}` });
+    assert.equal(r.ok, true, r.error);
+    assert.equal(handle(state, { exec: `expect layout.problems = ${layout.problems.length}` }).ok, true);
+  } finally { state.session.close(); }
+});
+
 test('verify mode runs debug reads and serves the debug observation', () => {
   const state = newState();
   assert.equal(handle(state, { start: ['walk', 'raft'], debug: true }).ok, true);
