@@ -29,7 +29,7 @@ export class ChunkStream {
     this.seed = seed; this.env = env; this.schedule = schedule;
     this.loaded = new Map();   // key -> { cx, cz, fast, parts, meanY, minY }
     this.jobs = new Map();     // key -> pool job (queued or running)
-    this.stats = { generated: 0, ms: 0 };
+    this.stats = { generated: 0, ms: 0, times: [] }; // times: worker ms of every completed chunk job
   }
 
   /**
@@ -70,8 +70,8 @@ export class ChunkStream {
       for (const name of PARTS) parts[name] = this.env.upload(d[name]);
       const old = this.loaded.get(k);
       if (old) this.drop(k, old); // a fast mesh replaced by full detail
-      this.loaded.set(k, { cx: d.cx, cz: d.cz, fast: d.fast, parts, meanY: d.meanY, minY: d.minY });
-      this.stats.generated++; this.stats.ms += job.ms || 0;
+      this.loaded.set(k, { cx: d.cx, cz: d.cz, fast: d.fast, parts, meanY: d.meanY, minY: d.minY, faces: Object.fromEntries(PARTS.map((n) => [n, d[n].faces])) });
+      this.stats.generated++; this.stats.ms += job.ms || 0; this.stats.times.push(job.ms || 0);
     }, () => {});
   }
 

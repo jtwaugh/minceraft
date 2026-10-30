@@ -73,3 +73,10 @@ export class WorkerPool {
     this.pump();
   }
 }
+
+/** Median of a list of numbers (mean of the middle two when even); 0 for an empty list. */
+export function median(values) {
+  if (!values.length) return 0;
+  const s = [...values].sort((a, b) => a - b), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
