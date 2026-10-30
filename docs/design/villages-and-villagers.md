@@ -103,6 +103,8 @@ Templates are data in `data/structures/villages/` in the `raft_start.toml` forma
 - `spawns`: a list of `{ cell, kind }` markers (`villager` for now), on the piece's floor.
 - `rotation`: allowed rotations, so pieces can face any of four ways.
 
+A template's floor is always its layer `y = 0`, and the walkable surface is the top of that layer's blocks. Every connector and spawn cell is at `y = 1`, the first air layer above the floor. Templates declare no floor height of their own. (Decided in #1558.)
+
 Two pieces join when a connector of each sits on the same cell face, facing opposite ways, at the same floor height. Stilt and step runs are not in the templates; they are generated down to the ground under each piece (section 3.1).
 
 ### 2.3 Building set
