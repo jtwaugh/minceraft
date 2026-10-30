@@ -68,10 +68,21 @@ runs:
       shell: bash
       env:
         VERSION: ${{ inputs.claude-code }}
+        SELF_HOSTED: ${{ runner.environment == 'self-hosted' }}
       run: |
         set -euo pipefail
         bun="$HOME/.bun/bin/bun"
         claude="$HOME/.cache/claude-code/claude-$VERSION"
-        echo "bun $("$bun" --version), claude $("$claude" --version)"
+        # A self-hosted runner keeps $HOME, so the cache restore rewrites
+        # these binaries in place. macOS then SIGKILLs them on launch (the
+        # signature it remembered for that file no longer matches), so give
+        # each a new inode.
+        if [ "$SELF_HOSTED" = true ]; then
+          for f in "$bun" "$claude"; do cp "$f" "$f.new" && mv -f "$f.new" "$f"; done
+        fi
+        # Not inside echo's $(...), where a killed binary wouldn't fail the step.
+        bun_version=$("$bun" --version)
+        claude_version=$("$claude" --version)
+        echo "bun $bun_version, claude $claude_version"
         echo "bun=$bun" >> "$GITHUB_OUTPUT"
         echo "claude=$claude" >> "$GITHUB_OUTPUT"
