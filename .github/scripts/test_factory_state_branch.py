@@ -99,6 +99,19 @@ class Test(unittest.TestCase):
             sb.publish(self.make_store("b.db", [1, 2]), run=racing)
         self.assertEqual(sh(self.bare, "rev-parse", sb.BRANCH).strip(), moved)
 
+    def test_fetch_asks_for_depth_one(self):
+        sb.publish(self.make_store("a.db", [1]), run=self.run_git)
+        seen = []
+
+        def spy(args, input=None):
+            seen.append(args)
+            return self.run_git(args, input)
+
+        sb.fetch(os.path.join(self.tmp.name, "out.db"), run=spy)
+        fetches = [a for a in seen if a[0] == "fetch"]
+        self.assertEqual(len(fetches), 1)
+        self.assertEqual(fetches[0][1:3], ["--depth", "1"])
+
 
 if __name__ == "__main__":
     unittest.main()
