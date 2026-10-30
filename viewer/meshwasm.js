@@ -25,14 +25,23 @@ function packColors(colors) {
   return out;
 }
 
+// ctx.variants (layer -> { count, cum }) as 9 numbers per layer: count, then cum.
+function packVariants(variants) {
+  const out = new Float64Array(256 * 9);
+  for (const [layer, { count, cum }] of Object.entries(variants ?? {})) {
+    out[layer * 9] = count;
+    out.set(cum.slice(0, 8), layer * 9 + 1);
+  }
+  return out;
+}
+
 const part = (bytes) => ({ verts: bytes.buffer, faces: bytes.length / VERTEX_BYTES / 4 });
 
 /**
- * `wasm` is the initialised terrain_web module. `origin` is passed on but the
- * Rust mesher doesn't read it yet.
+ * `wasm` is the initialised terrain_web module. `origin` is the world x and z of block (0, 0).
  */
 export function meshBlocksWasm(wasm, ctx, blocks, tints, size, pad = 0, { fast = false, origin = [0, 0], greedy = true } = {}) {
-  const r = wasm.mesh_blocks(blocks, size, pad, (fast ? FAST : 0) | (greedy ? GREEDY : 0) | (tints.corners ? CORNERS : 0), origin[0], origin[1], ctx.faceLayer, packTints(tints, size), packColors(ctx.COLORS));
+  const r = wasm.mesh_blocks(blocks, size, pad, (fast ? FAST : 0) | (greedy ? GREEDY : 0) | (tints.corners ? CORNERS : 0), origin[0], origin[1], ctx.faceLayer, packTints(tints, size), packColors(ctx.COLORS), packVariants(ctx.variants));
   const out = { opaque: part(r.opaque), cutout: part(r.cutout), water: part(r.water), ice: part(r.ice), meanY: r.meanY, minY: r.minY };
   r.free();
   return out;

@@ -2,7 +2,7 @@
 //! `meshBlocks` in `viewer/mesh.js`. `viewer/meshwasm.js` turns the result
 //! into the JS mesher's `{opaque, cutout, water, ice, meanY, minY}` shape.
 use alloc::vec::Vec;
-use mesh::Tints;
+use mesh::{Tints, Variants};
 use wasm_bindgen::prelude::*;
 
 /// Bit in `mesh_blocks`' `flags`: fast leaves.
@@ -53,9 +53,10 @@ impl MeshOut {
 /// Mesh `blocks` (`((z * w) + x) * 128 + y`, `w = size + 2 * pad`) with the
 /// face-layer table of `faceLayers` in `viewer/mesh.js`. `flags` bit 0 is fast
 /// leaves; bit 1 (greedy) is accepted but not used yet; bit 2 says `tints`
-/// has corner grids. `origin_x` and `origin_z` are likewise reserved for the
-/// features the Rust mesher doesn't have yet: see the list in
-/// `viewer/test/mesh_parity.test.mjs`.
+/// has corner grids. `origin_x` and `origin_z` are the world x and z of block
+/// (0, 0); `variants` is 9 f64 per texture layer (count, then cumulative
+/// weights) as packed by `viewer/meshwasm.js`. Features the Rust mesher
+/// doesn't have yet are listed in `viewer/test/mesh_parity.test.mjs`.
 ///
 /// `tints` is the grass, leaf, water and dry tints of each column
 /// (`size * size * 3` f32 each, in that order), then with the corners flag the
@@ -72,8 +73,8 @@ pub fn mesh_blocks(
     face_layer: &[u8],
     tints: &[f32],
     colors: &[u8],
+    variants: &[f64],
 ) -> MeshOut {
-    let _ = (origin_x, origin_z);
     let tints = Tints {
         size: size as usize,
         data: tints,
@@ -87,6 +88,8 @@ pub fn mesh_blocks(
         flags & FAST != 0,
         face_layer,
         &tints,
+        [origin_x, origin_z],
+        &Variants(variants),
     );
     MeshOut {
         opaque: m.opaque.bytes().to_vec(),

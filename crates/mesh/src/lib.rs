@@ -44,6 +44,37 @@ pub fn variant_at(x: i32, y: i32, z: i32) -> u32 {
     (hash_at(x, y, z, 0) & 7) as u32
 }
 
+/// Tile variant counts and cumulative weights per base layer, as `variantTable`
+/// in `viewer/mesh.js` builds them: 9 numbers a layer, the count (0 for a layer
+/// without variants) then the cumulative weights.
+#[derive(Clone, Copy)]
+pub struct Variants<'a>(pub &'a [f64]);
+
+impl Variants<'_> {
+    pub const NONE: Variants<'static> = Variants(&[]);
+    const STRIDE: usize = 9;
+}
+
+/// `layer` moved to its tile variant, picked by the world coordinate alone
+/// (a salt apart from `variant_at`). Layers without variants stay.
+pub fn pick_layer(v: &Variants, layer: u8, x: i32, y: i32, z: i32) -> u8 {
+    let Some(e) =
+        v.0.get(layer as usize * Variants::STRIDE..(layer as usize + 1) * Variants::STRIDE)
+    else {
+        return layer;
+    };
+    let count = e[0] as usize;
+    if count == 0 {
+        return layer;
+    }
+    let r = (hash_at(x, y, z, 0x5bd1e995) as u32 >> 8) as f64 / 16777216.0;
+    let mut i = 0;
+    while i < count - 1 && r >= e[1 + i] {
+        i += 1;
+    }
+    layer + i as u8
+}
+
 /// Cross-plant shift in x and z, in whole 1/16s from -2 to 2.
 pub fn plant_offset(x: i32, y: i32, z: i32) -> [f64; 2] {
     let h = hash_at(x, y, z, 0x2c1b3c6d) as u32;
