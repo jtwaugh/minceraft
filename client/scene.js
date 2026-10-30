@@ -42,6 +42,7 @@ import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
 import { sampleSky, easeSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
+import { SNAP_GLSL } from './texsnap.js';
 import { SKY_GLSL } from '../viewer/sky.js';
 import { WATER_GLSL, WATER_DEPTH_GLSL } from '../viewer/water.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
@@ -132,14 +133,14 @@ function program(cut) {
     uniform float waterFresnel; // 1 while drawing water from above the surface
     out vec4 o;
     ${FOG_GLSL}
+    ${SNAP_GLSL}
     ${SKY_GLSL}
     ${WATER_GLSL}
     ${WATER_DEPTH_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
       vec2 px = vuv.xy * ${TEX_SIZE}.0;
-      vec2 fw = max(fwidth(px), vec2(1e-4));
-      vec2 snapped = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / ${TEX_SIZE}.0;
+      vec2 snapped = snapTexel(px, fwidth(px)) / ${TEX_SIZE}.0;
       vec4 t = textureGrad(tex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy));
       ${cut && !msaa ? 'if (t.a < 0.5) discard;' : ''}
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
