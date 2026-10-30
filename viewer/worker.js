@@ -9,9 +9,11 @@
 //   habitat { seed, x, z, size }         habitat_map for a map tile (only fetched in habitat mode)
 //   coarse { seed, x0, z0, step, nx, nz } coarse_heightmap survey (the map's quick first draft)
 //   plan   { seed, cx, cz, bounds }      flyover plan data (flyover/plan.js planData)
-//   chunk  { seed, cx, cz, fast }        decorated 64x64 chunk (plus a one-block ring), meshed
-//                                        (fast: fast leaves, for chunks seen only from afar)
+//   chunk  { seed, cx, cz, fast, half }  decorated 64x64 chunk (plus a one-block ring), meshed
+//                                        (fast: fast leaves, for chunks seen only from afar;
+//                                        half: half-resolution mesh, lod.js, which implies fast)
 import init, * as wasm from './pkg/terrain_web.js';
+import { meshHalf } from './lod.js';
 import { legendContext, columnTints, meshBlocks } from './mesh.js';
 import { planData, CHUNK } from './flyover/plan.js';
 
@@ -38,13 +40,14 @@ const tasks = {
   plan({ seed, cx, cz, bounds }) {
     return [planData(wasm, seed, cx, cz, { bounds }), []];
   },
-  chunk({ seed, cx, cz, fast = false, blend }, ctx) {
+  chunk({ seed, cx, cz, fast = false, half = false, blend }, ctx) {
     const x = cx * CHUNK, z = cz * CHUNK;
     const blocks = wasm.generate_region_decorated(seed, x - 1, z - 1, CHUNK + 2, CHUNK + 2);
     const tints = columnTints(wasm, ctx, seed, x, z, CHUNK, blend);
-    const m = meshBlocks(ctx, blocks, tints, CHUNK, 1, { fast, origin: [x, z] });
+    const m = half ? meshHalf(ctx, blocks, tints, CHUNK, 1, { origin: [x, z] })
+      : meshBlocks(ctx, blocks, tints, CHUNK, 1, { fast, origin: [x, z] });
     const parts = { opaque: m.opaque, cutout: m.cutout, water: m.water, ice: m.ice };
-    return [{ cx, cz, fast, ...parts, meanY: m.meanY, minY: m.minY }, Object.values(parts).map((q) => q.verts)];
+    return [{ cx, cz, fast: fast || half, half, ...parts, meanY: m.meanY, minY: m.minY }, Object.values(parts).map((q) => q.verts)];
   },
 };
 

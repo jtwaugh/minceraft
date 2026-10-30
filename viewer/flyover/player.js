@@ -21,7 +21,8 @@ export const PRI = { plan: 1, opening: 2, stream: 3 };
 const key = (cx, cz) => `${cx},${cz}`;
 const PARTS = ['opaque', 'cutout', 'water', 'ice'];
 // Chunks are meshed with fast leaves until the schedule's `full` time comes
-// within `ahead`; then a full-detail mesh replaces the fast one.
+// within `ahead`; then a full-detail mesh replaces the fast one. Chunks first
+// seen from beyond HALF_DETAIL (`e.half`) start as half-resolution meshes.
 const wantFast = (e, t) => e.full > t;
 
 export class ChunkStream {
@@ -43,14 +44,14 @@ export class ChunkStream {
       if (e.last < t - 0.5) continue;
       const k = key(e.cx, e.cz);
       want.add(k);
-      const fast = wantFast(e, t + ahead);
+      const fast = wantFast(e, t + ahead), half = fast && e.half;
       const pri = priority + Math.max(0, (fast ? e.first : Math.max(e.first, e.full)) - t) / 100;
       const have = this.loaded.get(k);
       if (have && (!have.fast || fast)) continue;
       const job = this.jobs.get(k);
-      if (job && job.args.fast === fast) { this.env.pool.reprioritise(job, pri); continue; }
+      if (job && job.args.fast === fast && !!job.args.half === half) { this.env.pool.reprioritise(job, pri); continue; }
       job?.cancel();
-      this.request(e, k, pri, fast);
+      this.request(e, k, pri, fast, half);
     }
     for (const [k, job] of this.jobs) if (!want.has(k)) { job.cancel(); this.jobs.delete(k); }
     const keepUntil = t + ahead + 4;
@@ -60,8 +61,8 @@ export class ChunkStream {
     }
   }
 
-  request(e, k, priority, fast) {
-    const job = this.env.pool.run('chunk', { seed: this.seed, cx: e.cx, cz: e.cz, fast, blend: FLYOVER_BLEND }, priority);
+  request(e, k, priority, fast, half) {
+    const job = this.env.pool.run('chunk', { seed: this.seed, cx: e.cx, cz: e.cz, fast, half, blend: FLYOVER_BLEND }, priority);
     this.jobs.set(k, job);
     job.promise.then((d) => {
       if (this.jobs.get(k) !== job || this.disposed) return;
@@ -70,7 +71,7 @@ export class ChunkStream {
       for (const name of PARTS) parts[name] = this.env.upload(d[name]);
       const old = this.loaded.get(k);
       if (old) this.drop(k, old); // a fast mesh replaced by full detail
-      this.loaded.set(k, { cx: d.cx, cz: d.cz, fast: d.fast, parts, meanY: d.meanY, minY: d.minY, faces: Object.fromEntries(PARTS.map((n) => [n, d[n].faces])) });
+      this.loaded.set(k, { cx: d.cx, cz: d.cz, fast: d.fast, half: d.half, parts, meanY: d.meanY, minY: d.minY, faces: Object.fromEntries(PARTS.map((n) => [n, d[n].faces])) });
       this.stats.generated++; this.stats.ms += job.ms || 0; this.stats.times.push(job.ms || 0);
     }, () => {});
   }

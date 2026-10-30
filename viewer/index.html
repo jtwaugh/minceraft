@@ -1606,13 +1606,14 @@ function flyLoop(now) {
   $('flytime').textContent = `${pl.t.toFixed(1)} / ${pl.duration.toFixed(0)} s` +
     (pl.state === 'loading' ? ' · loading' : '') + (pl.recorder ? ' · ● rec' : '');
   if (pl.frameNo % 15 === 0) {
-    let fast = 0;
+    let fast = 0, half = 0;
     const faces = { opaque: 0, cutout: 0, water: 0, ice: 0 };
     for (const c of st.loaded.values()) {
       if (c.fast) fast++;
+      if (c.half) half++;
       for (const n in faces) faces[n] += c.faces[n];
     }
-    dev('flyover chunks', `${st.loaded.size} loaded (${fast} with fast leaves), ${flyDrawn} drawn, ${st.jobs.size} queued, ` +
+    dev('flyover chunks', `${st.loaded.size} loaded (${fast} with fast leaves, ${half} half detail), ${flyDrawn} drawn, ${st.jobs.size} queued, ` +
       `median ${median(st.stats.times).toFixed(1)} ms, faces ${faces.opaque} opaque / ${faces.cutout} cutout / ${faces.water} water / ${faces.ice} ice`);
   }
   if (!seeking) $('flyseek').value = String(Math.round(pl.t / pl.duration * 1000));

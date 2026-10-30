@@ -588,9 +588,12 @@ export const TREE_CLEARANCE = 24;
  * above the ground and some part of nearly every chunk in view shows (see
  * README). `full` is the first time (padded the same way) the camera comes
  * within FULL_DETAIL blocks of the chunk, or Infinity; before that it's drawn
- * with fast leaves. Returns [{ cx, cz, first, last, full }] sorted by first.
+ * with fast leaves. `half` is true when the chunk was first seen from beyond
+ * HALF_DETAIL blocks: it is then drawn at half resolution until `full`.
+ * Returns [{ cx, cz, first, last, full, half }] sorted by first.
  */
 export const FULL_DETAIL = 80;
+export const HALF_DETAIL = 120;
 export function visibilitySchedule(path, g, { step = 0.25, pad = 1, near = 40, margin = 4 } = {}) {
   const tanV = Math.tan(VIEW.fovY / 2), tanH = tanV * VIEW.aspect, far = VIEW.fogEnd;
   const seen = new Map(), spans = new Map();
@@ -613,7 +616,7 @@ export function visibilitySchedule(path, g, { step = 0.25, pad = 1, near = 40, m
   const mark = (cx, cz, t, d) => {
     const k = cx + ',' + cz;
     let e = seen.get(k);
-    if (e) { e.first = Math.min(e.first, t); e.last = Math.max(e.last, t); } else seen.set(k, e = { cx, cz, first: t, last: t, full: Infinity });
+    if (e) { e.first = Math.min(e.first, t); e.last = Math.max(e.last, t); } else seen.set(k, e = { cx, cz, first: t, last: t, full: Infinity, half: d > HALF_DETAIL });
     if (d <= FULL_DETAIL) e.full = Math.min(e.full, t);
   };
   for (let t = 0; t <= path.duration + 1e-9; t += step) {
