@@ -9,7 +9,7 @@ phases:
   B: done
   C: done
   D: done
-  E: todo
+  E: done
 ---
 
 ## Current state
@@ -97,6 +97,13 @@ What exists today that this doc relies on or overlaps (checked against the code)
   toolchain and cache, and setting `FACTORY_RUNNER` are `[external]`; the
   "before and after" median wall times need real runs on them.
   `[manual check]`
+- **Phase E done (plan #1482, closed).** The needs-you queue
+  (`factory_needs_you.py`) now shows time in state per item (PR #1487),
+  comments to alert the maintainer once an item waits past
+  `NEEDS_YOU_ALERT_HOURS` (#1489), and a replay test checks the 2026-10-20
+  hand-found items all appear (#1486, `test_factory_needs_you_history.py`).
+  The push-notification channel is `[external]` and not built; the alert is
+  an issue comment. Whether the maintainer sees it is a `[manual check]`.
 - **Not present** (the `factory-tick` workflow and the `needs-you` label
   now exist, see Phase A progress): any state store, any `factory-state`
   branch, file leases, per-transition history, a "needs
