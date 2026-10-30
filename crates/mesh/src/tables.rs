@@ -85,25 +85,11 @@ const fn flags(ids: &[u8]) -> [bool; 256] {
 }
 
 /// Full cubes that hide the faces of whatever is next to them.
+#[rustfmt::skip]
 const SOLID: [u8; 18] = [
-    STONE,
-    DIRT,
-    GRASS,
-    SAND,
-    GRAVEL,
-    OAK_LOG,
-    BIRCH_LOG,
-    SPRUCE_LOG,
-    PUMPKIN,
-    RAFT_PLANKS,
-    BUTCHER_BLOCK,
-    GRIDDLE,
-    CRATE,
-    FARMLAND_DRY,
-    FARMLAND_WET,
-    PLANTER_DIRT,
-    PLANTER_FARMLAND_DRY,
-    PLANTER_FARMLAND_WET,
+    STONE, DIRT, GRASS, SAND, GRAVEL, OAK_LOG, BIRCH_LOG, SPRUCE_LOG, PUMPKIN, RAFT_PLANKS,
+    BUTCHER_BLOCK, GRIDDLE, CRATE, FARMLAND_DRY, FARMLAND_WET, PLANTER_DIRT,
+    PLANTER_FARMLAND_DRY, PLANTER_FARMLAND_WET,
 ];
 pub const OPAQUE: [bool; 256] = flags(&SOLID);
 pub const LEAVES: [bool; 256] = flags(&[OAK_LEAVES, BIRCH_LEAVES, SPRUCE_LEAVES]);
@@ -118,44 +104,14 @@ pub const OPAQUE_FAST: [bool; 256] = {
     a
 };
 /// Drawn as two crossed quads.
+#[rustfmt::skip]
 pub const CROSS: [bool; 256] = flags(&[
-    TALL_GRASS,
-    FERN,
-    DEAD_BUSH,
-    DANDELION,
-    ROSE,
-    SUGAR_CANE,
-    BROWN_MUSHROOM,
-    RED_MUSHROOM,
-    DAISY,
-    BLUEBELL,
-    MARSH_ORCHID,
-    TALL_GRASS_DOUBLE_LOWER,
-    TALL_GRASS_DOUBLE_UPPER,
-    DRY_GRASS,
-    DRY_GRASS_TALL_LOWER,
-    DRY_GRASS_TALL_UPPER,
-    FERN_DOUBLE_LOWER,
-    FERN_DOUBLE_UPPER,
-    CATTAIL_LOWER,
-    CATTAIL_UPPER,
-    LARGE_FERN,
-    BROADLEAF,
-    CACTUS_FLOWER,
-    FROST_GRASS,
-    TULIP_RED,
-    TULIP_SALMON,
-    TULIP_YELLOW,
-    DUNE_GRASS_LOWER,
-    DUNE_GRASS_UPPER,
-    WHEAT_0,
-    WHEAT_1,
-    WHEAT_2,
-    WHEAT_3,
-    WHEAT_4,
-    WHEAT_5,
-    WHEAT_6,
-    WHEAT_7,
+    TALL_GRASS, FERN, DEAD_BUSH, DANDELION, ROSE, SUGAR_CANE, BROWN_MUSHROOM, RED_MUSHROOM,
+    DAISY, BLUEBELL, MARSH_ORCHID, TALL_GRASS_DOUBLE_LOWER, TALL_GRASS_DOUBLE_UPPER, DRY_GRASS,
+    DRY_GRASS_TALL_LOWER, DRY_GRASS_TALL_UPPER, FERN_DOUBLE_LOWER, FERN_DOUBLE_UPPER,
+    CATTAIL_LOWER, CATTAIL_UPPER, LARGE_FERN, BROADLEAF, CACTUS_FLOWER, FROST_GRASS, TULIP_RED,
+    TULIP_SALMON, TULIP_YELLOW, DUNE_GRASS_LOWER, DUNE_GRASS_UPPER, WHEAT_0, WHEAT_1, WHEAT_2,
+    WHEAT_3, WHEAT_4, WHEAT_5, WHEAT_6, WHEAT_7,
 ]);
 /// Upper blocks of two-block plants.
 pub const UPPER_HALF: [bool; 256] = flags(&[
@@ -176,6 +132,7 @@ pub struct Face {
 }
 
 /// Top, bottom, +x, -x, +z, -z.
+#[rustfmt::skip]
 pub const FACES: [Face; 6] = [
     Face {
         d: [0, 1, 0],
