@@ -33,7 +33,7 @@ Checked against the code on 2026-10-30. Nothing in this doc is built; there is n
 ## Reconciliation notes
 
 1. **Template format.** The doc says templates use the `raft_start.toml` format plus `kind`, `connectors`, `spawns` and `rotation`. Today only `raft_start` is embedded and the parser rejects unknown keys (check `structure_rules.rs`). Suggest Phase A extends the parser and `build.rs` to read every file in `data/structures/villages/`, without changing `raft_start`.
-2. **Block names.** Section 2.4 says `planks` and `log`. `data/blocks.toml` has no `planks`, `thatch` or `barrel`; it has `raft_planks`, `oak_log`, `birch_log` and `spruce_log`. Suggest the doc's "reuse" options (`raft_planks` for `dock_planks`, `oak_log` for `dock_post`) and new `thatch`, `plank_step`, `drying_rack`, `net` and `barrel` blocks. Check the ids stay within the block-id limit the terrain crate uses. `plank_step` needs a game-side shape entry, not a `crates/terrain` change.
+2. **Block names.** Section 2.4 says `planks` and `log`. `data/blocks.toml` has no `planks`, `thatch` or `barrel`; it has `raft_planks`, `oak_log`, `birch_log` and `spruce_log`. Add new `dock_planks`, `dock_post`, `thatch`, `plank_step`, `drying_rack`, `net` and `barrel` blocks. Check the ids stay within the block-id limit the terrain crate uses. `plank_step` needs a game-side shape entry, not a `crates/terrain` change.
 3. **Terrain crate.** Rule 3 holds: the coast is a new `DensityTerm`/bias in `crates/layout`. If a new bias needs a variant in `DensityTerm` (`crates/layout/src/lib.rs`) that is still layout code. `crates/terrain` stays untouched, so its `no_std` and zero-dependency invariants are not at risk.
 4. **Exclusion shape.** Section 3.1 step 8 wants an exclusion over the footprint plus margin, but only `Circle` and `Corridor` exist. Suggest a union of circles (one per piece) or a new rectangle variant; either is in `crates/layout`. Decide in Phase C.
 5. **Village record.** `Level` derives serde for the level file. A `village` record (pieces, doors, spawns) is computed from seed and level, not authored, so suggest keeping it out of the TOML and computing it alongside `build_route_layout`. Otherwise the level file format changes and `levels.toml` outputs need regenerating.
@@ -103,6 +103,8 @@ Templates are data in `data/structures/villages/` in the `raft_start.toml` forma
 - `spawns`: a list of `{ cell, kind }` markers (`villager` for now), on the piece's floor.
 - `rotation`: allowed rotations, so pieces can face any of four ways.
 
+A template's floor is always its layer `y = 0`, and the walkable surface is the top of that layer's blocks. Every connector and spawn cell is at `y = 1`, the first air layer above the floor. Templates declare no floor height of their own. (Decided in #1558.)
+
 Two pieces join when a connector of each sits on the same cell face, facing opposite ways, at the same floor height. Stilt and step runs are not in the templates; they are generated down to the ground under each piece (section 3.1).
 
 ### 2.3 Building set
@@ -123,12 +125,14 @@ Templates use existing blocks where possible (`planks`, `log`) and add only what
 | Block | Use | Art |
 |---|---|---|
 | `thatch` | Roofs | new: `thatch_top`, `thatch_side` |
-| `dock_planks` | Dock and boardwalk surface | new, or reuse `raft_planks` |
-| `dock_post` | Stilts and dock legs | new, or reuse `log` |
+| `dock_planks` | Dock and boardwalk surface | new |
+| `dock_post` | Stilts and dock legs | new |
 | `plank_step` | Steps | new; half-height collision from the game-side shape table (basic-gameplay 4.4) |
 | `drying_rack` | Food piece and decor | new, non-full collision |
 | `net` | Net loft and net racks | new, non-full collision |
 | `barrel` | Cooperage and decor | new |
+
+`dock_planks` and `dock_post` are new blocks with their own art, not `raft_planks` and `oak_log`. (Decided in #1559.)
 
 ---
 
@@ -264,6 +268,5 @@ Villagers render as box models from the existing art (`villager` in `art/PROMPT.
 1. **Exclusion shape for the footprint (note 4).** A. Union of one circle per piece, no new variant. B. New rectangle variant in `Exclusion`. Suggest B if the Phase C ticket can stay within 200 lines, else A.
 2. **Village record storage (note 5).** A. Computed alongside `build_route_layout`, not in the level file. B. Written into the level file by `mince-seeds`. Suggest A, so existing `levels.toml` files stay valid.
 3. **Existing levels and seeds (note 6).** A. Re-search and regenerate `levels.toml` after Phase B. B. Keep the shipped seeds and retry only the failing ones. Suggest B first, A if more than a few fail.
-4. **Block reuse (note 2).** A. Reuse `raft_planks` and `oak_log` for `dock_planks` and `dock_post`. B. Add new blocks and art. Suggest A, as the doc already allows.
 5. **Villager look variation (note 13).** A. Tint the one villager texture in the client. B. Separate textures per look. Suggest A.
 6. **Night behaviour (note 10).** A. Leave out until a day and night cycle exists. B. Tie it to the gathering/service phase clock. Suggest A, as the doc says.

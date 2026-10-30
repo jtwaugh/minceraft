@@ -29,7 +29,8 @@ test('interfaceScale keeps the belt within its width share and the hearts on scr
     if (s > 1) assert.ok(BELT_TEXELS_W * s <= w * BELT_MAX_WIDTH_FRACTION && s <= uiScale(w, h, 100, 60));
   }
   assert.equal(interfaceScale(390, 844), 3);
-  assert.equal(interfaceScale(1366, 768), 11);
+  assert.equal(interfaceScale(1366, 768), 4);
+  assert.equal(interfaceScale(1920, 1080), 6);
 });
 
 test('interfaceScale never decreases as the viewport grows', () => {
