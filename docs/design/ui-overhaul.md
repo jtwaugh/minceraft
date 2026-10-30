@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
 ---
 
@@ -15,6 +15,7 @@ phases:
 
 Checked against the code:
 
+- **Phase C done.** Crosshair art (#1355), nine-slice panel helper (#1356), hearts left and hands right with the label in the pixel font (#1362), timer on a panel with a sun/moon icon (#1375), belt on a panel strip with slot numbers (#1385), crosshair drawn from the texture (#1387) and the `hudsizes` scripts (#1389) are in (plan #1337); no `TEXT_CHAR_W` or `TEXT_H` remains in `client/`. Pop-up, wobble and flash were optional and are not built.
 - **Phase B done.** The glyph art (#1248, #1251), the helper `client/font.js` with `client/test/font.test.mjs` (#1250) and the punctuation mapping (#1284, plan #1280) are in; `glyphName` maps A to Z, 0 to 9 and `. , : ! ? ' - / ( )`, and anything else draws `font_unknown`.
 - **Phase A done.** One scale rule, `interfaceScale` in `client/uipx.js`, is used by the HUD, inventory, death screen and menu (#1161, #1166); the `layout` results are readable from `expect` (#1163); `client/test/scripts/hudsizes.input` checks the four sizes (#1169). It caps the belt at half the viewport width (`BELT_MAX_WIDTH_FRACTION = 0.5`); the one-third/30% target from #1151 is left to Phase B.
 - **Scale (before Phase A).** `hudScale(w, h)` is `uiScale(w, h, 80, 45)` in `client/hud.js:22`. `uiScale` (`client/uipx.js:7`) returns the largest whole multiple that fits the base size. The inventory and death screen use their own `uiScale(w, h, 100, 60)` (`client/inventoryui.js:19`, `client/deathui.js:17`) and the menu uses `BASE_W` and `BASE_H` (`client/menu.js:85`). So there are three or four scale rules, not one.
