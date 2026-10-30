@@ -3,11 +3,14 @@
 import { ALPHA, menuEntries } from './scenes.js';
 import { textureCanvas, textureSize, interfaceScale } from './uipx.js';
 import { panelImage } from './panel.js';
+import { buttonCss } from './uistyle.js';
 
 // Nine-slice panel pieces, 4x4 texels each, and the water tile the sea scrolls.
 export const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
 export const SEA_TILE = 'water_0';
 export const WORDMARK = 'wordmark';
+/** Entry links: section headings and scene links. */
+export const BUTTON_SELECTOR = 'body.styled h2 a, body.styled li a';
 const SEA_TEXELS = 8;
 // Layout the pixel scale is chosen for, in texels.
 const BASE_W = 160, BASE_H = 120;
@@ -95,6 +98,16 @@ export function styleMenu(doc, win, set) {
     style.setProperty('--wordmark-w', `${mark.w * scale}px`);
     style.setProperty('--wordmark-h', `${mark.h * scale}px`);
   }
+  const raised = panelImage(doc, set, 'raised'), pressed = panelImage(doc, set, 'pressed');
+  style.setProperty('--btn-raised', `url(${raised})`);
+  style.setProperty('--btn-pressed', `url(${pressed})`);
+  let btn = doc.getElementById('menu-buttons');
+  if (!btn) {
+    btn = doc.createElement('style');
+    btn.id = 'menu-buttons';
+    doc.head.appendChild(btn);
+  }
+  btn.textContent = `${buttonCss(BUTTON_SELECTOR, scale, raised, pressed)}\n${BUTTON_SELECTOR} { display: block; text-decoration: none; }`;
   h1?.classList.toggle('wordmark', Boolean(mark));
   doc.body.classList.add('styled');
   return true;
