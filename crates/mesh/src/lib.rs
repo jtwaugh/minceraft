@@ -7,9 +7,11 @@
 
 extern crate alloc;
 
+mod mesh;
 pub mod quads;
 pub mod tables;
 
+pub use mesh::{mesh_blocks, Mesh};
 pub use quads::{Quads, Tint};
 pub use tables::{b, face_uv, Face, CROSS, FACES, LEAVES, OPAQUE, OPAQUE_FAST, UPPER_HALF, VARIES};
 
