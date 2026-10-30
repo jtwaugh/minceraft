@@ -3,7 +3,6 @@
 //
 // Not compared yet, because the Rust mesher doesn't have them (later tickets
 // remove these restrictions one by one):
-//  - flat shapes (leaf litter, lily pads): removed (become air);
 //  - ambient occlusion: byte 13 is zeroed, and quads are rotated to a canonical
 //    first vertex, since AO can flip a quad's diagonal;
 //  - greedy merging: off in JS; water tops are always merged in JS when the
@@ -26,7 +25,8 @@ ctx.COLORS[B.birch_leaves] = [150, 190, 90];
 ctx.COLORS[B.spruce_leaves] = [60, 110, 70];
 
 const KEEP = new Set([B.air, B.dirt, B.grass, B.stone, B.sand, B.gravel, B.water, B.ice, B.oak_log, B.birch_log, B.spruce_log,
-  B.oak_leaves, B.birch_leaves, B.spruce_leaves, B.cactus, B.berry_bush, B.bush, B.jungle_bush, B.snow_layer]);
+  B.oak_leaves, B.birch_leaves, B.spruce_leaves, B.cactus, B.berry_bush, B.bush, B.jungle_bush, B.snow_layer,
+  B.leaf_litter, B.lily_pad]);
 const restrict = (blocks) => blocks.map((b) => (KEEP.has(b) || CROSS[b] ? b : B.air));
 
 // Quads of a part as canonical strings: AO zeroed, rotated to start at the smallest vertex.
