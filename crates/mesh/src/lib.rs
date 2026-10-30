@@ -10,10 +10,12 @@ extern crate alloc;
 mod mesh;
 pub mod quads;
 pub mod tables;
+pub mod tint;
 
 pub use mesh::{mesh_blocks, Mesh};
 pub use quads::{Quads, Tint};
 pub use tables::{b, face_uv, Face, CROSS, FACES, LEAVES, OPAQUE, OPAQUE_FAST, UPPER_HALF, VARIES};
+pub use tint::Tints;
 
 /// JavaScript `Math.round`: halves round towards +infinity.
 pub fn js_round(v: f64) -> f64 {

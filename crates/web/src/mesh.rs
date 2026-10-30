@@ -2,10 +2,13 @@
 //! `meshBlocks` in `viewer/mesh.js`. `viewer/meshwasm.js` turns the result
 //! into the JS mesher's `{opaque, cutout, water, ice, meanY, minY}` shape.
 use alloc::vec::Vec;
+use mesh::Tints;
 use wasm_bindgen::prelude::*;
 
 /// Bit in `mesh_blocks`' `flags`: fast leaves.
 const FAST: u32 = 1;
+/// Bit in `mesh_blocks`' `flags`: `tints` carries the corner grids.
+const CORNERS: u32 = 4;
 
 /// The four vertex buffers (16 bytes a vertex, 4 vertices a face) and the
 /// surface statistics of a meshed area.
@@ -49,10 +52,15 @@ impl MeshOut {
 
 /// Mesh `blocks` (`((z * w) + x) * 128 + y`, `w = size + 2 * pad`) with the
 /// face-layer table of `faceLayers` in `viewer/mesh.js`. `flags` bit 0 is fast
-/// leaves; bit 1 (greedy) is accepted but not used yet. `origin_x`, `origin_z`
-/// and `tints` (per-column data, layout still to be fixed) are likewise
-/// reserved for the features the Rust mesher doesn't have yet: see the list in
+/// leaves; bit 1 (greedy) is accepted but not used yet; bit 2 says `tints`
+/// has corner grids. `origin_x` and `origin_z` are likewise reserved for the
+/// features the Rust mesher doesn't have yet: see the list in
 /// `viewer/test/mesh_parity.test.mjs`.
+///
+/// `tints` is the grass, leaf, water and dry tints of each column
+/// (`size * size * 3` f32 each, in that order), then with the corners flag the
+/// same four per block corner (`(size + 1)^2 * 3` each). `colors` is the block
+/// colour table, 256 * 3 u8 (`ctx.COLORS`).
 #[wasm_bindgen]
 pub fn mesh_blocks(
     blocks: &[u8],
@@ -63,14 +71,22 @@ pub fn mesh_blocks(
     origin_z: i32,
     face_layer: &[u8],
     tints: &[f32],
+    colors: &[u8],
 ) -> MeshOut {
-    let _ = (origin_x, origin_z, tints);
+    let _ = (origin_x, origin_z);
+    let tints = Tints {
+        size: size as usize,
+        data: tints,
+        corners: flags & CORNERS != 0,
+        colors,
+    };
     let m = mesh::mesh_blocks(
         blocks,
         size as usize,
         pad as usize,
         flags & FAST != 0,
         face_layer,
+        &tints,
     );
     MeshOut {
         opaque: m.opaque.bytes().to_vec(),
