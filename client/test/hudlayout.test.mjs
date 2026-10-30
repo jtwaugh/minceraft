@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hudLayout, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP } from '../hudlayout.js';
+import { hudLayout, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP, HANDS_GAP } from '../hudlayout.js';
 import { hudModel } from '../hud.js';
 import { readFileSync } from 'node:fs';
 import { layoutChecks } from '../hudcheck.js';
@@ -38,7 +38,8 @@ for (const [w, h, name] of sweep) {
     // Crosshair centred; belt centred at the bottom margin; hearts above the belt.
     assert.deepEqual(rects.crosshair, { x: Math.floor((w - 7 * scale) / 2), y: Math.floor((h - 7 * scale) / 2), w: 7 * scale, h: 7 * scale });
     const bp = rects.beltPanel;
-    assert.equal(bp.x, Math.floor((w - Math.max(bp.w, rects.hearts.w)) / 2));
+    const hp = rects.handsPanel;
+    assert.equal(bp.x, Math.floor((w - Math.max(hp.x + hp.w - bp.x, rects.hearts.w)) / 2));
     assert.equal(rects.hearts.x, bp.x);
     assert.equal(bp.y + bp.h, h - BOTTOM_MARGIN);
     assert.equal(rects.hearts.y + rects.hearts.h + HEARTS_BELT_GAP * scale, bp.y);
@@ -116,23 +117,27 @@ for (const [w, h, name] of sweep) {
 
   test(`hands at ${w}x${h} (${name})`, () => {
     const empty = hudLayout(withTimer(7), set, { w, h });
-    assert.deepEqual([empty.rects.hands.w, empty.rects.hands.h, empty.rects.hands.icon, empty.rects.hands.label], [0, 0, null, null]);
+    assert.deepEqual([empty.rects.hands.w, empty.rects.hands.h, empty.rects.hands.label, empty.rects.handsSlot.icon], [0, 0, null, null]);
     const { scale, rects } = hudLayout(withTimer(7, 'sword'), set, { w, h });
-    const hd = rects.hands;
-    // The row shrinks in whole texels only when it would reach the crosshair's clear zone.
-    const k = hd.icon.h / 8;
+    // The hands slot is always shown: a slot frame on its own strip, right of the belt's and level with it.
+    const bp = rects.beltPanel, hp = rects.handsPanel, hs = rects.handsSlot;
+    assert.deepEqual(empty.rects.handsPanel, hp);
+    assert.deepEqual(hp, { x: bp.x + bp.w + HANDS_GAP * scale, y: bp.y, w: (10 + 2 * BELT_PAD) * scale, h: bp.h });
+    assert.deepEqual([hs.x, hs.y, hs.w, hs.h], [hp.x + BELT_PAD * scale, hp.y + BELT_PAD * scale, 10 * scale, 10 * scale]);
+    // The carried item's icon sits inside the frame, centred on whole texels.
+    assert.deepEqual(hs.icon, { x: hs.x + scale, y: hs.y + scale, w: 8 * scale, h: 8 * scale });
+    // The name row shrinks in whole texels only when it would reach the crosshair's clear zone.
+    const hd = rects.hands, k = hd.scale;
     assert.ok(Number.isInteger(k) && k >= 1 && k <= scale);
     assert.ok(k === 1 || hd.y >= rects.crosshair.y + rects.crosshair.h + 8, 'clear of the crosshair zone');
-    assert.equal(hd.scale, k);
     const labelW = 'sword'.length * 5 * k;
-    assert.equal(hd.x + hd.w, rects.beltPanel.x + rects.beltPanel.w);
-    assert.deepEqual([hd.w, hd.h], [8 * k + LABEL_GAP * k + labelW, 8 * k]);
+    assert.equal(hd.x + hd.w, hp.x + hp.w);
+    assert.deepEqual([hd.w, hd.h], [labelW, 7 * k]);
     // Beside the hearts when it fits, otherwise stacked above them; never overlapping.
     const stacked = hd.y + hd.h === rects.hearts.y;
     assert.ok(stacked || hd.y + hd.h === rects.hearts.y + rects.hearts.h);
     assert.ok(stacked || hd.x >= rects.hearts.x + rects.hearts.w);
-    assert.deepEqual(hd.icon, { x: hd.x, y: hd.y, w: 8 * k, h: 8 * k });
-    assert.deepEqual([hd.label.x, hd.label.y, hd.label.w, hd.label.h], [hd.x + (8 + LABEL_GAP) * k, hd.y, labelW, 7 * k]);
+    assert.deepEqual([hd.label.x, hd.label.y, hd.label.w, hd.label.h], [hd.x, hd.y, labelW, 7 * k]);
     assert.equal(hd.label.glyphs.length, 5);
     hd.label.glyphs.forEach((g, i) => assert.deepEqual([g.x, g.w], [hd.label.x + i * 5 * k, 5 * k]));
     assert.equal(hd.label.glyphs.at(-1).x + 5 * k, hd.label.x + hd.label.w);
@@ -165,7 +170,7 @@ test('the real tileset with an item in hands has no layout problems across the s
     for (const hands of ['sword', 'wooden_pickaxe']) {
       const layout = hudLayout(withTimer(42, hands), real, { w, h });
       assert.deepEqual(layoutChecks(layout, { w, h }), [], `${hands} at ${w}x${h}`);
-      assert.equal(layout.rects.hands.x + layout.rects.hands.w, layout.rects.beltPanel.x + layout.rects.beltPanel.w);
+      assert.equal(layout.rects.hands.x + layout.rects.hands.w, layout.rects.handsPanel.x + layout.rects.handsPanel.w);
     }
   }
 });

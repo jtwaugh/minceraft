@@ -9,7 +9,7 @@ export const CROSSHAIR_CLEAR_MARGIN = 8;
 /** Largest gap between the hands row and the belt, in texels (multiplied by the HUD scale). */
 export const MAX_HANDS_BELT_GAP = 16;
 
-const ELEMENTS = ['crosshair', 'belt', 'hearts', 'timer', 'hands'];
+const ELEMENTS = ['crosshair', 'belt', 'hearts', 'timer', 'hands', 'handsPanel'];
 
 const area = (r) => r.w * r.h;
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
