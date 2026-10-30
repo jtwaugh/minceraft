@@ -1,6 +1,8 @@
 //! Box-shaped blocks of `meshBlocks` in `viewer/mesh.js`: cactus, bushes and
-//! snow layers, and the face-hiding rules of the blocks drawn as cubes or boxes.
-use crate::tables::{b::*, Face};
+//! snow layers, the face-hiding rules of the blocks drawn as cubes or boxes,
+//! and the flat shapes (leaf litter, lily pads).
+use crate::tables::{b::*, face_uv, Face, FACES};
+use crate::{variant_at, Quads, Tint};
 
 /// Sway weight (vertex byte 14) of cutout leaf and bush vertices.
 pub const LEAF_WEIGHT: u8 = 64;
@@ -39,6 +41,43 @@ pub fn box_hidden(b: u8, dy: i32, n: u8, solid: bool) -> bool {
         SNOW_LAYER => (dy < 0 && solid) || (dy == 0 && (solid || n == SNOW_LAYER)),
         _ => dy < 0 && solid,
     }
+}
+
+/// Height of a flat shape's quad above the block's floor (`SHAPES` in
+/// `viewer/mesh.js`), or `None` for blocks that aren't flat shapes.
+pub fn flat_lift(b: u8) -> Option<f64> {
+    match b {
+        LEAF_LITTER | LILY_PAD => Some(1.0 / 16.0),
+        _ => None,
+    }
+}
+
+/// A flat shape's one up-facing quad at block (x, y, z), `lift` above its
+/// floor, its UVs turned and mirrored by the world coordinate `w`.
+pub fn flat(
+    out: &mut Quads,
+    [x, y, z]: [usize; 3],
+    w: [i32; 3],
+    lift: f64,
+    layer: u8,
+    tint: &Tint,
+) {
+    let top = &FACES[0];
+    let vr = variant_at(w[0], w[1], w[2]);
+    let p = top.c.map(|v| [v[0] as f64, lift, v[2] as f64]);
+    let uv = p.map(|v| face_uv(top, [v[0], 0.0, v[2]], vr, [1.0; 3]));
+    let k = top.s * (0.75 + y as f64 / 256.0);
+    out.quad(
+        [x as f64, y as f64, z as f64],
+        &p,
+        &uv,
+        layer,
+        k,
+        tint,
+        None,
+        None,
+        0,
+    );
 }
 
 /// The corners of face `f` of the box `lo..hi`.
@@ -86,5 +125,36 @@ mod tests {
         assert_eq!(bounds(SNOW_LAYER).1, [1.0, 0.125, 1.0]);
         assert_eq!(bounds(CACTUS).0, [0.0625, 0.0, 0.0625]);
         assert_eq!(bounds(STONE), FULL);
+    }
+
+    #[test]
+    fn flat_shapes_turn_their_uvs_by_world_coordinate() {
+        let quad = |w: [i32; 3]| {
+            let mut q = Quads::new();
+            flat(&mut q, [0, 40, 0], w, 1.0 / 16.0, 7, &Tint::One([1.0; 3]));
+            q.bytes().to_vec()
+        };
+        // two world blocks with different variants: same positions, different uvs
+        let (a, b) = ([3, 40, 9], [4, 40, 9]);
+        assert_ne!(variant_at(a[0], a[1], a[2]), variant_at(b[0], b[1], b[2]));
+        let (qa, qb) = (quad(a), quad(b));
+        let uv = |q: &[u8]| {
+            q.chunks(16)
+                .map(|v| [v[6], v[7]])
+                .collect::<alloc::vec::Vec<_>>()
+        };
+        let pos = |q: &[u8]| {
+            q.chunks(16)
+                .map(|v| v[..6].to_vec())
+                .collect::<alloc::vec::Vec<_>>()
+        };
+        assert_ne!(uv(&qa), uv(&qb));
+        assert_eq!(pos(&qa), pos(&qb));
+        // lifted 1/16 above the floor
+        assert!(qa
+            .chunks(16)
+            .all(|v| i16::from_le_bytes([v[2], v[3]]) == 40 * 16 + 1));
+        assert_eq!(flat_lift(LILY_PAD), Some(0.0625));
+        assert_eq!(flat_lift(GRASS), None);
     }
 }
