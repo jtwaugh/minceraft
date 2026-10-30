@@ -43,7 +43,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write # pushes the store to the factory-state branch (master stays protected)
   issues: write
   pull-requests: write # drafts PRs whose ticket another PR closed (factory_supersede.py)
   actions: write # dispatches the implementer and the docs updater
@@ -79,9 +79,22 @@ jobs:
           path: .factory-cache
           key: factory-http-none
           restore-keys: factory-http-
+      # The state store (FACTORY.md, "Maintainer steps for the store"). The
+      # tick publishes it to factory-state itself when it finishes (live
+      # ticks only; a dry run works on a copy), so there is no publish step.
+      - name: Fetch the store
+        run: |
+          python3 -B -c 'import sys; sys.path.insert(0, ".github/scripts"); import factory_state_branch as b; b.fetch(sys.argv[1])' \
+            "$RUNNER_TEMP/factory-state.db"
       - name: Tick
         env:
           FACTORY_HTTP_CACHE: .factory-cache/etags.json
+          FACTORY_STORE: ${{ runner.temp }}/factory-state.db
+          # Identity for the store commit (git commit-tree needs one).
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           # Reads use the project token's own budget; repo writes and
           # dispatches use the workflow token (WRITE_TOKEN).
           GH_TOKEN: ${{ secrets.PROJECT_TOKEN || github.token }}
