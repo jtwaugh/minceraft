@@ -8,7 +8,7 @@ phases:
   A: done
   B: done
   C: done
-  D: todo
+  D: done
   E: todo
 ---
 
@@ -89,6 +89,14 @@ What exists today that this doc relies on or overlaps (checked against the code)
   returning JSON (#1254 to #1258), and `expect.py` and the verdict regexes
   deleted (#1265; `/override` kept). `review_gate.py` still has one `RESULT`
   regex that finds the JSON block in the comment.
+- **Phase D done (plan #1271, closed).** The repo side is built: timing
+  maths (`factory_timing.py`, PR #1286), the timing report CLI (#1301), the
+  `FACTORY_RUNNER` repo variable choosing the runner for agent jobs with a
+  fork-safety test (#1414), the per-ticket worktree helper (#1287) and the
+  implementer start job using a warm worktree (#1476). The machines, their
+  toolchain and cache, and setting `FACTORY_RUNNER` are `[external]`; the
+  "before and after" median wall times need real runs on them.
+  `[manual check]`
 - **Not present** (the `factory-tick` workflow and the `needs-you` label
   now exist, see Phase A progress): any state store, any `factory-state`
   branch, file leases, per-transition history, a "needs
