@@ -120,7 +120,8 @@ class Snapshot:
         for i in snap.issues:
             i["depends_on"] = sorted(tickets.deps(i["body"]) - {i["number"]})
             if (i["state"].lower() == "open" and i["kind"] == "ticket" and "factory" in i["labels"]) \
-                    or (i["kind"] == "decision" and i["parent"]):  # decisions: the store records /decide
+                    or (i["kind"] == "decision" and i["parent"]) \
+                    or i["title"] == "Factory: needs you":  # the needs-you pass's alert markers  # decisions: the store records /decide
                 i["comments"] = [{"user": c["user"]["login"], "body": c.get("body") or "",
                                   "created_at": c["created_at"]}
                                  for c in paged(f"repos/{repo}/issues/{i['number']}/comments")
@@ -461,6 +462,10 @@ class FakeBackend(Backend):
                 "number": max([i["number"] for i in snapshot.issues], default=0) + 1,
                 "title": action.payload["title"], "state": "open", "labels": [],
                 "kind": "report", "body": action.payload["body"]})
+        elif action.kind == "comment" and issue is not None:
+            issue.setdefault("comments", []).append({
+                "user": "github-actions[bot]", "body": action.payload["body"],
+                "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
         elif action.kind == "update_issue" and issue is not None:
             issue["body"] = action.payload["body"]
         else:

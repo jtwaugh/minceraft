@@ -198,6 +198,8 @@ class GhBackend(Backend):
         elif k == "create_issue":
             self._gh("issue", "create", "--repo", r, "--title", p["title"], "--body", p["body"],
                      *(["--assignee", p["assignee"]] if p.get("assignee") else []))
+        elif k == "comment":
+            self._gh("issue", "comment", n, "--repo", r, "--body", p["body"])
         elif k == "update_issue":
             self._gh("issue", "edit", n, "--repo", r, "--body", p["body"])
         elif k == "start_ticket":
