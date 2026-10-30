@@ -32,6 +32,7 @@ import { SWAY_AMPLITUDE, SWAY_WAVE, swayPhase } from './sway.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
+import { mountHint } from './hintui.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
@@ -64,7 +65,6 @@ window.debugMode = debug;
 
 const canvas = document.getElementById('gl');
 const overlay = document.getElementById('overlay');
-const hint = document.getElementById('hint');
 const gl = canvas.getContext('webgl2', { antialias: true });
 if (!gl) throw new Error('WebGL2 is not available');
 
@@ -464,6 +464,7 @@ if (scene) {
 const controller = createController({ input, walk, fly, clock, document, flying, stream: scene ? null : { budget: 1 },
   sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds } });
 const deathView = mountDeath(document, tileset, controller);
+const hint = mountHint(document, tileset);
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 const outputBuffer = new OutputBuffer();
@@ -606,7 +607,7 @@ cheated: ${walk.cheated() ? 'yes' : 'no'}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;
-    hint.hidden = input.locked;
+    hint.setHidden(input.locked);
   }
   if (logEvery && frames.n % logEvery === 0 && frames.n) console.log(`[frames] ${frames.format()}`);
   requestAnimationFrame(render);
