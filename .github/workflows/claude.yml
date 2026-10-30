@@ -164,13 +164,38 @@ jobs:
       id-token: write
       actions: read
     steps:
-      - uses: actions/checkout@v7
+      - if: vars.FACTORY_RUNNER == ''
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # Claude pushes with the Claude app's token (the action sets the
           # remote). A persisted workflow token would win and push as
           # github-actions[bot], which the reviewer then skips.
           persist-credentials: false
+      # Warm worker (FACTORY_RUNNER set): no checkout or toolchain setup.
+      # The machine sets WORKER_REPO (its warm clone; optionally WORKER_ROOT,
+      # see worker_worktree.py) and has the toolchain installed. The ticket
+      # gets a worktree, and the workspace becomes a link to it, so local
+      # actions and Claude run there. Credentials as with checkout: the
+      # origin URL is reset to plain https here and in the last step, so
+      # only the Claude app token, set by the action, pushes.
+      - name: Prepare the ticket's worktree
+        if: vars.FACTORY_RUNNER != ''
+        env:
+          ISSUE: ${{ inputs.issue }}
+          ORIGIN: https://github.com/${{ github.repository }}
+        run: |
+          test -d "$WORKER_REPO/.git" || { echo "::error::WORKER_REPO is not a git clone on this runner"; exit 1; }
+          git -C "$WORKER_REPO" remote set-url origin "$ORIGIN"
+          git -C "$WORKER_REPO" fetch --prune origin
+          git -C "$WORKER_REPO" show origin/master:.github/scripts/worker_worktree.py > "$RUNNER_TEMP/worker_worktree.py"
+          out=$(python3 -I "$RUNNER_TEMP/worker_worktree.py" --repo "$WORKER_REPO" prepare "$ISSUE")
+          echo "$out"
+          wt=$(echo "$out" | sed -n 's/^worktree=//p')
+          echo "$out" | grep '^CARGO_TARGET_DIR=' >> "$GITHUB_ENV"
+          cd /
+          rm -rf "$GITHUB_WORKSPACE"
+          ln -s "$wt" "$GITHUB_WORKSPACE"
       # Skips only if someone is already building the ticket (a run this one
       # waited for made a PR, it's labelled `local`, or a branch for it has
       # work and no PR). Only maintainers can dispatch, so a hand-run
@@ -189,7 +214,7 @@ jobs:
             echo "go=true" >> "$GITHUB_OUTPUT"
             echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.mark.outputs.go == 'true'
+      - if: steps.mark.outputs.go == 'true' && vars.FACTORY_RUNNER == ''
         uses: ./.github/actions/toolchain
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
@@ -268,3 +293,21 @@ jobs:
           expected: ${{ steps.check.outputs.expected }}
           issue: ${{ inputs.issue }}
           retry: Comment `@claude` here to retry.
+      # Warm worker: drop finished tickets' worktrees, clear the app token
+      # from the shared clone's origin, and give the runner its workspace
+      # directory back (a link to a pruned worktree would dangle).
+      - name: Prune finished worktrees
+        if: always() && vars.FACTORY_RUNNER != ''
+        env:
+          ORIGIN: https://github.com/${{ github.repository }}
+        working-directory: /
+        run: |
+          test -d "$WORKER_REPO/.git" || exit 0
+          git -C "$WORKER_REPO" remote set-url origin "$ORIGIN"
+          if [ -f "$RUNNER_TEMP/worker_worktree.py" ]; then
+            python3 -I "$RUNNER_TEMP/worker_worktree.py" --repo "$WORKER_REPO" prune
+          fi
+          if [ -L "$GITHUB_WORKSPACE" ]; then
+            rm "$GITHUB_WORKSPACE"
+            mkdir -p "$GITHUB_WORKSPACE"
+          fi
