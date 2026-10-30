@@ -101,7 +101,7 @@ class Snapshot:
             snap.issues.append({
                 "number": i["number"], "title": i["title"], "state": i["state"],
                 "state_reason": i.get("state_reason"), "closed_at": i.get("closed_at"),
-                "labels": labels,
+                "labels": labels, "created_at": i.get("created_at") or "",
                 "kind": ("plan" if i["title"].startswith("Plan:") else
                          "report" if i["title"] == REPORT_TITLE else
                          "decision" if "spec-question" in labels else

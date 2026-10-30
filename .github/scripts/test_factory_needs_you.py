@@ -2,6 +2,8 @@
 import os
 import sys
 import unittest
+from datetime import datetime, timezone
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("GITHUB_REPOSITORY", "o/r")
@@ -146,6 +148,40 @@ class Test(unittest.TestCase):
         body = next(i for i in s.issues if i["title"] == QUEUE_TITLE)["body"]
         self.assertLess(body.index("#10:"), body.index("#9:"))
         self.assertIn("(blocks 1 ticket)", body)
+
+    def test_waiting_time_from_creation_without_a_store(self):
+        t0 = datetime(2026, 10, 20, tzinfo=timezone.utc).timestamp()
+        s = snap([ticket(7, created_at="2026-10-20T00:00:00Z")],
+                 [pr(9, 7, "blocked", created_at="2026-10-27T00:00:00Z")])
+        with mock.patch("factory_needs_you.clock", lambda: t0 + 10 * 86400 + 600):
+            run(s)
+            self.assertEqual(run(s), [])  # second tick: same text, no rewrite
+        body = next(i for i in s.issues if i["title"] == QUEUE_TITLE)["body"]
+        self.assertIn("#9: Reviewer blocked it", body)
+        self.assertIn("(waiting 3d)", body)  # the PR's created_at
+        self.assertIn("(waiting 10d)", body)  # the ticket's
+
+    def test_waiting_time_counts_from_the_transition_with_a_store(self):
+        import factory_store
+        store = factory_store.open(":memory:")
+        s = snap([ticket(7, created_at="2026-01-01T00:00:00Z")], [pr(9, 7, "blocked")])
+        s.store = store
+        now = [1_000_000.0]
+        with mock.patch("factory_needs_you.clock", lambda: now[0]):
+            run(s)
+            now[0] += 5 * 3600 + 1200
+            run(s)
+            body = next(i for i in s.issues if i["title"] == QUEUE_TITLE)["body"]
+            self.assertIn("(waiting 5h)", body)  # not since January
+            now[0] += 600
+            self.assertEqual(run(s), [])  # same hour: nothing rewritten
+            s.prs[0]["verdict"]["kind"] = "ready"  # it can move: cleared
+            run(s)
+            s.prs[0]["verdict"]["kind"] = "blocked"
+            now[0] += 3 * 86400
+            run(s)
+        body = next(i for i in s.issues if i["title"] == QUEUE_TITLE and i["state"] == "open")["body"]
+        self.assertIn("(waiting <1h)", body)  # the clock restarted
 
 
 if __name__ == "__main__":

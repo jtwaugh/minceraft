@@ -55,6 +55,8 @@ DUMP = """schema_version 1
   2 | 102 | transition | in_review | PR #200 is open | 1000.0
   3 | 103 | transition | blocked_on_question | question #107 is open | 1000.0
   4 | 104 | transition | done | the issue is closed | 1000.0
+  5 | 107 | needs_you | waiting | The factory asked you a question: answer it here | 1000.0
+  6 | 108 | needs_you | waiting | The tick found stalled work: see the list | 1000.0
 """
 
 
@@ -67,7 +69,8 @@ class StoreReplay(unittest.TestCase):
         open(os.path.join(design, "store-replay.md"), "w").write(DOC)
         for patch in (mock.patch.object(factory_store_sync, "sync_docs",
                                         functools.partial(factory_store_sync.sync_docs, design_dir=design)),
-                      mock.patch("factory_store_sync.time.time", return_value=NOW)):
+                      mock.patch("factory_store_sync.time.time", return_value=NOW),
+                      mock.patch("factory_needs_you.clock", return_value=NOW)):
             patch.start()
             self.addCleanup(patch.stop)
         self.snap = Snapshot.from_fixture(FIXTURE)
