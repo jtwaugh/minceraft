@@ -8,6 +8,7 @@
 extern crate alloc;
 
 mod mesh;
+pub mod plants;
 pub mod quads;
 pub mod shapes;
 pub mod tables;

@@ -1,9 +1,10 @@
 //! Core of `meshBlocks` in `viewer/mesh.js`: one quad per visible face of full
 //! cubes, ice, water, leaves, cacti, bushes and snow layers, with climate tints
-//! and per-block tile variants. Plants, AO and greedy merging come later; here
-//! AO is 0.
+//! and per-block tile variants, and cross plants. Flat shapes, AO and greedy
+//! merging come later; here AO is 0.
+use crate::plants::cross;
 use crate::shapes::{bounds, box_hidden, face_corners, is_box, LEAF_WEIGHT};
-use crate::tables::{face_uv, FACES, VARIES};
+use crate::tables::{face_uv, CROSS, FACES, VARIES};
 use crate::{js_round, pick_layer, variant_at, Quads, Tint, Tints, Variants};
 
 /// Column height in blocks.
@@ -104,6 +105,11 @@ pub fn mesh_blocks(
             let base = col(x, z);
             for y in y0..H {
                 let b = blocks[base + y];
+                if CROSS[b as usize] {
+                    let side = layer_of(face_layer, b, 0, false);
+                    cross(&mut out.cutout, b, [x, y, z], origin, side, tints, variants);
+                    continue;
+                }
                 if b != WATER
                     && b != ICE
                     && !SOLID.contains(&b)
