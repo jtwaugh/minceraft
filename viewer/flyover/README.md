@@ -383,3 +383,15 @@ Give scripted runs generous timeouts (see the previous section).
   only plays when someone asks for it.
 - Text seeds work in the viewer (they are hashed). `preview.mjs` takes
   numeric seeds only.
+
+### The Rust mesher is only fast at opt-level 3
+
+Chunk workers mesh with the Rust mesher (`crates/mesh` through
+`meshwasm.js`). It writes the same bytes as `meshBlocks`. Built like the rest
+of the wasm at `opt-level = "z"`, though, it was **no faster than the JS**
+(median 43 ms a full 64×64 chunk for both, seed 12345, 49 chunks, Node).
+Packing the arguments is under 1 ms; the time is inside the Rust call. With
+`[profile.release.package.mesh] opt-level = 3` the median falls to about
+**19 ms (2.5×)**, for 2.5 KB more gzipped wasm. Half-resolution chunks gain
+less (14 → 8.5 ms, 1.7×): downsampling and doubling positions still run in
+JS (`lod.js`), and the mesh is a quarter of the size.

@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { meshBlocks, B, H, VERTEX_BYTES } from '../mesh.js';
+import fs from 'node:fs';
+import { meshBlocks, legendContext, columnTints, B, H, VERTEX_BYTES } from '../mesh.js';
+import { meshBlocksWasm } from '../meshwasm.js';
 import { downsampleBlocks, meshHalf } from '../lod.js';
+
+const pkg = new URL('../pkg/', import.meta.url);
+const wasm = await import(new URL('terrain_web.js', pkg));
+await wasm.default({ module_or_path: fs.readFileSync(new URL('terrain_web_bg.wasm', pkg)) });
 
 const ctx = { COLORS: [], faceLayer: new Uint8Array(256 * 3 * 2) };
 const tints = (n) => ({ grass: Array(n * n).fill([1, 1, 1]), leaf: Array(n * n).fill([1, 1, 1]) });
@@ -83,4 +89,21 @@ test('overlapping regions agree on shared cells', () => {
   const qa = quads(a, 0), qb = quads(b, 8);
   assert.ok(qa.size > 0);
   assert.deepEqual([...qa].sort(), [...qb].sort());
+});
+
+test('meshHalf with the wasm mesher matches the JS one on a real chunk', () => {
+  const faceLayer = new Uint8Array(256 * 3 * 2).map((_, i) => (i * 7) % 241);
+  const real = { ...legendContext(wasm.legend()), faceLayer };
+  for (const [seed, x, z] of [[12345n, 0, 0], [9n, -128, 64], [12345n, 2048, 1024]]) {
+    const blocks = wasm.generate_region_decorated(seed, x - 1, z - 1, 66, 66);
+    const t = columnTints(wasm, real, seed, x, z, 64);
+    const js = meshHalf(real, blocks, t, 64, 1, { origin: [x, z] });
+    const rs = meshHalf(real, blocks, t, 64, 1, { origin: [x, z], mesher: (...a) => meshBlocksWasm(wasm, ...a) });
+    for (const k of ['opaque', 'cutout', 'water', 'ice']) {
+      assert.equal(rs[k].faces, js[k].faces, `${k} at ${x}, ${z}`);
+      assert.deepEqual(new Uint8Array(rs[k].verts), new Uint8Array(js[k].verts), `${k} at ${x}, ${z}`);
+    }
+    assert.equal(rs.meanY, js.meanY);
+    assert.equal(rs.minY, js.minY);
+  }
 });
