@@ -1,12 +1,15 @@
 //! Core of `meshBlocks` in `viewer/mesh.js`: one quad per visible face of full
 //! cubes, ice, water, leaves, cacti, bushes and snow layers, with climate tints
 //! and per-block tile variants, cross plants, flat shapes and vertex AO on
-//! full cubes and leaves. Greedy merging comes later.
+//! full cubes and leaves. Flat-tinted water tops always merge into rectangles,
+//! as in the JS; opaque faces don't merge yet.
 use crate::ao::{face_ao, flips, rot};
+use crate::greedy::merge;
 use crate::plants::cross;
 use crate::shapes::{bounds, box_hidden, face_corners, flat, flat_lift, is_box, LEAF_WEIGHT};
 use crate::tables::{face_uv, CROSS, FACES, VARIES};
 use crate::{js_round, pick_layer, variant_at, Quads, Tint, Tints, Variants};
+use alloc::vec::Vec;
 
 /// Column height in blocks.
 pub const H: usize = 128;
@@ -35,6 +38,31 @@ fn layer_of(face_layer: &[u8], b: u8, dy: i32, fast: bool) -> u8 {
         1
     };
     face_layer[if fast { 768 } else { 0 } + b as usize * 3 + face]
+}
+
+/// The water tint of column (x, z) as bytes, if all four corners agree
+/// (`waterTint` in `viewer/mesh.js`).
+fn water_tint(tints: &Tints, x: usize, z: usize) -> Option<[u8; 3]> {
+    let key = |t: [f64; 3]| t.map(|v| js_round(v * 255.0) as u8);
+    match tints.block(WATER, x, z) {
+        None => Some([255; 3]),
+        Some(t) if !tints.corners => Some(key(t)),
+        Some(_) => {
+            let k = key(tints.vertex(WATER, x, z, 0, 0));
+            [(0, 1), (1, 1), (1, 0)]
+                .iter()
+                .all(|&(a, b)| key(tints.vertex(WATER, x, z, a, b)) == k)
+                .then_some(k)
+        }
+    }
+}
+
+/// A water-top cell waiting to be merged: equal cells share a quad.
+#[derive(PartialEq)]
+struct WaterTop {
+    layer: u8,
+    depth: u8,
+    tint: [u8; 3],
 }
 
 /// The four vertex buffers of a meshed area plus the surface statistics.
@@ -101,6 +129,8 @@ pub fn mesh_blocks(
         mean_y: sum_y as f64 / (size * size) as f64,
         min_y,
     };
+    // y -> per-column water-top cells, in the order the y values first appear
+    let mut water_tops: Vec<(usize, Vec<Option<WaterTop>>)> = Vec::new();
     for z in 0..size {
         for x in 0..size {
             let base = col(x, z);
@@ -153,6 +183,20 @@ pub fn mesh_blocks(
                                 k += 1;
                             }
                             depth = k as u8;
+                            if let Some(tint) = water_tint(tints, x, z).filter(|_| d[1] > 0) {
+                                let layer = layer_of(face_layer, b, 1, fast);
+                                let i = match water_tops.iter().position(|e| e.0 == y) {
+                                    Some(i) => i,
+                                    None => {
+                                        water_tops
+                                            .push((y, (0..size * size).map(|_| None).collect()));
+                                        water_tops.len() - 1
+                                    }
+                                };
+                                water_tops[i].1[z * size + x] =
+                                    Some(WaterTop { layer, depth, tint });
+                                continue;
+                            }
                             &mut out.water
                         }
                         ICE => {
@@ -230,6 +274,20 @@ pub fn mesh_blocks(
                 }
             }
         }
+    }
+    let top = &FACES[0];
+    for (y, cells) in &water_tops {
+        merge(cells, size, size, |x, z, w, h, cell| {
+            let p = top
+                .c
+                .map(|v| [(v[0] as usize * w) as f64, 1.0, (v[2] as usize * h) as f64]);
+            let uv = p.map(|v| [v[0], v[2]]);
+            let tint = Tint::One(cell.tint.map(|v| v as f64 / 255.0));
+            let k = top.s * (0.75 + *y as f64 / 256.0);
+            let at = [x as f64, *y as f64, z as f64];
+            out.water
+                .quad(at, &p, &uv, cell.layer, k, &tint, None, None, cell.depth);
+        });
     }
     out
 }
@@ -361,8 +419,8 @@ mod tests {
             [0, 0],
             &Variants::NONE,
         );
-        // tops 4, sides of the 2x2x3 column: 4 sides * 2 * 3
-        assert_eq!(m.water.faces(), 4 + 24);
+        // one merged 2x2 top, sides of the 2x2x3 column: 4 sides * 2 * 3
+        assert_eq!(m.water.faces(), 1 + 24);
         let max = m.water.bytes().chunks(16).map(|v| v[15]).max().unwrap();
         assert_eq!(max, 3);
     }
