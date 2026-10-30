@@ -23,6 +23,8 @@ const CLASSES = {
   player: [
     'mode', 'locked', 'target.kind', 'belt.selected', ...BELT_SLOTS.map((n) => `belt.slot.${n}`),
     'hands', 'health', 'hearts.full', 'hearts.half', 'hearts.empty', 'hud.selected', 'hud.hands', 'phase',
+    // The last `layout` line's HUD geometry, which play.mjs already returns in player mode.
+    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction',
   ],
   partial: ['target.id', 'target.face', 'box', 'console.last', 'console.text', 'phase.left'],
   debug: [
@@ -32,7 +34,7 @@ const CLASSES = {
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt',
-    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction', 'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
+    'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
     'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
 };

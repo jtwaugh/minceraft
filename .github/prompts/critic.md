@@ -76,3 +76,19 @@ object with exactly these string fields:
 
 Every finding needs a `repro`. A second pass replays each one and drops
 those that do not reproduce, so keep repros short and exact.
+
+A repro reproduces only if it has at least one `expect` line and every
+`expect` holds. A repro without one is always dropped. End it with
+`expect <path> <op> <value>` lines that pin down the state your
+observation describes, using the fields a reply shows you. For example:
+
+- the hands still empty after an action: `expect hud.hands = none`
+- the pointer still unlocked: `expect locked = false`
+- the mode you ended up in: `expect mode = walk`
+- after a `layout <w> <h>` line, its result: `expect layout.scale = 16`,
+  `expect layout.problems = 0`, `expect layout.belt.fraction > 0.5`
+
+Assert what is there, not what should be: the expect holds today and
+shows the problem. Check each `expect` in your session before you put it
+in a repro. If you can't pin a finding to any state you can see, it
+can't be verified; leave it out.
