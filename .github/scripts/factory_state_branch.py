@@ -49,11 +49,11 @@ def _has_branch(run, remote, branch):
 
 
 def _fetch_tip(run, remote, branch):
-    """Fetch the branch; return its commit id, or None when it does not exist."""
+    """Fetch the branch tip only; return its commit id, or None when it does not exist."""
     if not _has_branch(run, remote, branch):
         return None
     ref = f"refs/remotes/{remote}/{branch}"
-    run(["fetch", remote, f"+refs/heads/{branch}:{ref}"])
+    run(["fetch", "--depth", "1", remote, f"+refs/heads/{branch}:{ref}"])
     return run(["rev-parse", ref]).decode().strip()
 
 
