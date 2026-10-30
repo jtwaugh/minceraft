@@ -44,7 +44,7 @@ test('menuScale follows hudScale and never overflows the 160x120 layout', () => 
     assert.ok(s <= hudScale(w, h));
     assert.ok(160 * s <= w && 120 * s <= h, `${w}x${h} -> ${s}`);
   }
-  assert.equal(menuScale(3440, 1440), 12);
+  assert.equal(menuScale(3440, 1440), 9);
 });
 
 test('wordmark is used when the tileset has it, text h1 otherwise', async () => {

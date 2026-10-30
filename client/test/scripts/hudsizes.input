@@ -1,6 +1,6 @@
 # HUD layout at the four viewport sizes of #1003: no overlaps or off-screen parts,
 # and the belt takes at most half the viewport width. The scale is the shared rule,
-# interfaceScale (client/uipx.js): min(belt-width limit, 100x65 panel fit). Each case carries seeds,
+# interfaceScale (client/uipx.js): min(belt-width limit, viewport height / 160, 100x65 panel fit). Each case carries seeds,
 # so the hands label exists, and checks that the hands label, timer and slot numbers are on screen.
 
 case hud fits a phone in portrait (390x844)
@@ -30,7 +30,7 @@ press KeyE
 frame 50 x2
 expect hands = seeds
 layout 1366 768
-expect layout.scale = 11
+expect layout.scale = 4
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
 expect layout.timer = inside
@@ -47,7 +47,7 @@ press KeyE
 frame 50 x2
 expect hands = seeds
 layout 1920 1080
-expect layout.scale = 15
+expect layout.scale = 6
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
 expect layout.timer = inside
@@ -64,7 +64,7 @@ press KeyE
 frame 50 x2
 expect hands = seeds
 layout 3440 1440
-expect layout.scale = 22
+expect layout.scale = 9
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
 expect layout.timer = inside

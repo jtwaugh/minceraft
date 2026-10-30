@@ -33,7 +33,8 @@ import { SWAY_AMPLITUDE, SWAY_WAVE, swayPhase } from './sway.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
-import { mountHint } from './hintui.js';
+import { mountHint, hintScale } from './hintui.js';
+import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
@@ -469,6 +470,22 @@ const controller = createController({ input, walk, fly, clock, document, flying,
   sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds } });
 const deathView = mountDeath(document, tileset, controller);
 const hint = mountHint(document, tileset);
+// The debug readout folds into a top-left button: open by default only in debug mode, and the choice is remembered.
+let overlayOpen = debug;
+try { overlayOpen = JSON.parse(localStorage.getItem('overlayOpen') ?? String(debug)) === true; } catch { /* blocked storage: use the default */ }
+const overlayButton = mountCornerButton(document, tileset, { id: 'overlay-button', corner: 'top-left', label: '-', onClick() {
+  overlayOpen = !overlayOpen;
+  try { localStorage.setItem('overlayOpen', String(overlayOpen)); } catch { /* blocked storage */ }
+  showOverlay();
+} });
+function showOverlay() {
+  overlayButton.setScale(hintScale(innerWidth, innerHeight));
+  overlayButton.setLabel(overlayOpen ? '-' : 'info');
+  overlay.hidden = !overlayOpen;
+  overlay.style.top = `${CORNER_MARGIN + overlayButton.h + 4}px`;
+}
+showOverlay();
+addEventListener('resize', showOverlay);
 const frames = new FrameTimes(300);
 let lastFrame = null, overlayAt = 0;
 const outputBuffer = new OutputBuffer();
@@ -595,6 +612,7 @@ function render(now) {
   inventoryView.update(controller.state.inventory, controller.state.belt);
   deathView.update(controller.state.dead);
   hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
+  hint.update(input.locked);
 
   if (lastFrame !== null) frames.push(now - lastFrame);
   lastFrame = now;
@@ -611,7 +629,6 @@ cheated: ${walk.cheated() ? 'yes' : 'no'}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;
-    hint.setHidden(input.locked);
   }
   if (logEvery && frames.n % logEvery === 0 && frames.n) console.log(`[frames] ${frames.format()}`);
   requestAnimationFrame(render);
