@@ -352,7 +352,7 @@ def read_issues(repo, state, paged, now=None):
 
 # The issue fields the loader reads, kept between ticks.
 KEEP = ("number", "title", "state", "state_reason", "closed_at", "labels", "body",
-        "parent_issue_url", "pull_request", "updated_at")
+        "parent_issue_url", "pull_request", "created_at", "updated_at")
 
 
 def unchanged(stats, state):
