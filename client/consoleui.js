@@ -65,7 +65,9 @@ export class OutputBuffer {
   }
 }
 
-const COLOURS = { echo: '#9ad', result: '#fff', error: '#f88' };
+import { PALETTE } from './uistyle.js';
+
+const COLOURS = { echo: PALETTE.consoleEcho, result: PALETTE.consoleResult, error: PALETTE.consoleError };
 
 /**
  * DOM layer. `onSubmit(line)` and `onCancel()` are called from the text box;

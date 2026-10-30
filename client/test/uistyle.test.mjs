@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PALETTE, buttonCss } from '../uistyle.js';
+import { PALETTE, buttonCss, panelCss } from '../uistyle.js';
 import { PANEL_TILE } from '../panel.js';
 
 test('button CSS scales its border width with the UI scale', () => {
@@ -19,4 +19,12 @@ test('button CSS names the raised and pressed states', () => {
 
 test('palette values are non-empty strings', () => {
   for (const v of Object.values(PALETTE)) assert.equal(typeof v, 'string');
+});
+
+test('panel CSS uses the panel border image and the shared dim colour', () => {
+  const css = panelCss('#box', 2, 'p.png');
+  assert.match(css, /^#box \{/);
+  assert.match(css, new RegExp(`border-width: ${PANEL_TILE * 2}px`));
+  assert.match(css, /border-image: url\(p\.png\) 4 stretch/);
+  assert.ok(css.includes(`background: ${PALETTE.dim}`));
 });
