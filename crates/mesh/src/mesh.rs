@@ -1,9 +1,10 @@
 //! Core of `meshBlocks` in `viewer/mesh.js`: one quad per visible face of full
-//! cubes, ice and water, with climate tints and per-block tile variants.
-//! Leaves, cacti, bushes, snow, plants, AO and greedy merging come later; here
+//! cubes, ice, water, leaves, cacti, bushes and snow layers, with climate tints
+//! and per-block tile variants. Plants, AO and greedy merging come later; here
 //! AO is 0.
+use crate::shapes::{bounds, box_hidden, face_corners, is_box, LEAF_WEIGHT};
 use crate::tables::{face_uv, FACES, VARIES};
-use crate::{pick_layer, variant_at, Quads, Tint, Tints, Variants};
+use crate::{js_round, pick_layer, variant_at, Quads, Tint, Tints, Variants};
 
 /// Column height in blocks.
 pub const H: usize = 128;
@@ -12,6 +13,8 @@ pub const AIR: u8 = 0;
 pub const WATER: u8 = 6;
 pub const ICE: u8 = 7;
 const GRASS: u8 = 3;
+const CACTUS: u8 = 20;
+const SNOW_LAYER: u8 = 24;
 /// Full cubes that hide the faces next to them (`SOLID` in `viewer/mesh.js`).
 const SOLID: [u8; 18] = [
     1, 2, 3, 4, 5, 8, 9, 10, 23, 25, 26, 27, 28, 29, 30, 39, 40, 41,
@@ -101,17 +104,23 @@ pub fn mesh_blocks(
             let base = col(x, z);
             for y in y0..H {
                 let b = blocks[base + y];
-                if b != WATER && b != ICE && !SOLID.contains(&b) {
+                if b != WATER
+                    && b != ICE
+                    && !SOLID.contains(&b)
+                    && !LEAVES.contains(&b)
+                    && !is_box(b)
+                {
                     continue;
                 }
+                let bx = bounds(b);
                 for f in &FACES {
                     let (d, s) = (&f.d, f.s);
-                    let c = &f.c.map(|q| q.map(f64::from));
+                    let c = &face_corners(f, bx);
                     if y == y0 && d[1] < 0 {
                         continue;
                     }
                     let n = at(x as i32 + d[0], y as i32 + d[1], z as i32 + d[2]);
-                    let mut depth = 0u8;
+                    let (mut depth, mut weight) = (0u8, None);
                     let quads = match b {
                         WATER => {
                             if n == WATER || n == ICE || solid(n) {
@@ -130,11 +139,27 @@ pub fn mesh_blocks(
                             }
                             &mut out.ice
                         }
+                        _ if is_box(b) => {
+                            if box_hidden(b, d[1], n, solid(n)) {
+                                continue;
+                            }
+                            if b == CACTUS || b == SNOW_LAYER {
+                                &mut out.opaque
+                            } else {
+                                weight = Some([LEAF_WEIGHT; 4]);
+                                &mut out.cutout
+                            }
+                        }
                         _ => {
                             if solid(n) {
                                 continue;
                             }
-                            &mut out.opaque
+                            if LEAVES.contains(&b) && !fast {
+                                weight = Some([LEAF_WEIGHT; 4]);
+                                &mut out.cutout
+                            } else {
+                                &mut out.opaque
+                            }
                         }
                     };
                     let vr = if VARIES[b as usize] {
@@ -156,9 +181,10 @@ pub fn mesh_blocks(
                     let tint = match tints.block(b, x, z) {
                         None => Tint::One([1.0; 3]),
                         Some(flat) if !tints.corners => Tint::One(flat),
-                        Some(_) => Tint::Four(
-                            c.map(|q| tints.vertex(b, x, z, q[0] as usize, q[2] as usize)),
-                        ),
+                        Some(_) => Tint::Four(c.map(|q| {
+                            let o = [q[0], q[2]].map(|v| js_round(v) as usize);
+                            tints.vertex(b, x, z, o[0], o[1])
+                        })),
                     };
                     quads.quad(
                         [x as f64, y as f64, z as f64],
@@ -167,7 +193,7 @@ pub fn mesh_blocks(
                         layer,
                         s * (0.75 + y as f64 / 256.0),
                         &tint,
-                        None,
+                        weight,
                         None,
                         depth,
                     );
@@ -346,8 +372,11 @@ mod tests {
             [0, 0],
             &Variants::NONE,
         );
-        assert_eq!((slow.ice.faces(), slow.opaque.faces()), (5, 6));
-        // fast leaves are solid: they hide the ice top but are not drawn
+        assert_eq!(
+            (slow.ice.faces(), slow.opaque.faces(), slow.cutout.faces()),
+            (5, 6, 6)
+        );
+        // fast leaves are solid: they hide the ice top and are drawn opaque
         let fast = mesh_blocks(
             &b,
             1,
@@ -360,7 +389,7 @@ mod tests {
         );
         assert_eq!(
             (fast.ice.faces(), fast.opaque.faces(), fast.cutout.faces()),
-            (4, 6, 0)
+            (4, 12, 0)
         );
     }
 
