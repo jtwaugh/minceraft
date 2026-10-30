@@ -1,0 +1,10 @@
+[package]
+name = "mesh"
+version = "0.1.0"
+edition = "2021"
+description = "Block mesher building blocks (no_std + alloc): vertex writer, face tables, coordinate hashes"
+
+[dependencies]
+
+[lints]
+workspace = true
