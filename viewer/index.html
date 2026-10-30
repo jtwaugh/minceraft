@@ -188,7 +188,7 @@ import init, * as wasm from './pkg/terrain_web.js';
 import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, variantTable, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
-import { WorkerPool } from './pool.js';
+import { WorkerPool, median } from './pool.js';
 import { FOG_GLSL, FAR_FOG_END, farCutRadius } from './fog.js';
 import { farMesh } from './farmesh.js';
 import { SKY_GLSL } from './sky.js';
@@ -1607,8 +1607,13 @@ function flyLoop(now) {
     (pl.state === 'loading' ? ' · loading' : '') + (pl.recorder ? ' · ● rec' : '');
   if (pl.frameNo % 15 === 0) {
     let fast = 0;
-    for (const c of st.loaded.values()) if (c.fast) fast++;
-    dev('flyover chunks', `${st.loaded.size} loaded (${fast} with fast leaves), ${flyDrawn} drawn, ${st.jobs.size} queued`);
+    const faces = { opaque: 0, cutout: 0, water: 0, ice: 0 };
+    for (const c of st.loaded.values()) {
+      if (c.fast) fast++;
+      for (const n in faces) faces[n] += c.faces[n];
+    }
+    dev('flyover chunks', `${st.loaded.size} loaded (${fast} with fast leaves), ${flyDrawn} drawn, ${st.jobs.size} queued, ` +
+      `median ${median(st.stats.times).toFixed(1)} ms, faces ${faces.opaque} opaque / ${faces.cutout} cutout / ${faces.water} water / ${faces.ice} ice`);
   }
   if (!seeking) $('flyseek').value = String(Math.round(pl.t / pl.duration * 1000));
 }
