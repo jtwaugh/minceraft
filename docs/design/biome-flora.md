@@ -10,7 +10,6 @@ phases:
   C: done
   D: done
   E: done
-  F: todo
 ---
 
 # Biome colour blending, biome flora and foliage variation
@@ -404,14 +403,15 @@ Same framework; mostly data and art.
   of the square of 3 columns around it (Chebyshev distance, not a circle).
   (Decided in #1313 and #1410.)
 
-## Phase F: underwater flora (later)
+## Underwater flora (moved out)
 
 Seagrass and kelp would suit a game about fishing from a raft, and the fish
 habitats in `crates/layout` could use them as cover. They need a plant that
 also draws as water around it ("waterlogged"): a block id the mesher draws
 as both a water volume and a cross quad, with its own physics and swimming
-rules. Big enough to deserve its own design pass; listed here so Phase D's
-shapes leave room for it.
+rules. Big enough to deserve its own design pass, so it is no longer a phase
+of this doc: it will be designed in its own doc, started from an `idea`
+issue. Phase D's shapes should still leave room for it. (Decided in #1466.)
 
 ## Open questions
 
