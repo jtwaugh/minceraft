@@ -7,8 +7,10 @@
 
 extern crate alloc;
 
+mod mesh;
 pub mod quads;
 
+pub use mesh::{mesh_blocks, Mesh};
 pub use quads::{Quads, Tint};
 
 /// JavaScript `Math.round`: halves round towards +infinity.
