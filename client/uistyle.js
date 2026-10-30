@@ -1,6 +1,6 @@
 // Shared look for the DOM overlays: one palette and one button style. Plain
-// values and a pure CSS generator; imports only ./uipx.js and ./panel.js, so
-// it never pulls in wasm.
+// values and a pure CSS generator; imports only ./panel.js, so it never
+// pulls in wasm.
 import { PANEL_TILE } from './panel.js';
 
 /** Colours the overlays share; the values are the ones already in use across the client. */
