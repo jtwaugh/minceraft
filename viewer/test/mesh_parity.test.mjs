@@ -1,10 +1,7 @@
 // Byte parity of the Rust mesher (via wasm) with meshBlocks in mesh.js on real
 // decorated regions.
 //
-// Not compared yet, because the Rust mesher doesn't have them (later tickets
-// remove these restrictions one by one):
-//  - greedy merging of opaque faces: off in JS. (Water tops with a flat tint
-//    merge in both, greedy or not.)
+// Compared with greedy merging on and off.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -51,23 +48,21 @@ function randomTints(size, corners) {
 for (const seed of [12345n, 9n, 42n]) {
   for (const fast of [false, true]) {
     for (const corners of [false, true]) {
-      test(`wasm mesher matches meshBlocks, seed ${seed}${fast ? ', fast' : ''}${corners ? ', corners' : ''}`, () => {
-        const size = 32, pad = 1, w = size + 2 * pad;
-        const blocks = restrict(wasm.generate_region_decorated(seed, -pad, -pad, w, w));
-        const tints = randomTints(size, corners);
-        const origin = [Number(seed) * 3 - 1000, -77 - Number(seed)]; // negative and positive world coordinates
-        const js = meshBlocks(ctx, blocks, tints, size, pad, { fast, greedy: false, origin });
-        const rs = meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { fast, greedy: false, origin });
-        assert.equal(rs.minY, js.minY);
-        assert.equal(rs.meanY, js.meanY);
-        for (const k of ['opaque', 'cutout', 'ice']) assert.deepEqual(quads(rs[k]), quads(js[k]), k);
-        // water doesn't depend on greedy; compare it with greedy on
-        const jsG = meshBlocks(ctx, blocks, tints, size, pad, { fast, origin });
-        const rsG = meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { fast, origin });
-        assert.deepEqual(quads(rsG.water), quads(jsG.water), 'water');
-        assert.deepEqual(quads(rs.water), quads(js.water), 'water, greedy off');
-        assert.ok(rs.opaque.faces > 0);
-      });
+      for (const greedy of [false, true]) {
+        test(`wasm mesher matches meshBlocks, seed ${seed}${fast ? ', fast' : ''}${corners ? ', corners' : ''}${greedy ? ', greedy' : ''}`, () => {
+          const size = 32, pad = 1, w = size + 2 * pad;
+          const blocks = restrict(wasm.generate_region_decorated(seed, -pad, -pad, w, w));
+          const tints = randomTints(size, corners);
+          const origin = [Number(seed) * 3 - 1000, -77 - Number(seed)]; // negative and positive world coordinates
+          const js = meshBlocks(ctx, blocks, tints, size, pad, { fast, greedy, origin });
+          const rs = meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { fast, greedy, origin });
+          assert.equal(rs.minY, js.minY);
+          assert.equal(rs.meanY, js.meanY);
+          for (const k of ['opaque', 'cutout', 'water', 'ice']) assert.deepEqual(quads(rs[k]), quads(js[k]), k);
+          assert.ok(rs.opaque.faces > 0);
+          if (greedy) assert.ok(rs.opaque.faces < meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { fast, greedy: false, origin }).opaque.faces);
+        });
+      }
     }
   }
 }

@@ -5,6 +5,16 @@
 /// Largest merged quad side: uv is u8 in 1/16, so 15 blocks fit.
 pub const MERGE_MAX: usize = 15;
 
+/// Face `fi`'s merge grid: plane axis, u axis, v axis (0 x, 1 y, 2 z).
+pub const GRID_AXES: [[usize; 3]; 6] = [
+    [1, 0, 2],
+    [1, 0, 2],
+    [0, 2, 1],
+    [0, 2, 1],
+    [2, 0, 1],
+    [2, 0, 1],
+];
+
 /// Merge the `u_n` x `v_n` grid `cells` (row `v`, column `u`, `None` for no
 /// face) into rectangles of equal cells at most `MERGE_MAX` a side. For each,
 /// `emit(u, v, w, h, cell)` gets its first cell, its corner and its size.

@@ -7,6 +7,8 @@ use wasm_bindgen::prelude::*;
 
 /// Bit in `mesh_blocks`' `flags`: fast leaves.
 const FAST: u32 = 1;
+/// Bit in `mesh_blocks`' `flags`: merge untinted cube faces.
+const GREEDY: u32 = 2;
 /// Bit in `mesh_blocks`' `flags`: `tints` carries the corner grids.
 const CORNERS: u32 = 4;
 
@@ -52,7 +54,7 @@ impl MeshOut {
 
 /// Mesh `blocks` (`((z * w) + x) * 128 + y`, `w = size + 2 * pad`) with the
 /// face-layer table of `faceLayers` in `viewer/mesh.js`. `flags` bit 0 is fast
-/// leaves; bit 1 (greedy) is accepted but not used yet; bit 2 says `tints`
+/// leaves; bit 1 merges untinted cube faces (greedy); bit 2 says `tints`
 /// has corner grids. `origin_x` and `origin_z` are the world x and z of block
 /// (0, 0); `variants` is 9 f64 per texture layer (count, then cumulative
 /// weights) as packed by `viewer/meshwasm.js`. Features the Rust mesher
@@ -86,6 +88,7 @@ pub fn mesh_blocks(
         size as usize,
         pad as usize,
         flags & FAST != 0,
+        flags & GREEDY != 0,
         face_layer,
         &tints,
         [origin_x, origin_z],
