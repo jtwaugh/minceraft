@@ -1215,16 +1215,17 @@ impl Walker {
         self.world.tiles()
     }
 
-    /// Whether the block cell containing `pos` is a liquid. The client asks
-    /// this of the drawn eye to switch to the underwater view. Water blocks
-    /// fill their whole cell, so the cell alone decides; the raft is never
-    /// liquid, so only the loaded regions are consulted.
+    /// Whether the block cell containing `pos` is water (`is_water`, so
+    /// waterlogged blocks too). The client asks this of the drawn eye to
+    /// switch to the underwater view. Water fills its whole cell, so the cell
+    /// alone decides; the raft is never water, so only the loaded regions are
+    /// consulted.
     pub fn liquid_at(&self, pos: [f64; 3]) -> bool {
         let c = |v: f64| v.floor() as i32;
         self.world
             .block_at(c(pos[0]), c(pos[1]), c(pos[2]))
             .info()
-            .liquid
+            .is_water()
     }
 
     /// Put the player standing on the highest block of column `(x, z)` that
@@ -1244,7 +1245,7 @@ impl Walker {
             .rev()
             .find(|&y| {
                 let info = self.world.block_at(x, y, z).info();
-                info.collision != Collision::None || info.liquid
+                info.collision != Collision::None || info.is_water()
             })
             .ok_or_else(|| format!("nothing to stand on at {x} {z}"))?;
         let feet = [cx, top as f64 + 1.0, cz];
@@ -1332,7 +1333,7 @@ fn aim(
             block_selection_boxes_in(world, &query, &mut base);
             // Water stays a target for rules but never gets an outline
             // (raft-scene-feedback item 6).
-            let is_water = world.block_at(pos[0], pos[1], pos[2]).info().liquid;
+            let is_water = world.block_at(pos[0], pos[1], pos[2]).info().is_water();
             let boxed = all
                 .iter()
                 .filter(|b| !is_water && b.pos == pos)
@@ -3520,6 +3521,45 @@ mod tests {
             .collect();
         seen.extend(landings(&mut w, &TickInput::default(), 40));
         assert_eq!(seen.len(), 1, "{seen:?}");
+    }
+
+    /// Fall into a pool of `fill` (x < 2, y = 4..=8 over a stone floor), sink,
+    /// swim up, then swim east and climb out onto the stone ledge at x >= 2.
+    /// Returns the feet position after each of 200 ticks.
+    fn pool_run(fill: Block) -> Vec<[f64; 3]> {
+        let mut r = flat(-8, -8, 32, 3);
+        for z in 0..32 {
+            for x in 0..32 {
+                let b = if x < 10 { fill } else { Block::Stone };
+                for y in 4..=8 {
+                    let i = r.index(x, y, z);
+                    r.blocks[i] = b as u8;
+                }
+            }
+        }
+        let mut w = Walker::new([-1.5, 14.0, 0.5]).unwrap();
+        w.add_region(r);
+        assert!(w.liquid_at([-1.5, 6.0, 0.5]));
+        (0..200)
+            .map(|t| {
+                w.tick(&TickInput {
+                    jump: (60..80).contains(&t) || t >= 100,
+                    move_forward: if t >= 100 { 1.0 } else { 0.0 },
+                    yaw: std::f32::consts::FRAC_PI_2,
+                    ..TickInput::default()
+                });
+                w.player().pos
+            })
+            .collect()
+    }
+
+    #[test]
+    fn waterlogged_cells_swim_exactly_like_water() {
+        let water = pool_run(Block::Water);
+        assert_eq!(pool_run(Block::TestWaterloggedPlant), water);
+        // The run fell in, sank below the surface and climbed out on the ledge.
+        assert!(water.iter().any(|p| p[1] < 6.0), "{water:?}");
+        assert!(water.iter().any(|p| p[0] > 2.5 && p[1] == 9.0), "{water:?}");
     }
 
     #[test]

@@ -42,6 +42,7 @@ export const B = {
   fern_double_lower: 51, fern_double_upper: 52, cattail_lower: 53, cattail_upper: 54,
   lily_pad: 55, marsh_orchid: 56, bush: 57, jungle_bush: 58, large_fern: 59, broadleaf: 60, cactus_flower: 61, frost_grass: 62,
   tulip_red: 63, tulip_salmon: 64, tulip_yellow: 65, dune_grass_lower: 66, dune_grass_upper: 67,
+  test_waterlogged_plant: 68,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };

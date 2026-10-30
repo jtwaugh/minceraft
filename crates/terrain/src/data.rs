@@ -25,8 +25,18 @@ pub struct BlockInfo {
     /// "Opaque cube" flag (leaves included, quirk B6).
     pub opaque_cube: bool,
     pub liquid: bool,
+    /// The cell is also water for game water rules (`data/blocks.toml`).
+    pub waterlogged: bool,
     /// Flat fallback colour.
     pub color: [u8; 3],
+}
+
+impl BlockInfo {
+    /// Whether game water rules treat this block as water: water itself and
+    /// waterlogged blocks. Terrain generation keeps using `liquid`.
+    pub fn is_water(&self) -> bool {
+        self.liquid || self.waterlogged
+    }
 }
 
 /// Small-plant patch attempts per 16x16 cell (SPEC 9.1). Fractions below 1

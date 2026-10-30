@@ -214,10 +214,18 @@ fn gen_blocks(doc: &Value, out: &mut String, json: &mut String) -> Vec<String> {
         let opacity = int(b, "opacity");
         let opaque = b["opaque_cube"].as_bool().unwrap();
         let liquid = b.get("liquid").and_then(Value::as_bool).unwrap_or(false);
+        let waterlogged = b
+            .get("waterlogged")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        assert!(
+            !waterlogged || collision == "none",
+            "waterlogged block {name} must have collision = \"none\""
+        );
         let c = color(&b["color"]);
         writeln!(
             infos,
-            "    BlockInfo {{ name: {name:?}, fire_encouragement: {}, flammability: {}, collision: Collision::{col}, opacity: {opacity}, opaque_cube: {opaque}, liquid: {liquid}, color: {c:?} }},",
+            "    BlockInfo {{ name: {name:?}, fire_encouragement: {}, flammability: {}, collision: Collision::{col}, opacity: {opacity}, opaque_cube: {opaque}, liquid: {liquid}, waterlogged: {waterlogged}, color: {c:?} }},",
             fire[0].as_integer().unwrap(),
             fire[1].as_integer().unwrap()
         )

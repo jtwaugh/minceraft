@@ -348,6 +348,28 @@ fn raft_blocks_have_distinct_ids_and_old_ids_unchanged() {
     }
 }
 
+#[test]
+fn is_water_is_water_and_waterlogged_blocks_only() {
+    assert!(Block::Water.info().is_water());
+    let plant = Block::TestWaterloggedPlant.info();
+    assert!(plant.is_water() && plant.waterlogged && !plant.liquid);
+    assert_eq!(plant.collision, Collision::None);
+    // Every other block (air, stone, ice, plants, ...) is not water.
+    for b in Block::ALL {
+        let water = b == Block::Water || b == Block::TestWaterloggedPlant;
+        assert_eq!(b.info().is_water(), water, "{}", b.info().name);
+        assert_eq!(b.info().waterlogged, b == Block::TestWaterloggedPlant);
+    }
+}
+
+#[test]
+fn test_waterlogged_plant_is_never_generated() {
+    for (seed, x0, z0) in [(12345u64, -40, 17), (7, 300, -260), (99, 0, 0)] {
+        let r = generate_decorated(seed, x0, z0, 48, 48);
+        assert!(!r.blocks.contains(&(Block::TestWaterloggedPlant as u8)));
+    }
+}
+
 // ---- coarse density sampler (seed prefilter) ----
 
 const BAND: (i32, i32) = (SEA_LEVEL - 8, SEA_LEVEL + 8);
