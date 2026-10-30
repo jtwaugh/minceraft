@@ -8,8 +8,10 @@
 extern crate alloc;
 
 pub mod quads;
+pub mod tables;
 
 pub use quads::{Quads, Tint};
+pub use tables::{b, face_uv, Face, CROSS, FACES, LEAVES, OPAQUE, OPAQUE_FAST, UPPER_HALF, VARIES};
 
 /// JavaScript `Math.round`: halves round towards +infinity.
 pub fn js_round(v: f64) -> f64 {
