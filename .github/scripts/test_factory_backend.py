@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from factory_backend import FIX_WORKFLOW, PLAN_WORKFLOW, GhBackend  # noqa: E402
+from factory_backend import FIX_WORKFLOW, PLAN_WORKFLOW, START_WORKFLOW, GhBackend  # noqa: E402
 from factory_fix import marker  # noqa: E402
 from factory_tick import Action, Snapshot  # noqa: E402
 
@@ -41,10 +41,21 @@ class Test(unittest.TestCase):
         s = snap()
         b.apply(s, FIX)
         self.assertEqual(calls, [  # dispatch first: a marker without a run reads as "running"
-            ["workflow", "run", FIX_WORKFLOW, "--repo", "o/r", "-f", "pr=9", "-f", "task=do it"],
+            ["workflow", "run", FIX_WORKFLOW, "--repo", "o/r", "-f", "pr=9", "-f", "task=do it",
+             "-f", 'runner="ubuntu-latest"'],
             ["pr", "comment", "9", "--repo", "o/r", "--body", marker(9, "abc1234", "nits")]])
         b.apply(s, FIX)
         self.assertEqual(len(calls), 2)
+
+    def test_dispatches_pass_the_chosen_runner(self):
+        b, calls = backend()
+        s = snap(issues=[{"number": 7, "state": "open", "labels": []}])
+        s.runner = '"warm"'
+        b.apply(s, FIX)
+        b.apply(s, Action("start_ticket", "issue#7", {}, ""))
+        self.assertEqual(calls[0][-2:], ["-f", 'runner="warm"'])
+        self.assertEqual(calls[2], ["workflow", "run", START_WORKFLOW, "--repo", "o/r", "-f", "issue=7",
+                                    "-f", 'runner="warm"'])
 
     def test_start_fix_skipped_when_marker_present(self):
         b, calls = backend()

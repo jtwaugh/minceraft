@@ -204,7 +204,8 @@ class GhBackend(Backend):
             self._gh("issue", "edit", n, "--repo", r, "--body", p["body"])
         elif k == "start_ticket":
             # Dispatch first: a marker without a run would read as a start in progress.
-            self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}")
+            self._gh("workflow", "run", START_WORKFLOW, "--repo", r, "-f", f"issue={n}",
+                     "-f", f"runner={snapshot.runner}")
             self._gh("issue", "comment", n, "--repo", r, "--body", START_MARKER)
         elif k == "open_pr":
             self._gh("api", "-X", "POST", f"repos/{r}/pulls", "-f", f"title={p['title']}",
@@ -247,7 +248,8 @@ class GhBackend(Backend):
             self._gh("workflow", "run", PLAN_WORKFLOW, "--repo", r, "-f", f"file={p['file']}")
         elif k == "start_fix":
             # Dispatch first: a marker without a run would read as a fix in progress.
-            self._gh("workflow", "run", FIX_WORKFLOW, "--repo", r, "-f", f"pr={n}", "-f", f"task={p['task']}")
+            self._gh("workflow", "run", FIX_WORKFLOW, "--repo", r, "-f", f"pr={n}", "-f", f"task={p['task']}",
+                     "-f", f"runner={snapshot.runner}")
             self._gh("pr", "comment", n, "--repo", r, "--body", marker(int(n), p["head"], p["kind"]))
         elif k == "open_question":
             found = self._question(snapshot, action)

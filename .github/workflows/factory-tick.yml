@@ -102,6 +102,9 @@ jobs:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
           PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
+          # Dispatched agent jobs go here while a matching runner is online,
+          # else to ubuntu-latest (factory_runner.py).
+          FACTORY_RUNNER: ${{ vars.FACTORY_RUNNER }}
           DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
         run: |
           set -o pipefail  # so a failure isn't hidden by tee
