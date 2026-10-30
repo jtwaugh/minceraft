@@ -2,7 +2,7 @@
 // tileset export; imports only ./uipx.js, so the root page can use it without
 // wasm. The `panel_*` tiles are TILE x TILE texels: corners are fixed, edges
 // repeat along one axis and `panel_c` repeats along both.
-import { findTexture } from './uipx.js';
+import { findTexture, textureCanvas } from './uipx.js';
 
 export const PANEL_TILE = 4;
 
@@ -75,4 +75,28 @@ export function drawPanel(set, w, h, scale, doc = document) {
     }
   }
   return canvas;
+}
+
+/**
+ * Tile names for a panel state: 'raised' (default) uses `panel_*`, 'pressed'
+ * uses `panel_pressed_*`, falling back to the raised tiles if the set lacks any.
+ */
+export function panelNames(set, state = 'raised') {
+  if (state === 'pressed') {
+    const names = NAMES.map((row) => row.map((n) => n.replace('panel_', 'panel_pressed_')));
+    if (names.flat().every((n) => findTexture(set, n))) return names;
+  }
+  return NAMES;
+}
+
+/** Composes the 3x3 panel tiles into one canvas data URL, for use as a CSS border-image. */
+export function panelImage(doc, set, state = 'raised') {
+  const n = PANEL_TILE, canvas = doc.createElement('canvas');
+  canvas.width = canvas.height = 3 * n;
+  const ctx = canvas.getContext('2d');
+  panelNames(set, state).forEach((row, y) => row.forEach((name, x) => {
+    const tile = textureCanvas(set, name, doc);
+    if (tile) ctx.drawImage(tile, x * n, y * n);
+  }));
+  return canvas.toDataURL();
 }
