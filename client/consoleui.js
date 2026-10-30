@@ -3,6 +3,8 @@
 // DOM-free (`OutputBuffer`) so Node tests cover them; `createConsoleUI` is the
 // thin DOM layer, wired up in scene.js.
 
+import { PALETTE } from './uistyle.js';
+
 /** How long the output stays on screen after the console closes (or output arrives). */
 export const FADE_DELAY_MS = 4000;
 /** Output lines shown above the text box; the buffer keeps every line. */
@@ -64,8 +66,6 @@ export class OutputBuffer {
     return this.lines.slice(-this.visibleMax);
   }
 }
-
-import { PALETTE } from './uistyle.js';
 
 const COLOURS = { echo: PALETTE.consoleEcho, result: PALETTE.consoleResult, error: PALETTE.consoleError };
 
