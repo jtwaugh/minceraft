@@ -1,7 +1,7 @@
 // client/tools/critic.mjs with a canned model: no network. Run: node --test client/test/critic.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runCritic, main, criticPrompt } from '../tools/critic.mjs';
+import { runCritic, main, criticPrompt, claudeArgs } from '../tools/critic.mjs';
 
 const finding = (goal, repro) => ({
   kind: 'control-flow', severity: 'low', goal, observation: 'o', suggestion: 's', repro,
@@ -48,7 +48,23 @@ test('a model error exits non-zero', async () => {
 
 test('the prompt sent to the model is the critic prompt', async () => {
   let seen;
-  await runCritic({ model: async (p) => { seen = p; return '[]'; } });
+  await runCritic({ model: async (p) => { seen = p; return '[]'; }, log: () => {} });
   assert.equal(seen, criticPrompt());
   assert.match(seen, /play critic/);
+});
+
+test('claude may run play.mjs without asking', () => {
+  const args = claudeArgs('p');
+  assert.deepEqual(args.slice(0, 2), ['-p', 'p']);
+  const tools = args.slice(args.indexOf('--allowedTools') + 1);
+  assert.ok(tools.includes('Bash(node client/tools/play.mjs*)'));
+  assert.ok(tools.includes('Read'));
+});
+
+test('the model reply and each drop reason go to stderr', async () => {
+  const { out, err } = await run('I could not play.\n' + JSON.stringify([bad, finding('no expect', 'case c\nstart walk\n')]));
+  assert.equal(out, 'no findings\n');
+  assert.match(err, /model reply:\nI could not play\./);
+  assert.match(err, /dropped \(line \d+ \(expect mode = fly\).*\): does not reproduce/);
+  assert.match(err, /dropped \(repro has no expect line\): no expect/);
 });
