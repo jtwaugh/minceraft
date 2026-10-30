@@ -14,7 +14,7 @@ phases:
 
 ## Current state
 
-Checked against `master` (ba3a7e9). Phases A to D are done; Phase E is not built and stays `todo`.
+Checked against `master` (ba3a7e9). Phases A to D are done; Phase E is partly built (E.1 missing) and stays `todo`.
 
 - **Phase A is done:** the viewer (PRs #248, #250, #252) and the client (PR #520, ticket #505) both use radial fog with the shared curve in `viewer/fog.js`, trilinear and anisotropic filtering, texel snapping and the tint weight (plan #242).
 
@@ -45,6 +45,8 @@ Checked against `master` (ba3a7e9). Phases A to D are done; Phase E is not built
   by `plan.js` and `viewer/worker.js` (Phase D).
 
 ## Reconciliation notes
+
+- **Phase E still incomplete (plan #1444).** Built: the stats readout for median mesh time and face counts (#1445), box visibility in the schedule (E.3, #1446), greedy meshing for water tops and other opaque faces (E.2, #1447, #1448), and the half-resolution mesher and its wiring beyond about 120 blocks (E.4, #1449, #1450). Not built: E.1, the allocation-free mesher. Question #1451 was decided as option B (Rust/wasm, in `crates/web` or a new crate, not `crates/terrain`), but the plan made no ticket for it, and `crates/web/src/lib.rs` has no mesher; `viewer/mesh.js` is still the JS mesher. The 2x median mesh-time criterion is therefore unmet. Phase E stays `todo`; a ticket for the wasm mesher (reporting gzipped wasm size before and after) is needed.
 
 - **Phase C was incomplete (resolved by plan #1291, now `done`; water depth missing at the time).**
   Built: C.1 vertex AO (PRs #688, #692, #694; `viewer/mesh.js`,
