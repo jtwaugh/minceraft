@@ -1,7 +1,8 @@
 //! Core of `meshBlocks` in `viewer/mesh.js`: one quad per visible face of full
 //! cubes, ice, water, leaves, cacti, bushes and snow layers, with climate tints
-//! and per-block tile variants, cross plants and flat shapes. AO and greedy
-//! merging come later; here AO is 0.
+//! and per-block tile variants, cross plants, flat shapes and vertex AO on
+//! full cubes and leaves. Greedy merging comes later.
+use crate::ao::{face_ao, flips, rot};
 use crate::plants::cross;
 use crate::shapes::{bounds, box_hidden, face_corners, flat, flat_lift, is_box, LEAF_WEIGHT};
 use crate::tables::{face_uv, CROSS, FACES, VARIES};
@@ -136,12 +137,12 @@ pub fn mesh_blocks(
                 let bx = bounds(b);
                 for f in &FACES {
                     let (d, s) = (&f.d, f.s);
-                    let c = &face_corners(f, bx);
+                    let mut c = face_corners(f, bx);
                     if y == y0 && d[1] < 0 {
                         continue;
                     }
                     let n = at(x as i32 + d[0], y as i32 + d[1], z as i32 + d[2]);
-                    let (mut depth, mut weight) = (0u8, None);
+                    let (mut depth, mut weight, mut ao) = (0u8, None, None);
                     let quads = match b {
                         WATER => {
                             if n == WATER || n == ICE || solid(n) {
@@ -175,6 +176,8 @@ pub fn mesh_blocks(
                             if solid(n) {
                                 continue;
                             }
+                            let p = [x as i32, y as i32, z as i32];
+                            ao = Some(face_ao(f, p, |x, y, z| solid(at(x, y, z))));
                             if LEAVES.contains(&b) && !fast {
                                 weight = Some([LEAF_WEIGHT; 4]);
                                 &mut out.cutout
@@ -188,7 +191,7 @@ pub fn mesh_blocks(
                     } else {
                         0
                     };
-                    let uv = c.map(|q| face_uv(f, q, vr, [1.0; 3]));
+                    let mut uv = c.map(|q| face_uv(f, q, vr, [1.0; 3]));
                     let mut layer = layer_of(face_layer, b, d[1], fast);
                     if b == GRASS && d[1] > 0 {
                         layer = pick_layer(
@@ -199,7 +202,7 @@ pub fn mesh_blocks(
                             origin[1] + z as i32,
                         );
                     }
-                    let tint = match tints.block(b, x, z) {
+                    let mut tint = match tints.block(b, x, z) {
                         None => Tint::One([1.0; 3]),
                         Some(flat) if !tints.corners => Tint::One(flat),
                         Some(_) => Tint::Four(c.map(|q| {
@@ -207,15 +210,21 @@ pub fn mesh_blocks(
                             tints.vertex(b, x, z, o[0], o[1])
                         })),
                     };
+                    if let Some(a) = ao.filter(|&a| flips(a)) {
+                        (c, uv, ao) = (rot(c), rot(uv), Some(rot(a)));
+                        if let Tint::Four(t) = tint {
+                            tint = Tint::Four(rot(t));
+                        }
+                    }
                     quads.quad(
                         [x as f64, y as f64, z as f64],
-                        c,
+                        &c,
                         &uv,
                         layer,
                         s * (0.75 + y as f64 / 256.0),
                         &tint,
                         weight,
-                        None,
+                        ao,
                         depth,
                     );
                 }
@@ -412,6 +421,40 @@ mod tests {
             (fast.ice.faces(), fast.opaque.faces(), fast.cutout.faces()),
             (4, 12, 0)
         );
+    }
+
+    #[test]
+    fn ao_flips_the_diagonal_of_a_top_face() {
+        // stone at (1, 40, 1) with one stone above-diagonal at (0, 41, 2): the
+        // top's corner (0, 1) has AO 1, so its quad starts at that corner
+        let b = world(3, 0, |x, z, y| match (x, z, y) {
+            (1, 1, 40) | (0, 2, 41) => STONE,
+            _ => 0,
+        });
+        let m = mesh_blocks(
+            &b,
+            3,
+            0,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
+        let top = m
+            .opaque
+            .bytes()
+            .chunks(64)
+            .find(|q| {
+                q.chunks(16)
+                    .all(|v| i16::from_le_bytes([v[2], v[3]]) == 41 * 16)
+            })
+            .filter(|q| i16::from_le_bytes([q[0], q[1]]) >= 16)
+            .unwrap();
+        let ao: Vec<u8> = top.chunks(16).map(|v| v[13]).collect();
+        assert_eq!(ao, [1, 0, 0, 0]);
+        let first = [0, 4].map(|o| i16::from_le_bytes([top[o], top[o + 1]]) / 16);
+        assert_eq!(first, [1, 2]);
     }
 
     #[test]

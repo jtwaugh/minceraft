@@ -7,6 +7,7 @@
 
 extern crate alloc;
 
+pub mod ao;
 mod mesh;
 pub mod plants;
 pub mod quads;

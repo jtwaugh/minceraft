@@ -3,8 +3,6 @@
 //
 // Not compared yet, because the Rust mesher doesn't have them (later tickets
 // remove these restrictions one by one):
-//  - ambient occlusion: byte 13 is zeroed, and quads are rotated to a canonical
-//    first vertex, since AO can flip a quad's diagonal;
 //  - greedy merging: off in JS; water tops are always merged in JS when the
 //    tint is flat, so without corners horizontal water quads are left out.
 import test from 'node:test';
@@ -29,19 +27,13 @@ const KEEP = new Set([B.air, B.dirt, B.grass, B.stone, B.sand, B.gravel, B.water
   B.leaf_litter, B.lily_pad]);
 const restrict = (blocks) => blocks.map((b) => (KEEP.has(b) || CROSS[b] ? b : B.air));
 
-// Quads of a part as canonical strings: AO zeroed, rotated to start at the smallest vertex.
+// Quads of a part as strings, vertex order kept.
 function quads(p, skipFlat) {
   const u8 = new Uint8Array(p.verts), out = [];
   for (let q = 0; q < p.faces; q++) {
-    const vs = [0, 1, 2, 3].map((j) => {
-      const v = u8.slice((q * 4 + j) * VERTEX_BYTES, (q * 4 + j + 1) * VERTEX_BYTES);
-      v[13] = 0;
-      return v;
-    });
+    const vs = [0, 1, 2, 3].map((j) => u8.slice((q * 4 + j) * VERTEX_BYTES, (q * 4 + j + 1) * VERTEX_BYTES));
     if (skipFlat && vs.every((v) => v[2] === vs[0][2] && v[3] === vs[0][3])) continue;
-    let s = 0;
-    for (let j = 1; j < 4; j++) if (vs[j].join() < vs[s].join()) s = j;
-    out.push([0, 1, 2, 3].map((j) => vs[(s + j) % 4].join()).join(';'));
+    out.push(vs.map((v) => v.join()).join(';'));
   }
   return out.sort();
 }
