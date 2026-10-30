@@ -254,15 +254,15 @@ const FACES = [
 // rotations and mirrors (bit 0 swaps u and v, bit 1 flips u, bit 2 flips v);
 // sides only mirror horizontally (bit 1), so they never turn or flip upside
 // down. Bottoms stay as they are.
-function faceUV(f, [a, b, c], v) {
+function faceUV(f, [a, b, c], v, [sa, sb, sc] = [1, 1, 1]) {
   if (f.d[1] > 0) {
-    let u = a, w = c;
-    if (v & 1) { u = c; w = a; }
-    return [v & 2 ? 1 - u : u, v & 4 ? 1 - w : w];
+    let u = a, w = c, eu = sa, ew = sc;
+    if (v & 1) { u = c; w = a; eu = sc; ew = sa; }
+    return [v & 2 ? eu - u : u, v & 4 ? ew - w : w];
   }
   if (f.d[1] < 0) return [a, c];
-  const u = f.d[0] !== 0 ? c : a;
-  return [v & 2 ? 1 - u : u, 1 - b];
+  const u = f.d[0] !== 0 ? c : a, eu = f.d[0] !== 0 ? sc : sa;
+  return [v & 2 ? eu - u : u, sb - b];
 }
 
 // Blocks whose tiles vary from block to block.
@@ -310,8 +310,10 @@ export const LEAF_WEIGHT = 64;
 const BUSH_INSET = 2 / 16;
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 
-// Largest merged water-top quad side: uv is uint8 in 1/16, so 15 blocks fit.
+// Largest merged quad side (water tops and opaque cubes): uv is uint8 in 1/16, so 15 blocks fit.
 const WATER_MERGE_MAX = 15;
+// Face fi's merge grid: [plane axis, u axis, v axis] (0 x, 1 y, 2 z).
+const GRID_AXES = [[1, 0, 2], [1, 0, 2], [0, 2, 1], [0, 2, 1], [2, 0, 1], [2, 0, 1]];
 // The tint bytes "r,g,b" of a water block's tint if all four corners agree, else null.
 function waterTint(tint) {
   const key = (t) => t.map((v) => Math.round(v * 255)).join();
@@ -370,12 +372,15 @@ class Quads {
  * per-block texture variants of ground blocks (grass, sand, gravel, stone,
  * snow layer), which depend only on the world coordinate.
  *
+ * `greedy: false` keeps one quad per block face (tests that count or look at
+ * single blocks); by default untinted full-cube faces merge into rectangles.
+ *
  * `fast`: fast leaves, for terrain seen from afar. Leaves hide each other
  * and the faces next to them like solid blocks, and use the hole-free
  * leaves_fast tile, so they move to `opaque`. In a forest that's about half
  * the faces.
  */
-export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, origin = [0, 0] } = {}) {
+export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, origin = [0, 0], greedy = true } = {}) {
   const SOLID_N = fast ? OPAQUE_FAST : OPAQUE;
   const w = size + 2 * pad;
   const col = (x, z) => ((z + pad) * w + x + pad) * H;
@@ -417,6 +422,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       return q(sa, 0) + q(0, sb) + q(sa, sb);
     });
   };
+  const faceCells = new Map(); // fi * 4096 + plane -> grid of opaque-cube face cells (or null), merged after the main loop
   const waterTops = new Map(); // y -> per-column water-top cell (or null), merged after the main loop
   const FULL_LO = [0, 0, 0], FULL_HI = [1, 1, 1];
   const CACTUS_LO = [CACTUS_INSET, 0, CACTUS_INSET], CACTUS_HI = [1 - CACTUS_INSET, 1, 1 - CACTUS_INSET];
@@ -504,7 +510,19 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           // drawn, as cut-outs
           if (SOLID_N[n]) continue;
           const cutLeaf = LEAVES[b] && !fast;
-          boxFace(cutLeaf ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr, faceAO(x, y, z, f), cutLeaf ? LEAF_WEIGHT : 0);
+          const ao = faceAO(x, y, z, f);
+          // Untinted cubes whose four corners share one AO level merge with
+          // equal neighbours; the rest (leaves, tinted, AO gradients) stay single.
+          if (greedy && !cutLeaf && flat === WHITE && ao[0] === ao[1] && ao[1] === ao[2] && ao[2] === ao[3]) {
+            const fi = FACES.indexOf(f), [pa, ua, va] = GRID_AXES[fi], at3 = [x, y, z];
+            const key = fi * 4096 + at3[pa];
+            let grid = faceCells.get(key);
+            if (!grid) faceCells.set(key, grid = new Array((ua === 1 ? H : size) * (va === 1 ? H : size)).fill(null));
+            const shade = Math.round(f.s * (0.75 + y / 256) * 128);
+            grid[at3[va] * (ua === 1 ? H : size) + at3[ua]] = { key: `${layer},${shade},${ao[0]},${vr}`, layer, ao: ao[0], vr, k: f.s * (0.75 + y / 256) };
+            continue;
+          }
+          boxFace(cutLeaf ? 3 : 0, x, y, z, f, FULL_LO, FULL_HI, layer, tint, vr, ao, cutLeaf ? LEAF_WEIGHT : 0);
         }
       }
     }
@@ -526,6 +544,29 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) done[c + j * size + i] = 1;
       const p = top.c.map((v) => [v[0] * w, 1, v[2] * h]);
       out[1].quad(x, y, z, p, p.map((v) => [v[0], v[2]]), cell.layer, top.s * (0.75 + y / 256), cell.tint, null, null, cell.depth);
+    }
+  }
+  // Opaque cube faces: merge runs of equal cells (same layer, shade, AO level
+  // and UV variant) in each face plane into rectangles of at most WATER_MERGE_MAX.
+  for (const [key, cells] of faceCells) {
+    const fi = key >> 12, plane = key & 4095, f = FACES[fi], [pa, ua, va] = GRID_AXES[fi];
+    const U = ua === 1 ? H : size, V = va === 1 ? H : size, done = new Uint8Array(U * V);
+    for (let v = 0; v < V; v++) for (let u = 0; u < U; u++) {
+      const c = v * U + u, cell = cells[c];
+      if (!cell || done[c]) continue;
+      const same = (i) => cells[i] && !done[i] && cells[i].key === cell.key;
+      let w = 1, h = 1;
+      while (w < WATER_MERGE_MAX && u + w < U && same(c + w)) w++;
+      outer: while (h < WATER_MERGE_MAX && v + h < V) {
+        for (let i = 0; i < w; i++) if (!same(c + h * U + i)) break outer;
+        h++;
+      }
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) done[c + j * U + i] = 1;
+      const at3 = [0, 0, 0], e = [1, 1, 1];
+      at3[pa] = plane; at3[ua] = u; at3[va] = v; e[ua] = w; e[va] = h;
+      const p = f.c.map((q) => q.map((t, j) => t * e[j]));
+      const ao = [cell.ao, cell.ao, cell.ao, cell.ao];
+      out[0].quad(at3[0], at3[1], at3[2], p, p.map((q) => faceUV(f, q, cell.vr, e)), cell.layer, cell.k, WHITE, null, ao);
     }
   }
   const [opaque, water, ice, cutout] = out.map((q) => q.done());
