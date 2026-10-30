@@ -12,7 +12,15 @@ ISSUES = {
     10: {"title": "Raft C: animals swim", "body": "**Files:** `crates/game/src/swim.rs` (new)"},
     11: {"title": "Plan: Raft C", "body": ""},
     12: {"title": "Some PR", "pull_request": {}, "body": ""},
+    # a chain like #1496 -> #1497 in plan #1493: 21 creates a file, 22 depends on 21
+    21: {"title": "Mesher F: shapes", "body": "**Depends on:** none\n**Files:** `crates/mesh/src/shapes.rs` (new)"},
+    22: {"title": "Mesher G: plants", "body": "**Depends on:** #21\n**Files:** `crates/mesh/src/plants.rs` (new)"},
+    # a cycle, which the walk must not loop on
+    31: {"title": "A", "body": "**Depends on:** #32\n**Files:** `a.rs` (new)"},
+    32: {"title": "B", "body": "**Depends on:** #31\n**Files:** `b.rs` (new)"},
 }
+for _n, _i in ISSUES.items():
+    _i["number"] = _n
 EXISTING = {"crates/game/src/animals.rs"}
 
 
@@ -61,6 +69,16 @@ class TicketErrors(unittest.TestCase):
         self.assertEqual(errors(body(files="`crates/x.rs` (new)")), [])
         self.assertIn("doesn't exist", errors(body(files="`crates/x.rs`"))[0])
         self.assertIn("no backticked", errors(body(files="the animals module"))[0])
+
+    def test_files_from_the_dependency_chain(self):
+        # shapes.rs comes from #21, which 22 depends on: allowed through the chain
+        self.assertEqual(errors(body("#22", "`crates/mesh/src/shapes.rs`")), [])
+        self.assertEqual(errors(body("#22", "`crates/mesh/src/plants.rs`")), [])
+        # a ticket outside the chain still doesn't count
+        self.assertIn("doesn't exist", errors(body("#10", "`crates/mesh/src/shapes.rs`"))[0])
+
+    def test_chain_survives_a_cycle(self):
+        self.assertEqual(errors(body("#31", "`b.rs`")), [])
 
     def test_missing_lines_and_sections(self):
         e = errors("**Depends on:** none\n")
