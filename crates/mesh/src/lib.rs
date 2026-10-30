@@ -1,6 +1,5 @@
 //! Building blocks of the block mesher, ported from `viewer/mesh.js`: the
-//! 16-byte vertex writer, the face and flag tables, and the coordinate hashes
-//! that vary tiles and plants. Nothing here reads block data.
+//! 16-byte vertex writer and the coordinate hashes that vary tiles and plants. Nothing here reads block data.
 //!
 //! Numbers are `f64` and rounded like JavaScript's `Math.round` so the bytes
 //! match the JS mesher exactly.
@@ -9,10 +8,8 @@
 extern crate alloc;
 
 pub mod quads;
-pub mod tables;
 
 pub use quads::{Quads, Tint};
-pub use tables::*;
 
 /// JavaScript `Math.round`: halves round towards +infinity.
 pub fn js_round(v: f64) -> f64 {
