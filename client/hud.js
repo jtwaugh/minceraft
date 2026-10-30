@@ -51,7 +51,7 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
 
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font: 12px/14px ui-monospace, monospace; color: #fff; }
-#hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot { position: absolute; }
+#hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot, .slot > * { position: absolute; }
 #hud canvas { image-rendering: pixelated; }
 #hud-hands { text-shadow: 0 0 3px #000; }
 #hud span { white-space: nowrap; }
@@ -73,7 +73,9 @@ export function mountHud(document, set, parent = document.body, view = globalThi
   const make = (id) => Object.assign(document.createElement('div'), { id });
   const cross = make('hud-cross'), timer = make('hud-timer'), hands = make('hud-hands');
   const hearts = make('hud-hearts'), beltPanel = make('hud-belt-panel'), belt = make('hud-belt');
-  root.append(cross, timer, hands, hearts, beltPanel, belt);
+  const handsPanel = make('hud-hands-panel'), handsSlot = make('hud-hands-slot');
+  handsSlot.className = 'slot';
+  root.append(cross, timer, hands, hearts, beltPanel, belt, handsPanel, handsSlot);
   parent.append(style, root);
   let last = '';
   return {
@@ -109,10 +111,16 @@ export function mountHud(document, set, parent = document.body, view = globalThi
 
       const h = rects.hands;
       place(hands, h);
-      hands.replaceChildren(...(m.hands ? [
-        h.icon && icon(m.hands, h.icon, h.x, h.y),
-        h.label && h.label.w ? label(m.hands, h.label, h, h.scale) : null,
-      ].filter(Boolean) : []));
+      hands.replaceChildren(...(m.hands && h.label && h.label.w ? [label(m.hands, h.label, h, h.scale)] : []));
+
+      const hp = rects.handsPanel, hs = rects.handsSlot;
+      place(handsPanel, hp);
+      handsPanel.replaceChildren(drawPanel(set, hp.w / scale, hp.h / scale, scale, document));
+      place(handsSlot, hs);
+      handsSlot.replaceChildren(...[
+        icon('slot', { ...hs, x: 0, y: 0 }, 0, 0),
+        hs.icon && icon(m.hands, hs.icon, hs.x, hs.y),
+      ].filter(Boolean));
 
       place(hearts, rects.hearts);
       hearts.replaceChildren(...heartNames(m.hearts).map((n, i) => icon(n, rects.heartIcons[i], rects.hearts.x, rects.hearts.y)).filter(Boolean));
