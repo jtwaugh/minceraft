@@ -49,6 +49,7 @@ import { parseBlend } from './blend.js';
 import { sceneById } from './scenes.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
+import { mountPanelStyle } from './uistyle.js';
 
 const { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } = game;
 
@@ -362,6 +363,7 @@ const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIA
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
 const models = createModelDrawer(gl, tileset, SCENE_TEXTURES);
+mountPanelStyle(document, tileset, '#overlay, #console-input');
 const hud = mountHud(document, tileset);
 const inventoryView = mountInventory(document, tileset);
 
