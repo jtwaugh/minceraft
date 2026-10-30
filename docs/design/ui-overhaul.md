@@ -68,7 +68,7 @@ Today the timer's phase word, the hands item name, the death screen, the invento
 
 - A small bitmap font in `art/` (capitals A to Z, 0 to 9, basic punctuation, in a fixed 4x6 cell with a 3x5 glyph to match the digits; lower-case letters in a string are drawn with their capital glyph), drawn by a shared helper next to `uipx.js`, so any string renders as pixel art at the UI scale. (Decided in #1174.)
 - The HUD, inventory, death screen and menu use it. That removes the text fallbacks in `hudLayout`, and every rectangle is exact.
-- The debug console and overlay may stay monospace, since they're debug tools, but they get the same panel and colours.
+- The debug console and overlay stay monospace, since they're debug tools with long, free-form output, but they get the same panel and colours. (Decided in #1432.)
 
 > **Reconciler:** A font supersedes the per-word `phase_*` and `label_*` textures of play-critic-agent note 7: the same exact-rectangle goal is met by measuring a string from glyph widths. The existing `digit_*` (4x6) can be reused as the font's digits so the timer and slot numbers match.
 
@@ -108,5 +108,4 @@ The first-person held item and item entities in the world are in #1137. Gameplay
 
 ## Open questions
 
-3. **Debug console and overlay font.** A: stay monospace with the shared panel and colours. B: move to the pixel font. A keeps long free-form output readable; B is more consistent.
 5. **One style or a separate menu treatment.** A: the wooden panel for every screen, the menu included. B: the menu keeps its animated sea backdrop and gets only the wordmark and shared buttons.
