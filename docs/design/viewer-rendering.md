@@ -9,12 +9,12 @@ phases:
   B: done
   C: done
   D: done
-  E: todo
+  E: done
 ---
 
 ## Current state
 
-Checked against `master` (ba3a7e9). Phases A to D are done; Phase E is partly built (E.1 missing) and stays `todo`.
+Checked against `master` (ba3a7e9). Phases A to E are done.
 
 - **Phase A is done:** the viewer (PRs #248, #250, #252) and the client (PR #520, ticket #505) both use radial fog with the shared curve in `viewer/fog.js`, trilinear and anisotropic filtering, texel snapping and the tint weight (plan #242).
 
@@ -23,6 +23,8 @@ Checked against `master` (ba3a7e9). Phases A to D are done; Phase E is partly bu
 - **Phase C is done** (plan #1291; earlier plan #619): vertex AO (PRs #688, #692, #694), sky gradient, sky pass and directional fog (PRs #691, #701, #724), water Fresnel (PRs #702, #725), and water colour and alpha by depth: the mesher writes depth into byte 15 (PR #1300), the viewer shader maps it (PR #1324) and the client shader reuses the mapping (PR #1350). C.4 (linear-colour fog) is optional and not built. The `[manual check]` criteria were not judged here.
 
 - **Phase D is done** (plan #1441; built under plan #1393): far-terrain heightmap mesh with skirt in `viewer/farmesh.js` (PR #1398), colour from biome and water depth (PR #1405), far program drawn before chunks with `FAR_FOG_END` 500 and the `farCutRadius` discard in `viewer/fog.js` (PR #1407). The mesh is built once from the flyover survey, so it is not refreshed as the camera moves. Open question 4 was answered as option A (biome surface colour only). The `[manual check]` criteria (horizon look, seams, 10% frame time) were not judged here.
+
+- **Phase E is done** (plans #1444 and #1505; earlier E.1a-f under plan #1470/#1493): stats readout (#1445), box visibility (E.3, #1446), greedy meshing in JS (E.2, #1447, #1448), half-resolution far chunks (E.4, #1449, #1450), and the Rust/wasm mesher in `crates/mesh` (E.1, decided option B in #1451) with plants (PR #1513), flat shapes (PR #1514), vertex AO (PR #1515), greedy water tops (PR #1516) and greedy opaque faces (PR #1517). The viewer worker and half-resolution meshing (PR #1518) and the client scene (PR #1519) call `meshBlocksWasm` from `viewer/meshwasm.js`. The 2x median mesh-time criterion and the `[manual check]` pop-in criterion were not measured here.
 
 - **F1** holds: `viewer/index.html` sets `vdist = gl_Position.w` (~line 636)
   and fogs with a linear ramp from 0.55 to 1.15 × `fogFar` (~line 650).
@@ -46,7 +48,7 @@ Checked against `master` (ba3a7e9). Phases A to D are done; Phase E is partly bu
 
 ## Reconciliation notes
 
-- **Phase E still incomplete (plan #1444).** Built: the stats readout for median mesh time and face counts (#1445), box visibility in the schedule (E.3, #1446), greedy meshing for water tops and other opaque faces (E.2, #1447, #1448), and the half-resolution mesher and its wiring beyond about 120 blocks (E.4, #1449, #1450). Not built: E.1, the allocation-free mesher. Question #1451 was decided as option B (Rust/wasm, in `crates/web` or a new crate, not `crates/terrain`), but the plan made no ticket for it, and `crates/web/src/lib.rs` has no mesher; `viewer/mesh.js` is still the JS mesher. The 2x median mesh-time criterion is therefore unmet. Phase E stays `todo`; a ticket for the wasm mesher (reporting gzipped wasm size before and after) is needed.
+- **Phase E was incomplete (resolved by plan #1505, now `done`; the wasm mesher was missing at the time).** Built: the stats readout for median mesh time and face counts (#1445), box visibility in the schedule (E.3, #1446), greedy meshing for water tops and other opaque faces (E.2, #1447, #1448), and the half-resolution mesher and its wiring beyond about 120 blocks (E.4, #1449, #1450). Not built: E.1, the allocation-free mesher. Question #1451 was decided as option B (Rust/wasm, in `crates/web` or a new crate, not `crates/terrain`), but the plan made no ticket for it, and `crates/web/src/lib.rs` has no mesher; `viewer/mesh.js` is still the JS mesher. The 2x median mesh-time criterion is therefore unmet. Phase E stays `todo`; a ticket for the wasm mesher (reporting gzipped wasm size before and after) is needed.
 
 - **Phase C was incomplete (resolved by plan #1291, now `done`; water depth missing at the time).**
   Built: C.1 vertex AO (PRs #688, #692, #694; `viewer/mesh.js`,
