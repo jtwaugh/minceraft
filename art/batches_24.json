@@ -11,12 +11,102 @@
     "...e...",
     "...e...",
     "...e..."
+   ],
+   "panel_pressed_tl": [
+    ".000",
+    "0555",
+    "0566",
+    "0566"
+   ],
+   "panel_pressed_t": [
+    "0000",
+    "5555",
+    "6666",
+    "6656"
+   ],
+   "panel_pressed_tr": [
+    "000.",
+    "5570",
+    "6670",
+    "6670"
+   ],
+   "panel_pressed_l": [
+    "0566",
+    "0566",
+    "0576",
+    "0566"
+   ],
+   "panel_pressed_c": [
+    "6665",
+    "6666",
+    "6566",
+    "6666"
+   ],
+   "panel_pressed_r": [
+    "6670",
+    "7670",
+    "6670",
+    "6670"
+   ],
+   "panel_pressed_bl": [
+    "0566",
+    "0566",
+    "0577",
+    ".000"
+   ],
+   "panel_pressed_b": [
+    "6666",
+    "6766",
+    "7777",
+    "0000"
+   ],
+   "panel_pressed_br": [
+    "6670",
+    "6670",
+    "7770",
+    "000."
    ]
   },
   "sizes": {
    "crosshair": [
     7,
     7
+   ],
+   "panel_pressed_tl": [
+    4,
+    4
+   ],
+   "panel_pressed_t": [
+    4,
+    4
+   ],
+   "panel_pressed_tr": [
+    4,
+    4
+   ],
+   "panel_pressed_l": [
+    4,
+    4
+   ],
+   "panel_pressed_c": [
+    4,
+    4
+   ],
+   "panel_pressed_r": [
+    4,
+    4
+   ],
+   "panel_pressed_bl": [
+    4,
+    4
+   ],
+   "panel_pressed_b": [
+    4,
+    4
+   ],
+   "panel_pressed_br": [
+    4,
+    4
    ]
   }
  }

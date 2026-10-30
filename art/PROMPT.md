@@ -136,7 +136,12 @@ panel_c, panel_r, panel_bl, panel_b, panel_br (each 4×4: a nine-slice
 wooden panel like a raft board with a dark outline and a 1-pixel bevel;
 panel_c tiles in both directions, panel_t and panel_b tile
 horizontally, panel_l and panel_r tile vertically, corners are
-transparent outside the outline), digit_0, digit_1, digit_2, digit_3,
+transparent outside the outline), panel_pressed_tl, panel_pressed_t,
+panel_pressed_tr, panel_pressed_l, panel_pressed_c, panel_pressed_r,
+panel_pressed_bl, panel_pressed_b, panel_pressed_br (each 4×4: the same
+nine-slice and tiling rules as panel_*, with the bevel inverted, dark on
+the top and left and light on the bottom and right, so it reads as pushed
+in), digit_0, digit_1, digit_2, digit_3,
 digit_4, digit_5, digit_6, digit_7, digit_8, digit_9 (each 4×6:
 stack-count numerals in off-white, 3 pixels wide and 5 tall, with a
 1-pixel near-black drop shadow to the right and below; transparent
