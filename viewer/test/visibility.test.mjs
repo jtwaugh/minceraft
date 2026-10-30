@@ -57,7 +57,7 @@ test('chunks first seen from afar are half detail until the swap', () => {
   assert.ok(far.length > 0);
   for (const c of far) {
     // swapped to full detail after it first shows, with time to load before the camera is within FULL_DETAIL
-    assert.ok(c.full > c.first && c.full < Infinity || c.full === Infinity);
+    if (c.full < Infinity) assert.ok(c.full > c.first);
   }
   const swapped = far.find((c) => c.full < Infinity);
   assert.ok(swapped, 'a far-first chunk the camera reaches');
