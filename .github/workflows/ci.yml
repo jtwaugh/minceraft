@@ -254,6 +254,12 @@ jobs:
           git diff --exit-code -- batches_24.json \
             || { echo "::error::batches_24.json is out of date or was hand-edited. Edit tools/draw_hud.py and rerun it from art/."; exit 1; }
 
+      - name: batches_33.json matches draw_wordmark.py
+        run: |
+          python3 -I tools/draw_wordmark.py
+          git diff --exit-code -- batches_33.json \
+            || { echo "::error::batches_33.json is out of date or was hand-edited. Edit tools/draw_wordmark.py and rerun it from art/."; exit 1; }
+
       - name: Build preview sheet
         run: python3 -I tools/build_sheet.py
 
