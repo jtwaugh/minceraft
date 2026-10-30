@@ -259,7 +259,10 @@ mod tests {
                 let got = w.region_border(c, dx, dz).unwrap();
                 assert_eq!(got.len(), want.len(), "({dx}, {dz})");
                 assert!(got == want, "({dx}, {dz})");
-                assert!(got.contains(&(terrain::Block::Dandelion as u8)), "({dx}, {dz})");
+                assert!(
+                    got.contains(&(terrain::Block::Dandelion as u8)),
+                    "({dx}, {dz})"
+                );
                 assert!(w.region_border(RegionCoord::new(9, 9), dx, dz).is_none());
             }
         }
