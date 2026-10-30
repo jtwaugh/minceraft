@@ -53,6 +53,7 @@ import { sceneById } from './scenes.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
 import { mountPanelStyle } from './uistyle.js';
+import { snowOnFoliage } from './particles.js';
 
 const { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } = game;
 
@@ -273,6 +274,7 @@ function drawHeld(proj) {
 }
 
 // `box` is [minx, miny, minz, maxx, maxy, maxz]; entities also get a faint fill.
+// `fill` 'flake' is a snow flake: a solid white fill and no outline.
 function drawBox(mvp, box, fill) {
   const grow = 0.003; // keeps the lines off the block's own faces
   const lo = [0, 1, 2].map((i) => box[i] - grow);
@@ -286,10 +288,11 @@ function drawBox(mvp, box, fill) {
   if (fill) {
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false); gl.disable(gl.CULL_FACE);
-    gl.uniform4f(boxProg.u('color'), 1, 1, 1, 0.22);
+    gl.uniform4f(boxProg.u('color'), 1, 1, 1, fill === 'flake' ? 0.9 : 0.22);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, unitBox.quadIB);
     gl.drawElements(gl.TRIANGLES, unitBox.quads, gl.UNSIGNED_BYTE, 0);
     gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.disable(gl.BLEND);
+    if (fill === 'flake') { gl.bindVertexArray(null); return; }
   }
   gl.uniform4f(boxProg.u('color'), 0, 0, 0, 1);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, unitBox.edgeIB);
@@ -393,6 +396,13 @@ const meshes = { opaque: [], cutout: [], water: [], ice: [] };
 let raftModel = null; // the raft's boxes; moved each frame by the sim's raft offset
 // Meshes of each streamed region, by "rx,rz", so they can be freed when it unloads.
 const regionParts = new Map();
+// World cells of the snow on swaying foliage in each region, by "rx,rz", which shake off flakes.
+const regionSnow = new Map();
+let snowCells = [];
+const setSnow = (key, cells) => {
+  if (cells?.length) regionSnow.set(key, cells); else regionSnow.delete(key);
+  snowCells = [...regionSnow.values()].flat();
+};
 // Loaded neighbours of a newly meshed region, remeshed one per spare frame: they were
 // padded with this region's edge as their own, which can leave a hole in a cliff wall.
 const stale = new Map();
@@ -411,6 +421,7 @@ function meshRegion({ rx, rz }, remesh = false) {
     if (part) meshes[k].push(part);
   }
   regionParts.set(`${rx},${rz}`, parts);
+  setSnow(`${rx},${rz}`, snowOnFoliage(blocks, REGION_SIZE, 1, [x, z]));
   if (!remesh) for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
     const n = { rx: rx + dx, rz: rz + dz };
     if (regionParts.has(`${n.rx},${n.rz}`)) stale.set(`${n.rx},${n.rz}`, n);
@@ -420,6 +431,7 @@ function meshRegion({ rx, rz }, remesh = false) {
 function freeRegion({ rx, rz }) {
   const parts = regionParts.get(`${rx},${rz}`);
   regionParts.delete(`${rx},${rz}`);
+  setSnow(`${rx},${rz}`, null);
   stale.delete(`${rx},${rz}`);
   for (const k of Object.keys(parts ?? {})) {
     for (const p of parts[k]) freeParts(p);
@@ -519,7 +531,8 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 function render(now) {
   remeshFarm();
 
-  const { alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000);
+  const snow = reducedMotion.matches ? null : { cells: snowCells, phase: swayPhase(now, false) };
+  const { alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow);
   if (regions) {
     regions.free.forEach(freeRegion);
     regions.mesh.forEach((r) => meshRegion(r));
@@ -607,7 +620,7 @@ function render(now) {
   if (scene) drawAnimals(mvp, readAnimals(walk));
   drawItems(mvp, readItems(walk), now / 1000, { yaw });
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
-  for (const { pos, size } of particles) drawBox(mvp, [...pos.map((v) => v - size), ...pos.map((v) => v + size)], true);
+  for (const { pos, size, snow } of particles) drawBox(mvp, [...pos.map((v) => v - size), ...pos.map((v) => v + size)], snow ? 'flake' : true);
   if (!flying) drawHeld(proj);
   inventoryView.update(controller.state.inventory, controller.state.belt);
   deathView.update(controller.state.dead);

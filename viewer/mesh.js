@@ -11,9 +11,9 @@
 //               the corner's two side neighbours and diagonal on the open side
 //               of full-cube faces; 0 elsewhere. The viewer shader reads it.
 //   byte  14    sway weight  uint8: 255 on the top vertices of cross plants,
-//               0 at their base; LEAF_WEIGHT on every vertex of a cutout leaf
-//               face; 0 on every other face. The client sways with it, and
-//               fades only weights >= 128 (plants, not leaves); the viewer
+//               0 at their base; LEAF_WEIGHT on every vertex of a cutout leaf,
+//               bush or snow-on-foliage face (swaysUnder); 0 on every other
+//               face. The client sways with it, and fades only weights >= 128 (plants, not leaves); the viewer
 //               ignores it
 //   byte  15    water depth uint8: on water faces, the water blocks from the face's
 //               block down to the first non-water block, capped at 255; 0 elsewhere
@@ -307,6 +307,10 @@ function pickLayer(ctx, layer, x, y, z) {
 // 128, which the client reads as "not a plant" so leaves never sink with the fade.
 export const LEAF_WEIGHT = 64;
 
+const BUSHES = flags([B.berry_bush, B.bush, B.jungle_bush]);
+/** Whether block `b` sways in the wind, so a snow layer on it sways too: cutout leaves (not `fast`) and bushes. */
+export const swaysUnder = (b, fast) => (LEAVES[b] && !fast) || BUSHES[b] === 1;
+
 // Berry bush: a cutout cube inset 2/16 on the sides and top (this project's choice).
 const BUSH_INSET = 2 / 16;
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
@@ -504,7 +508,9 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         } else if (b === B.snow_layer) {
           if (f.d[1] < 0 && SOLID_N[n]) continue;
           if (f.d[1] === 0 && (SOLID_N[n] || n === B.snow_layer)) continue;
-          boxFace(0, x, y, z, f, FULL_LO, SNOW_HI, layer, tint, vr);
+          // snow on swaying foliage sways with it, as a cutout with the leaf weight
+          const sway = y > 0 && swaysUnder(blocks[base + y - 1], fast);
+          boxFace(sway ? 3 : 0, x, y, z, f, FULL_LO, SNOW_HI, layer, tint, vr, null, sway ? LEAF_WEIGHT : 0);
         } else {
           // full cubes and leaves: hidden only by opaque cubes, so (unless
           // fast) leaves never hide their neighbours and leaf-leaf faces are
