@@ -359,6 +359,15 @@ impl Walk {
             .unwrap_or_default()
     }
 
+    /// The columns of the loaded region `(rx, rz)` that touch its neighbour
+    /// at `(-dx, -dz)` (an edge, or one column at a corner), laid out like
+    /// `region_blocks`, or empty if it isn't loaded.
+    pub fn region_border(&self, rx: i32, rz: i32, dx: i32, dz: i32) -> Vec<u8> {
+        self.0
+            .region_border(RegionCoord::new(rx, rz), dx, dz)
+            .unwrap_or_default()
+    }
+
     /// Regions an edit changed since the last call, as flat `rx, rz` pairs.
     pub fn drain_edited_regions(&mut self) -> Vec<i32> {
         let regions = self.0.drain_edited_regions();
