@@ -86,9 +86,9 @@ Today the timer's phase word, the hands item name, the death screen, the invento
 
 ## 4. Overlays and pages share one style
 
-- The inventory, death screen, pause/hint and menu all use the same panel, font, button style (a pressed and an unpressed panel state) and palette.
+- The inventory, death screen and pause/hint all use the same panel, font, button style (a pressed and an unpressed panel state) and palette. The menu shares only the button style, as set out below.
 - The first-load hint (`#hint` in `client/index.html`) becomes a panel with pixel text.
-- The root menu gets a title graphic in `art/` (a "Mince Raft" wordmark) above its panel.
+- The root menu gets a title graphic in `art/` (a "Mince Raft" wordmark) above its panel. The menu keeps its animated sea backdrop and gets only the wordmark and the shared button states, not the wooden panel for the rest of the screen. (Decided in #1433.)
 
 > **Reconciler:** The menu already has a styled title screen with an animated sea (`ui-art-and-inventory.md` phase B, `client/menu.js`); the wordmark and shared panel go on top of it, and the "alpha" label must stay (`client/test/menu.test.mjs`). The pressed panel state is new art (`panel_*` has one state only).
 
@@ -108,4 +108,4 @@ The first-person held item and item entities in the world are in #1137. Gameplay
 
 ## Open questions
 
-5. **One style or a separate menu treatment.** A: the wooden panel for every screen, the menu included. B: the menu keeps its animated sea backdrop and gets only the wordmark and shared buttons.
+None.
