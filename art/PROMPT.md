@@ -312,6 +312,19 @@ crosshair (7×7, transparent background): a plus of off-white pixels, arms
 3 long on each side with a transparent centre pixel, so the aimed block
 shows through. It will replace the CSS crosshair box.
 
+BATCH 34: VILLAGE BLOCKS (8x8, tileable; drawn by art/tools/draw_7_12.py,
+file batches_7_12.json; plank_step reuses the plank texture)
+thatch_top (bundled straw in yellow and sand with tan and brown shadow
+strands, no regular pattern), thatch_side (overlapping straw courses,
+each with a brown shadow line under it, so it tiles vertically),
+drying_rack (transparent background: a tan top bar over brown posts at
+both edges, with green kelp strips hanging from the bar), net
+(transparent background: a diamond mesh of sand and tan rope with
+darker knots, tiling on all edges), barrel_top (a round-looking lid of
+tan planks with dark seams inside a dark gray hoop rim), barrel_side
+(tan staves with dark brown seams and two dark gray hoops with a light
+gray glint)
+
 BATCH 33: WORDMARK (drawn by art/tools/draw_wordmark.py, file batches_33.json)
 wordmark (74×12, transparent background): "Mince Raft" in the pixel font's
 capitals at double size, yellow with a brown bottom row and a near-black

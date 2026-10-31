@@ -409,6 +409,22 @@ batch16 = {
                     ".0ddd0..", "..0e0...", "...0e00.", "....0ee0"],
 }
 
+# ---------------------------------------------------------------- batch 34
+batch34 = {
+    "thatch_top": ["f7ff6f7f", "7f6ff7f6", "ff7f6ff5", "6ff7ff6f",
+                   "f6ff7f6f", "ff5f6ff7", "7ff6f7ff", "f6f7ff6f"],
+    "thatch_side": ["7f7ff7f7", "f6ff6f6f", "6f6f6f66", "45545455",
+                    "f7ff7f7f", "ff6ff6ff", "6f66f6f6", "54554545"],
+    "drying_rack": ["66666665", "44444444", "4.8.98.4", "4.9.89.4",
+                    "4.8.98.4", "4.9..8.4", "4.8....4", "4......4"],
+    "net": ["6...5...", ".7.7.6.7", "..6...6.", ".7.6.7.7",
+            "5...6...", ".7.7.7.6", "..6...5.", ".6.7.7.7"],
+    "barrel_top": ["11111111", "17664661", "16654651", "16654651",
+                   "16654561", "16654651", "15554551", "11111111"],
+    "barrel_side": ["76546654", "13111131", "66546654", "76545654",
+                    "66546654", "65546664", "11131111", "76546654"],
+}
+
 # ---------------------------------------------------------------- sizes
 EXPECT = {
     # batch 9-12 explicit sizes (w, h); everything else defaults to 8x8
@@ -460,7 +476,7 @@ def check(name, rs, w, h):
 
 
 errs = []
-for b in (batch7, batch8, batch9, batch10, batch16):
+for b in (batch7, batch8, batch9, batch10, batch16, batch34):
     for k, v in b.items():
         errs += check(k, v, *EXPECT.get(k, (8, 8)))
 for b in (batch11, batch12):
@@ -488,6 +504,7 @@ out = {
     "Batch 12": {"title": "People", "tiles": False, "models": batch12,
                  "face_sizes": {k: MODEL_EXPECT[k] for k in batch12}},
     "Batch 16": {"title": "Item icons", "tiles": False, "textures": batch16},
+    "Batch 34": {"title": "Village blocks", "tiles": True, "textures": batch34},
 }
 json.dump(out, open("batches_7_12.json", "w"), indent=1)
 print("ok", {k: len(v.get("textures", v.get("models"))) for k, v in out.items()})
