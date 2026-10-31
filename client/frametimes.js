@@ -4,6 +4,9 @@
 
 export const FRAME_BUDGET_MS = 1000 / 60;
 
+// A wall-clock hitch is a frame longer than two frames at 60 Hz (about 33.3 ms).
+export const HITCH_MS = 2 * FRAME_BUDGET_MS;
+
 export class FrameTimes {
   constructor(capacity = 300) {
     this.buf = new Float64Array(capacity);
@@ -27,13 +30,34 @@ export class FrameTimes {
     return sorted[Math.min(n - 1, Math.max(0, Math.ceil((p / 100) * n) - 1))];
   }
 
+  /** Slowest frame in the window; 0 when empty. */
+  get max() {
+    let m = 0;
+    for (const ms of this.buf.subarray(0, this.count)) m = Math.max(m, ms);
+    return m;
+  }
+
+  /** Frames in the window longer than HITCH_MS. */
+  get hitches() {
+    let h = 0;
+    for (const ms of this.buf.subarray(0, this.count)) if (ms > HITCH_MS) h++;
+    return h;
+  }
+
   summary() {
-    return { frames: this.count, p50: this.percentile(50), p99: this.percentile(99) };
+    return {
+      frames: this.count,
+      p50: this.percentile(50),
+      p99: this.percentile(99),
+      max: this.max,
+      hitches: this.hitches,
+    };
   }
 
   /** One line for the overlay and the console. */
   format() {
-    const { frames, p50, p99 } = this.summary();
-    return `frame p50 ${p50.toFixed(1)} ms  p99 ${p99.toFixed(1)} ms  (${frames} frames)`;
+    const { frames, p50, p99, max, hitches } = this.summary();
+    return `frame p50 ${p50.toFixed(1)} ms  p99 ${p99.toFixed(1)} ms  max ${max.toFixed(1)} ms  ` +
+      `${hitches} hitches  (${frames} frames)`;
   }
 }
