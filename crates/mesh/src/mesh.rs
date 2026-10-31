@@ -7,7 +7,7 @@ use crate::ao::{face_ao, flips, rot};
 use crate::greedy::{merge, GRID_AXES};
 use crate::plants::cross;
 use crate::shapes::{bounds, box_hidden, face_corners, flat, flat_lift, is_box, LEAF_WEIGHT};
-use crate::tables::{face_uv, CROSS, FACES, VARIES};
+use crate::tables::{face_uv, CROSS, FACES, VARIES, WATERLOGGED};
 use crate::{js_round, pick_layer, variant_at, Quads, Tint, Tints, Variants};
 use alloc::vec::Vec;
 
@@ -26,6 +26,11 @@ const SOLID: [u8; 18] = [
 ];
 /// Oak, birch and spruce leaves: solid only with `fast`.
 const LEAVES: [u8; 3] = [11, 12, 13];
+
+/// Water or a waterlogged block: water faces between them are hidden.
+fn is_water(b: u8) -> bool {
+    b == WATER || WATERLOGGED[b as usize]
+}
 
 /// Whether `b` sways in the wind, so a snow layer on it sways too: cutout
 /// leaves (not with `fast`) and bushes.
@@ -122,7 +127,7 @@ pub fn mesh_blocks(
         for x in 0..size {
             let base = col(x, z);
             let mut y = H - 1;
-            while y > 0 && matches!(blocks[base + y], AIR | WATER | ICE) {
+            while y > 0 && (matches!(blocks[base + y], AIR | ICE) || is_water(blocks[base + y])) {
                 y -= 1;
             }
             min_y = min_y.min(y);
@@ -162,7 +167,13 @@ pub fn mesh_blocks(
         for x in 0..size {
             let base = col(x, z);
             for y in y0..H {
-                let b = blocks[base + y];
+                let mut b = blocks[base + y];
+                if WATERLOGGED[b as usize] {
+                    // the plant inside, then the cell's water faces as `water`
+                    let side = layer_of(face_layer, b, 0, false);
+                    cross(&mut out.cutout, b, [x, y, z], origin, side, tints, variants);
+                    b = WATER;
+                }
                 if let Some(lift) = flat_lift(b) {
                     let w = [origin[0] + x as i32, y as i32, origin[1] + z as i32];
                     let layer = layer_of(face_layer, b, 1, false);
@@ -217,11 +228,11 @@ pub fn mesh_blocks(
                     }
                     let quads = match b {
                         WATER => {
-                            if n == WATER || n == ICE || solid(n) {
+                            if is_water(n) || n == ICE || solid(n) {
                                 continue;
                             }
                             let mut k = 1;
-                            while k < 255 && y >= k && blocks[base + y - k] == WATER {
+                            while k < 255 && y >= k && is_water(blocks[base + y - k]) {
                                 k += 1;
                             }
                             depth = k as u8;
@@ -516,6 +527,113 @@ mod tests {
         );
         let max = m.water.bytes().chunks(16).map(|v| v[15]).max().unwrap();
         assert_eq!(max, 127);
+    }
+
+    const LOGGED: u8 = crate::tables::b::TEST_WATERLOGGED_PLANT;
+
+    fn plain(b: &[u8], size: usize, pad: usize, origin: [i32; 2]) -> Mesh {
+        mesh_blocks(
+            b,
+            size,
+            pad,
+            false,
+            false,
+            &layers(),
+            &Tints::NONE,
+            origin,
+            &Variants::NONE,
+        )
+    }
+
+    #[test]
+    fn waterlogged_cells_draw_as_water_plus_a_plant() {
+        // stone to 40, water 41..=44 with waterlogged cells at 42 and at the surface 44
+        let column = |logged: bool| {
+            world(1, 0, move |_, _, y| match y {
+                0..=40 => STONE,
+                42 | 44 if logged => LOGGED,
+                41..=44 => WATER,
+                _ => 0,
+            })
+        };
+        let (m, w) = (
+            plain(&column(true), 1, 0, [0, 0]),
+            plain(&column(false), 1, 0, [0, 0]),
+        );
+        // one top and 4 sides * 4 cells, nothing between water and waterlogged cells
+        assert_eq!(m.water.faces(), 1 + 16);
+        // the same water bytes as plain water: faces, top quad, tint and depth
+        assert_eq!(m.water.bytes(), w.water.bytes());
+        let top = m.water.bytes().chunks(64).filter(|q| {
+            q.chunks(16)
+                .all(|v| i16::from_le_bytes([v[2], v[3]]) == 45 * 16)
+        });
+        assert_eq!(top.count(), 1);
+        let max = m.water.bytes().chunks(16).map(|v| v[15]).max().unwrap();
+        assert_eq!(max, 4);
+        // four cross quads in each waterlogged cell, at y 42 and 44
+        assert_eq!((m.cutout.faces(), w.cutout.faces()), (8, 0));
+        let mut ys: Vec<i16> = m
+            .cutout
+            .bytes()
+            .chunks(16)
+            .map(|v| i16::from_le_bytes([v[2], v[3]]).div_euclid(16))
+            .collect();
+        ys.sort();
+        ys.dedup();
+        assert_eq!(ys, [42, 43, 44, 45]);
+        assert_eq!((m.min_y, m.mean_y), (w.min_y, w.mean_y));
+    }
+
+    #[test]
+    fn waterlogged_cells_do_not_depend_on_the_area() {
+        let f = |x: i32, z: i32, y: usize| match y {
+            0..=40 => STONE,
+            41..=43 if (x * 3 + z * 5).rem_euclid(4) == 0 => LOGGED,
+            41..=43 => WATER,
+            _ => 0,
+        };
+        // plant vertices in world space (x, y, z, then the other bytes) inside
+        // the 2x2 columns from world `keep`
+        let plants = |size: usize, o: [i32; 2], keep: [i32; 2]| {
+            let m = plain(
+                &world(size, 1, |x, z, y| f(x + o[0], z + o[1], y)),
+                size,
+                1,
+                o,
+            );
+            // the water is all tops at depth 3: no faces between the cells
+            let mut tops = m.water.bytes().chunks(16);
+            assert!(tops.all(|v| v[2..4] == (44i16 * 16).to_le_bytes() && v[15] == 3));
+            let mut v: Vec<Vec<Vec<u8>>> = Vec::new();
+            for quad in m.cutout.bytes().chunks(64) {
+                let p = |i: usize, k: usize| {
+                    i16::from_le_bytes([quad[i * 16 + k], quad[i * 16 + k + 1]]) as i32
+                };
+                // the plant's corner nearest -x, -z lies inside its own cell
+                let min = |k| (0..4).map(|i| p(i, k)).min().unwrap().div_euclid(16);
+                let cell = [min(0) + o[0], min(4) + o[1]];
+                if (0..2).contains(&(cell[0] - keep[0])) && (0..2).contains(&(cell[1] - keep[1])) {
+                    v.push(
+                        (0..4)
+                            .map(|i| {
+                                let mut e = [p(i, 0) + o[0] * 16, p(i, 2), p(i, 4) + o[1] * 16]
+                                    .iter()
+                                    .flat_map(|c| c.to_le_bytes())
+                                    .collect::<Vec<u8>>();
+                                e.extend_from_slice(&quad[i * 16 + 6..i * 16 + 16]);
+                                e
+                            })
+                            .collect(),
+                    );
+                }
+            }
+            v.sort();
+            v
+        };
+        let small = plants(2, [9, -3], [9, -3]);
+        assert!(!small.is_empty());
+        assert_eq!(plants(6, [7, -5], [9, -3]), small);
     }
 
     #[test]
