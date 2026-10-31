@@ -12,8 +12,9 @@
 //   ?debug=1     debug mode on (also on whenever ?scene= is set); see debug.js
 //   ?log=N      console.log the frame-time summary every N frames, for headless runs
 //
-// window.frameStats() returns { frames, p50, p99, max, hitches } at any time:
-// max is the slowest frame in the window, hitches the frames over HITCH_MS.
+// window.frameStats() returns { frames, p50, p99, max, hitches, records } at any time:
+// max is the slowest frame in the window, hitches the frames over HITCH_MS, records
+// the work done in the last hitch frames ({ ms, meshed, remeshed, verts, ticks, chunks }).
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, * as game from './pkg/game_web.js';
@@ -315,8 +316,11 @@ function quadIndexBuffer(quads) {
   return quadIB;
 }
 
+// Work done this frame, kept with the frame time when the frame is a hitch.
+let work = { meshed: 0, remeshed: 0, verts: 0, ticks: 0, chunks: 0 };
 function upload({ verts, faces }, offset) {
   if (!faces) return null;
+  work.verts += verts.byteLength / VERTEX_BYTES;
   const ib = quadIndexBuffer(faces);
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
@@ -410,6 +414,7 @@ const setSnow = (key, cells) => {
 const stale = new Map();
 const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); };
 function meshRegion({ rx, rz }, remesh = false) {
+  work[remesh ? 'remeshed' : 'meshed']++;
   const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
   // one column of the neighbours' edges around the region, so no seams at its borders
   const blocks = padRegion((a, b) => walk.region_blocks(a, b), (a, b, dx, dz) => walk.region_border(a, b, dx, dz), rx, rz, REGION_SIZE);
@@ -518,7 +523,7 @@ const consoleUI = debug && createConsoleUI({
   onCancel: () => controller.closeConsole(),
 });
 if (consoleUI) window.consoleOutput = () => outputBuffer.lines; // every line this session, for scripts
-window.frameStats = () => frames.summary();
+window.frameStats = () => ({ ...frames.summary(), records: frames.hitchRecords() });
 
 function drawParts(prog, parts) {
   for (const m of parts) {
@@ -531,11 +536,14 @@ function drawParts(prog, parts) {
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 function render(now) {
+  work = { meshed: 0, remeshed: 0, verts: 0, ticks: 0, chunks: 0 };
   remeshFarm();
 
   const snow = reducedMotion.matches ? null : { cells: snowCells, phase: swayPhase(now, false) };
-  const { alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow);
+  const { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow);
+  work.ticks = ticks;
   if (regions) {
+    work.chunks = regions.chunks;
     regions.free.forEach(freeRegion);
     regions.mesh.forEach((r) => meshRegion(r));
     // A pick or other edit changed these regions' blocks: mesh them again.
@@ -629,7 +637,7 @@ function render(now) {
   hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
   hint.update(input.locked);
 
-  if (lastFrame !== null) frames.push(now - lastFrame);
+  if (lastFrame !== null) frames.push(now - lastFrame, work);
   lastFrame = now;
   if (consoleUI) {
     for (const text of walk.drain_command_output()) outputBuffer.output(text, now);
@@ -638,7 +646,9 @@ function render(now) {
   if (now - overlayAt > 250) {
     overlayAt = now;
     const p99 = frames.percentile(99);
+    const hitch = frames.formatLastHitch();
     overlay.textContent = `${frames.format()}\n${p99 > FRAME_BUDGET_MS ? 'over' : 'within'} the 16.7 ms p99 budget\n` +
+      (hitch ? `${hitch}\n` : '') +
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 cheated: ${walk.cheated() ? 'yes' : 'no'}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `

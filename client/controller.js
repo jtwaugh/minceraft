@@ -34,8 +34,9 @@
 // With `stream` ({ budget }) the walk is a Walk.streamed world: each frame the
 // controller feeds the sim's load and unload events to a stream (stream.js)
 // centred on the eye, and `state.regions` is { mesh, free, loaded, freed, pending,
-// centre }: regions to mesh and to free this frame, how many are meshed now, how
-// many have been freed so far, and how many wait for the budget. While flying the
+// chunks, centre }: regions to mesh and to free this frame, how many are meshed now, how
+// many have been freed so far, how many wait for the budget, and how many the sim
+// loaded since the previous frame. While flying the
 // sim is not ticked, so the walk's feet follow the fly camera whenever it enters
 // a new region; otherwise nothing would load ahead of it.
 //
@@ -74,10 +75,13 @@ export function createController({ input, walk, fly, clock, document, flying = f
       followed = centre;
       walk.teleport(eye[0], eye[1] - 1.62, eye[2]); // streams around the fly eye
     }
-    const { mesh, free } = regions.frame(walk.drain_stream(), centre);
+    const events = walk.drain_stream();
+    let chunks = 0;
+    for (let i = 0; i < events.length; i += 3) if (events[i] === 1) chunks++;
+    const { mesh, free } = regions.frame(events, centre);
     freed += free.length;
     const remesh = regions.edited(walk.drain_edited_regions());
-    return { mesh, free, remesh, loaded: regions.meshed, freed, pending: regions.pending, centre };
+    return { mesh, free, remesh, loaded: regions.meshed, freed, pending: regions.pending, chunks, centre };
   };
 
   return {

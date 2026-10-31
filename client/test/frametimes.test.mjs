@@ -2,7 +2,7 @@
 // Run: node --test client/test/frametimes.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FrameTimes, FRAME_BUDGET_MS, HITCH_MS } from '../frametimes.js';
+import { FrameTimes, FRAME_BUDGET_MS, HITCH_MS, HITCH_RECORDS } from '../frametimes.js';
 
 test('frame times report nearest-rank percentiles over the window', () => {
   const f = new FrameTimes(100);
@@ -45,4 +45,34 @@ test('max and hitches drop frames the ring buffer overwrote', () => {
 
 test('the hitch threshold is two frame budgets', () => {
   assert.equal(HITCH_MS, 2 * FRAME_BUDGET_MS);
+});
+
+test('a hitch frame keeps a record of its work; other frames add none', () => {
+  const f = new FrameTimes();
+  const work = { meshed: 2, remeshed: 1, verts: 4096, ticks: 3, chunks: 5 };
+  f.push(10, work);
+  f.push(HITCH_MS, work); // exactly the threshold is not a hitch
+  f.push(50, work);
+  f.push(60); // a hitch with no work counted records zeros
+  assert.deepEqual(f.hitchRecords(), [
+    { ms: 50, ...work },
+    { ms: 60, meshed: 0, remeshed: 0, verts: 0, ticks: 0, chunks: 0 },
+  ]);
+  assert.match(f.formatLastHitch(), /^last hitch 60\.0 ms: 0 meshed/);
+});
+
+test('hitch records are bounded and evict the oldest first', () => {
+  const f = new FrameTimes();
+  for (let i = 0; i < HITCH_RECORDS + 3; i++) f.push(100 + i, { meshed: i });
+  const r = f.hitchRecords();
+  assert.equal(r.length, HITCH_RECORDS);
+  assert.equal(r[0].meshed, 3);
+  assert.equal(r.at(-1).meshed, HITCH_RECORDS + 2);
+});
+
+test('a series with no hitches keeps no records', () => {
+  const f = new FrameTimes(10);
+  for (let i = 0; i < 50; i++) f.push(16, { meshed: 1, verts: 100 });
+  assert.deepEqual(f.hitchRecords(), []);
+  assert.equal(f.formatLastHitch(), '');
 });
