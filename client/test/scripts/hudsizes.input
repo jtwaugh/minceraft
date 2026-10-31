@@ -9,7 +9,8 @@ click
 lock
 mouse 632 120
 frame 50 x2
-press KeyE
+button down right
+button up right
 frame 50 x2
 expect hands = seeds
 layout 390 844
@@ -26,7 +27,8 @@ click
 lock
 mouse 632 120
 frame 50 x2
-press KeyE
+button down right
+button up right
 frame 50 x2
 expect hands = seeds
 layout 1366 768
@@ -43,7 +45,8 @@ click
 lock
 mouse 632 120
 frame 50 x2
-press KeyE
+button down right
+button up right
 frame 50 x2
 expect hands = seeds
 layout 1920 1080
@@ -60,7 +63,8 @@ click
 lock
 mouse 632 120
 frame 50 x2
-press KeyE
+button down right
+button up right
 frame 50 x2
 expect hands = seeds
 layout 3440 1440

@@ -11,6 +11,10 @@ const WIDTH = 128;
 const GAP = 1; // empty border so linear filtering does not bleed between rects
 const GREY = [128, 128, 128, 255];
 export const FALLBACK = '(grey)';
+// A fully transparent rect: faces that name it are discarded by the shader.
+export const CLEAR = '(clear)';
+// The four thin edge faces of a sprite slab, all CLEAR, so only the icon shows.
+export const CLEAR_EDGES = { left: CLEAR, right: CLEAR, top: CLEAR, bottom: CLEAR };
 
 const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
@@ -32,7 +36,7 @@ export function packAtlas(exportJson, textureNames = []) {
     }
   }
   const order = [...grids].sort(([an, a], [bn, b]) => b.length - a.length || (an < bn ? -1 : an > bn ? 1 : 0));
-  order.unshift([FALLBACK, ['g']]);
+  order.unshift([FALLBACK, ['g']], [CLEAR, ['.']]);
 
   const rects = {};
   let x = 0, y = 0, shelf = 0;

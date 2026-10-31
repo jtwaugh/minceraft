@@ -231,7 +231,7 @@ fn killed_animal_drops_can_be_picked_up_and_carried() {
     };
     w.tick(&aim);
     w.tick(&TickInput {
-        interact: true,
+        secondary: true,
         ..aim
     });
     assert_eq!(

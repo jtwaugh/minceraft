@@ -49,7 +49,8 @@ click
 lock
 mouse 632 120
 frame 50 x2
-press KeyE
+button down right
+button up right
 frame 50 x2
 layout 1366 768
 expect layout.hands.label = inside`)[0]);

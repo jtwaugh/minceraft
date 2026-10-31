@@ -162,7 +162,7 @@ impl Session {
         let aim = self.aim([at[0], at[1] + 0.1, at[2]]);
         self.tick(&aim);
         self.tick(&TickInput {
-            interact: true,
+            secondary: true,
             ..aim
         });
         assert_eq!(self.w.hands().map(|h| h.item.as_str()), Some(item));

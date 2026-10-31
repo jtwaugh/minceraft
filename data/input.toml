@@ -59,12 +59,14 @@ mode = "hold"
 keys = ["MouseLeft"]
 mode = "edge"
 
-# Press edge, plus hold for repeat where an item says so.
+# Press edge, plus hold for repeat where an item says so. Right-click also
+# picks up the aimed loose item when the hands are empty (tools go to the belt).
 [actions.secondary]
 keys = ["MouseRight"]
 mode = "edge"
 hold_repeat = true
 
+# Takes and leaves the raft's helm. Pickup is on secondary (right-click).
 [actions.interact]
 keys = ["KeyE"]
 mode = "edge"

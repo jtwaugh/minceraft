@@ -3,6 +3,7 @@
 // ([[tool]] in data/items.toml); items use ITEM_TEXTURES (itemmodel.js).
 
 import { itemTextureName } from './itemmodel.js';
+import { CLEAR_EDGES } from './models.js';
 
 export const HELD_TEXTURES = ['sword', 'hoe'];
 
@@ -35,7 +36,7 @@ export const HELD_USE_PITCH = 15;
 export function heldBoxes(held) {
   const tex = heldTextureName(held);
   if (!tex) return [];
-  const faces = { front: tex, back: tex };
+  const faces = { front: tex, back: tex, ...CLEAR_EDGES };
   return [{ lo: [-0.5, -0.5, -SLAB / 2], size: [1, 1, SLAB], faces }];
 }
 

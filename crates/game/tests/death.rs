@@ -269,7 +269,7 @@ fn a_tool_dropped_on_death_can_be_picked_up_onto_the_empty_belt() {
     let d = [0, 1, 2].map(|i| sword.pos[i] - eye[i]);
     let flat = (d[0] * d[0] + d[2] * d[2]).sqrt();
     w.tick(&TickInput {
-        interact: true,
+        secondary: true,
         yaw: d[0].atan2(-d[2]) as f32,
         pitch: d[1].atan2(flat) as f32,
         ..idle()
@@ -292,9 +292,9 @@ fn facing_loose(name: &str) -> (Walker, game::targeting::EntityId) {
     (w, id)
 }
 
-fn press_interact() -> TickInput {
+fn press_pick_up() -> TickInput {
     TickInput {
-        interact: true,
+        secondary: true,
         ..idle()
     }
 }
@@ -313,7 +313,7 @@ fn pickup_run() -> (u64, Vec<GameEvent>, Vec<Option<String>>) {
     });
     w.player_state_mut().tool_belt[2] = None;
     w.drain_events();
-    w.tick(&press_interact());
+    w.tick(&press_pick_up());
     assert!(w.items().get(id).is_none());
     assert_eq!(w.hands().map(|h| h.item.as_str()), Some("wheat"));
     (w.world_hash(), w.drain_events(), belt_tools(&w))
@@ -343,7 +343,7 @@ fn a_full_belt_leaves_the_loose_tool_in_place() {
     }
     let belt = belt_tools(&w);
     w.drain_events();
-    w.tick(&press_interact());
+    w.tick(&press_pick_up());
     assert!(w.items().get(id).is_some());
     assert_eq!(belt_tools(&w), belt);
     assert!(w.drain_events().is_empty());
@@ -355,11 +355,11 @@ fn an_ordinary_item_still_needs_empty_hands() {
     w.player_state_mut().hands = Some(game::items::ItemInstance {
         item: "stick".into(),
     });
-    w.tick(&press_interact());
+    w.tick(&press_pick_up());
     assert!(w.items().get(id).is_some());
     assert_eq!(w.hands().map(|h| h.item.as_str()), Some("stick"));
     w.player_state_mut().hands = None;
-    w.tick(&press_interact());
+    w.tick(&press_pick_up());
     assert!(w.items().get(id).is_none());
     assert_eq!(w.hands().map(|h| h.item.as_str()), Some("wheat"));
 }
