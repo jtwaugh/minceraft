@@ -18,6 +18,7 @@ pub mod fish_bodies;
 pub mod fish_columns;
 pub mod fish_entities;
 pub mod fish_spawn_config;
+pub mod fish_spawner;
 pub mod fish_steer;
 pub mod forage;
 pub mod growth;
