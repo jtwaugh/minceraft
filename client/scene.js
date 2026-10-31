@@ -411,7 +411,7 @@ const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); 
 function meshRegion({ rx, rz }, remesh = false) {
   const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
   // one column of the neighbours' edges around the region, so no seams at its borders
-  const blocks = padRegion((a, b) => walk.region_blocks(a, b), rx, rz, REGION_SIZE);
+  const blocks = padRegion((a, b) => walk.region_blocks(a, b), (a, b, dx, dz) => walk.region_border(a, b, dx, dz), rx, rz, REGION_SIZE);
   const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE, blendRadius);
   if (rx === 0 && rz === 0 && !skyReady) skyColor = skyTarget = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
   const m = meshBlocksWasm(terrain, ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });

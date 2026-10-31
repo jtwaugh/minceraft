@@ -47,7 +47,7 @@ test('the client region and scene meshes are the same from the wasm mesher', () 
   const faceLayer = new Uint8Array(256 * 3 * 2).map((_, i) => (i * 7) % 241);
   const real = { ...legendContext(terrain.legend()), faceLayer, variants: { 3: { count: 3, cum: [0.6, 0.8, 1] } } };
   const seed = 12345n, walk = Walk.streamed(seed, 32, 127, 32);
-  const region = padRegion((a, b) => walk.region_blocks(a, b), 0, 0, REGION_SIZE);
+  const region = padRegion((a, b) => walk.region_blocks(a, b), (a, b, dx, dz) => walk.region_border(a, b, dx, dz), 0, 0, REGION_SIZE);
   const scene = new Scene();
   const cases = [
     [region, columnTints(terrain, real, seed, 0, 0, REGION_SIZE), REGION_SIZE, 1, [0, 0]],
@@ -61,4 +61,26 @@ test('the client region and scene meshes are the same from the wasm mesher', () 
     assert.equal(rs.meanY, js.meanY);
     assert.equal(rs.minY, js.minY);
   }
+});
+
+// On the real wasm, a region padded from its neighbours' border strips equals one padded
+// from their whole blocks, and region_blocks is read once per meshed region.
+test('a streamed region padded from region_border equals one padded from whole neighbours', () => {
+  const walk = Walk.streamed(12345n, 64, 127, 64);
+  const S = REGION_SIZE, w = S + 2;
+  let fullReads = 0;
+  const get = (a, b) => { fullReads++; return walk.region_blocks(a, b); };
+  const got = padRegion(get, (a, b, dx, dz) => walk.region_border(a, b, dx, dz), 0, 0, S);
+  assert.equal(fullReads, 1);
+  const want = new Uint8Array(w * w * H);
+  for (let z = -1; z <= S; z++) {
+    for (let x = -1; x <= S; x++) {
+      const dx = x < 0 ? -1 : x >= S ? 1 : 0, dz = z < 0 ? -1 : z >= S ? 1 : 0;
+      const nb = walk.region_blocks(dx, dz);
+      assert.ok(nb.length, `${dx},${dz} loaded`);
+      const c = ((z + S) % S) * S + (x + S) % S;
+      want.set(nb.subarray(c * H, (c + 1) * H), ((z + 1) * w + x + 1) * H);
+    }
+  }
+  assert.ok(got.every((v, i) => v === want[i]));
 });
