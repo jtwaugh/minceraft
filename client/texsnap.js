@@ -8,6 +8,8 @@
 // REPEAT would be the opposite edge of the same tile. Inside a greedy-merged
 // quad px passes the boundary itself and so reaches the next block's texel 0.
 
+export const TEX_SIZE = 16; // side of every layer in the tile array (tiles.js)
+
 export function snapTexel(px, fw) {
   const seam = Math.floor(px + 0.5);
   return seam + Math.min(Math.max((px - seam) / Math.max(fw, 1e-4), -0.5), 0.5);
@@ -18,3 +20,8 @@ export const SNAP_GLSL = `
       vec2 seam = floor(px + 0.5);
       return seam + clamp((px - seam) / max(fw, vec2(1e-4)), -0.5, 0.5);
     }`;
+
+// Shader lines that set `snapped` (tile-array UV) from `vuv.xy`; the unsnapped
+// derivatives of `vuv` keep mip selection.
+export const SNAP_SAMPLE_GLSL = `vec2 px = vuv.xy * ${TEX_SIZE}.0;
+      vec2 snapped = snapTexel(px, fwidth(px)) / ${TEX_SIZE}.0;`;

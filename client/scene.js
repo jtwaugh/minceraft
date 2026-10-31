@@ -45,7 +45,7 @@ import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
 import { sampleSky, easeSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
-import { SNAP_GLSL } from './texsnap.js';
+import { SNAP_GLSL, SNAP_SAMPLE_GLSL } from './texsnap.js';
 import { SKY_GLSL } from '../viewer/sky.js';
 import { WATER_GLSL, WATER_DEPTH_GLSL } from '../viewer/water.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
@@ -85,7 +85,6 @@ if (!gl) throw new Error('WebGL2 is not available');
 // `fogStart` to `fogEnd` (under water); both measure distance from the eye. `tint` multiplies the
 // lit colour, both set per frame by view.js `look`, so the same shader draws
 // above and under water.
-const TEX_SIZE = 16; // side of every layer in the tile array (tiles.js)
 // GLSL for swayOffset in sway.js at `amplitude`: moves `w.xz` by weight `top` along the shared wave.
 const swayGlsl = (amplitude) => `float k = ${SWAY_WAVE.toFixed(3)};
       w.xz += ${amplitude.toFixed(3)} * top * vec2(sin(swayPhase + (w.x + 0.6 * w.z) * k), cos(swayPhase + (w.z - 0.6 * w.x) * k));`;
@@ -147,8 +146,7 @@ function program(cut) {
     ${WATER_DEPTH_GLSL}
     void main() {
       // snap UVs to texel centres; the unsnapped derivatives keep mip selection
-      vec2 px = vuv.xy * ${TEX_SIZE}.0;
-      vec2 snapped = snapTexel(px, fwidth(px)) / ${TEX_SIZE}.0;
+      ${SNAP_SAMPLE_GLSL}
       vec4 t = textureGrad(tex, vec3(snapped, vuv.z), dFdx(vuv.xy), dFdy(vuv.xy));
       ${cut && !msaa ? 'if (t.a < 0.5) discard;' : ''}
       ${cut && msaa ? 'float ca = clamp((t.a - 0.5) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);' : ''}
