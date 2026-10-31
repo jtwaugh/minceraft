@@ -27,12 +27,14 @@ concurrency:
 jobs:
   review:
     # Public repo: review only PRs from branches in this repo (not forks),
-    # opened by jtwaugh or the Claude app, and updated by them or by this
-    # repo's own workflows (a conflict merge can be pushed as github-actions).
+    # opened and updated by jtwaugh, the Claude app or this repo's own
+    # workflows (the factory tick opens a PR for a branch an implementer
+    # pushed without one, and a conflict merge can be pushed as
+    # github-actions).
     if: |
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.pull_request.user.login) &&
+      contains(fromJSON('["jtwaugh", "claude[bot]", "github-actions[bot]"]'), github.event.pull_request.user.login) &&
       contains(fromJSON('["jtwaugh", "claude[bot]", "github-actions[bot]"]'), github.actor)
     runs-on: ubuntu-latest
     timeout-minutes: 30
