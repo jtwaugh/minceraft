@@ -33,8 +33,10 @@
 //
 // With `stream` ({ budget }) the walk is a Walk.streamed world: each frame the
 // controller feeds the sim's load and unload events to a stream (stream.js)
-// centred on the eye, and `state.regions` is { mesh, free, loaded, freed, pending,
-// chunks, centre }: regions to mesh and to free this frame, how many are meshed now, how
+// centred on the eye, and `state.regions` is { mesh, free, remesh, loaded, freed, pending,
+// chunks, centre }: regions to mesh and to free this frame, meshed regions to mesh again
+// (edited ones, plus one stale neighbour on a frame that meshes nothing new; none of them
+// in `mesh`), how many are meshed now, how
 // many have been freed so far, how many wait for the budget, and how many the sim
 // loaded since the previous frame. While flying the
 // sim is not ticked, so the walk's feet follow the fly camera whenever it enters
@@ -78,9 +80,13 @@ export function createController({ input, walk, fly, clock, document, flying = f
     const events = walk.drain_stream();
     let chunks = 0;
     for (let i = 0; i < events.length; i += 3) if (events[i] === 1) chunks++;
-    const { mesh, free } = regions.frame(events, centre);
+    const { mesh, free, stale } = regions.frame(events, centre);
     freed += free.length;
-    const remesh = regions.edited(walk.drain_edited_regions());
+    const remesh = [];
+    for (const r of [...regions.edited(walk.drain_edited_regions()), ...stale]) {
+      const same = (m) => m.rx === r.rx && m.rz === r.rz;
+      if (!mesh.some(same) && !remesh.some(same)) remesh.push(r);
+    }
     return { mesh, free, remesh, loaded: regions.meshed, freed, pending: regions.pending, chunks, centre };
   };
 
