@@ -76,29 +76,22 @@ Grass under a tree is the same colour as grass in open sun. Under real canopies 
 - **Not Beta behaviour.** Beta grass colour depends only on climate (SPEC). This is a project choice layered on top; don't take facts about the original from anywhere but SPEC.
 - **World output:** unchanged if tint-only.
 
-> **Reconciler:** Answers, from the code. Render-only: kept out of the world, as preferred. Borders: the blur pads climate colour only, and the block padding is 1 column, so it does not yet cover a shade window (Reconciliation notes); full column height is present in the padded blocks. Light vs. tint: stated in the notes; AO exists and is separate. Player changes: the region remesh recomputes from blocks. Viewer and flyover: `worker.js` calls `columnTints` and `meshBlocks` the same way, so they share the change; the doc treats that as wanted (open question 1 lets the maintainer say otherwise).
+> **Reconciler:** Answers, from the code. Render-only: kept out of the world, as preferred. Borders: the blur pads climate colour only, and the block padding is 1 column, so it does not yet cover a shade window (Reconciliation notes); full column height is present in the padded blocks. Light vs. tint: stated in the notes; AO exists and is separate. Player changes: the region remesh recomputes from blocks. Viewer and flyover: `worker.js` calls `columnTints` and `meshBlocks` the same way, so they share the change; the maintainer confirmed that is wanted: the viewer and flyover get the shaded tint too, with no client-only option. (Decided in #1627.)
 
 ## Phases (reconciler)
 
-**Phase A.** The shade value and the grass top face. Add the data keys (`shade_mix`, and the window size) to `data/biomes.toml` `[blend]`, expose them through the legend, and raise the block padding the callers pass if the window needs it. Compute, per column, whether leaves lie above the top grass block (one scan per column), take the fraction of that over the window (option C), blur it with an exact integer sum so it depends only on world blocks, and mix the grass top face tint toward `tints.dry` by `shade_mix * fraction`, per corner like the existing tints. Done when: tests show a column under a tree gets a tint between grass and dry and an open column keeps its grass tint exactly; `shade_mix = 0` reproduces today's tints; a column's value is the same from two overlapping areas with different origins and sizes (the determinism test CLAUDE.md asks for); breaking or placing a leaf block and remeshing changes the result; `node --test` for viewer and client passes, `preview.mjs` still plans a route, and `./build.sh` succeeds with wasm size reported if it changed.
+**Phase A.** The shade value and the grass top face. Add the data keys (`shade_mix`, and the window size) to `data/biomes.toml` `[blend]`, expose them through the legend, and raise the block padding the callers pass if the window needs it. The window is 3×3, and the block padding is raised to cover the window plus the blur, so region edges agree. Compute, per column, whether leaves lie above the top grass block (one scan per column), take the fraction of that over the window (option C), blur it with an exact integer sum so it depends only on world blocks, and mix the grass top face tint toward `tints.dry` by `shade_mix * fraction`, per corner like the existing tints. Done when: tests show a column under a tree gets a tint between grass and dry and an open column keeps its grass tint exactly; `shade_mix = 0` reproduces today's tints; a column's value is the same from two overlapping areas with different origins and sizes (the determinism test CLAUDE.md asks for); breaking or placing a leaf block and remeshing changes the result; `node --test` for viewer and client passes, `preview.mjs` still plans a route, and `./build.sh` succeeds with wasm size reported if it changed. (Decided in #1628.)
 
 **Phase B.** Flora follows the ground. Apply the same mix to the tint of grass-tinted flora on shaded columns (`tall_grass`, double tall grass, `fern`, `large_fern`, `broadleaf`, and `bush` if open question 2 says yes), and fix the duplicated `dry_grass` case in `tintFor` if open question 3 confirms it is a bug. Done when: a test shows a plant on a shaded column takes the same fractional shift as the grass under it, a plant on an open column is unchanged, and dry grass takes the `dry` tint.
 
 ## Open questions
 
-1. **Viewer and flyover.** Should the shaded tint apply there too, or only in the client?
-   - A. Yes, all share it (the doc's guess; the lowest cost, as they share `columnTints`/`meshBlocks`).
-   - B. Client only, behind an option passed by the caller.
 2. **Bushes and leaves.** `bush`, `berry_bush` and `jungle_bush` use the leaf tint, not the grass tint. Should they shift too?
    - A. No: only grass-tinted plants (tall grass, ferns, `broadleaf`).
    - B. Yes, toward the dry ramp, like the ground.
 3. **Dry grass tint.** Is it intended that `dry_grass` and its tall halves use the grass tint (as the first `case` does), or the `dry` ramp (as the second `case` and `data/flora.toml` `tint = "dry"` say)?
    - A. A bug: use the `dry` ramp, in Phase B.
    - B. Intended for now: leave it and open a separate ticket.
-4. **Window and padding.** How wide is the shade window and how is the border handled?
-   - A. 3×3, block pad raised to cover window plus blur.
-   - B. 5×5, pad raised further (costs more padded generation per region).
-   - C. 3×3 with no extra pad: the outermost ring of columns is slightly off at region edges, which breaks the border-agreement rule, so not recommended.
 5. **Neighbour remesh on edits.** When a player breaks leaves at a region edge, should the neighbour region be remeshed too?
    - A. Yes, queue the adjacent regions through the existing `stale` path.
    - B. No: accept a seam until the neighbour next meshes.
