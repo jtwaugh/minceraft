@@ -1,8 +1,9 @@
 //! Streaming of terrain regions around the player.
 //! See docs/design/world-layout.md Phase D (Multi-region world).
 
+use crate::fish_columns::FishColumns;
 use crate::walk::RegionSet;
-use layout::{CacheChange, Corridor, Layout, RegionCache, RegionCoord};
+use layout::{CacheChange, Corridor, FishColumn, Layout, RegionCache, RegionCoord};
 
 const DEFAULT_STREAMING: &str = include_str!("../../../data/streaming.toml");
 
@@ -58,6 +59,7 @@ pub struct Streamer {
     config: StreamConfig,
     centre: Option<RegionCoord>,
     pending: CacheChange,
+    fish: FishColumns,
 }
 
 impl Streamer {
@@ -67,7 +69,14 @@ impl Streamer {
             config,
             centre: None,
             pending: CacheChange::default(),
+            fish: FishColumns::default(),
         }
+    }
+
+    /// Habitat, temperature and depth of the water column at `(x, z)`;
+    /// `None` on land or outside the loaded regions.
+    pub fn fish_column(&mut self, x: i32, z: i32) -> Option<FishColumn> {
+        self.fish.column(&self.cache, x, z)
     }
 
     /// Regions loaded and unloaded since the last call, for a renderer that
@@ -104,6 +113,7 @@ impl Streamer {
         let change = self
             .cache
             .update(centre, self.config.load, self.config.unload);
+        self.fish.retain_loaded(&self.cache);
         for c in &change.unloaded {
             let (x0, z0) = c.origin();
             world.remove(x0, z0);
