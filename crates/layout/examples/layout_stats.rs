@@ -1,6 +1,6 @@
 //! Measures the v0 layout over seeds 1..=N (default 200): island centre
 //! height and water depth under the raft. Used to tune `builder.rs`.
-use layout::{build_layout, default_v0_level, WorldConfig};
+use layout::{build_layout, default_v0_level, is_sea_ice, WorldConfig};
 use terrain::{column_summary, Block, HEIGHT, SEA_LEVEL};
 
 fn main() {
@@ -15,7 +15,7 @@ fn main() {
         let [ix, iz] = level.island_center;
         let r = l.generate_region(ix, iz, 1, 1, false);
         let (top, ty, _, _) = column_summary(&r.blocks[..HEIGHT]);
-        let wet = top == Block::Water as u8 || top == Block::Ice as u8;
+        let wet = top == Block::Water as u8 || is_sea_ice(top);
         if !wet && ty as i32 >= SEA_LEVEL {
             land += 1;
         }

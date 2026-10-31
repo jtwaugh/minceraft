@@ -274,7 +274,7 @@ pub use channel::ChannelEval;
 mod corridor;
 pub use corridor::Corridor;
 mod derived;
-pub use derived::{DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
+pub use derived::{is_sea_ice, DerivedMaps, NO_BOTTOM, SHORE_DISTANCE_CAP, SHORE_PAD};
 mod fish;
 pub use fish::{Fish, FishColumn, Species};
 #[cfg(feature = "toml-io")]

@@ -48,7 +48,7 @@ fn main() {
             let i = r.index(x, 0, z);
             let (tb, _, _, _) = column_summary(&r.blocks[i..i + 128]);
             top_counts[tb as usize] += 1;
-            if tb == Block::Water as u8 || tb == Block::Ice as u8 {
+            if tb == Block::Water as u8 || tb == Block::Ice as u8 || tb == Block::FloeIce as u8 {
                 water_cols += 1;
             }
         }
@@ -56,6 +56,11 @@ fn main() {
     println!(
         "water/ice columns: {:.1}%",
         100.0 * water_cols as f64 / n as f64
+    );
+    println!(
+        "sea ice columns: ice={:.2}% floe_ice={:.2}%",
+        100.0 * top_counts[Block::Ice as usize] as f64 / n as f64,
+        100.0 * top_counts[Block::FloeIce as usize] as f64 / n as f64
     );
     print!("top block:");
     for (i, c) in top_counts.iter().enumerate() {

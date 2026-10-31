@@ -15,7 +15,8 @@ pub struct DerivedMaps {
     /// The block under the water run. Land columns, and a run that reaches
     /// y = 0, hold [`NO_BOTTOM`].
     pub bottom_block: Vec<u8>,
-    /// True where the block at `SEA_LEVEL - 1` is ice (sea ice, SPEC 13).
+    /// True where the block at `SEA_LEVEL - 1` is ice or floe ice (sea ice,
+    /// SPEC 13).
     pub frozen: Vec<bool>,
     /// Euclidean distance between column centres to the nearest land column
     /// (`water_depth == 0`), rounded to the nearest integer and capped at
@@ -37,8 +38,13 @@ pub const SHORE_PAD: u32 = SHORE_DISTANCE_CAP as u32;
 /// Sentinel for `bottom_block` on columns without a water run.
 pub const NO_BOTTOM: u8 = Block::Air as u8;
 
-fn is_water(b: u8) -> bool {
-    b == Block::Water as u8 || b == Block::Ice as u8
+/// Sea ice: plain ice or floe ice (docs/design/sea-ice-floes.md A).
+pub fn is_sea_ice(b: u8) -> bool {
+    b == Block::Ice as u8 || b == Block::FloeIce as u8
+}
+
+pub(crate) fn is_water(b: u8) -> bool {
+    b == Block::Water as u8 || is_sea_ice(b)
 }
 
 impl DerivedMaps {
@@ -58,7 +64,7 @@ impl DerivedMaps {
             if !is_water(col[surface]) {
                 continue;
             }
-            maps.frozen[i] = col[surface] == Block::Ice as u8;
+            maps.frozen[i] = is_sea_ice(col[surface]);
             let run = col[..=surface]
                 .iter()
                 .rev()

@@ -6,6 +6,7 @@
 
 use terrain::{Block, Region, HEIGHT, SEA_LEVEL};
 
+use crate::derived::{is_sea_ice, is_water};
 use crate::Thresholds;
 
 /// Per-column navigable flags, row order `z * width + x` like the region.
@@ -20,14 +21,13 @@ impl NavMap {
     pub fn from_region(region: &Region, t: &Thresholds) -> NavMap {
         let lo = SEA_LEVEL as usize;
         let hi = (lo + t.navigable_clearance.max(0) as usize).min(HEIGHT);
-        let is_water = |b: u8| b == Block::Water as u8 || b == Block::Ice as u8;
         let navigable = region
             .blocks
             .chunks_exact(HEIGHT)
             .map(|col| {
                 // Same depth rule as `DerivedMaps`, without the shore transform.
                 let depth = col[..lo].iter().rev().take_while(|&&b| is_water(b)).count();
-                col[lo - 1] != Block::Ice as u8
+                !is_sea_ice(col[lo - 1])
                     && depth as u32 >= t.min_navigable_depth
                     && col[lo..hi].iter().all(|&b| b == Block::Air as u8)
             })
