@@ -30,7 +30,7 @@ phases:
 ## Reconciliation notes
 
 1. **Squid rules.** Section 2.1 says squid "behave as SPEC 14's water spawn describes". SPEC 14 gives only a weight (10) and a population cap (5); it says nothing about swimming, depth or where squid spawn. Suggest: Phase E uses the cap and weight from SPEC 14 and takes squid movement and body data from this game's own data file, like fish; any further Beta fact is a `research` `spec-question`, not filled in by the implementer.
-2. **No day counter.** Sections 3.1 and 6 say stock resets "at the start of each day". `PhaseClock` only knows gathering and service. Suggest: a day is one gathering plus one service, and the reset happens on the tick the clock enters gathering (Phase B derives it from `PhaseClock::at`). See open question 1.
+2. **No day counter.** Sections 3.1 and 6 say stock resets "at the start of each day". `PhaseClock` only knows gathering and service. Suggest: a day is one gathering plus one service, and the reset happens on the tick the clock enters gathering (Phase B derives it from `PhaseClock::at`). See section 3.1.
 3. **Phase-change spawning needs a phase-change signal.** `PhaseClock::at(tick)` returns the current phase only; Phase B must detect the change (compare to the previous tick) or add an event.
 4. **Habitat map in the game.** Section 3.1 needs a habitat, temperature and depth per water column inside `crates/game`. The game has no habitat access yet; `Layout::habitat_map` is the source. Phase B should add the smallest accessor over the streamed regions (`crates/game/src/stream.rs`). Frozen columns: species with `habitats` unset match `frozen` too, and `species_for` has no "no fish" rule, so "frozen columns have no fish" must be a spawner check (or every species lists habitats). Suggest the spawner check.
 5. **Tuna habitat.** "`deep_water`, `warm_shallows` edge" is not expressible in the current schema as an edge. Suggest `habitats = ["deep_water", "warm_shallows"]` plus a `depth_min` so only the deeper part of warm shallows qualifies; tune in data.
@@ -96,7 +96,7 @@ Squid spawn and behave as SPEC 14's water spawn describes; this idea adds no squ
 
 ### 3.1 Spawning
 
-- **Daily stock.** Each anchorage has a daily stock of fish (data, default 24). It resets to full at the start of each day, like the animal top-up in basic-gameplay 8.4. Every fish caught or killed comes out of the stock; fish that swim off or despawn go back into it.
+- **Daily stock.** Each anchorage has a daily stock of fish (data, default 24). It resets to full at the start of each day, like the animal top-up in basic-gameplay 8.4. Every fish caught or killed comes out of the stock; fish that swim off or despawn go back into it. A day is one gathering plus one service; the stock resets on the tick the clock enters gathering, derived from `PhaseClock::at`, without waiting for a real day clock. (Decided in #1608.)
 - **Spawn at phase changes only.** Fish are spawned at each phase change (the start of gathering and the start of service), never in the middle of a phase. At each change the spawner tops the water around the raft up to a target count (data, default 12 within 24 blocks), limited by what is left of the day's stock. It does not fill the whole loaded world.
 - Each school is placed at a water column in a ring around the raft (data, default 12 to 24 blocks away, out of the player's direct view where possible). The spawner asks `species_for(column)` for the weighted list and spawns a small school of one species at a depth inside that species' range.
 - Spawning ignores time of day; there is no day and night filter (the open item from #93 stays open).
@@ -197,9 +197,6 @@ Add to the events of basic-gameplay section 11:
 
 ## Open questions
 
-1. **What is a "day" for the stock reset?**
-   - A: one gathering plus one service; reset when gathering starts (suggested).
-   - B: wait for a real day clock (basic-gameplay 8.4 defers it) and build the fish stock after it.
 2. **Particles for `splash` and `fishing_wake`.** The client has no particle system.
    - A: Phase D ships without particles and a follow-up adds them (suggested).
    - B: add a minimal sprite-particle path to the client in Phase D.
