@@ -40,7 +40,7 @@ import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
 import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
-import { padRegion } from './regionpad.js';
+import { meshRegionCpu } from './regionmesh.js';
 import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
 import { sampleSky, easeSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
@@ -415,12 +415,8 @@ const stale = new Map();
 const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); };
 function meshRegion({ rx, rz }, remesh = false) {
   work[remesh ? 'remeshed' : 'meshed']++;
-  const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
-  // one column of the neighbours' edges around the region, so no seams at its borders
-  const blocks = padRegion((a, b) => walk.region_blocks(a, b), (a, b, dx, dz) => walk.region_border(a, b, dx, dz), rx, rz, REGION_SIZE);
-  const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE, blendRadius);
+  const { mesh: m, blocks, tints, origin: [x, z] } = meshRegionCpu({ walk, terrain, ctx, seed, blendRadius }, { rx, rz });
   if (rx === 0 && rz === 0 && !skyReady) skyColor = skyTarget = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
-  const m = meshBlocksWasm(terrain, ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });
   const parts = {};
   for (const k of Object.keys(meshes)) {
     const part = upload(m[k], [x, 0, z]);
