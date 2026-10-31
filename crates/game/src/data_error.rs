@@ -18,6 +18,7 @@ pub enum DataFile {
     Phases,
     Hands,
     FishBodies,
+    FishSpawn,
 }
 
 impl DataFile {
@@ -34,6 +35,7 @@ impl DataFile {
             DataFile::Phases => "phases.toml",
             DataFile::Hands => "hands.toml",
             DataFile::FishBodies => "fish_bodies.toml",
+            DataFile::FishSpawn => "fish_spawn.toml",
         }
     }
 }
