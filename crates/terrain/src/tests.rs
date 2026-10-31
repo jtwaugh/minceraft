@@ -370,21 +370,26 @@ fn test_waterlogged_plant_is_never_generated() {
     }
 }
 
+// Village and cooking-station blocks: game blocks the generator never places.
 #[test]
-fn village_blocks_have_dense_ids_and_are_never_generated() {
-    let village = [
+fn game_blocks_have_dense_ids_and_are_never_generated() {
+    let game = [
         (Block::Thatch, 69, Collision::Full, true),
         (Block::Barrel, 70, Collision::Full, true),
         (Block::PlankStep, 71, Collision::Full, false),
         (Block::DryingRack, 72, Collision::None, false),
         (Block::Net, 73, Collision::None, false),
+        (Block::Counter, 74, Collision::Full, true),
+        (Block::PlateRack, 75, Collision::Full, true),
     ];
-    for (b, id, collision, opaque) in village {
+    for (b, id, collision, opaque) in game {
         assert_eq!(b as u8, id);
         let info = b.info();
         assert_eq!(info.collision, collision, "{}", info.name);
         assert_eq!(info.opaque_cube, opaque, "{}", info.name);
         assert_eq!(info.opacity == 255, opaque, "{}", info.name);
+        let fire = (info.fire_encouragement, info.flammability);
+        assert_eq!(fire, (0, 0), "{}", info.name);
         for other in Block::ALL {
             if other != b {
                 assert_ne!(other.info().name, info.name);
@@ -394,31 +399,7 @@ fn village_blocks_have_dense_ids_and_are_never_generated() {
     }
     for (seed, x0, z0) in [(12345u64, -40, 17), (7, 300, -260), (99, 0, 0)] {
         let r = generate_decorated(seed, x0, z0, 48, 48);
-        for (b, ..) in village {
-            assert!(!r.blocks.contains(&(b as u8)), "{}", b.info().name);
-        }
-    }
-}
-
-#[test]
-fn cooking_blocks_are_full_opaque_cubes_and_never_generated() {
-    let cooking = [(Block::Counter, 74), (Block::PlateRack, 75)];
-    for (b, id) in cooking {
-        assert_eq!(b as u8, id);
-        let info = b.info();
-        assert_eq!(info.collision, Collision::Full, "{}", info.name);
-        assert!(info.opaque_cube && info.opacity == 255, "{}", info.name);
-        assert_eq!((info.fire_encouragement, info.flammability), (0, 0));
-        for other in Block::ALL {
-            if other != b {
-                assert_ne!(other.info().name, info.name);
-                assert_ne!(other.info().color, info.color, "{}", info.name);
-            }
-        }
-    }
-    for (seed, x0, z0) in [(12345u64, -40, 17), (7, 300, -260), (99, 0, 0)] {
-        let r = generate_decorated(seed, x0, z0, 48, 48);
-        for (b, _) in cooking {
+        for (b, ..) in game {
             assert!(!r.blocks.contains(&(b as u8)), "{}", b.info().name);
         }
     }

@@ -185,7 +185,7 @@
 <script type="module">
 import { REQUIRED, NAMES as SHARED, TINTED, VARIANTS } from './tilelist.js';
 import init, * as wasm from './pkg/terrain_web.js';
-import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, variantTable, quadIndices, columnTints, meshBlocks } from './mesh.js';
+import { B, VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, variantTable, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
 import { FlyoverPlayer, CHUNK, OPENING, PRI } from './flyover/player.js';
 import { WorkerPool, median } from './pool.js';
@@ -218,25 +218,7 @@ $('devbtn').addEventListener('click', () => {
 const MAP = 1024, PX = 512, K = MAP / PX, TILE = 512, AREA = 64, H = 128;
 const WASM_URL = './pkg/terrain_web_bg.wasm';
 
-// Block ids (data/blocks.toml); names and colours come from legend().
-const B = {
-  air: 0, stone: 1, dirt: 2, grass: 3, sand: 4, gravel: 5, water: 6, ice: 7,
-  oak_log: 8, birch_log: 9, spruce_log: 10, oak_leaves: 11, birch_leaves: 12, spruce_leaves: 13,
-  tall_grass: 14, fern: 15, dead_bush: 16, dandelion: 17, rose: 18, sugar_cane: 19,
-  cactus: 20, brown_mushroom: 21, red_mushroom: 22, pumpkin: 23, snow_layer: 24,
-  raft_planks: 25, butcher_block: 26, griddle: 27, crate: 28,
-  farmland_dry: 29, farmland_wet: 30,
-  wheat_0: 31, wheat_1: 32, wheat_2: 33, wheat_3: 34, wheat_4: 35, wheat_5: 36, wheat_6: 37, wheat_7: 38,
-  planter_dirt: 39, planter_farmland_dry: 40, planter_farmland_wet: 41,
-  daisy: 42, bluebell: 43, tall_grass_double_lower: 44, tall_grass_double_upper: 45, berry_bush: 46,
-  dry_grass: 47, dry_grass_tall_lower: 48, dry_grass_tall_upper: 49, leaf_litter: 50,
-  fern_double_lower: 51, fern_double_upper: 52, cattail_lower: 53, cattail_upper: 54,
-  lily_pad: 55, marsh_orchid: 56, bush: 57, jungle_bush: 58, large_fern: 59, broadleaf: 60, cactus_flower: 61, frost_grass: 62,
-  tulip_red: 63, tulip_salmon: 64, tulip_yellow: 65, dune_grass_lower: 66, dune_grass_upper: 67,
-  test_waterlogged_plant: 68,
-  thatch: 69, barrel: 70, plank_step: 71, drying_rack: 72, net: 73,
-  counter: 74, plate_rack: 75,
-};
+// Block ids are B from mesh.js; names and colours come from legend().
 let LEGEND, COLORS, NAMES, BIOMES, CTX; // CTX: mesh.js context (legend + face layers)
 
 let state = { seed: 0n, x0: 0, z0: 0, hm: null, sel: null, mode: 'terrain', legendAll: false };
