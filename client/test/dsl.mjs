@@ -11,7 +11,8 @@
 //                               the raft scene has three loose seeds on its islet and
 //                               implies debug; `debug` turns the console keys on elsewhere;
 //                               `stream` is a streamed world (seed 12345) starting over region 0 0,
-//                               meshing one region per frame
+//                               meshing one region per frame; every frame's new and remeshed regions
+//                               are meshed on the CPU as scene.js does (client/regionmesh.js, no upload)
 //   click                       click the canvas (requests pointer lock)
 //   lock | unlock | blur        pointer lock gained / lost; window loses focus
 //   down <code> | up <code>     KeyboardEvent.code, e.g. KeyW, Space, ShiftLeft
@@ -57,7 +58,10 @@
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
 // Paths: regions.loaded|freed|pending|x|z (stream only: regions meshed now, regions freed so far,
-// regions waiting to be meshed, and the region under the eye), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
+// regions waiting to be meshed, and the region under the eye), regions.max_per_frame, chunks.max_per_tick,
+// verts.max_per_frame (stream only: the most work any one frame has done since the case began: regions
+// meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
+// all mesh kinds), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
 // console.lines (output lines so far), console.text (the box), cheated, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
@@ -78,7 +82,9 @@
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
-import { B } from '../../viewer/mesh.js';
+import * as terrain from '../../viewer/pkg/terrain_web.js';
+import { B, VERTEX_BYTES, legendContext } from '../../viewer/mesh.js';
+import { meshRegionCpu } from '../regionmesh.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
 import { heldDraw } from '../helditem.js';
@@ -90,7 +96,22 @@ let ready = false;
 function init() {
   if (ready) return;
   initSync({ module: readFileSync(new URL('../pkg/game_web_bg.wasm', import.meta.url)) });
+  terrain.initSync({ module: readFileSync(new URL('../../viewer/pkg/terrain_web_bg.wasm', import.meta.url)) });
   ready = true;
+}
+
+let meshCtx; // no textures in the harness: every face on layer 0, which changes no vertex counts
+const STREAM_SEED = 12345n;
+
+/** Meshes this frame's new and remeshed regions as scene.js would (no upload); returns the work done. */
+function meshFrame(walk, r) {
+  meshCtx ??= legendContext(terrain.legend(), new Uint8Array(256 * 3 * 2));
+  let verts = 0;
+  for (const region of [...r.mesh, ...r.remesh]) {
+    const { mesh } = meshRegionCpu({ walk, terrain, ctx: meshCtx, seed: STREAM_SEED }, region);
+    for (const k of ['opaque', 'cutout', 'water', 'ice']) verts += mesh[k].verts.byteLength / VERTEX_BYTES;
+  }
+  return { regions: r.mesh.length + r.remesh.length, chunks: r.chunks, verts };
 }
 
 /** Split a script into cases of `{ name, line, steps: [{ line, op, args }] }`. */
@@ -123,7 +144,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   const sampler = new InputSampler();
   const input = attachInput({ sampler, canvas, document, window, debug });
   const scene = raft ? new Scene() : null;
-  const walk = raft ? Walk.in_scene(scene) : stream ? Walk.streamed(12345n, 50.5, 72, 40.5) : new Walk(32, 70.5, 32);
+  const walk = raft ? Walk.in_scene(scene) : stream ? Walk.streamed(STREAM_SEED, 50.5, 72, 40.5) : new Walk(32, 70.5, 32);
   if (raft) spawnTestItems(walk);
   const fly = stream ? new FlyCamera(50.5, 110, 40.5) : new FlyCamera(32, 94, 32);
   const controller = createController({
@@ -131,15 +152,17 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
     sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds },
   });
   const seen = [];
+  const most = stream ? { regions: 0, chunks: 0, verts: 0 } : null; // running maxima of one frame's work
   const frame = controller.frame;
   controller.frame = (dt) => {
     const state = frame(dt);
     seen.push(...state.events);
+    if (most) for (const [k, v] of Object.entries(meshFrame(walk, state.regions))) most[k] = Math.max(most[k], v);
     return state;
   };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, text: '', output: [], layout: null };
+  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, text: '', output: [], layout: null };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
@@ -179,6 +202,11 @@ function read(w, path) {
     if (path === 'console.last') return w.output.at(-1) ?? 'none';
     if (path === 'console.lines') return w.output.length;
     if (path === 'console.text') return w.text;
+  }
+  const work = { 'regions.max_per_frame': 'regions', 'chunks.max_per_tick': 'chunks', 'verts.max_per_frame': 'verts' }[path];
+  if (work) {
+    if (!w.most) throw new Error(`${path} needs \`start ... stream\``);
+    return w.most[work];
   }
   if (path.startsWith('regions.')) {
     const r = s.regions;

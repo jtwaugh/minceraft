@@ -38,3 +38,24 @@ expect regions.z = -1
 expect eye.z < -1
 expect eye.y > 30
 expect moved.y > -10
+
+# The stream budget of 1 is the guard against a meshing stall: crossing
+# region borders never meshes more than one region in a frame.
+case sprinting and flying across region borders meshes at most one region per frame
+start walk stream
+click
+lock
+frame 100 x30
+press KeyW
+frame 100
+down KeyW
+down Space
+frame 100
+expect sprinting = true
+until regions.z = -1
+press KeyF
+until regions.z = -3
+frame 50 x20
+expect regions.max_per_frame <= 1
+expect chunks.max_per_tick > 0
+expect verts.max_per_frame > 0
