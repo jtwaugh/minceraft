@@ -72,6 +72,11 @@ export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.ro
 
 // Upper blocks of two-block plants.
 const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper, B.fern_double_upper, B.cattail_upper, B.dune_grass_upper]);
+// Plants that are also water (`waterlogged` in data/blocks.toml), drawn as a
+// water cell plus a cross plant.
+export const WATERLOGGED = flags([B.test_waterlogged_plant]);
+// Water or a waterlogged block: water faces between them are hidden.
+const isWater = (b) => b === B.water || WATERLOGGED[b] === 1;
 
 /**
  * Meshing context: names, colours and biomes from the legend() JSON, plus
@@ -396,7 +401,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     const base = col(x, z);
     let y = H - 1;
-    while (y > 0 && (blocks[base + y] === B.air || blocks[base + y] === B.water || blocks[base + y] === B.ice)) y--;
+    while (y > 0 && (blocks[base + y] === B.air || isWater(blocks[base + y]) || blocks[base + y] === B.ice)) y--;
     minY = Math.min(minY, y); sumY += y;
   }
   const y0 = Math.max(0, minY - 8);
@@ -440,17 +445,44 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
   const X2 = [[0.85, 1, 0.15], [0.15, 1, 0.85], [0.15, 0, 0.85], [0.85, 0, 0.15]];
   const XTOP = [255, 255, 0, 0]; // vertex order of X1/X2: top, top, base, base
   const XUV = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  // The tint of block b in column (x, z): WHITE, one [r, g, b], or (with
+  // corners) a function of the corner offset (0 or 1).
+  const tintOf = (b, x, z) => {
+    const c = z * size + x, flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c], tints.water?.[c], tints.dry?.[c]);
+    return flat === WHITE || !tints.corners ? flat : (ox, oz) => {
+      const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf, w = tints.corners.water, dr = tints.corners.dry;
+      return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]], w && [w[k], w[k + 1], w[k + 2]], dr && [dr[k], dr[k + 1], dr[k + 2]]);
+    };
+  };
+  // Two crossed quads, wound both ways so they show from either side; the
+  // upper half of a tall plant takes its variation from the lower block.
+  const crossPlant = (b, x, y, z, tint) => {
+    const py = UPPER_HALF[b] ? y - 1 : y;
+    const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, py, origin[1] + z), k = 0.9 * (0.75 + py / 256);
+    const [dx, dz] = plantOffset(origin[0] + x, py, origin[1] + z);
+    const shape = plantShape(origin[0] + x, py, z + origin[1]);
+    const tall = b === B.tall_grass || b === B.fern, hgt = tall ? shape.height : 1;
+    const uvs = XUV.map(([u, v]) => [shape.mirror ? 1 - u : u, v === 0 ? 1 - hgt : v]);
+    for (const q of [X1, X2]) {
+      const t = typeof tint === 'function' ? q.map((v) => tint(Math.round(v[0]), Math.round(v[2]))) : q.map(() => tint);
+      const tj = t.map((c, j) => c.map((v) => clamp01(v * shape.bright) * (XTOP[j] ? 1 : PLANT_BASE_DARK)));
+      const qs = q.map((v) => [v[0], v[1] * hgt, v[2]]);
+      const flip = (a) => [a[1], a[0], a[3], a[2]];
+      out[3].quad(x + dx, y, z + dz, qs, uvs, layer, k, tj, XTOP);
+      out[3].quad(x + dx, y, z + dz, flip(qs), flip(uvs), layer, k, flip(tj), flip(XTOP));
+    }
+  };
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     const c = z * size + x, base = col(x, z);
     for (let y = y0; y < H; y++) {
-      const b = blocks[base + y];
+      let b = blocks[base + y];
       if (b === B.air) continue;
-      const flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c], tints.water?.[c], tints.dry?.[c]);
-      // Per-vertex tint by corner offset (0 or 1), for blocks that have one.
-      const tint = flat === WHITE || !tints.corners ? flat : (ox, oz) => {
-        const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf, w = tints.corners.water, dr = tints.corners.dry;
-        return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]], w && [w[k], w[k + 1], w[k + 2]], dr && [dr[k], dr[k + 1], dr[k + 2]]);
-      };
+      if (WATERLOGGED[b]) {
+        // the plant inside, then the cell's water faces as `water`
+        crossPlant(b, x, y, z, tintOf(b, x, z));
+        b = B.water;
+      }
+      const tint = tintOf(b, x, z);
       const vr = VARIES[b] ? variantAt(origin[0] + x, y, origin[1] + z) : 0;
       const shape = SHAPE_OF[b];
       if (shape) {
@@ -462,22 +494,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         continue;
       }
       if (CROSS[b]) {
-        // two crossed quads, wound both ways so they show from either side
-        // the upper half of a tall plant takes its variation from the lower block
-        const py = UPPER_HALF[b] ? y - 1 : y;
-        const layer = pickLayer(ctx, layerOf(ctx, b, 0), origin[0] + x, py, origin[1] + z), k = 0.9 * (0.75 + py / 256);
-        const [dx, dz] = plantOffset(origin[0] + x, py, origin[1] + z);
-        const shape = plantShape(origin[0] + x, py, z + origin[1]);
-        const tall = b === B.tall_grass || b === B.fern, hgt = tall ? shape.height : 1;
-        const uvs = XUV.map(([u, v]) => [shape.mirror ? 1 - u : u, v === 0 ? 1 - hgt : v]);
-        for (const q of [X1, X2]) {
-          const t = typeof tint === 'function' ? q.map((v) => tint(Math.round(v[0]), Math.round(v[2]))) : q.map(() => tint);
-          const tj = t.map((c, j) => c.map((v) => clamp01(v * shape.bright) * (XTOP[j] ? 1 : PLANT_BASE_DARK)));
-          const qs = q.map((v) => [v[0], v[1] * hgt, v[2]]);
-          const flip = (a) => [a[1], a[0], a[3], a[2]];
-          out[3].quad(x + dx, y, z + dz, qs, uvs, layer, k, tj, XTOP);
-          out[3].quad(x + dx, y, z + dz, flip(qs), flip(uvs), layer, k, flip(tj), flip(XTOP));
-        }
+        crossPlant(b, x, y, z, tint);
         continue;
       }
       for (const f of FACES) {
@@ -487,9 +504,9 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         if (b === B.grass && f.d[1] > 0) layer = pickLayer(ctx, layer, origin[0] + x, y, origin[1] + z);
         if (b === B.water) {
           // water: only next to air, plants or leaves (not water, ice or solids)
-          if (n === B.water || n === B.ice || SOLID_N[n]) continue;
+          if (isWater(n) || n === B.ice || SOLID_N[n]) continue;
           let depth = 1;
-          while (depth < 255 && y - depth >= 0 && blocks[base + y - depth] === B.water) depth++;
+          while (depth < 255 && y - depth >= 0 && isWater(blocks[base + y - depth])) depth++;
           const flatTint = f.d[1] > 0 && waterTint(tint);
           if (flatTint) {
             let tops = waterTops.get(y);
@@ -523,7 +540,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
           const ao = faceAO(x, y, z, f);
           // Untinted cubes whose four corners share one AO level merge with
           // equal neighbours; the rest (leaves, tinted, AO gradients) stay single.
-          if (greedy && !cutLeaf && flat === WHITE && ao[0] === ao[1] && ao[1] === ao[2] && ao[2] === ao[3]) {
+          if (greedy && !cutLeaf && tint === WHITE && ao[0] === ao[1] && ao[1] === ao[2] && ao[2] === ao[3]) {
             const fi = FACES.indexOf(f), [pa, ua, va] = GRID_AXES[fi], at3 = [x, y, z];
             const key = fi * 4096 + at3[pa];
             let grid = faceCells.get(key);
