@@ -54,3 +54,10 @@ test('R = 3 softens the Plains / Forest border', () => {
   assert.ok(maxStep(raw) > 0.02, 'border has a visible step');
   assert.ok(maxStep(blur) < maxStep(raw) / 3);
 });
+
+test('legend blend has radius, shade_mix and shade_radius', () => {
+  const { radius, shade_mix, shade_radius } = JSON.parse(wasm.legend()).blend;
+  assert.ok(Number.isInteger(radius) && radius >= 0 && radius <= 7);
+  assert.ok(typeof shade_mix === 'number' && shade_mix >= 0 && shade_mix <= 1);
+  assert.ok(Number.isInteger(shade_radius) && shade_radius >= 0 && shade_radius <= 3);
+});

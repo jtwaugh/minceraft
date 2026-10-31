@@ -576,5 +576,10 @@ fn no_open_water_mask_is_identical() {
 
 #[test]
 fn legend_exposes_blend_radius() {
-    assert!(LEGEND_JSON.contains("\"blend\":{\"radius\":3}"));
+    assert!(LEGEND_JSON.contains("\"blend\":{\"radius\":3,"));
+}
+
+#[test]
+fn legend_exposes_blend_shade_keys() {
+    assert!(LEGEND_JSON.contains(",\"shade_mix\":0.25,\"shade_radius\":1}"));
 }
