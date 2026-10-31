@@ -84,3 +84,24 @@ test('hands to belt distance: just inside, at and just outside the limit', () =>
     assert.equal(only(l, 'distance').length, expected, `gap=${gap}`);
   }
 });
+
+test('containment: a slot icon inside its slot is fine, one outside it is a finding', () => {
+  const l = clean();
+  l.rects.slots = [r(10, 80, 10, 10)];
+  l.rects.slotNumbers = [r(11, 81, 4, 6)];
+  l.rects.slotIcons = [r(11, 81, 8, 8)];
+  assert.deepEqual(only(l, 'containment'), []);
+  l.rects.slotIcons = [r(20, 81, 8, 8)];
+  assert.deepEqual(only(l, 'containment').map((c) => c.elements), [['slotIcons[0]', 'slots[0]']]);
+  l.rects.slotIcons = [null];
+  assert.deepEqual(layoutChecks(l, vp), []);
+});
+
+test('containment: timer, hands and hearts parts must sit inside their parent', () => {
+  const l = clean();
+  l.rects.timer = { ...r(30, 8, 40, 10), phase: r(31, 9, 8, 8), digits: [r(40, 9, 4, 6), r(68, 9, 4, 6)] };
+  l.rects.hearts = r(10, 66, 80, 9);
+  l.rects.heartIcons = [r(10, 66, 9, 9), r(85, 66, 9, 9)];
+  l.rects.hands = { ...r(10, 50, 10, 7), label: { ...r(10, 50, 10, 7), glyphs: [r(10, 50, 5, 7), r(16, 50, 5, 7)] } };
+  assert.deepEqual(only(l, 'containment').map((c) => c.elements), [['timer.digits[1]', 'timer'], ['hands.label.glyphs[1]', 'hands'], ['heartIcons[1]', 'hearts']]);
+});
