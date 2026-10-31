@@ -13,6 +13,31 @@ pub(crate) struct StaticStructure {
     pub origin_offset: [i32; 3],
     pub raft: bool,
     pub blocks: &'static [u8],
+    pub kind: Option<PieceKind>,
+    pub connectors: &'static [Connector],
+    pub spawns: &'static [[i32; 3]],
+    pub rotations: &'static [u8],
+}
+
+impl StaticStructure {
+    pub(crate) fn to_structure(&self) -> Structure {
+        Structure {
+            size: self.size,
+            origin_offset: self.origin_offset,
+            raft: self.raft,
+            blocks: self.blocks.to_vec(),
+            kind: self.kind,
+            connectors: self.connectors.to_vec(),
+            spawns: self.spawns.to_vec(),
+            rotations: self.rotations.to_vec(),
+        }
+    }
+}
+
+/// The template called `name` in `list`.
+pub(crate) fn find(list: &[(&str, StaticStructure)], name: &str) -> Option<Structure> {
+    let found = list.iter().find(|(n, _)| *n == name);
+    found.map(|(_, s)| s.to_structure())
 }
 
 include!(concat!(env!("OUT_DIR"), "/structure.rs"));
@@ -53,24 +78,21 @@ impl Structure {
 
     /// The `raft_start` template from `data/structures/raft_start.toml`.
     pub fn raft_start() -> Structure {
-        let s = &RAFT_START;
-        Structure {
-            size: s.size,
-            origin_offset: s.origin_offset,
-            raft: s.raft,
-            blocks: s.blocks.to_vec(),
-            kind: None,
-            connectors: Vec::new(),
-            spawns: Vec::new(),
-            rotations: vec![0, 1, 2, 3],
-        }
+        RAFT_START.to_structure()
+    }
+
+    /// The templates in `data/structures/villages/` as `(name, template)`,
+    /// `name` being the file stem, sorted by file name.
+    pub fn village_templates() -> Vec<(&'static str, Structure)> {
+        let list = VILLAGE_TEMPLATES.iter();
+        list.map(|(n, s)| (*n, s.to_structure())).collect()
     }
 
     /// The built-in template called `name`, if there is one.
     pub fn named(name: &str) -> Option<Structure> {
         match name {
             "raft_start" => Some(Structure::raft_start()),
-            _ => None,
+            _ => find(VILLAGE_TEMPLATES, name),
         }
     }
 
