@@ -409,9 +409,6 @@ const setSnow = (key, cells) => {
   if (cells?.length) regionSnow.set(key, cells); else regionSnow.delete(key);
   snowCells = [...regionSnow.values()].flat();
 };
-// Loaded neighbours of a newly meshed region, remeshed one per spare frame: they were
-// padded with this region's edge as their own, which can leave a hole in a cliff wall.
-const stale = new Map();
 const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); };
 function meshRegion({ rx, rz }, remesh = false) {
   work[remesh ? 'remeshed' : 'meshed']++;
@@ -425,17 +422,11 @@ function meshRegion({ rx, rz }, remesh = false) {
   }
   regionParts.set(`${rx},${rz}`, parts);
   setSnow(`${rx},${rz}`, snowOnFoliage(blocks, REGION_SIZE, 1, [x, z]));
-  if (!remesh) for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-    const n = { rx: rx + dx, rz: rz + dz };
-    if (regionParts.has(`${n.rx},${n.rz}`)) stale.set(`${n.rx},${n.rz}`, n);
-  }
-  stale.delete(`${rx},${rz}`);
 }
 function freeRegion({ rx, rz }) {
   const parts = regionParts.get(`${rx},${rz}`);
   regionParts.delete(`${rx},${rz}`);
   setSnow(`${rx},${rz}`, null);
-  stale.delete(`${rx},${rz}`);
   for (const k of Object.keys(parts ?? {})) {
     for (const p of parts[k]) freeParts(p);
     meshes[k] = meshes[k].filter((m) => !parts[k].includes(m));
@@ -542,16 +533,10 @@ function render(now) {
     work.chunks = regions.chunks;
     regions.free.forEach(freeRegion);
     regions.mesh.forEach((r) => meshRegion(r));
-    // A pick or other edit changed these regions' blocks: mesh them again.
-    for (const r of regions.remesh) if (!regions.mesh.some((m) => m.rx === r.rx && m.rz === r.rz)) {
+    // An edit changed these regions' blocks, or a new neighbour left them stale: mesh them again.
+    for (const r of regions.remesh) {
       freeRegion(r);
       meshRegion(r, true);
-    }
-    if (!regions.mesh.length && stale.size) {
-      const [key, n] = stale.entries().next().value;
-      stale.delete(key);
-      freeRegion(n);
-      meshRegion(n, true);
     }
   }
 

@@ -4,11 +4,15 @@
 // `budget` per frame, and unload events become regions whose meshes to free.
 //
 //   const s = createStream({ budget: 1 });
-//   const { mesh, free } = s.frame(walk.drain_stream(), centre);
-//   // mesh: [{ rx, rz }] to mesh and upload now; free: [{ rx, rz }] to delete
+//   const { mesh, free, stale } = s.frame(walk.drain_stream(), centre);
+//   // mesh: [{ rx, rz }] to mesh and upload now; free: [{ rx, rz }] to delete;
+//   // stale: [{ rx, rz }] to mesh again, at most one and only when mesh is empty
 //
 // `events` is the flat [kind, rx, rz, ...] list of drain_stream: kind 1 a
 // region loaded, 0 unloaded. A region the sim loads twice is meshed once.
+//
+// Meshing a region makes its meshed N/S/E/W neighbours stale: they were padded
+// with this region's edge as their own, which can leave a hole in a cliff wall.
 
 export const REGION_SIZE = 128;
 
@@ -20,6 +24,7 @@ export function regionOf(x, z) {
 export function createStream({ budget = 1 } = {}) {
   const queued = new Map(); // "rx,rz" -> { rx, rz }: loaded, not yet meshed
   const meshed = new Set();
+  const stale = new Map(); // "rx,rz" -> { rx, rz }: meshed, to mesh again on a spare frame
   const key = (rx, rz) => `${rx},${rz}`;
   return {
     frame(events, centre) {
@@ -30,6 +35,7 @@ export function createStream({ budget = 1 } = {}) {
         if (kind === 1) {
           if (!meshed.has(k)) queued.set(k, { rx, rz });
         } else if (!queued.delete(k) && meshed.delete(k)) {
+          stale.delete(k);
           free.push({ rx, rz }); // queued-only regions have no meshes to free
         }
       }
@@ -39,19 +45,32 @@ export function createStream({ budget = 1 } = {}) {
       for (const r of mesh) {
         queued.delete(key(r.rx, r.rz));
         meshed.add(key(r.rx, r.rz));
+        for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const n = { rx: r.rx + dx, rz: r.rz + dz };
+          if (meshed.has(key(n.rx, n.rz))) stale.set(key(n.rx, n.rz), n);
+        }
+        stale.delete(key(r.rx, r.rz));
       }
-      return { mesh, free };
+      const next = mesh.length ? null : stale.entries().next().value;
+      if (next) stale.delete(next[0]);
+      return { mesh, free, stale: next ? [next[1]] : [] };
     },
     // `pairs` is the flat [rx, rz, ...] of Walk.drain_edited_regions: the meshed
-    // regions among them, to mesh again. Unmeshed ones pick the edit up when meshed.
+    // regions among them, to mesh again (so no longer stale). Unmeshed ones pick
+    // the edit up when meshed.
     edited(pairs) {
       const out = [];
       for (let i = 0; i < pairs.length; i += 2) {
-        if (meshed.has(key(pairs[i], pairs[i + 1]))) out.push({ rx: pairs[i], rz: pairs[i + 1] });
+        const k = key(pairs[i], pairs[i + 1]);
+        if (meshed.has(k)) {
+          out.push({ rx: pairs[i], rz: pairs[i + 1] });
+          stale.delete(k);
+        }
       }
       return out;
     },
     get pending() { return queued.size; },
     get meshed() { return meshed.size; },
+    get stale() { return stale.size; },
   };
 }
