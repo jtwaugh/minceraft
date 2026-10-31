@@ -16,9 +16,7 @@ test('mesh.js B matches blocks.toml', () => {
   assert.deepEqual(B, tomlIds());
 });
 
-test('index.html B matches blocks.toml', () => {
-  const body = read('viewer/index.html').match(/const B = \{([^}]*)\}/)[1];
-  const got = {};
-  for (const m of body.matchAll(/(\w+): (\d+)/g)) got[m[1]] = +m[2];
-  assert.deepEqual(got, tomlIds());
+test('index.html takes B from mesh.js', () => {
+  assert.match(read('viewer/index.html'), /import \{ B\b[^}]*\} from '\.\/mesh\.js'/);
+  assert.doesNotMatch(read('viewer/index.html'), /const B = \{/);
 });
