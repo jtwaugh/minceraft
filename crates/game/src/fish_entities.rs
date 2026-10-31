@@ -113,6 +113,15 @@ impl FishStore {
     pub fn iter(&self) -> impl Iterator<Item = &FishEntity> {
         self.fish.iter()
     }
+
+    /// Fish in id order, for the swim tick. Callers must not change `id`.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut FishEntity> {
+        self.fish.iter_mut()
+    }
+
+    pub fn bodies(&self) -> &FishBodies {
+        &self.bodies
+    }
 }
 
 #[cfg(test)]
