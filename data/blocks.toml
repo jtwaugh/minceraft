@@ -694,3 +694,23 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#8f8a6e"
+
+# Cooking-station blocks (cooking-stations.md 2). The generator never places
+# them.
+[[block]]
+id = 74
+name = "counter"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#a08f72"
+
+[[block]]
+id = 75
+name = "plate_rack"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#8a6f8f"
