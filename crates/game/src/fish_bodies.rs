@@ -35,6 +35,11 @@ fn err(kind: DataErrorKind) -> DataError {
     DataError::new(DataFile::FishBodies, kind)
 }
 
+fn bad_entry(entry: &str, problem: &str) -> DataError {
+    let (entry, problem) = (entry.to_string(), problem.to_string());
+    err(DataErrorKind::BadEntry { entry, problem })
+}
+
 fn positive(v: &toml::Value) -> Option<f64> {
     v.as_float()
         .or_else(|| v.as_integer().map(|i| i as f64))
@@ -49,18 +54,9 @@ fn parse_body(n: usize, value: &toml::Value) -> Result<FishBody, DataError> {
         .get("species")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            err(DataErrorKind::Invalid(format!(
-                "body {n}: `species` must be a non-empty string"
-            )))
-        })?
+        .ok_or_else(|| bad_entry(&format!("body {n}"), "`species` must be a non-empty string"))?
         .to_string();
-    let bad = |problem: &str| {
-        err(DataErrorKind::BadEntry {
-            entry: species.clone(),
-            problem: problem.to_string(),
-        })
-    };
+    let bad = |problem: &str| bad_entry(&species, problem);
     let fields = [
         "species",
         "box",
@@ -134,11 +130,7 @@ impl FishBodies {
             .get("body")
             .ok_or_else(|| err(DataErrorKind::MissingKey("body".into())))?
             .as_array()
-            .ok_or_else(|| {
-                err(DataErrorKind::Invalid(
-                    "`body` must be an array of tables".into(),
-                ))
-            })?;
+            .ok_or_else(|| err(DataErrorKind::Invalid("`body` must be an array".into())))?;
         let mut bodies: Vec<FishBody> = Vec::new();
         for (i, value) in list.iter().enumerate() {
             let b = parse_body(i + 1, value)?;
@@ -149,10 +141,7 @@ impl FishBodies {
                 }));
             }
             if !species.contains(&b.species.as_str()) {
-                return Err(err(DataErrorKind::BadEntry {
-                    entry: b.species,
-                    problem: "not a species in fish.toml".into(),
-                }));
+                return Err(bad_entry(&b.species, "not a species in fish.toml"));
             }
             if !items.has_item(&b.raw_item) {
                 return Err(err(DataErrorKind::UnknownItem {
@@ -162,16 +151,11 @@ impl FishBodies {
             }
             bodies.push(b);
         }
-        if let Some(s) = species
-            .iter()
-            .find(|s| !bodies.iter().any(|b| b.species == **s))
-        {
-            return Err(err(DataErrorKind::BadEntry {
-                entry: s.to_string(),
-                problem: "has no body".into(),
-            }));
+        let bodies = FishBodies { bodies };
+        match species.iter().find(|s| bodies.get(s).is_none()) {
+            Some(s) => Err(bad_entry(s, "has no body")),
+            None => Ok(bodies),
         }
-        Ok(FishBodies { bodies })
     }
 
     pub fn get(&self, species: &str) -> Option<&FishBody> {
