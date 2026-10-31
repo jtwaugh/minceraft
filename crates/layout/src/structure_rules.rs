@@ -62,11 +62,7 @@ fn choice<T: Copy>(
 }
 
 /// A `cell` that must lie inside `size`.
-fn cell_in(
-    v: &toml::Value,
-    field: &'static str,
-    size: [i32; 3],
-) -> Result<[i32; 3], StructureError> {
+fn cell(v: &toml::Value, field: &'static str, size: [i32; 3]) -> Result<[i32; 3], StructureError> {
     let cell = int3(v, "cell").map_err(|_| StructureError::Field(field))?;
     if cell.iter().zip(size).any(|(&c, s)| c < 0 || c >= s) {
         return Err(StructureError::CellOutOfBounds { field, cell });
@@ -93,7 +89,7 @@ fn list<T>(
 
 fn connector(v: &toml::Value, size: [i32; 3]) -> Result<Connector, StructureError> {
     Ok(Connector {
-        cell: cell_in(v, "connectors", size)?,
+        cell: cell(v, "connectors", size)?,
         facing: choice(v, "facing", &FACINGS, StructureError::BadFacing)?,
         pool: choice(v, "pool", &POOLS, StructureError::BadPool)?,
     })
@@ -102,7 +98,7 @@ fn connector(v: &toml::Value, size: [i32; 3]) -> Result<Connector, StructureErro
 /// A spawn marker's cell; `villager` is the only spawn kind.
 fn spawn(v: &toml::Value, size: [i32; 3]) -> Result<[i32; 3], StructureError> {
     choice(v, "kind", &[("villager", ())], StructureError::BadSpawnKind)?;
-    cell_in(v, "spawns", size)
+    cell(v, "spawns", size)
 }
 
 fn rotations(v: &toml::Value) -> Result<Vec<u8>, StructureError> {
