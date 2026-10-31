@@ -1,5 +1,5 @@
 ---
-title: Dither sea ice into open water
+title: Sea ice floes
 status: accepted
 scope: generator
 source: "#1597"
@@ -14,11 +14,15 @@ phases:
 - **Hard edge today.** `crates/terrain/src/lib.rs` (~line 902) sets `frozen = t < 0.5 && !open_water(wx, wz)`. The density fill puts `ICE` at `y = SEA_LEVEL - 1` when `frozen`, and `Generator::surface` does the same for a beach/stone-patch water top. `t` is the unquantised column temperature after the temperature biases.
 - **`open_water` hook exists.** `trait OpenWater` and `Biases::open_water` (`lib.rs`, ~lines 165-210); `Layout::with_biases` (`crates/layout/src/region.rs`) builds the `Biases`. `Biases` derives `Default` ("none").
 - **Ice is one block.** `ice` is block id 7 in `data/blocks.toml` (opacity 3, `collision = "full"`, not `opaque_cube`); `crates/terrain/src/lib.rs` has `const ICE`. Places that compare against it: the snow pass and `decorate.rs:704` (`below == ICE`), the column scan at `lib.rs:553-554`, `crates/layout/src/derived.rs:61` (`frozen[i] = surface == Block::Ice`), and `tests_veg.rs` (~line 110, ~284).
+- **More ice checks outside terrain.** Each of these needs `floe_ice` (or `is_sea_ice`) too:
+  - `crates/mesh` (face culling and rendering): `tables.rs:12` (`const ICE`), `mesh.rs:125` (column scan through `AIR | WATER | ICE`), `mesh.rs:187` (`b != ICE`), `mesh.rs:220` (water faces hidden by ice), `mesh.rs:244-248` (ice faces culled against ice and solids, drawn into `out.ice`), `mesh.rs:525` (the `ice_and_fast_leaves` test), `tint.rs:167` (untinted block list). `floe_ice` needs the same treatment plus its texture variants (open question 2).
+  - `crates/layout`: `derived.rs:40-41` (`is_water` counts ice as water), `navigability.rs:23` (`is_water`) and `navigability.rs:30` (ice at `SEA_LEVEL - 1` is never navigable), `validation.rs:164`, `validation.rs:338`, `validation_decorated.rs:56`.
+  - Examples: `crates/layout/examples/layout_stats.rs:18` (`wet` includes ice), `crates/terrain/examples/stats.rs:51` (water or ice top).
 - **Habitats already follow the block.** `frozen` in `crates/layout/src/derived.rs` comes from the surface block, not T, so Phase B's "consumers follow the block" is mostly true already. `data/habitats.toml` has `frozen` first, then `warm_shallows`, `deep_water`, `rocky_shore`, `cold_open`, `temperate_open`. No `broken_ice` habitat exists.
 - **Level file.** `crates/layout/src/level.rs` has `Climate { temp_start, temp_end }`, an optional `[climate]` table that only records what was used (#846, `world-layout.md`). It has no switch today.
 - **Tests that assume the hard edge.** `check_snow_ice` in `crates/terrain/src/tests_veg.rs` (~line 262, "unfrozen sea" and "ice in warm column") and `open_water_skips_sea_ice_only_on_its_columns`; `crates/layout/src/channel_tests.rs:281` counts ice outside channels; `derived_tests.rs` asserts `frozen == (top == Ice)`.
 - **Art.** `ice` (batch 13, `art/PROMPT.md`) is one 8x8 tile. There are no floe or crack textures.
-- **Snow.** SPEC 13's snow rule excludes ice; that stays true if the floe block is also excluded.
+- **Snow.** SPEC 13's snow rule excludes ice; that stays true if the floe block is also excluded. Whether to exclude it is a project choice, not yet made (open question 6).
 
 ## Reconciliation notes
 
@@ -87,6 +91,8 @@ Sea ice ends on a hard line. The sea surface at `y = SEA_LEVEL - 1` freezes exac
 
 **B. Consumers follow the block.** Habitats, layout checks and any T-based ice assumption read the block instead. Done when a column inside the band classifies by its surface block.
 
+> **Reconciler:** "Phases (reconciler)" below replaces this section, as section 5 says. The header's phases A and B are the ones defined there. Because there is no `t_open` (see the note under section 2), Phase A's criterion is "no ice at `T >= 0.5`", not "ice only below `t_open`".
+
 ## 5. Decided (maintainer)
 
 1. **Cold side only.** Today's ice edge (T = 0.5) is the outer limit: nothing freezes that doesn't freeze now. The band is `[t_ice, 0.5)`; colder than `t_ice` is solid ice, inside the band the ice breaks up into floes and gaps.
@@ -99,9 +105,9 @@ These change the phases: Phase A also covers the floe block/texture art, and Pha
 
 ## Phases (reconciler)
 
-**Phase A.** Terrain, block and art. The band data (`data/sea_ice.toml`), the floe rule (option C), the `floe_ice` block and its texture variants (art batch plus an `art/PROMPT.md` entry), the `Biases` field for the hard edge (band on by default), the `is_sea_ice` helper at every `== ICE` site, determinism tests, and the updated hard-edge asserts in `tests_veg.rs`. Done when: `stats` shows no ice at `T >= 0.5`; every column with `T < t_ice` is still `ice`; band columns are `floe_ice` or water; the ice set is a subset of the hard-edge ice set; the clumping proxy holds; overlapping regions agree with and without decoration; no snow lies on `floe_ice`; `validate.py` prints `ok`. If it won't fit in 200 reviewable lines, the planner splits the art from the terrain code.
+**Phase A.** Terrain, block and art. The band data (`data/sea_ice.toml`), the floe rule (option C), the `floe_ice` block and its texture variants (art batch plus an `art/PROMPT.md` entry), the `Biases` field for the hard edge (band on by default), the `is_sea_ice` helper at every `== ICE` site in `crates/terrain` (`decorate.rs`, `lib.rs:553`, `examples/stats.rs`; the snow pass per open question 6), determinism tests, and the updated hard-edge asserts in `tests_veg.rs`. Mesh: `floe_ice` in `crates/mesh` (`tables.rs`, the culling and ice-quad cases in `mesh.rs`, the untinted list in `tint.rs:167`, and a mesh test like `ice_and_fast_leaves`), with the texture variant chosen there if open question 2 picks A. Done when: `stats` shows no ice at `T >= 0.5`; every column with `T < t_ice` is still `ice`; band columns are `floe_ice` or water; the ice set is a subset of the hard-edge ice set; the clumping proxy holds; overlapping regions agree with and without decoration; `floe_ice` faces are culled against `ice`, `floe_ice` and water as `ice` faces are; `validate.py` prints `ok`. Snow on `floe_ice` follows open question 6. If it won't fit in 200 reviewable lines, the planner splits the art and the mesh from the terrain code.
 
-**Phase B.** Habitat and level switch. The `broken_ice` habitat (`data/habitats.toml`, `crates/layout/src/habitat*.rs`, `derived.rs`), layout checks that count ice (`channel_tests.rs`, `derived_tests.rs`) following the block, and the `[climate]` key that turns the band off (`level.rs`, `seed_output.rs`, `Layout::with_biases`). Done when: a band column classifies `broken_ice` and a solid-ice column `frozen`; a level with the key off generates the same world as the hard edge; a level without the key gets the band; a level file round-trips the key.
+**Phase B.** Habitat and level switch. The `broken_ice` habitat (`data/habitats.toml`, `crates/layout/src/habitat*.rs`, `derived.rs`), layout checks that count ice (`channel_tests.rs`, `derived_tests.rs`) following the block, `floe_ice` at every layout ice site (`derived.rs:40-41` `is_water`, `navigability.rs:23, 30` per open question 5, `validation.rs:164, 338`, `validation_decorated.rs:56`, `examples/layout_stats.rs`), and the `[climate]` key that turns the band off (`level.rs`, `seed_output.rs`, `Layout::with_biases`). Done when: a band column classifies `broken_ice` and a solid-ice column `frozen`; a level with the key off generates the same world as the hard edge; a level without the key gets the band; a level file round-trips the key.
 
 ## Open questions
 
@@ -119,3 +125,10 @@ These change the phases: Phase A also covers the floe block/texture art, and Pha
 4. **Level key name and default.**
    - A. `sea_ice_band` (bool), default `true` when absent (proposed).
    - B. `hard_ice_edge`, default `false`; same meaning, inverted.
+5. **Navigability through the floe band.** `navigability.rs` counts ice as water for depth but never makes a column with ice at `SEA_LEVEL - 1` navigable. Route channels stay open either way (`open_water` wins), but route search and the Phase G cold-first climate scoring in `world-layout.md` (and its "not frozen" anchorage rule) see the band differently.
+   - A. Follow the block: `floe_ice` columns are not navigable, the open gaps are (proposed). Consistent with `frozen` and `broken_ice` following the block; the search may thread gaps where they connect.
+   - B. The whole band is blocked: gap columns are not navigable either. Same navigable set as today's hard edge, so route search and Phase G scoring don't change.
+   - C. `floe_ice` is navigable (the raft pushes through floes). Widens cold water the search can use; needs a client rule for crossing floes.
+6. **Snow on `floe_ice`.** SPEC 13 keeps snow off ice; extending that to `floe_ice` is a project choice nobody has made.
+   - A. No snow on `floe_ice`, like `ice` (proposed): one `is_sea_ice` check in the snow pass.
+   - B. Snow may lie on `floe_ice`: floes read as snow-covered pack from above, and differ from solid `ice`.
