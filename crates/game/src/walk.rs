@@ -1130,8 +1130,8 @@ impl Walker {
             }
         }
         self.facts = ctx.facts;
-        if input.interact {
-            self.interact();
+        if input.secondary {
+            self.pick_up();
         } else if input.drop {
             self.drop_carried(input);
         }
@@ -1153,10 +1153,10 @@ impl Walker {
         self.items.spawn(carried, self.cur_eye, velocity);
     }
 
-    /// Interact picks up the targeted loose item if the hands are empty.
-    /// With full hands it does nothing: put-down arrives with stations
-    /// and counters (decided in #215); only Drop releases the item.
-    fn interact(&mut self) {
+    /// Secondary (right-click) picks up the targeted loose item if the hands
+    /// are empty. With full hands it does nothing: put-down arrives with
+    /// stations and counters (decided in #215); only Drop releases the item.
+    fn pick_up(&mut self) {
         let Target::Entity { id } = self.target else {
             return;
         };
@@ -1635,6 +1635,13 @@ mod tests {
         }
     }
 
+    fn pick_up() -> TickInput {
+        TickInput {
+            secondary: true,
+            ..look(0.0, false)
+        }
+    }
+
     /// A walker looking at seeds 1.5 blocks ahead (north) at eye height.
     fn facing_seeds() -> (Walker, crate::targeting::EntityId) {
         let mut w = settled();
@@ -1645,9 +1652,17 @@ mod tests {
     }
 
     #[test]
-    fn interact_picks_up_a_targeted_item_with_empty_hands() {
+    fn interact_key_no_longer_picks_up() {
         let (mut w, id) = facing_seeds();
         w.tick(&interact());
+        assert_eq!(w.hands(), None);
+        assert!(w.items().get(id).is_some());
+    }
+
+    #[test]
+    fn secondary_picks_up_a_targeted_item_with_empty_hands() {
+        let (mut w, id) = facing_seeds();
+        w.tick(&pick_up());
         assert_eq!(w.hands(), Some(&seeds()));
         assert!(w.items().get(id).is_none());
         assert_eq!(w.target(), Target::None);
@@ -1676,19 +1691,19 @@ mod tests {
         e.velocity = [0.0; 3];
         let name = e.item.item.clone();
         w.tick(&look(0.0, false));
-        w.tick(&interact());
+        w.tick(&pick_up());
         assert_eq!(w.hands().map(|h| h.item.clone()), Some(name));
         assert_eq!(w.items().len(), ids.len() - 1);
     }
 
     #[test]
-    fn interact_with_full_hands_does_nothing() {
+    fn pick_up_with_full_hands_does_nothing() {
         let (mut w, id) = facing_seeds();
         let other = ItemInstance {
             item: "other".into(),
         };
         w.state.hands = Some(other.clone());
-        w.tick(&interact());
+        w.tick(&pick_up());
         assert_eq!(w.hands(), Some(&other));
         assert!(w.items().get(id).is_some());
     }
@@ -1696,15 +1711,15 @@ mod tests {
     /// Decided in #215: with stations absent, interact while carrying is a
     /// no-op whatever is aimed at; the item is neither put down nor lost.
     #[test]
-    fn interact_while_carrying_never_puts_down_or_loses_the_item() {
+    fn pick_up_while_carrying_never_puts_down_or_loses_the_item() {
         let mut w = settled();
         let far = w.spawn_item(seeds(), [0.5, 5.62, -6.0]);
         w.state.hands = Some(seeds());
-        let mut aims = vec![interact()];
-        let mut up = interact();
+        let mut aims = vec![pick_up()];
+        let mut up = pick_up();
         up.pitch = 1.2;
         aims.push(up);
-        let mut down = interact();
+        let mut down = pick_up();
         down.pitch = -1.5;
         aims.push(down);
         for input in &aims {
@@ -1717,20 +1732,20 @@ mod tests {
     }
 
     #[test]
-    fn interact_out_of_reach_or_on_nothing_picks_nothing_up() {
+    fn pick_up_out_of_reach_or_on_nothing_picks_nothing_up() {
         let mut w = settled();
         let far = w.spawn_item(seeds(), [0.5, 5.62, -6.0]);
-        w.tick(&interact());
+        w.tick(&pick_up());
         assert_eq!(w.hands(), None);
         assert!(w.items().get(far).is_some());
         // Looking at the sky with an item behind: nothing targeted.
-        let mut up = interact();
+        let mut up = pick_up();
         up.pitch = 1.2;
         w.tick(&up);
         assert_eq!(w.hands(), None);
         assert_eq!(w.items().len(), 1);
         // Targeting a block (not an item) picks nothing up either.
-        let mut down = interact();
+        let mut down = pick_up();
         down.pitch = -1.5;
         w.tick(&down);
         assert_eq!(w.hands(), None);
@@ -1790,7 +1805,7 @@ mod tests {
         let d = [0, 1, 2].map(|i| e.pos[i] - eye[i]);
         let flat = (d[0] * d[0] + d[2] * d[2]).sqrt();
         let aim = TickInput {
-            interact: true,
+            secondary: true,
             yaw: d[0].atan2(-d[2]) as f32,
             pitch: d[1].atan2(flat) as f32,
             ..TickInput::default()
@@ -3335,10 +3350,10 @@ mod tests {
     fn pickup_emits_item_picked_up_unless_hands_are_full() {
         let (mut w, _) = facing_seeds();
         w.state.hands = Some(seeds());
-        w.tick(&interact());
+        w.tick(&pick_up());
         assert!(w.drain_events().is_empty(), "full hands");
         w.state.hands = None;
-        w.tick(&interact());
+        w.tick(&pick_up());
         assert_eq!(
             w.drain_events(),
             vec![GameEvent::ItemPickedUp {
@@ -3401,7 +3416,7 @@ mod tests {
             for _ in 0..40 {
                 w.tick(&drop_input(0.3, -0.3));
                 seen.extend(w.drain_events());
-                w.tick(&interact());
+                w.tick(&pick_up());
                 seen.extend(w.drain_events());
             }
             seen
@@ -3888,7 +3903,7 @@ mod tests {
         let d = [0, 1, 2].map(|i| e.pos[i] - eye[i]);
         let flat = (d[0] * d[0] + d[2] * d[2]).sqrt();
         w.tick(&TickInput {
-            interact: true,
+            secondary: true,
             yaw: d[0].atan2(-d[2]) as f32,
             pitch: d[1].atan2(flat) as f32,
             ..TickInput::default()

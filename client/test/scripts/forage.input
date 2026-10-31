@@ -62,7 +62,8 @@ place air
 frame 50 x2
 expect flower.block = air
 expect target.kind = entity
-press KeyE
+button down right
+button up right
 frame 50 x2
 expect hands = seeds
 expect items = 3
@@ -122,7 +123,8 @@ forage
 frame 50 x20
 place air
 frame 50 x2
-press KeyE
+button down right
+button up right
 frame 50 x2
 # seeds are the same item whatever their source
 expect hands = seeds

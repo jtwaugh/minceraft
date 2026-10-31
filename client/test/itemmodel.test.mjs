@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import {
   ITEM_TEXTURES, itemTextureName, itemBoxes, itemPose, itemDraws, BOB_SPEED, BOB_AMPLITUDE,
 } from '../itemmodel.js';
-import { packAtlas } from '../models.js';
+import { packAtlas, CLEAR } from '../models.js';
 
 const itemsToml = readFileSync(new URL('../../data/items.toml', import.meta.url), 'utf8');
 const itemNames = [...itemsToml.matchAll(/\[\[item\]\]\s*\nname = "([^"]+)"/g)].map((m) => m[1]);
@@ -40,7 +40,17 @@ test('itemBoxes textures both big faces with the icon, unknown items grey', () =
   const [b] = itemBoxes('seeds');
   assert.equal(b.faces.front, 'seeds');
   assert.equal(b.faces.back, 'seeds');
+  for (const f of ['left', 'right', 'top', 'bottom']) assert.equal(b.faces[f], CLEAR, f);
   assert.deepEqual(itemBoxes('nope')[0].faces, {});
+});
+
+test('the CLEAR rect is fully transparent, so slab edges are discarded', () => {
+  const atlas = packAtlas({ palette: {}, batches: {} });
+  const r = atlas.rects[CLEAR];
+  assert.ok(r);
+  for (let j = 0; j < r.h; j++) for (let i = 0; i < r.w; i++) {
+    assert.equal(atlas.data[((r.y + j) * atlas.width + r.x + i) * 4 + 3], 0);
+  }
 });
 
 test('itemDraws yields one draw per item at its position', () => {

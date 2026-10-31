@@ -132,7 +132,7 @@ fn pick_up_seeds(w: &mut Walker) {
     };
     w.tick(&aim);
     w.tick(&TickInput {
-        interact: true,
+        secondary: true,
         ..aim
     });
     assert_eq!(w.hands().map(|h| h.item.as_str()), Some("seeds"));

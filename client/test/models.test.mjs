@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { packAtlas, boxVertices, FALLBACK, animalPose, animalBoxes, ANIMAL_MODELS } from '../models.js';
+import { packAtlas, boxVertices, FALLBACK, CLEAR, animalPose, animalBoxes, ANIMAL_MODELS } from '../models.js';
 
 const fixture = {
   palette: { 0: '#101010', 1: '#ff0000', 2: '#00ff00' },
@@ -20,7 +20,7 @@ test('packAtlas is deterministic and packs without overlap', () => {
   const b = packAtlas(fixture, ['dirt']);
   assert.deepEqual(a.rects, b.rects);
   assert.deepEqual(a.data, b.data);
-  assert.deepEqual(Object.keys(a.rects).sort(), [FALLBACK, 'crab.shell', 'dirt', 'fish.body_left', 'fish.body_top'].sort());
+  assert.deepEqual(Object.keys(a.rects).sort(), [FALLBACK, CLEAR, 'crab.shell', 'dirt', 'fish.body_left', 'fish.body_top'].sort());
   assert.equal(a.data.length, a.width * a.height * 4);
   const rs = Object.values(a.rects);
   for (const r of rs) assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= a.width && r.y + r.h <= a.height);

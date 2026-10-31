@@ -96,12 +96,12 @@ fn run_session() -> Final {
     });
     assert_eq!(w.held(), HeldThing::Tool("sword".into()));
 
-    // Interact picks the item up; the tools are stowed.
+    // Right-click picks the item up; the tools are stowed.
     let id = w.spawn_item(seeds(), [0.5, 5.62, -1.0]);
     w.tick(&idle());
     assert_eq!(w.target(), Target::Entity { id });
     w.tick(&TickInput {
-        interact: true,
+        secondary: true,
         ..idle()
     });
     assert_eq!(w.hands(), Some(&seeds()));
@@ -139,7 +139,7 @@ fn run_session() -> Final {
     // Pick it up again.
     let aim = aim_at(&w, rest.pos);
     w.tick(&TickInput {
-        interact: true,
+        secondary: true,
         ..aim
     });
     assert_eq!(w.hands(), Some(&seeds()));

@@ -2,6 +2,8 @@
 // ([[item]]) has an 8x8 icon in art/ whose tile name is the item's name; the
 // drawer packs these into its atlas next to the model faces (see scene.js).
 
+import { CLEAR_EDGES } from './models.js';
+
 export const ITEM_TEXTURES = [
   'seeds', 'raw_beef', 'leather', 'raw_pork', 'raw_chicken', 'feather',
   'dandelion_flower', 'rose_flower', 'wheat',
@@ -22,11 +24,11 @@ const SLAB = 0.02; // thickness of the sprite's box, in item sizes
 /**
  * The unit box (centred on the origin) of item `name`: a thin slab whose
  * front and back faces both show the icon, so a camera-facing pose sees it from
- * either side. Unknown items get grey faces.
+ * either side, and whose thin edges are transparent. Unknown items get grey faces.
  */
 export function itemBoxes(name) {
   const tex = itemTextureName(name);
-  const faces = tex ? { front: tex, back: tex } : {};
+  const faces = tex ? { front: tex, back: tex, ...CLEAR_EDGES } : {};
   return [{ lo: [-0.5, -0.5, -SLAB / 2], size: [1, 1, SLAB], faces }];
 }
 
