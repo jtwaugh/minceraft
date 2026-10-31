@@ -344,7 +344,7 @@ mod tests {
         for t in 0..3000 {
             steer.tick(&mut store, &world, None, &mut rng);
             if t >= 400 {
-                assert!(spread(&store) < 8.0,"tick {t}: {}", spread(&store));
+                assert!(spread(&store) < 8.0, "tick {t}: {}", spread(&store));
             }
         }
     }
