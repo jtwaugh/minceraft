@@ -31,7 +31,7 @@ import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.j
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
-import { SWAY_AMPLITUDE, SWAY_WAVE, swayPhase } from './sway.js';
+import { SWAY_AMPLITUDE, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE, swayPhase } from './sway.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
@@ -86,6 +86,9 @@ if (!gl) throw new Error('WebGL2 is not available');
 // lit colour, both set per frame by view.js `look`, so the same shader draws
 // above and under water.
 const TEX_SIZE = 16; // side of every layer in the tile array (tiles.js)
+// GLSL for swayOffset in sway.js at `amplitude`: moves `w.xz` by weight `top` along the shared wave.
+const swayGlsl = (amplitude) => `float k = ${SWAY_WAVE.toFixed(3)};
+      w.xz += ${amplitude.toFixed(3)} * top * vec2(sin(swayPhase + (w.x + 0.6 * w.z) * k), cos(swayPhase + (w.z - 0.6 * w.x) * k));`;
 function program(cut) {
   const sh = (type, src) => {
     const s = gl.createShader(type);
@@ -118,8 +121,8 @@ function program(cut) {
       // weights below 0.5 are leaves (LEAF_WEIGHT in mesh.js): they sway but never sink
       w.y -= step(0.5, top) * top * (1.0 - s);
       // mirrors swayOffset in sway.js: tops move sideways, bases stay put
-      float k = ${SWAY_WAVE.toFixed(3)};
-      w.xz += ${SWAY_AMPLITUDE.toFixed(3)} * top * vec2(sin(swayPhase + (w.x + 0.6 * w.z) * k), cos(swayPhase + (w.z - 0.6 * w.x) * k));` : ''}
+      ${swayGlsl(SWAY_AMPLITUDE)}` : `// mirrors trunkLean in sway.js: logs lean with height, weight 0 stays put
+      ${swayGlsl(TRUNK_SWAY_AMPLITUDE)}`}
       gl_Position = mvp * vec4(w, 1.0);
       bool anim = layer > ${(ANIM_FIRST - 0.5).toFixed(1)} && layer < ${(ANIM_END - 0.5).toFixed(1)};
       vuv = vec3(uv * unpack.y, anim ? layer + waterFrame : layer);
@@ -588,7 +591,8 @@ function render(now) {
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
-    if (prog === cutProg) { gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE); gl.uniform1f(prog.u('swayPhase'), swayPhase(now, reducedMotion.matches)); }
+    gl.uniform1f(prog.u('swayPhase'), swayPhase(now, reducedMotion.matches));
+    if (prog === cutProg) gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE);
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
