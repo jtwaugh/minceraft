@@ -12,7 +12,8 @@
 //   ?debug=1     debug mode on (also on whenever ?scene= is set); see debug.js
 //   ?log=N      console.log the frame-time summary every N frames, for headless runs
 //
-// window.frameStats() returns { frames, p50, p99 } at any time.
+// window.frameStats() returns { frames, p50, p99, max, hitches } at any time:
+// max is the slowest frame in the window, hitches the frames over HITCH_MS.
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, * as game from './pkg/game_web.js';
