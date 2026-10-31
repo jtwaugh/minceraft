@@ -60,6 +60,13 @@ pub(crate) const SAND: u8 = Block::Sand as u8;
 pub(crate) const GRAVEL: u8 = Block::Gravel as u8;
 pub(crate) const WATER: u8 = Block::Water as u8;
 pub(crate) const ICE: u8 = Block::Ice as u8;
+pub(crate) const FLOE_ICE: u8 = Block::FloeIce as u8;
+
+/// Sea ice: plain ice or floe ice (sea-ice-floes.md A).
+#[inline]
+pub(crate) fn is_sea_ice(b: u8) -> bool {
+    b == ICE || b == FLOE_ICE
+}
 /// Internal marker used only during the surface pass; written out as Sand.
 const SANDSTONE: u8 = 0x80;
 
@@ -554,8 +561,8 @@ pub fn column_summary(col: &[u8]) -> (u8, u8, u8, u8) {
     }
     let top = col[y];
     let ty = y;
-    if top == WATER || top == ICE {
-        while y > 0 && (col[y] == WATER || col[y] == ICE) {
+    if top == WATER || is_sea_ice(top) {
+        while y > 0 && (col[y] == WATER || is_sea_ice(col[y])) {
             y -= 1;
         }
     }
@@ -975,7 +982,7 @@ impl Generator {
             }
             match col[yi] {
                 AIR => run = -1,
-                WATER | ICE => {}
+                b if b == WATER || is_sea_ice(b) => {}
                 _ => {
                     if run == -1 {
                         if soil <= 0 {

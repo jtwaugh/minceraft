@@ -34,7 +34,7 @@ use crate::data::{
 };
 use crate::flora::{Flora, FloraShape, FLORA};
 use crate::noise::{mix64, Rng};
-use crate::{plants, trees, Biases, Generator, Region, AIR, HEIGHT, ICE, STONE};
+use crate::{is_sea_ice, plants, trees, Biases, Generator, Region, AIR, HEIGHT, STONE};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -701,7 +701,7 @@ pub(crate) fn snow_column(world: &mut World, x: i32, z: i32, flora: &[Flora]) ->
         world.set(x, top, z, AIR);
     }
     let below = world.get(x, top - 1, z);
-    if !blocks_movement(below) || below == ICE {
+    if !blocks_movement(below) || is_sea_ice(below) {
         return false;
     }
     world.set(x, top, z, SNOW)
@@ -741,5 +741,43 @@ mod tests_cells {
         assert_eq!(cell_index(0), 0);
         assert_eq!(cell_index(15), 0);
         assert_eq!(cell_index(16), 1);
+    }
+}
+
+#[cfg(test)]
+mod tests_floe_ice {
+    use super::*;
+    use crate::{column_summary, FLOE_ICE, ICE, WATER};
+
+    /// Sea column: stone to 50, water to 62, `cap` at 63.
+    fn sea(cap: u8) -> Vec<u8> {
+        let mut col = vec![AIR; HEIGHT];
+        col[..=50].fill(STONE);
+        col[51..63].fill(WATER);
+        col[63] = cap;
+        col
+    }
+
+    #[test]
+    fn column_scan_treats_floe_ice_like_ice() {
+        let (ice, floe) = (column_summary(&sea(ICE)), column_summary(&sea(FLOE_ICE)));
+        assert_eq!(floe, (FLOE_ICE, 63, 50, STONE));
+        assert_eq!((ice.1, ice.2, ice.3), (floe.1, floe.2, floe.3));
+    }
+
+    #[test]
+    fn no_snow_on_floe_ice() {
+        let temp = [-0.8];
+        let biome = [0];
+        for (cap, snows) in [(ICE, false), (FLOE_ICE, false), (STONE, true)] {
+            let mut blocks = sea(cap);
+            let mut world = World {
+                temp: &temp,
+                biome: &biome,
+                ..World::for_test(&mut blocks, 1, 1)
+            };
+            assert_eq!(snow_column(&mut world, 0, 0, &[]), snows, "cap {cap}");
+            assert_eq!(blocks[64] == SNOW, snows, "cap {cap}");
+        }
     }
 }
