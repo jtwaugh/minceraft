@@ -29,7 +29,7 @@ const CLASSES = {
   partial: ['target.id', 'target.face', 'box', 'console.last', 'console.text', 'phase.left'],
   debug: [
     'regions.loaded', 'regions.freed', 'regions.pending', 'regions.x', 'regions.z',
-    'regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame',
+    'regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget',
     'console.lines', 'cheated', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',

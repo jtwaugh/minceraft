@@ -77,7 +77,9 @@
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
-// events.foraged (`foraged` events seen since the case began),
+// events.foraged (`foraged` events seen since the case began), events.overbudget (stream only: frames whose work,
+// as counted for the work paths, went over a budget in client/workbudget.js; each is an event
+// `overbudget <field>=<value> ...` naming the fields over, e.g. `expect no event overbudget`),
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
 
 import { readFileSync } from 'node:fs';
@@ -85,6 +87,7 @@ import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg
 import * as terrain from '../../viewer/pkg/terrain_web.js';
 import { B, VERTEX_BYTES, legendContext } from '../../viewer/mesh.js';
 import { meshRegionCpu } from '../regionmesh.js';
+import { overBudget } from '../workbudget.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
 import { heldDraw } from '../helditem.js';
@@ -129,7 +132,7 @@ export function parse(src) {
   return cases;
 }
 
-function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
+function world({ mode = 'walk', raft = false, debug = raft, stream = false, budget = 1 }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
   const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
@@ -148,7 +151,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   if (raft) spawnTestItems(walk);
   const fly = stream ? new FlyCamera(50.5, 110, 40.5) : new FlyCamera(32, 94, 32);
   const controller = createController({
-    input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly', stream: stream ? { budget: 1 } : null,
+    input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly', stream: stream ? { budget } : null,
     sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds },
   });
   const seen = [];
@@ -157,7 +160,12 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false }) {
   controller.frame = (dt) => {
     const state = frame(dt);
     seen.push(...state.events);
-    if (most) for (const [k, v] of Object.entries(meshFrame(walk, state.regions))) most[k] = Math.max(most[k], v);
+    if (most) {
+      const work = meshFrame(walk, state.regions);
+      for (const [k, v] of Object.entries(work)) most[k] = Math.max(most[k], v);
+      const over = overBudget(work);
+      if (over.length) seen.push(`overbudget ${over.map((k) => `${k}=${work[k]}`).join(' ')}`);
+    }
     return state;
   };
   controller.frame(0);
@@ -223,6 +231,10 @@ function read(w, path) {
   }
   if (path === 'particles') return s.particleCount;
   if (path === 'events.foraged') return w.events.filter((e) => e.startsWith('foraged ')).length;
+  if (path === 'events.overbudget') {
+    if (!w.most) throw new Error(`${path} needs \`start ... stream\``);
+    return w.events.filter((e) => e.startsWith('overbudget ')).length;
+  }
   if (path === 'events') return w.events.length;
   if (path === 'sim_tick') return w.walk.sim_tick();
   if (path === 'raft.moved') {
@@ -490,10 +502,10 @@ function parseStart(args) {
  * `execStep` (a parsed `{ op, args }`) never throw: they return `{ ok: true }` or
  * `{ ok: false, error }`. `transcript()` is the session as a valid script: `case <name>`,
  * the `start` line, then every line that succeeded (errored ones are dropped).
- * Call `close()` when done.
+ * Call `close()` when done. `streamBudget` (tests only) meshes that many regions per frame in a stream world.
  */
-export function createSession(startArgs = [], name = 'session') {
-  const w = world(parseStart(startArgs));
+export function createSession(startArgs = [], name = 'session', { streamBudget = 1 } = {}) {
+  const w = world({ ...parseStart(startArgs), budget: streamBudget });
   let open = true;
   const lines = [`case ${name}`, `start ${(startArgs.length ? startArgs : ['walk']).join(' ')}`];
   const execStep = ({ op, args }) => {
