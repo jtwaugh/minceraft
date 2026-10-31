@@ -269,20 +269,39 @@ mod tests {
     }
 
     #[test]
-    fn construction_loads_the_neighbours_and_the_player_lands_on_terrain() {
+    fn construction_loads_the_neighbours_and_the_player_starts_on_terrain() {
         let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
         assert_eq!(w.loaded_region_count(), 9);
-        for _ in 0..200 {
-            w.tick(&TickInput::default());
-        }
-        let p = w.player();
-        assert!(p.on_ground, "{p:?}");
+        let start = w.player().pos;
         let ground = terrain::generate_decorated(25, 64, 64, 1, 1);
         let top = (0..terrain::HEIGHT as u32)
             .rev()
             .find(|&y| ground.get(0, y, 0) != terrain::Block::Air)
             .unwrap();
-        assert!(p.pos[1] >= top as f64 && p.pos[1] < 120.0, "{p:?} {top}");
+        assert!(start[1] <= top as f64 + 1.0, "{start:?} {top}");
+        for _ in 0..40 {
+            w.tick(&TickInput::default());
+        }
+        let p = w.player();
+        assert!(p.on_ground && p.pos == start, "{p:?}");
+        assert_eq!(p.health, w.max_health(), "no fall damage at the start");
+    }
+
+    #[test]
+    fn respawn_returns_to_the_ground_at_the_start_not_the_sky() {
+        let mut w = Walker::with_layout(layout(), [64.5, 127.0, 64.5]).unwrap();
+        let start = w.player().pos;
+        w.teleport([start[0], start[1] + 100.0, start[2]]);
+        for _ in 0..200 {
+            w.tick(&TickInput::default());
+        }
+        assert!(w.dead(), "the fall is fatal");
+        assert_eq!(w.respawn(), Ok(start));
+        for _ in 0..40 {
+            w.tick(&TickInput::default());
+        }
+        assert!(!w.dead());
+        assert_eq!(w.player().pos, start, "standing, not falling");
     }
 
     #[test]
@@ -344,7 +363,7 @@ mod tests {
     fn streamed_walk_matches_one_large_region() {
         let l = layout();
         let mut streamed = Walker::with_layout(l.clone(), spawn()).unwrap();
-        let mut single = Walker::new(spawn()).unwrap();
+        let mut single = Walker::new(streamed.player().pos).unwrap();
         single.add_region(l.generate_layout_region(-256, -256, 1024, 640, true).region);
         let input = east();
         for i in 0..1800 {

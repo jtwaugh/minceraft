@@ -85,16 +85,17 @@ pub trait CollisionWorld {
     fn block_at(&self, x: i32, y: i32, z: i32) -> Block;
 
     /// Whether a body occupying `bb` is in water: the box strictly overlaps
-    /// any liquid block cell. Water blocks keep `collision = "none"`, so this
-    /// is separate from `boxes_in`. Every world gets this through the block
-    /// lookup, so `RegionWorld`, `MemoryWorld` and `RegionSet` agree.
+    /// any water cell (`BlockInfo::is_water`: water or a waterlogged block).
+    /// Both keep `collision = "none"`, so this is separate from `boxes_in`.
+    /// Every world gets this through the block lookup, so `RegionWorld`,
+    /// `MemoryWorld` and `RegionSet` agree.
     fn body_in_water(&self, bb: &Aabb) -> bool {
         let lo = |i: usize| bb.min[i].floor() as i32;
         let hi = |i: usize| bb.max[i].ceil() as i32 - 1;
         for x in lo(0)..=hi(0) {
             for y in lo(1)..=hi(1) {
                 for z in lo(2)..=hi(2) {
-                    if self.block_at(x, y, z).info().liquid {
+                    if self.block_at(x, y, z).info().is_water() {
                         return true;
                     }
                 }
@@ -297,6 +298,15 @@ mod tests {
         assert!(!w.body_in_water(&body(10.0, 4.0, 10.0)));
         // Touching the side of the pool only.
         assert!(!w.body_in_water(&body(2.0, 4.0, 0.2)));
+    }
+
+    #[test]
+    fn a_waterlogged_cell_is_water_with_no_box() {
+        let mut w = MemoryWorld::new();
+        w.set(0, 4, 0, Block::TestWaterloggedPlant);
+        assert!(w.body_in_water(&body(0.2, 4.5, 0.2)));
+        assert!(!w.body_in_water(&body(0.2, 5.0, 0.2)));
+        assert!(query(&w, &body(0.2, 4.5, 0.2)).is_empty());
     }
 
     /// A one-block-tall-slab region: stone at y = 3, water at (wx, 4, wz).

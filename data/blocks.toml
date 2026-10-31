@@ -13,6 +13,10 @@
 # opaque_cube = the "opaque cube" flag used by leaf placement and mushroom
 #               ground (leaves are opaque per quirk B6).
 # liquid      = still/flowing liquid (counts for the snow pass top scan).
+# waterlogged = optional, default false: the cell is also water, so every game
+#               water rule (body in water, swimming, climbing out, falling in)
+#               treats it as water. Must have collision = "none". The terrain
+#               generator's liquid checks ignore it.
 # color       = flat fallback colour (#rrggbb) for maps / untextured views.
 
 [[block]]
@@ -630,3 +634,15 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#b8a45a"
+
+# Test-only waterlogged cross plant (sea-flora-and-shellfish 2): a tall_grass
+# cross standing in water. Terrain generation never places it.
+[[block]]
+id = 68
+name = "test_waterlogged_plant"
+fire = [0, 0]
+collision = "none"
+opacity = 3
+opaque_cube = false
+waterlogged = true
+color = "#6fb043"
