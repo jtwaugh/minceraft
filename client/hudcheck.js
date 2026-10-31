@@ -1,6 +1,6 @@
 // Mechanical HUD layout checks: pure functions over `hudLayout`'s result. Each problem is plain data,
-// `{ check, elements, detail }`. Only the top-level rectangles are checked; slots, hearts and the
-// timer's parts sit inside their parent row.
+// `{ check, elements, detail }`. Overlap, offscreen and clear-zone checks look at the top-level
+// rectangles; the containment check keeps slot icons, hearts and the timer's parts inside their parent.
 
 /** Thresholds (docs/design/play-critic-agent.md section 3, decided in #970 and #971); to be tuned later. */
 export const MIN_SCALE = 2;
@@ -69,7 +69,22 @@ export function handsDistanceChecks(layout) {
   return [{ check: 'distance', elements: ['hands', 'belt'], detail: `hands are ${gap}px above the belt, more than ${limit}px` }];
 }
 
+const inside = (c, p) => c.x >= p.x && c.y >= p.y && c.x + c.w <= p.x + p.w && c.y + c.h <= p.y + p.h;
+
+/** Child rectangles that stick out of their parent: slot icons and numbers out of their slot frame, and the parts of the timer, hands and hearts. */
+export function containmentChecks(layout) {
+  const { slots = [], slotIcons = [], slotNumbers = [], timer, hands, hearts, heartIcons = [] } = layout.rects;
+  const pairs = [
+    ...slots.flatMap((s, i) => [[`slotIcons[${i}]`, slotIcons[i], `slots[${i}]`, s], [`slotNumbers[${i}]`, slotNumbers[i], `slots[${i}]`, s]]),
+    ...(timer ? [['timer.phase', timer.phase, 'timer', timer], ...(timer.digits ?? []).map((d, i) => [`timer.digits[${i}]`, d, 'timer', timer])] : []),
+    ...(hands?.label ? [['hands.label', hands.label, 'hands', hands], ...hands.label.glyphs.map((g, i) => [`hands.label.glyphs[${i}]`, g, 'hands', hands])] : []),
+    ...(hearts ? heartIcons.map((h, i) => [`heartIcons[${i}]`, h, 'hearts', hearts]) : []),
+  ];
+  return pairs.filter(([, c, , p]) => c && p && !inside(c, p))
+    .map(([cn, , pn]) => ({ check: 'containment', elements: [cn, pn], detail: `${cn} is not inside ${pn}` }));
+}
+
 /** All mechanical problems in `layout` (a `hudLayout` result) for `viewport`; empty when there are none. */
 export function layoutChecks(layout, viewport) {
-  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport), ...scaleChecks(layout, viewport), ...clearZoneChecks(layout), ...handsDistanceChecks(layout)];
+  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport), ...scaleChecks(layout, viewport), ...clearZoneChecks(layout), ...handsDistanceChecks(layout), ...containmentChecks(layout)];
 }

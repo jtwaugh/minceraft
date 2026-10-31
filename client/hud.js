@@ -13,7 +13,7 @@
 import { hudLayout, PHASE_ICONS } from './hudlayout.js';
 import { drawString } from './font.js';
 import { drawPanel } from './panel.js';
-import { findTexture, textureCanvas, textureSize, interfaceScale } from './uipx.js';
+import { findTexture, textureCanvas, interfaceScale } from './uipx.js';
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
 export function slotView(set, name, selected) {
@@ -51,7 +51,7 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
 
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font: 12px/14px ui-monospace, monospace; color: #fff; }
-#hud > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot, .slot > * { position: absolute; }
+#hud > *, #hud-cross > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot, .slot > * { position: absolute; }
 #hud canvas { image-rendering: pixelated; }
 #hud-hands { text-shadow: 0 0 3px #000; }
 #hud span { white-space: nowrap; }
@@ -138,10 +138,9 @@ export function mountHud(document, set, parent = document.body, view = globalThi
         place(el, r, rects.belt.x, rects.belt.y);
         const frame = icon(v.frame, { x: 0, y: 0, w: r.w, h: r.h }, 0, 0);
         if (frame) el.append(frame);
-        if (v.icon) {
-          // Centre the icon in the frame, on whole texels.
-          const f = textureSize(set, v.frame), tx = textureSize(set, v.icon);
-          const ic = icon(v.icon, { x: Math.floor((f.w - tx.w) / 2) * scale, y: Math.floor((f.h - tx.h) / 2) * scale, w: tx.w * scale, h: tx.h * scale }, 0, 0);
+        const ir = rects.slotIcons[i];
+        if (v.icon && ir) {
+          const ic = icon(v.icon, ir, r.x, r.y);
           if (ic) el.append(ic);
         }
         const num = rects.slotNumbers[i];
