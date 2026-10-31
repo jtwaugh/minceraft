@@ -1,0 +1,15 @@
+# Fish stock, spawning and swimming (docs/design/fish-and-fishing.md
+# sections 3.1 and 3.2), read by crates/game/src/fish_spawn_config.rs.
+# Numbers are this game's own. Every key is required and must be above zero;
+# ring_inner < ring_outer < despawn_radius. Distances are in blocks.
+
+daily_stock = 24          # fish per anchorage per day
+target_count = 12         # fish topped up to at each phase change ...
+target_radius = 24        # ... counted within this distance of the raft
+ring_inner = 12           # schools spawn at least this far from the raft ...
+ring_outer = 24           # ... and at most this far
+despawn_radius = 40       # fish farther than this are removed
+clearance = 1             # keep this far below the surface and above the bottom
+scatter_distance = 4      # a swimming player this close scatters fish ...
+scatter_speed = 2.0       # ... which swim at this multiple of their speed
+retarget_ticks = [40, 100] # wander picks a new heading after this many ticks, inclusive
