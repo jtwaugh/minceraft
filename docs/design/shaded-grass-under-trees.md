@@ -76,7 +76,7 @@ Grass under a tree is the same colour as grass in open sun. Under real canopies 
 - **Not Beta behaviour.** Beta grass colour depends only on climate (SPEC). This is a project choice layered on top; don't take facts about the original from anywhere but SPEC.
 - **World output:** unchanged if tint-only.
 
-> **Reconciler:** Answers, from the code. Render-only: kept out of the world, as preferred. Borders: the blur pads climate colour only, and the block padding is 1 column, so it does not yet cover a shade window (Reconciliation notes); full column height is present in the padded blocks. Light vs. tint: stated in the notes; AO exists and is separate. Player changes: the region remesh recomputes from blocks. Viewer and flyover: `worker.js` calls `columnTints` and `meshBlocks` the same way, so they share the change; the doc treats that as wanted (open question 1 lets the maintainer say otherwise).
+> **Reconciler:** Answers, from the code. Render-only: kept out of the world, as preferred. Borders: the blur pads climate colour only, and the block padding is 1 column, so it does not yet cover a shade window (Reconciliation notes); full column height is present in the padded blocks. Light vs. tint: stated in the notes; AO exists and is separate. Player changes: the region remesh recomputes from blocks. Viewer and flyover: `worker.js` calls `columnTints` and `meshBlocks` the same way, so they share the change; the maintainer confirmed that is wanted: the viewer and flyover get the shaded tint too, with no client-only option. (Decided in #1627.)
 
 ## Phases (reconciler)
 
@@ -86,9 +86,6 @@ Grass under a tree is the same colour as grass in open sun. Under real canopies 
 
 ## Open questions
 
-1. **Viewer and flyover.** Should the shaded tint apply there too, or only in the client?
-   - A. Yes, all share it (the doc's guess; the lowest cost, as they share `columnTints`/`meshBlocks`).
-   - B. Client only, behind an option passed by the caller.
 2. **Bushes and leaves.** `bush`, `berry_bush` and `jungle_bush` use the leaf tint, not the grass tint. Should they shift too?
    - A. No: only grass-tinted plants (tall grass, ferns, `broadleaf`).
    - B. Yes, toward the dry ramp, like the ground.
