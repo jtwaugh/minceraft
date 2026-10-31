@@ -27,6 +27,8 @@ pub struct BlockInfo {
     pub liquid: bool,
     /// The cell is also water for game water rules (`data/blocks.toml`).
     pub waterlogged: bool,
+    /// Selection box inset in 1/16ths on the four sides and the top.
+    pub selection_inset: u8,
     /// Flat fallback colour.
     pub color: [u8; 3],
 }

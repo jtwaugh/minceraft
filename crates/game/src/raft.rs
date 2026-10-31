@@ -378,7 +378,11 @@ impl<W: CollisionWorld> CollisionWorld for RaftWorld<'_, W> {
                 (0..3).all(|i| aabb.min[i] <= query.max[i] && aabb.max[i] >= query.min[i]);
             // The cell the box mostly occupies now.
             let pos = [0, 1, 2].map(|i| ((aabb.min[i] + aabb.max[i]) / 2.0).floor() as i32);
-            touches.then_some(SelectionBox { pos, aabb })
+            touches.then_some(SelectionBox {
+                pos,
+                aabb,
+                plain_water: false,
+            })
         }));
     }
 }
