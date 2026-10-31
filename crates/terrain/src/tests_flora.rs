@@ -20,6 +20,7 @@ static TEST: [Flora; 2] = [
         requires: None,
         snow_stays: false,
         biomes: &[(Biome::Plains, 0.9), (Biome::Forest, 0.5)],
+        niche: &[],
     },
     Flora {
         name: "b",
@@ -33,6 +34,7 @@ static TEST: [Flora; 2] = [
         requires: None,
         snow_stays: false,
         biomes: &[(Biome::Desert, 0.9), (Biome::Taiga, 0.5)],
+        niche: &[],
     },
 ];
 
@@ -196,6 +198,7 @@ macro_rules! plains_entry {
             requires: None,
             snow_stays: false,
             biomes: &[(Biome::Plains, $chance), (Biome::Forest, $chance)],
+            niche: &[],
         }]
     };
 }
@@ -247,6 +250,7 @@ static RIVALS: [Flora; 2] = [
         requires: None,
         snow_stays: false,
         biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
+        niche: &[],
     },
     Flora {
         name: "r2",
@@ -260,6 +264,7 @@ static RIVALS: [Flora; 2] = [
         requires: None,
         snow_stays: false,
         biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
+        niche: &[],
     },
 ];
 
@@ -335,6 +340,7 @@ static TALL: [Flora; 1] = [Flora {
     requires: None,
     snow_stays: false,
     biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
+    niche: &[],
 }];
 
 #[test]
@@ -446,6 +452,7 @@ fn cold(shape: FloraShape, block: Block, upper: Option<Block>) -> [Flora; 1] {
         cluster_scale: 8.0,
         salt: 41,
         biomes: &COLD,
+        niche: &[],
         requires: None,
         snow_stays: false,
     }]

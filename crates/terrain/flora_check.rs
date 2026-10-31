@@ -15,12 +15,23 @@ pub struct RawFlora {
     pub requires: Option<String>,
     /// Plant survives the snow pass; only meaningful for `cross` and `tall_cross`.
     pub snow_stays: bool,
+    /// Optional niche: layer name -> range values (`None` for a non-number).
+    pub niche: Vec<(String, Vec<Option<f64>>)>,
 }
 
 const SHAPES: [&str; 5] = ["cross", "tall_cross", "ground_cover", "pad", "bush"];
 /// Column conditions an entry may name in `requires`.
 pub const REQUIRES: [&str; 3] = ["near_water", "canopy", "coast"];
 const TINTS: [&str; 4] = ["none", "grass", "leaf", "dry"];
+/// Layers an entry may name in `niche`, in `NicheLayer` order.
+pub const NICHE_LAYERS: [&str; 6] = [
+    "height_above_sea",
+    "soil_depth",
+    "light",
+    "slope",
+    "sun_facing",
+    "hollow",
+];
 
 /// Returns the first problem in `entries` as a readable message.
 pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> Result<(), String> {
@@ -41,6 +52,20 @@ pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> R
         if let Some(r) = &e.requires {
             if !REQUIRES.contains(&r.as_str()) {
                 return Err(format!("flora {n}: unknown requires {r:?}"));
+            }
+        }
+        for (layer, range) in &e.niche {
+            if !NICHE_LAYERS.contains(&layer.as_str()) {
+                return Err(format!("flora {n}: unknown niche layer {layer:?}"));
+            }
+            match range[..] {
+                [Some(lo), Some(hi)] if lo <= hi => {}
+                [Some(_), Some(_)] => return Err(format!("flora {n}: niche {layer} has lo > hi")),
+                _ => {
+                    return Err(format!(
+                        "flora {n}: niche {layer} needs two numbers [lo, hi]"
+                    ))
+                }
             }
         }
         for b in e.block.iter().chain(&e.ground) {
