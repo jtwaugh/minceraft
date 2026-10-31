@@ -197,6 +197,9 @@ impl<F: Fn(i32, i32) -> bool> OpenWater for F {
 /// - `protected`: cells decoration must never modify (raft mask, spawn
 ///   water). Terrain itself is not affected by the mask.
 /// - `open_water`: columns kept free of sea ice (water is placed instead).
+/// - `hard_ice_edge`: `true` turns the sea-ice floe band off, so sea ice ends
+///   on the hard `T < 0.5` edge; `false` (the default) keeps the band
+///   `[SEA_ICE_T_ICE, 0.5)` from `data/sea_ice.toml`.
 #[derive(Clone, Copy, Default)]
 pub struct Biases<'a> {
     pub density: &'a [&'a dyn DensityBias],
@@ -206,6 +209,7 @@ pub struct Biases<'a> {
     pub clamp: &'a [&'a dyn DensityClamp],
     pub protected: Option<&'a dyn ProtectedMask>,
     pub open_water: Option<&'a dyn OpenWater>,
+    pub hard_ice_edge: bool,
 }
 
 /// Generate a `w x d` region of **terrain only** (Part I plus biome surfaces

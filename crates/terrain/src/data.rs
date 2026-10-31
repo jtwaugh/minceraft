@@ -1,5 +1,6 @@
-//! Data tables generated at compile time from `data/blocks.toml` and
-//! `data/biomes.toml` (see `build.rs`). The types are declared here; the
+//! Data tables generated at compile time from `data/blocks.toml`,
+//! `data/biomes.toml` and `data/sea_ice.toml` (see `build.rs`). The types
+//! are declared here; the
 //! values (and the `Block` / `Biome` enums) come from the generated file.
 
 /// Collision shape of a block (SPEC 16).

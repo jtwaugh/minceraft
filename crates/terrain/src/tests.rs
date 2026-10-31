@@ -575,6 +575,15 @@ fn no_open_water_mask_is_identical() {
 }
 
 #[test]
+fn sea_ice_band_data_is_sane() {
+    use data::{SEA_ICE_FLOE_SCALE, SEA_ICE_FLOE_STRENGTH, SEA_ICE_T_ICE};
+    // The band is [t_ice, 0.5): nothing warmer than today's edge freezes.
+    const { assert!(SEA_ICE_T_ICE >= 0.0 && SEA_ICE_T_ICE < 0.5) };
+    const { assert!(SEA_ICE_FLOE_SCALE > 0.0 && SEA_ICE_FLOE_STRENGTH > 0.0) };
+    assert!(!Biases::default().hard_ice_edge, "band is on by default");
+}
+
+#[test]
 fn legend_exposes_blend_radius() {
     assert!(LEGEND_JSON.contains("\"blend\":{\"radius\":3}"));
 }
