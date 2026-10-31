@@ -1,10 +1,7 @@
 //! Per-tick fish swimming: wander, loose schooling, depth clearance and
 //! scatter from a swimming player. See docs/design/fish-and-fishing.md
-//! section 3.2.
-//!
-//! A fish only ever moves to a spot where its whole box is in water and no
-//! block or raft box overlaps it, so it never leaves the water. All
-//! randomness comes from the sim `Rng` passed to `tick`.
+//! section 3.2. A fish only moves where its whole box is in water and clear
+//! of blocks and the raft. All randomness comes from the sim `Rng`.
 
 use std::collections::BTreeMap;
 
@@ -23,19 +20,13 @@ pub const SCHOOL_RADIUS: f64 = 4.0;
 /// and bottom.
 const SCAN: i32 = 128;
 
-/// One fish's wander: the heading it is turning towards, and the ticks
-/// before it picks a new heading and depth.
-#[derive(Clone, Debug, PartialEq)]
-struct Wander {
-    heading: f64,
-    ticks_left: u32,
-}
-
 /// The swim state of every fish, beside the `FishStore`.
 #[derive(Clone, Debug)]
 pub struct FishSteer {
     config: FishSpawnConfig,
-    wander: BTreeMap<EntityId, Wander>,
+    /// Per fish: the wander heading it turns towards, and the ticks before
+    /// it picks a new heading and depth.
+    wander: BTreeMap<EntityId, (f64, u32)>,
 }
 
 /// Unit horizontal direction of a heading in degrees (0 looks along -z).
@@ -108,10 +99,7 @@ fn place<W: CollisionWorld + ?Sized>(
     let [lo, hi] = allowed_y(world, pos, size, clearance)?;
     let p = [pos[0], pos[1].clamp(lo, hi), pos[2]];
     let h = size[0] / 2.0;
-    let bb = Aabb::new(
-        [p[0] - h, p[1], p[2] - h],
-        [p[0] + h, p[1] + size[1], p[2] + h],
-    );
+    let bb = Aabb::from_size([p[0] - h, p[1], p[2] - h], [size[0], size[1], size[0]]);
     let mut boxes = Vec::new();
     world.boxes_in(&bb, &mut boxes);
     boxes.is_empty().then_some(p)
@@ -145,21 +133,17 @@ impl FishSteer {
         let c = &self.config;
         for f in store.iter_mut() {
             let body = bodies.get(&f.species).expect("species checked at spawn");
-            let fresh = Wander {
-                heading: f.heading,
-                ticks_left: 0,
-            };
-            let w = self.wander.entry(f.id).or_insert(fresh);
-            if w.ticks_left == 0 {
-                w.heading = f64::from(rng.angle()).to_degrees();
+            let (heading, ticks_left) = self.wander.entry(f.id).or_insert((f.heading, 0));
+            if *ticks_left == 0 {
+                *heading = f64::from(rng.angle()).to_degrees();
                 let [lo, hi] = c.retarget_ticks;
-                w.ticks_left = rng.range(lo as i32, hi as i32) as u32;
+                *ticks_left = rng.range(lo as i32, hi as i32) as u32;
                 if let Some([lo, hi]) = allowed_y(world, f.pos, f.box_size, c.clearance) {
                     let unit = f64::from(rng.next_u32()) / 4_294_967_296.0;
                     f.depth_target = lo + (hi - lo) * unit;
                 }
             }
-            w.ticks_left -= 1;
+            *ticks_left -= 1;
 
             let mut speed = body.swim_speed;
             let away = swimmer.filter(|p| {
@@ -170,19 +154,14 @@ impl FishSteer {
                 speed *= c.scatter_speed;
                 let (dx, dz) = (f.pos[0] - p[0], f.pos[2] - p[2]);
                 if dx.hypot(dz) > 1e-9 {
-                    w.heading = heading_of(dx, dz);
+                    *heading = heading_of(dx, dz);
                 }
-                w.heading
+                *heading
             } else {
                 let [sx, sz, n] = centres[&f.school];
-                let (dx, dz) = (sx / n - f.pos[0], sz / n - f.pos[2]);
-                let d = dx.hypot(dz);
-                let [mut gx, mut gz] = dir(w.heading);
-                if d > 1e-9 {
-                    gx += dx / SCHOOL_RADIUS;
-                    gz += dz / SCHOOL_RADIUS;
-                }
-                heading_of(gx, gz)
+                let [gx, gz] = dir(*heading);
+                let pull = |s: f64, p: f64| (s / n - p) / SCHOOL_RADIUS;
+                heading_of(gx + pull(sx, f.pos[0]), gz + pull(sz, f.pos[2]))
             };
             let turn = (goal - f.heading + 180.0).rem_euclid(360.0) - 180.0;
             let max_turn = body.turn_rate * TICK_SECONDS;
@@ -197,7 +176,7 @@ impl FishSteer {
                 f.pos = p;
             } else {
                 // Blocked ahead: rise or sink in place and turn back.
-                w.heading = (f.heading + 180.0).rem_euclid(360.0);
+                *heading = (f.heading + 180.0).rem_euclid(360.0);
                 if let Some(p) = place(world, [f.pos[0], y, f.pos[2]], size, c.clearance) {
                     f.pos = p;
                 }
