@@ -36,7 +36,7 @@ fn err(kind: DataErrorKind) -> DataError {
 }
 
 fn bad_entry(entry: &str, problem: &str) -> DataError {
-    let (entry, problem) = (entry.to_string(), problem.to_string());
+    let (entry, problem) = (entry.into(), problem.into());
     err(DataErrorKind::BadEntry { entry, problem })
 }
 
@@ -47,14 +47,15 @@ fn positive(v: &toml::Value) -> Option<f64> {
 }
 
 fn parse_body(n: usize, value: &toml::Value) -> Result<FishBody, DataError> {
+    let entry = format!("body {n}");
     let table = value
         .as_table()
-        .ok_or_else(|| err(DataErrorKind::Invalid(format!("body {n} is not a table"))))?;
+        .ok_or_else(|| bad_entry(&entry, "not a table"))?;
     let species = table
         .get("species")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| bad_entry(&format!("body {n}"), "`species` must be a non-empty string"))?
+        .ok_or_else(|| bad_entry(&entry, "`species` must be a non-empty string"))?
         .to_string();
     let bad = |problem: &str| bad_entry(&species, problem);
     let fields = [
