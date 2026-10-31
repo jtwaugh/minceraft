@@ -5,6 +5,7 @@
 //! `Structure::parse` (feature `toml-io`) reads other sources at run time.
 
 pub use crate::structure_error::StructureError;
+use crate::structure_piece::{Connector, PieceKind, Spawn};
 
 /// A template as emitted by `build.rs`.
 pub(crate) struct StaticStructure {
@@ -24,6 +25,12 @@ pub struct Structure {
     /// Every non-air cell joins the raft mask.
     pub raft: bool,
     blocks: Vec<u8>,
+    /// Village piece kind, if the template is one (villages-and-villagers 2.2).
+    pub kind: Option<PieceKind>,
+    pub connectors: Vec<Connector>,
+    pub spawns: Vec<Spawn>,
+    /// Allowed quarter turns, ascending.
+    pub rotations: Vec<u8>,
 }
 
 impl Structure {
@@ -36,6 +43,10 @@ impl Structure {
             origin_offset: p.origin_offset,
             raft: p.raft,
             blocks: p.blocks,
+            kind: p.kind,
+            connectors: p.connectors,
+            spawns: p.spawns,
+            rotations: p.rotations,
         })
     }
 
@@ -47,6 +58,10 @@ impl Structure {
             origin_offset: s.origin_offset,
             raft: s.raft,
             blocks: s.blocks.to_vec(),
+            kind: None,
+            connectors: Vec::new(),
+            spawns: Vec::new(),
+            rotations: vec![0, 1, 2, 3],
         }
     }
 

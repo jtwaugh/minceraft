@@ -26,6 +26,8 @@ mod habitat_rules;
 mod rule_check;
 #[path = "src/structure_error.rs"]
 mod structure_error;
+#[path = "src/structure_piece.rs"]
+mod structure_piece;
 #[path = "src/structure_rules.rs"]
 mod structure_rules;
 
@@ -107,6 +109,7 @@ fn main() {
         "src/habitat_rules.rs",
         "src/fish_rules.rs",
         "src/structure_error.rs",
+        "src/structure_piece.rs",
         "src/structure_rules.rs",
     ] {
         println!("cargo:rerun-if-changed={f}");
@@ -276,6 +279,15 @@ fn main() {
     // Built-in structure templates.
     let raft = structure_rules::parse_structure(&read(&raft_path), &|n| block_id(n))
         .unwrap_or_else(|e| panic!("{}: {e}", raft_path.display()));
+    // `StaticStructure` has no village fields, so the raft may not set them.
+    assert!(
+        raft.kind.is_none()
+            && raft.connectors.is_empty()
+            && raft.spawns.is_empty()
+            && raft.rotations == [0, 1, 2, 3],
+        "{}: the raft is not a village piece",
+        raft_path.display()
+    );
     let out = format!(
         "pub(crate) static RAFT_START: StaticStructure = StaticStructure {{ size: {:?}, \
          origin_offset: {:?}, raft: {}, blocks: &{:?} }};\n",
