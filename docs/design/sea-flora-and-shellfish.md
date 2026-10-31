@@ -5,7 +5,7 @@ scope: both
 source: "#1529"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -13,7 +13,9 @@ phases:
 
 ## Current state
 
-Checked against the code. Nothing in phases A to D is built.
+Checked against the code. Phase A is built (above the older notes below, which describe the code before it); phases B to D are not.
+
+- **Phase A done (plan #1545):** `waterlogged` block property and water physics (#1582), selection boxes and eye-in-water targeting (#1613), Rust mesher (#1641) and JS mesher parity (#1685). Test block `test_waterlogged_plant` in `data/blocks.toml`; tests: `waterlogged_cells_swim_exactly_like_water` (`crates/game/src/walk.rs`), `an_eye_in_water_sees_through_plain_water` and `an_eye_above_water_stops_on_the_surface` (`crates/game/src/targeting.rs`), `crates/mesh/src/mesh.rs` and `viewer/test/mesh_waterlogged.test.mjs`.
 
 - **No waterlogged block.** `data/blocks.toml` has no `waterlogged` property. Water is block id 6 (`liquid = true`, `collision = "none"`, `opacity = 3`). Game code asks "is this water" through the `liquid` flag: `crates/game/src/collision.rs` (around line 97), `crates/game/src/walk.rs` (`liquid_at`, line 1219, and the swim check near line 1328) and `crates/game-web/src/lib.rs` (`liquid_at`).
 - **Meshers.** `viewer/mesh.js` (JS) and `crates/mesh` (Rust/wasm, built under `viewer-rendering.md` Phase E, which is `done`) both draw water, water tops, cross plants (`crates/mesh/src/plants.rs`) and other shapes (`shapes.rs`). Neither draws two things in one cell.
