@@ -20,6 +20,7 @@ pub mod fish_entities;
 pub mod fish_spawn_config;
 pub mod fish_spawner;
 pub mod fish_steer;
+pub mod fish_world;
 pub mod forage;
 pub mod growth;
 pub mod growth_odds;
