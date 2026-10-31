@@ -646,3 +646,51 @@ opacity = 3
 opaque_cube = false
 waterlogged = true
 color = "#6fb043"
+
+# Village blocks (villages-and-villagers.md 2.4). The generator never places
+# them. plank_step, drying_rack and net use placeholder collisions here; their
+# real shapes come from the game-side shape table.
+[[block]]
+id = 69
+name = "thatch"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#c9a646"
+
+[[block]]
+id = 70
+name = "barrel"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#7a4e24"
+
+[[block]]
+id = 71
+name = "plank_step"
+fire = [0, 0]
+collision = "full"
+opacity = 0
+opaque_cube = false
+color = "#b8894a"
+
+[[block]]
+id = 72
+name = "drying_rack"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#9c7442"
+
+[[block]]
+id = 73
+name = "net"
+fire = [0, 0]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#8f8a6e"

@@ -370,6 +370,36 @@ fn test_waterlogged_plant_is_never_generated() {
     }
 }
 
+#[test]
+fn village_blocks_have_dense_ids_and_are_never_generated() {
+    let village = [
+        (Block::Thatch, 69, Collision::Full, true),
+        (Block::Barrel, 70, Collision::Full, true),
+        (Block::PlankStep, 71, Collision::Full, false),
+        (Block::DryingRack, 72, Collision::None, false),
+        (Block::Net, 73, Collision::None, false),
+    ];
+    for (b, id, collision, opaque) in village {
+        assert_eq!(b as u8, id);
+        let info = b.info();
+        assert_eq!(info.collision, collision, "{}", info.name);
+        assert_eq!(info.opaque_cube, opaque, "{}", info.name);
+        assert_eq!(info.opacity == 255, opaque, "{}", info.name);
+        for other in Block::ALL {
+            if other != b {
+                assert_ne!(other.info().name, info.name);
+                assert_ne!(other.info().color, info.color, "{}", info.name);
+            }
+        }
+    }
+    for (seed, x0, z0) in [(12345u64, -40, 17), (7, 300, -260), (99, 0, 0)] {
+        let r = generate_decorated(seed, x0, z0, 48, 48);
+        for (b, ..) in village {
+            assert!(!r.blocks.contains(&(b as u8)), "{}", b.info().name);
+        }
+    }
+}
+
 // ---- coarse density sampler (seed prefilter) ----
 
 const BAND: (i32, i32) = (SEA_LEVEL - 8, SEA_LEVEL + 8);
