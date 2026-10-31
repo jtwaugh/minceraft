@@ -1,7 +1,8 @@
-# Fish species for the spawn query (docs/design/world-layout.md Phase C).
-# Read by crates/layout/src/fish.rs.
+# Fish species for the spawn query (docs/design/world-layout.md Phase C,
+# docs/design/fish-and-fishing.md section 2). Read by crates/layout/src/fish.rs.
 #
-# No species ship yet (decided in #93); the species list is a later ticket.
+# Every species lists its habitats, so `frozen` columns match none.
+# Weights and ranges are this game's own numbers, tuned here.
 # Schema, one table per species:
 #
 # [[species]]
@@ -10,3 +11,23 @@
 # habitats  = ["cold_open"]     # habitat ids (data/habitats.toml); unset = any
 # temp_min / temp_max           # column temperature, inclusive, 0..1; unset = any
 # depth_min / depth_max         # water depth in blocks, inclusive; unset = any
+
+# Common, the everyday catch.
+[[species]]
+id = "mackerel"
+weight = 10
+habitats = ["cold_open", "temperate_open", "rocky_shore"]
+
+# Cold water, early in the route.
+[[species]]
+id = "salmon"
+weight = 5
+habitats = ["cold_open", "rocky_shore"]
+temp_max = 0.55
+
+# Rare; only the deeper part of warm shallows (depth_max 6 there).
+[[species]]
+id = "tuna"
+weight = 2
+habitats = ["deep_water", "warm_shallows"]
+depth_min = 4
