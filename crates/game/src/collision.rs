@@ -2,9 +2,10 @@
 //!
 //! Shapes come from the terrain crate's block data (`data/blocks.toml`
 //! `collision`): `none` has no box, `full` a unit cube, `inset` the cactus
-//! shape (1/16 inset on the sides and top). Partial-height shapes are a
-//! game-side table and not part of this module yet.
+//! shape (1/16 inset on the sides and top). Partial-height shapes come from
+//! the game-side table in `shapes`, which is consulted first.
 
+use crate::shapes;
 use std::collections::HashMap;
 use terrain::{Block, Collision, Region, HEIGHT};
 
@@ -43,6 +44,9 @@ impl Aabb {
 
 /// The collision box of `block` placed at block coordinates `(x, y, z)`.
 pub fn block_box(block: Block, x: i32, y: i32, z: i32) -> Option<Aabb> {
+    if let Some(s) = shapes::shape(block) {
+        return Some(s.at(x, y, z));
+    }
     let (x, y, z) = (x as f64, y as f64, z as f64);
     match block.info().collision {
         Collision::None => None,
@@ -73,6 +77,9 @@ pub struct SelectionBox {
 pub fn selection_box(block: Block, x: i32, y: i32, z: i32) -> Option<Aabb> {
     if block == Block::Air {
         return None;
+    }
+    if shapes::shape(block).is_some() {
+        return block_box(block, x, y, z);
     }
     let (fx, fy, fz) = (x as f64, y as f64, z as f64);
     let s = f64::from(block.info().selection_inset) / 16.0;
@@ -242,6 +249,9 @@ mod tests {
         for b in blocks {
             let id = b["id"].as_integer().unwrap() as usize;
             let block = Block::ALL[id];
+            if crate::shapes::shape(block).is_some() {
+                continue;
+            }
             let got = block_box(block, 3, 7, -2);
             let expect = match b["collision"].as_str().unwrap() {
                 "none" => None,
