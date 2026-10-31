@@ -5,7 +5,7 @@ scope: game
 source: "#1523"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -14,6 +14,7 @@ phases:
 
 ## Current state
 
+- **Phase A done (plan #1534).** `data/fish.toml` ships mackerel, salmon and tuna (#1586), the four raw fish items are in `data/items.toml` and can be given and carried (#1576), and `data/fish_bodies.toml` holds the game-side body data, read by `crates/game/src/fish_bodies.rs` (#1594). The bullets below that say `data/fish.toml` has no species or `data/items.toml` has no fish items predate this.
 - **Spawn query exists, no species.** `species_for(&FishColumn)` and the `data/fish.toml` loader are in `crates/layout/src/fish.rs` (`Fish::shipped`, `Fish::species_for`); `data/fish.toml` is schema comments only (decided in #93). `FishColumn` carries habitat, temperature and depth; `Layout::habitat_map` (`crates/layout/src/habitat_map.rs`) produces them per region. Habitat ids in `data/habitats.toml`: `frozen`, `warm_shallows`, `deep_water`, `rocky_shore`, `cold_open`, `temperate_open`.
 - **Nothing in `crates/game` uses fish or habitats.** `crates/game` depends on `layout` with `default-features = false` and has no habitat or `species_for` call.
 - **Art exists.** `salmon`, `tuna`, `mackerel` and `squid` box models are in batch 11 (`art/tools/draw_7_12.py`, `art/batches_7_12.json`); `raw_salmon`, `raw_tuna`, `raw_mackerel`, `raw_squid` and `fishing_rod` are in `art/batches_1_6.json`; `bobber`, `splash_0..3` and `fishing_wake` are in `art/batches_7_12.json`. No game code or client code references any of them.
