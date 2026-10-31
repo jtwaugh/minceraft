@@ -36,6 +36,7 @@ pub mod replay;
 pub mod rng;
 pub mod sampler;
 pub mod scene;
+pub mod shapes;
 pub mod stream;
 pub mod targeting;
 pub mod till;
