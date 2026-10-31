@@ -3,7 +3,7 @@
 // (crates/game-web). The sim steps at 20 Hz and rendering interpolates between ticks at display rate; look is
 // applied every frame, as docs/design/basic-gameplay.md section 2.2 asks.
 //
-//   ?seed=N      world seed (default 12345)
+//   ?seed=S      world seed: an integer, or any text (hashed as the viewer does; default 12345)
 //   ?scene=raft  the Phase 3 test scene: a flat sea, a raft rocking on the scripted swell,
 //                and the player swimming in front of it (default: generated terrain)
 //   ?mode=fly    start in the debug fly camera (default walk); F toggles while playing
@@ -51,6 +51,7 @@ import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
 import { debugEnabled } from './debug.js';
 import { parseBlend } from './blend.js';
 import { sceneById } from './scenes.js';
+import { parseSeed } from './seed.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
 import { mountPanelStyle } from './uistyle.js';
@@ -60,7 +61,7 @@ const { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } = game;
 
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
-const seed = BigInt(qs.get('seed') ?? 12345);
+const seed = parseSeed(qs.get('seed'));
 const flying = qs.get('mode') === 'fly';
 const raftScene = sceneById(qs.get('scene'))?.id === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
