@@ -339,9 +339,11 @@ mod scoring_extra;
 pub use scoring_extra::{extra_islands, ExtraIslands};
 mod structure;
 mod structure_error;
+mod structure_piece;
 #[cfg(feature = "toml-io")]
 mod structure_rules;
 pub use structure::{Structure, StructureError};
+pub use structure_piece::{Connector, Facing, PieceKind, Pool};
 mod validation;
 mod validation_decorated;
 pub use validation::{
@@ -413,6 +415,8 @@ mod scoring_tests;
 mod search_tests;
 #[cfg(all(test, feature = "toml-io"))]
 mod seed_output_tests;
+#[cfg(all(test, feature = "toml-io"))]
+mod structure_rules_tests;
 #[cfg(test)]
 mod structure_tests;
 #[cfg(test)]

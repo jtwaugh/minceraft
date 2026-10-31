@@ -32,6 +32,21 @@ pub enum StructureError {
         expected: usize,
         found: usize,
     },
+    /// `kind` is not a village piece kind.
+    BadKind(String),
+    /// A connector's `pool` is not a known pool.
+    BadPool(String),
+    /// A connector's `facing` is not `+x`, `-x`, `+z` or `-z`.
+    BadFacing(String),
+    /// A spawn's `kind` is not a known spawn kind.
+    BadSpawnKind(String),
+    /// A `rotation` entry is not a quarter turn from 0 to 3.
+    BadRotation(i64),
+    /// A connector or spawn cell lies outside `size`.
+    CellOutOfBounds {
+        field: &'static str,
+        cell: [i32; 3],
+    },
 }
 
 impl fmt::Display for StructureError {
@@ -66,6 +81,14 @@ impl fmt::Display for StructureError {
                 f,
                 "layer {layer} row {row} is {found} cells long, expected {expected}"
             ),
+            Self::BadKind(s) => write!(f, "unknown piece kind `{s}`"),
+            Self::BadPool(s) => write!(f, "unknown connector pool `{s}`"),
+            Self::BadFacing(s) => write!(f, "connector facing `{s}` is not +x, -x, +z or -z"),
+            Self::BadSpawnKind(s) => write!(f, "unknown spawn kind `{s}`"),
+            Self::BadRotation(n) => write!(f, "rotation {n} is not a quarter turn from 0 to 3"),
+            Self::CellOutOfBounds { field, cell } => {
+                write!(f, "{field} cell {cell:?} lies outside the template size")
+            }
         }
     }
 }
