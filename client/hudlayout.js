@@ -45,7 +45,7 @@ function row(set, names, x, y, gap) {
 
 /**
  * `{ scale, rects }` for a `hudModel` result: `rects.crosshair`, `rects.belt` (the slot row), `rects.beltPanel` (the strip around it), `rects.slotNumbers` (one glyph rect per slot),
- * `rects.slots` (one per slot) and `rects.hearts` (the whole row) plus `rects.heartIcons`,
+ * `rects.slots` (one per slot), `rects.slotIcons` (the item's icon centred in each slot, or null) and `rects.hearts` (the whole row) plus `rects.heartIcons`,
  * `rects.timer` (box centred at the top, with `phase` and `digits` rects inside), `rects.handsPanel` (the strip
  * right of the belt's), `rects.handsSlot` (the frame on it, with the carried item's `icon` rect or null) and
  * `rects.hands` (the name row above the hands strip, with the label rect and one rect per glyph; zero-sized when
@@ -95,6 +95,12 @@ export function hudLayout(model, set, viewport) {
     return rect(x + g.x, y + g.y, g.w, g.h);
   });
   const slots = place(beltRow.r, beltX, beltY);
+  // Each item's icon is centred in its frame on whole texels; null for an empty slot or an item without a texture.
+  const slotIcons = slots.map((r, i) => {
+    const name = model.slots[i].name, f = textureSize(set, slotNames[i]);
+    const t = name && f ? textureSize(set, name) : null;
+    return t && rect(r.x + Math.floor((f.w - t.w) / 2) * scale, r.y + Math.floor((f.h - t.h) / 2) * scale, t.w * scale, t.h * scale);
+  });
   // Slot n (1 to N) shows its digit, one texel in from the frame's top left corner.
   const slotNumbers = slots.map((r, i) => {
     const n = (i + 1) % 10;
@@ -136,6 +142,7 @@ export function hudLayout(model, set, viewport) {
       belt: rect(beltX, beltY, beltW, beltH),
       beltPanel: rect(left, panelY, panelW, panelH),
       slots,
+      slotIcons,
       slotNumbers,
       hearts: rect(left, heartsY, heartsW, heartsH),
       heartIcons,

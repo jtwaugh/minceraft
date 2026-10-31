@@ -82,6 +82,20 @@ test('belt strip is within the width share and the layout has no problems at the
   }
 });
 
+test('slot icons are centred in their slots on whole texels, null when empty or without a texture', () => {
+  const odd = { ...set, batches: { ui: { textures: { ...set.batches.ui.textures, hoe: grid(5, 7) } } } };
+  for (const [w, h] of [[80, 45], [1366, 768]]) {
+    const { scale, rects } = hudLayout(model, odd, { w, h });
+    assert.equal(rects.slotIcons.length, rects.slots.length);
+    assert.deepEqual([rects.slotIcons[0], rects.slotIcons[3], rects.slotIcons[4]], [null, null, null]);
+    const [s1, s2] = [rects.slots[1], rects.slots[2]];
+    assert.deepEqual(rects.slotIcons[1], { x: s1.x + scale, y: s1.y + scale, w: 8 * scale, h: 8 * scale });
+    assert.deepEqual(rects.slotIcons[2], { x: s2.x + 2 * scale, y: s2.y + scale, w: 5 * scale, h: 7 * scale });
+    // Without a hoe texture its slot shows the frame only.
+    assert.equal(hudLayout(model, set, { w, h }).rects.slotIcons[2], null);
+  }
+});
+
 test('minimum viewport has hud scale 1', () => {
   assert.equal(hudLayout(model, set, { w: 80, h: 45 }).scale, 1);
   assert.equal(hudLayout(model, set, { w: 10, h: 10 }).scale, 1);
