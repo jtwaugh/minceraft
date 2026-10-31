@@ -31,10 +31,24 @@ fn main() {
     gen_biomes(&biomes, &block_names, &mut out, &mut json);
     let radius = int(&biomes["blend"], "radius");
     assert!((0..=7).contains(&radius), "[blend] radius must be 0 to 7");
+    let shade_mix = num(&biomes["blend"]["shade_mix"]);
+    assert!(
+        (0.0..=1.0).contains(&shade_mix),
+        "[blend] shade_mix must be 0 to 1, got {shade_mix}"
+    );
+    let shade_radius = int(&biomes["blend"], "shade_radius");
+    assert!(
+        (0..=3).contains(&shade_radius),
+        "[blend] shade_radius must be 0 to 3, got {shade_radius}"
+    );
     json.push_str(
         "],\"ramps\":{\"grass\":\"humidity\",\"leaf\":\"humidity\",\"water\":\"humidity\",\"dry\":\"humidity\",\"sky\":\"temperature\"}",
     );
-    write!(json, ",\"blend\":{{\"radius\":{radius}}}}}").unwrap();
+    write!(
+        json,
+        ",\"blend\":{{\"radius\":{radius},\"shade_mix\":{shade_mix},\"shade_radius\":{shade_radius}}}}}"
+    )
+    .unwrap();
     gen_lookup(&biomes, &mut out);
     gen_trees(&biomes, &block_names, &mut out);
     gen_flora(&flora_path, &block_names, &biome_names(&biomes));
