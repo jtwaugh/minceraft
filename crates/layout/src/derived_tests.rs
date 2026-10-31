@@ -50,6 +50,16 @@ fn hand_built_columns() {
 }
 
 #[test]
+fn floe_ice_column_reads_like_ice() {
+    let mut r = hand_built();
+    r.blocks[2 * HEIGHT + SURFACE] = Block::FloeIce as u8;
+    let m = DerivedMaps::from_region(&r);
+    assert_eq!(m, DerivedMaps::from_region(&hand_built()));
+    assert!(m.frozen[2]);
+    assert_eq!(m.water_depth[2], 4);
+}
+
+#[test]
 fn water_to_bedrock_has_no_bottom() {
     let mut r = hand_built();
     for y in 0..=SURFACE {
@@ -69,14 +79,15 @@ fn real_seed_matches_column_scan() {
         for x in 0..r.width {
             let i = (z * r.width + x) as usize;
             let top = r.get(x, SURFACE as u32, z);
-            let wet = top == Block::Water || top == Block::Ice;
+            let ice = top == Block::Ice || top == Block::FloeIce;
+            let wet = top == Block::Water || ice;
             assert_eq!(m.water_depth[i] > 0, wet);
-            assert_eq!(m.frozen[i], top == Block::Ice);
+            assert_eq!(m.frozen[i], ice);
             if wet {
                 water += 1;
                 let d = m.water_depth[i] as u32;
                 let below = r.get(x, SURFACE as u32 - d, z);
-                assert!(below != Block::Water && below != Block::Ice);
+                assert!(below != Block::Water && !is_sea_ice(below as u8));
                 assert_eq!(m.bottom_block[i], below as u8);
             } else {
                 assert_eq!(m.bottom_block[i], NO_BOTTOM);

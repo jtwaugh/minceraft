@@ -7,7 +7,7 @@ use crate::validation::{
     block_at, flat_grass_tiles_with, island_columns_with, CheckResult, Thresholds,
     ValidationReport, CHECK_CLEAR_FLAT, CHECK_TREES,
 };
-use crate::Level;
+use crate::{is_sea_ice, Level};
 
 fn is_log(b: u8) -> bool {
     [Block::OakLog, Block::BirchLog, Block::SpruceLog]
@@ -51,11 +51,8 @@ fn is_decoration(b: u8) -> bool {
 fn ground_under_decoration(region: &Region, x: i32, z: i32) -> Option<(u8, i32)> {
     (0..HEIGHT as i32).rev().find_map(|y| {
         let b = block_at(region, x, y, z)?;
-        (b != Block::Air as u8
-            && b != Block::Water as u8
-            && b != Block::Ice as u8
-            && !is_decoration(b))
-        .then_some((b, y))
+        (b != Block::Air as u8 && b != Block::Water as u8 && !is_sea_ice(b) && !is_decoration(b))
+            .then_some((b, y))
     })
 }
 

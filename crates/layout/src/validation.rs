@@ -18,7 +18,7 @@ use std::fmt;
 
 use terrain::{column_summary, Block, Region, HEIGHT, SEA_LEVEL};
 
-use crate::{Layout, Level, Structure, StructurePlacement};
+use crate::{is_sea_ice, Layout, Level, Structure, StructurePlacement};
 
 /// Thresholds from `data/validation.toml`.
 #[derive(Clone, Debug, PartialEq)]
@@ -161,7 +161,7 @@ pub(crate) fn is_land(region: &Region, x: u32, z: u32) -> bool {
     let (top, top_y, _, _) = column_summary(&region.blocks[start..start + HEIGHT]);
     top != Block::Air as u8
         && top != Block::Water as u8
-        && top != Block::Ice as u8
+        && !is_sea_ice(top)
         && top_y as i32 >= SEA_LEVEL
 }
 
@@ -335,8 +335,7 @@ pub fn validate_raft(
 fn ground(region: &Region, x: i32, z: i32) -> Option<(u8, i32)> {
     (0..HEIGHT as i32).rev().find_map(|y| {
         let b = block_at(region, x, y, z)?;
-        (b != Block::Air as u8 && b != Block::Water as u8 && b != Block::Ice as u8)
-            .then_some((b, y))
+        (b != Block::Air as u8 && b != Block::Water as u8 && !is_sea_ice(b)).then_some((b, y))
     })
 }
 

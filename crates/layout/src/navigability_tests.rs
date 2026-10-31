@@ -59,6 +59,22 @@ fn removing_overhang_makes_column_navigable() {
 }
 
 #[test]
+fn floe_ice_is_never_navigable() {
+    // Column 0 is navigable open water; cap it with floe ice.
+    let mut r = hand_built();
+    r.blocks[SURFACE] = Block::FloeIce as u8;
+    assert!(!NavMap::from_region(&r, &t()).at(0, 0));
+}
+
+#[test]
+fn floe_ice_below_the_surface_counts_as_depth() {
+    // Column 1 is 1 deep; floe ice under it makes the water run 2 deep.
+    let mut r = hand_built();
+    r.blocks[HEIGHT + SURFACE - 1] = Block::FloeIce as u8;
+    assert!(NavMap::from_region(&r, &t()).at(1, 0));
+}
+
+#[test]
 fn any_non_air_block_blocks() {
     for b in [Block::OakLeaves, Block::Stone, Block::Water] {
         let mut r = hand_built();
