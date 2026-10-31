@@ -226,6 +226,49 @@ mod tests {
     }
 
     #[test]
+    fn region_border_matches_region_blocks_with_border_edits() {
+        let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
+        let c = RegionCoord::new(0, 0);
+        let corners = [(0, 0), (127, 0), (0, 127), (127, 127)];
+        let edges = [(0, 40), (127, 41), (42, 0), (43, 127)];
+        for (x, z) in corners.into_iter().chain(edges) {
+            assert!(w.world.set_block(x, 120, z, terrain::Block::Dandelion));
+        }
+        assert!(w.world.set_block(-1, 120, 40, terrain::Block::Dandelion));
+        let all = w.region_blocks(c).unwrap();
+        let size = REGION_SIZE as i32;
+        let h = terrain::HEIGHT;
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                if (dx, dz) == (0, 0) {
+                    assert_eq!(w.region_border(c, dx, dz), None);
+                    continue;
+                }
+                let span = |d: i32| match d {
+                    -1 => vec![size - 1],
+                    0 => (0..size).collect(),
+                    _ => vec![0],
+                };
+                let mut want = Vec::new();
+                for lz in span(dz) {
+                    for lx in span(dx) {
+                        let i = (lz * size + lx) as usize * h;
+                        want.extend_from_slice(&all[i..i + h]);
+                    }
+                }
+                let got = w.region_border(c, dx, dz).unwrap();
+                assert_eq!(got.len(), want.len(), "({dx}, {dz})");
+                assert!(got == want, "({dx}, {dz})");
+                assert!(
+                    got.contains(&(terrain::Block::Dandelion as u8)),
+                    "({dx}, {dz})"
+                );
+                assert!(w.region_border(RegionCoord::new(9, 9), dx, dz).is_none());
+            }
+        }
+    }
+
+    #[test]
     fn construction_loads_the_neighbours_and_the_player_starts_on_terrain() {
         let mut w = Walker::with_layout(layout(), [64.5, 120.0, 64.5]).unwrap();
         assert_eq!(w.loaded_region_count(), 9);

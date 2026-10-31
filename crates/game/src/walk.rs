@@ -457,6 +457,42 @@ impl Walker {
         Some(blocks)
     }
 
+    /// The columns of the loaded streamed region `coord` that touch its
+    /// neighbour at `(-dx, -dz)`, edits applied: the facing edge's
+    /// `REGION_SIZE` columns, or one column at a corner, laid out like
+    /// `region_blocks`. `None` if it is not loaded or `(dx, dz)` is not one of
+    /// the 8 directions.
+    pub fn region_border(&self, coord: layout::RegionCoord, dx: i32, dz: i32) -> Option<Vec<u8>> {
+        if (dx, dz) == (0, 0) || dx.abs() > 1 || dz.abs() > 1 {
+            return None;
+        }
+        let blocks = &self.streamer_cache()?.get(coord)?.region.blocks;
+        let size = layout::REGION_SIZE as i32;
+        let span = |d: i32| match d {
+            -1 => size - 1..size,
+            0 => 0..size,
+            _ => 0..1,
+        };
+        let (xs, zs) = (span(dx), span(dz));
+        let width = xs.len();
+        let mut out = Vec::with_capacity(width * zs.len() * HEIGHT);
+        for lz in zs.clone() {
+            for lx in xs.clone() {
+                let i = (lz * size + lx) as usize * HEIGHT;
+                out.extend_from_slice(&blocks[i..i + HEIGHT]);
+            }
+        }
+        let (x0, z0) = coord.origin();
+        for ([x, y, z], b) in self.world.edits() {
+            let (lx, lz) = (x - x0, z - z0);
+            if xs.contains(&lx) && zs.contains(&lz) {
+                let col = (lz - zs.start) as usize * width + (lx - xs.start) as usize;
+                out[col * HEIGHT + y as usize] = b as u8;
+            }
+        }
+        Some(out)
+    }
+
     /// Loaded regions whose meshed view changed by an edit since the last
     /// call: the owner of each edited column, and a neighbour too when the
     /// column is on the shared border (neighbours pad with that edge).
