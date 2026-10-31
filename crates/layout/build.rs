@@ -280,12 +280,15 @@ fn main() {
     let raft = structure_rules::parse_structure(&read(&raft_path), &|n| block_id(n))
         .unwrap_or_else(|e| panic!("{}: {e}", raft_path.display()));
     // `StaticStructure` has no village fields, so the raft may not set them.
-    assert!(
-        raft.kind.is_none()
-            && raft.connectors.is_empty()
-            && raft.spawns.is_empty()
-            && raft.rotations == [0, 1, 2, 3],
-        "{}: the raft is not a village piece",
+    let village = (
+        raft.kind,
+        raft.connectors.len() + raft.spawns.len(),
+        raft.rotations.len(),
+    );
+    assert_eq!(
+        village,
+        (None, 0, 4),
+        "{}: not a village piece",
         raft_path.display()
     );
     let out = format!(

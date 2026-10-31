@@ -87,11 +87,7 @@ impl fmt::Display for StructureError {
             Self::BadSpawnKind(s) => write!(f, "unknown spawn kind `{s}`"),
             Self::BadRotation(n) => write!(f, "rotation {n} is not a quarter turn from 0 to 3"),
             Self::CellOutOfBounds { field, cell } => {
-                let [x, y, z] = cell;
-                write!(
-                    f,
-                    "{field} cell ({x}, {y}, {z}) lies outside the template size"
-                )
+                write!(f, "{field} cell {cell:?} lies outside the template size")
             }
         }
     }

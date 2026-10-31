@@ -192,7 +192,7 @@ fn village_error_display_is_readable() {
                 field: "spawns",
                 cell: [1, 2, -1],
             },
-            vec!["spawns", "(1, 2, -1)", "outside"],
+            vec!["spawns", "[1, 2, -1]", "outside"],
         ),
     ];
     for (e, keys) in cases {
