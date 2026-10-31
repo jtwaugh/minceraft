@@ -44,13 +44,15 @@ export const B = {
   tulip_red: 63, tulip_salmon: 64, tulip_yellow: 65, dune_grass_lower: 66, dune_grass_upper: 67,
   test_waterlogged_plant: 68,
   thatch: 69, barrel: 70, plank_step: 71, drying_rack: 72, net: 73,
+  counter: 74, plate_rack: 75,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
 // Full cubes that hide the faces of whatever is next to them.
 const SOLID = [B.stone, B.dirt, B.grass, B.sand, B.gravel, B.oak_log, B.birch_log, B.spruce_log, B.pumpkin,
   B.raft_planks, B.butcher_block, B.griddle, B.crate, B.farmland_dry, B.farmland_wet,
-  B.planter_dirt, B.planter_farmland_dry, B.planter_farmland_wet, B.thatch, B.barrel];
+  B.planter_dirt, B.planter_farmland_dry, B.planter_farmland_wet, B.thatch, B.barrel,
+  B.counter, B.plate_rack];
 export const OPAQUE = flags(SOLID);
 export const LEAVES = flags([B.oak_leaves, B.birch_leaves, B.spruce_leaves]);
 // With fast leaves, leaves count as solid too.
