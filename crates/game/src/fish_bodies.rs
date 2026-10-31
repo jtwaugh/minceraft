@@ -69,12 +69,7 @@ fn parse_body(n: usize, value: &toml::Value) -> Result<FishBody, DataError> {
     if let Some(field) = table.keys().find(|k| !fields.contains(&k.as_str())) {
         return Err(bad(&format!("unknown field `{field}`")));
     }
-    let pair = |field: &str| {
-        table
-            .get(field)
-            .and_then(|v| v.as_array())
-            .filter(|a| a.len() == 2)
-    };
+    let pair = |f: &str| table.get(f)?.as_array().filter(|a| a.len() == 2);
     let box_size = pair("box")
         .and_then(|a| Some([positive(&a[0])?, positive(&a[1])?]))
         .ok_or_else(|| bad("`box` must be [width, height], both above zero"))?;
@@ -87,12 +82,9 @@ fn parse_body(n: usize, value: &toml::Value) -> Result<FishBody, DataError> {
     let (swim_speed, turn_rate) = (speed("swim_speed")?, speed("turn_rate")?);
     let school = pair("school")
         .and_then(|a| {
-            let n = |v: &toml::Value| {
-                v.as_integer()
-                    .filter(|c| (1..=i64::from(u32::MAX)).contains(c))
-            };
+            let n = |v: &toml::Value| u32::try_from(v.as_integer()?).ok().filter(|c| *c >= 1);
             let (lo, hi) = (n(&a[0])?, n(&a[1])?);
-            (lo <= hi).then_some([lo as u32, hi as u32])
+            (lo <= hi).then_some([lo, hi])
         })
         .ok_or_else(|| bad("`school` must be [min, max] fish, 1 <= min <= max"))?;
     let raw_item = table
