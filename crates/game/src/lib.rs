@@ -17,6 +17,7 @@ pub mod farm;
 pub mod fish_bodies;
 pub mod fish_entities;
 pub mod fish_spawn_config;
+pub mod fish_steer;
 pub mod forage;
 pub mod growth;
 pub mod growth_odds;
