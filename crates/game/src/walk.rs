@@ -3619,6 +3619,8 @@ mod tests {
     fn waterlogged_cells_swim_exactly_like_water() {
         let water = pool_run(Block::Water);
         assert_eq!(pool_run(Block::TestWaterloggedPlant), water);
+        assert_eq!(pool_run(Block::Kelp0), water);
+        assert_eq!(pool_run(Block::Kelp1), water);
         // The run fell in, sank below the surface and climbed out on the ledge.
         assert!(water.iter().any(|p| p[1] < 6.0), "{water:?}");
         assert!(water.iter().any(|p| p[0] > 2.5 && p[1] == 9.0), "{water:?}");
