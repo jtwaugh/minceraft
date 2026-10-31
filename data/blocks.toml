@@ -718,3 +718,14 @@ collision = "full"
 opacity = 255
 opaque_cube = true
 color = "#8a6f8f"
+
+# Sea-ice floes (sea-ice-floes.md A): same physics as ice. The generator
+# never places it yet.
+[[block]]
+id = 76
+name = "floe_ice"
+fire = [0, 0]
+collision = "full"
+opacity = 3
+opaque_cube = false
+color = "#cfe2f5"
