@@ -13,6 +13,9 @@
 #   pad           ground is the water the pad floats on; land must lie within
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
+#   niche         optional layer name -> [lo, hi], lo <= hi; layers: height_above_sea |
+#                 soil_depth | light | slope | sun_facing | hollow. The response is 1
+#                 inside and falls to 0 over niche_margin_<layer> outside. Not used yet.
 
 [settings]
 patch_noise_salt = 7001
@@ -23,6 +26,13 @@ coast_min_y = 62        # lowest sand y for requires = "coast"
 coast_max_y = 66        # highest sand y for requires = "coast"
 pad_land_radius = 4     # columns searched for land by a `pad` entry
 colour_scale = 20.0     # blocks per cell of the noise that picks the winner
+# Soft margins of the niche response, in each layer's own units.
+niche_margin_height_above_sea = 2.0
+niche_margin_soil_depth = 1.0
+niche_margin_light = 0.1
+niche_margin_slope = 0.25
+niche_margin_sun_facing = 0.2
+niche_margin_hollow = 1.0
 
 [[flora]]
 name = "daisy"

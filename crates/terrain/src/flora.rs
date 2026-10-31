@@ -4,6 +4,7 @@
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Biome, Block};
 use crate::decorate::World;
+use crate::niche::NicheLayer;
 use crate::noise::{hash_f64, mix64, OctavePerlin, Rng};
 use crate::{AIR, HEIGHT};
 use alloc::vec::Vec;
@@ -61,6 +62,8 @@ pub struct Flora {
     pub snow_stays: bool,
     /// Chance per eligible column, by biome.
     pub biomes: &'static [(Biome, f64)],
+    /// Preferred `[lo, hi]` range per layer; empty for an entry without a niche.
+    pub niche: &'static [(NicheLayer, f64, f64)],
 }
 
 include!(concat!(env!("OUT_DIR"), "/flora.rs"));
@@ -332,6 +335,7 @@ mod tests {
         assert!(d.biomes.contains(&(Biome::Plains, 0.020)));
         assert!(d.biomes.contains(&(Biome::Forest, 0.004)));
         assert_eq!(d.biomes.len(), 2);
+        assert!(d.niche.is_empty());
     }
 
     fn names(v: &[&str]) -> Vec<String> {
@@ -349,6 +353,7 @@ mod tests {
             biomes: vec![("Plains".into(), 0.5)],
             requires: None,
             snow_stays: false,
+            niche: Vec::new(),
         }
     }
 
@@ -394,6 +399,20 @@ mod tests {
         assert!(check(&[e]).unwrap_err().contains("unknown requires"));
         let mut e = entry();
         e.requires = Some("near_water".into());
+        assert!(check(&[e]).is_ok());
+        let mut e = entry();
+        e.niche = vec![("wetness".into(), vec![Some(0.0), Some(1.0)])];
+        assert!(check(&[e]).unwrap_err().contains("unknown niche layer"));
+        let mut e = entry();
+        e.niche = vec![("light".into(), vec![Some(0.9), Some(0.5)])];
+        assert!(check(&[e]).unwrap_err().contains("lo > hi"));
+        for bad in [vec![Some(0.5)], vec![None, Some(0.5)], vec![]] {
+            let mut e = entry();
+            e.niche = vec![("slope".into(), bad)];
+            assert!(check(&[e]).unwrap_err().contains("two numbers"));
+        }
+        let mut e = entry();
+        e.niche = vec![("light".into(), vec![Some(0.5), Some(0.5)])];
         assert!(check(&[e]).is_ok());
         let (mut a, mut b) = (entry(), entry());
         a.name = "a".into();

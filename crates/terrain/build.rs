@@ -102,6 +102,16 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
             snow_stays: f
                 .get("snow_stays")
                 .is_some_and(|v| v.as_bool().expect("snow_stays bool")),
+            niche: f.get("niche").map_or(Vec::new(), |t| {
+                let t = t.as_table().expect("niche table");
+                let range = |v: &Value| -> Vec<Option<f64>> {
+                    let a = v.as_array().map_or(&[][..], |a| a.as_slice());
+                    a.iter()
+                        .map(|x| x.as_float().or_else(|| x.as_integer().map(|i| i as f64)))
+                        .collect()
+                };
+                t.iter().map(|(k, v)| (k.clone(), range(v))).collect()
+            }),
             biomes: f["biomes"]
                 .as_table()
                 .expect("biomes table")
@@ -130,6 +140,14 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     }
     let radius = int(&doc["settings"], "pad_land_radius");
     writeln!(out, "pub const FLORA_PAD_LAND_RADIUS: i32 = {radius};").unwrap();
+    for layer in flora_check::NICHE_LAYERS {
+        let k = format!("niche_margin_{layer}");
+        let m = num(doc["settings"]
+            .get(&k)
+            .unwrap_or_else(|| panic!("missing {k}")));
+        assert!(m > 0.0, "flora.toml: {k} must be positive");
+        writeln!(out, "pub const {}: f64 = {m:?};", k.to_uppercase()).unwrap();
+    }
     writeln!(out, "pub static FLORA: [Flora; {}] = [", raw.len()).unwrap();
     for (f, r) in list.iter().zip(&raw) {
         let ground: Vec<String> = r.ground.iter().map(blk).collect();
@@ -142,12 +160,24 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
             .block
             .get(1)
             .map_or("None".into(), |u| format!("Some({})", blk(u)));
+        let niche: Vec<String> = r
+            .niche
+            .iter()
+            .map(|(l, v)| {
+                format!(
+                    "(NicheLayer::{}, {:?}, {:?})",
+                    camel(l),
+                    v[0].unwrap(),
+                    v[1].unwrap()
+                )
+            })
+            .collect();
         let requires = r.requires.as_deref().map_or("None".into(), |c| {
             format!("Some(FloraRequires::{})", camel(c))
         });
         writeln!(
             out,
-            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, requires: {requires}, snow_stays: {}, biomes: &[{}] }},",
+            "    Flora {{ name: {:?}, block: {}, upper: {upper}, shape: FloraShape::{}, ground: &[{}], tint: FloraTint::{}, cluster_scale: {:?}, salt: {}, requires: {requires}, snow_stays: {}, biomes: &[{}], niche: &[{}] }},",
             r.name,
             blk(&r.block[0]),
             camel(&r.shape),
@@ -156,7 +186,8 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
             num(&f["cluster_scale"]),
             r.salt,
             r.snow_stays,
-            chances.join(", ")
+            chances.join(", "),
+            niche.join(", ")
         )
         .unwrap();
     }
