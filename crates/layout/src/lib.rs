@@ -338,6 +338,8 @@ pub use search::{search_seeds, Scored, SearchParams, SearchProgress, TermScores}
 mod scoring_extra;
 pub use scoring_extra::{extra_islands, ExtraIslands};
 mod structure;
+#[cfg(test)]
+mod structure_dir;
 mod structure_error;
 mod structure_piece;
 #[cfg(feature = "toml-io")]

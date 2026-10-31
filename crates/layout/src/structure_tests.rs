@@ -234,3 +234,89 @@ fn structure_error_display_is_readable() {
         }
     }
 }
+
+#[test]
+fn village_templates_match_the_directory() {
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../data/structures/villages"
+    );
+    let files = crate::structure_dir::template_files(dir.as_ref()).unwrap();
+    let list = Structure::village_templates();
+    let names: Vec<&str> = list.iter().map(|(n, _)| *n).collect();
+    assert_eq!(
+        names,
+        files.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>()
+    );
+    assert!(names.windows(2).all(|w| w[0] < w[1]), "{names:?}");
+    for (name, s) in &list {
+        assert_eq!(Structure::named(name).as_ref(), Some(s), "{name}");
+    }
+    assert_eq!(
+        Structure::named("raft_start"),
+        Some(Structure::raft_start())
+    );
+    assert_eq!(Structure::named("no_such_piece"), None);
+}
+
+#[test]
+fn template_files_are_sorted_toml_only() {
+    let dir = std::env::temp_dir().join(format!("layout-villages-{}", std::process::id()));
+    let missing = crate::structure_dir::template_files(&dir.join("missing")).unwrap();
+    assert!(missing.is_empty());
+    std::fs::create_dir_all(&dir).unwrap();
+    for f in ["plaza_b.toml", "dock.toml", "notes.txt", "plaza_a.toml"] {
+        std::fs::write(dir.join(f), "").unwrap();
+    }
+    let files = crate::structure_dir::template_files(&dir).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["dock", "plaza_a", "plaza_b"]);
+    assert!(files[0].1.ends_with("dock.toml"));
+}
+
+#[cfg(feature = "toml-io")]
+#[test]
+fn baked_templates_are_found_by_name_with_their_village_data() {
+    use crate::structure::{find, StaticStructure};
+    let parsed = Structure::parse(
+        "size=[2,2,1]\norigin_offset=[0,0,0]\nkind=\"dock\"\nrotation=[0,2]\n\
+         palette={ A=\"stone\", \".\"=\"air\" }\nlayers=[[\"AA\"],[\"..\"]]\n\
+         connectors=[{ cell=[1,1,0], facing=\"+x\", pool=\"boardwalks\" }]\n\
+         spawns=[{ kind=\"villager\", cell=[0,1,0] }]\n",
+    )
+    .unwrap();
+    // What build.rs would emit for each template.
+    let bake = |s: &Structure| StaticStructure {
+        size: s.size,
+        origin_offset: s.origin_offset,
+        raft: s.raft,
+        blocks: s
+            .cells([0; 3], 0)
+            .iter()
+            .map(|c| c.3)
+            .collect::<Vec<_>>()
+            .leak(),
+        kind: s.kind,
+        connectors: s.connectors.clone().leak(),
+        spawns: s.spawns.clone().leak(),
+        rotations: s.rotations.clone().leak(),
+    };
+    let statics = [
+        ("cap", bake(&Structure::raft_start())),
+        ("dock", bake(&parsed)),
+    ];
+    let found = find(&statics, "dock").unwrap();
+    assert_eq!(found.kind, Some(PieceKind::Dock));
+    assert_eq!(found.rotations, [0, 2]);
+    assert_eq!(found.spawns, [[0, 1, 0]]);
+    let c = Connector {
+        cell: [1, 1, 0],
+        facing: Facing::PosX,
+        pool: Pool::Boardwalks,
+    };
+    assert_eq!(found.connectors, [c]);
+    assert_eq!(found, parsed);
+    assert_eq!(find(&statics, "cap"), Some(Structure::raft_start()));
+    assert!(find(&statics, "plaza").is_none());
+}

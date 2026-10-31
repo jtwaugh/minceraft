@@ -6,7 +6,8 @@
 //! - `validation.rs` from `data/validation.toml` (`src/validation.rs`)
 //! - `route.rs` from `data/route.toml` (`src/route.rs`)
 //! - `scoring.rs` from `data/scoring.toml` (`src/scoring.rs`)
-//! - `structure.rs` from `data/structures/raft_start.toml` (`src/structure.rs`)
+//! - `structure.rs` from `data/structures/raft_start.toml` and every
+//!   `data/structures/villages/*.toml` (`src/structure.rs`)
 //!
 //! A bad file fails the build. The shipped data reaches the crate as static
 //! tables, so the wasm links no TOML parser (the `toml-io` feature is off).
@@ -24,6 +25,8 @@ mod habitat_rule;
 mod habitat_rules;
 #[path = "src/rule_check.rs"]
 mod rule_check;
+#[path = "src/structure_dir.rs"]
+mod structure_dir;
 #[path = "src/structure_error.rs"]
 mod structure_error;
 #[path = "src/structure_piece.rs"]
@@ -108,6 +111,7 @@ fn main() {
         "src/habitat_rule.rs",
         "src/habitat_rules.rs",
         "src/fish_rules.rs",
+        "src/structure_dir.rs",
         "src/structure_error.rs",
         "src/structure_piece.rs",
         "src/structure_rules.rs",
@@ -119,6 +123,12 @@ fn main() {
     let route_path = root.join("route.toml");
     let scoring_path = root.join("scoring.toml");
     let raft_path = root.join("structures/raft_start.toml");
+    // Watching `structures/` also catches `villages/` appearing.
+    println!(
+        "cargo:rerun-if-changed={}",
+        root.join("structures").display()
+    );
+    let villages_dir = root.join("structures/villages");
     for p in [
         &fish_path,
         &validation_path,
@@ -277,17 +287,52 @@ fn main() {
     std::fs::write(out_dir.join("scoring.rs"), out).unwrap();
 
     // Built-in structure templates.
-    let raft = structure_rules::parse_structure(&read(&raft_path), &|n| block_id(n))
-        .unwrap_or_else(|e| panic!("{}: {e}", raft_path.display()));
-    // `StaticStructure` has no village fields, so the raft may not set them.
-    let village = raft.connectors.len() + raft.spawns.len() + 4 - raft.rotations.len();
-    if raft.kind.is_some() || village > 0 {
-        panic!("raft_start must not be a village piece");
-    }
-    let out = format!(
-        "pub(crate) static RAFT_START: StaticStructure = StaticStructure {{ size: {:?}, \
-         origin_offset: {:?}, raft: {}, blocks: &{:?} }};\n",
-        raft.size, raft.origin_offset, raft.raft, raft.blocks
+    let parse = |p: &PathBuf| {
+        structure_rules::parse_structure(&read(p), &|n| block_id(n))
+            .unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+    };
+    let mut out = format!(
+        "pub(crate) static RAFT_START: StaticStructure = {};\n",
+        static_structure(&parse(&raft_path))
     );
+    out.push_str("pub(crate) static VILLAGE_TEMPLATES: &[(&str, StaticStructure)] = &[\n");
+    let files = structure_dir::template_files(&villages_dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", villages_dir.display()));
+    for (name, path) in &files {
+        if name == "raft_start" {
+            panic!("{}: the name raft_start is taken", path.display());
+        }
+        writeln!(out, "    ({name:?}, {}),", static_structure(&parse(path))).unwrap();
+    }
+    out.push_str("];\n");
     std::fs::write(out_dir.join("structure.rs"), out).unwrap();
+}
+
+/// A `StaticStructure` literal for `p`.
+fn static_structure(p: &structure_rules::ParsedStructure) -> String {
+    let kind = match p.kind {
+        Some(k) => format!("Some(crate::PieceKind::{k:?})"),
+        None => "None".into(),
+    };
+    let connectors: Vec<String> = p
+        .connectors
+        .iter()
+        .map(|c| {
+            format!(
+                "Connector {{ cell: {:?}, facing: crate::Facing::{:?}, pool: crate::Pool::{:?} }}",
+                c.cell, c.facing, c.pool
+            )
+        })
+        .collect();
+    format!(
+        "StaticStructure {{ size: {:?}, origin_offset: {:?}, raft: {}, blocks: &{:?}, \
+         kind: {kind}, connectors: &[{}], spawns: &{:?}, rotations: &{:?} }}",
+        p.size,
+        p.origin_offset,
+        p.raft,
+        p.blocks,
+        connectors.join(", "),
+        p.spawns,
+        p.rotations
+    )
 }
