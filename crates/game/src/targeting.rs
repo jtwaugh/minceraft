@@ -89,6 +89,10 @@ pub fn ray_vs_box(origin: [f64; 3], dir: [f64; 3], aabb: &Aabb) -> Option<RayHit
 /// `Target::Block`, with its distance. `dir` need not be unit length.
 /// Returns `None` for a zero direction or when nothing is in reach. A box
 /// containing the origin is never hit (see `ray_vs_box`).
+///
+/// When the origin's cell is water (`is_water`, so waterlogged too) the ray
+/// passes through plain water cells and stops only on other boxes; from
+/// above water it stops on the water surface (sea-flora-and-shellfish 2).
 pub fn cast_block(
     world: &impl CollisionWorld,
     origin: [f64; 3],
@@ -107,8 +111,10 @@ pub fn cast_block(
     );
     let mut boxes = Vec::new();
     world.selection_boxes_in(&query, &mut boxes);
+    let cell = origin.map(|v| v.floor() as i32);
+    let eye_in_water = world.block_at(cell[0], cell[1], cell[2]).info().is_water();
     let mut best: Option<(Target, f64)> = None;
-    for b in &boxes {
+    for b in boxes.iter().filter(|b| !(eye_in_water && b.plain_water)) {
         if let Some(hit) = ray_vs_box(origin, d, &b.aabb) {
             if hit.distance <= reach && best.is_none_or(|(_, bd)| hit.distance < bd) {
                 best = Some((
@@ -333,6 +339,55 @@ mod tests {
         // Air only.
         assert_eq!(cast(&w, o, [-1.0, 0.0, 0.0]), None);
         assert_eq!(cast(&w, o, [0.0, 0.0, 0.0]), None);
+    }
+
+    /// Plain water at x = 0..6, y = 0..2, z = 0 (the eye's cell included).
+    fn pool() -> MemoryWorld {
+        let mut w = MemoryWorld::new();
+        for x in 0..6 {
+            for y in 0..2 {
+                w.set(x, y, 0, terrain::Block::Water);
+            }
+        }
+        w
+    }
+
+    #[test]
+    fn an_eye_in_water_sees_through_plain_water() {
+        use terrain::Block;
+        let mut w = pool();
+        w.set(3, 0, 0, Block::TestWaterloggedPlant);
+        // Two cells of plain water (x = 1, 2) between the eye and the plant.
+        let (t, d) = cast_block(&w, [0.5, 0.5, 0.5], [1.0, 0.0, 0.0], 4.5).unwrap();
+        assert_eq!(Some(t), block([3, 0, 0], Face::West));
+        assert!((d - (2.5 + 3.0 / 16.0)).abs() < 1e-9);
+        // Blocks stop the ray too.
+        w.set(2, 0, 0, Block::Stone);
+        assert_eq!(
+            cast(&w, [0.5, 0.5, 0.5], [1.0, 0.0, 0.0]),
+            block([2, 0, 0], Face::West)
+        );
+    }
+
+    #[test]
+    fn an_eye_in_water_with_nothing_in_reach_targets_nothing() {
+        assert_eq!(cast(&pool(), [0.5, 0.5, 0.5], [1.0, 0.0, 0.0]), None);
+        // Out through the surface into open air.
+        assert_eq!(cast(&pool(), [0.5, 0.5, 0.5], [0.0, 1.0, 0.0]), None);
+    }
+
+    #[test]
+    fn an_eye_above_water_stops_on_the_surface() {
+        let o = [2.5, 3.5, 0.5];
+        let down = [0.0, -1.0, 0.0];
+        assert_eq!(cast(&pool(), o, down), block([2, 1, 0], Face::Top));
+        // A waterlogged plant at the surface is targeted as the plant, at its
+        // own (inset) top.
+        let mut w = pool();
+        w.set(2, 1, 0, terrain::Block::TestWaterloggedPlant);
+        let (t, d) = cast_block(&w, o, down, 4.5).unwrap();
+        assert_eq!(Some(t), block([2, 1, 0], Face::Top));
+        assert!((d - (1.5 + 3.0 / 16.0)).abs() < 1e-9);
     }
 
     #[test]

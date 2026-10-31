@@ -1367,9 +1367,9 @@ fn aim(
             world.selection_boxes_in(&query, &mut all);
             let mut base = Vec::new();
             block_selection_boxes_in(world, &query, &mut base);
-            // Water stays a target for rules but never gets an outline
-            // (raft-scene-feedback item 6).
-            let is_water = world.block_at(pos[0], pos[1], pos[2]).info().is_water();
+            // Plain water stays a target for rules but never gets an outline
+            // (raft-scene-feedback item 6); a waterlogged plant does.
+            let is_water = world.block_at(pos[0], pos[1], pos[2]).info().liquid;
             let boxed = all
                 .iter()
                 .filter(|b| !is_water && b.pos == pos)
@@ -2389,6 +2389,17 @@ mod tests {
     fn solid_blocks_still_have_an_outline() {
         let a = water_aim(Block::Stone);
         assert!(a.boxed.is_some());
+    }
+
+    #[test]
+    fn a_waterlogged_plant_is_outlined_with_its_own_box() {
+        let a = water_aim(Block::TestWaterloggedPlant);
+        assert!(matches!(a.target, Target::Block { pos: [0, 3, 0], .. }));
+        let (b, on_raft) = a.boxed.unwrap();
+        assert!(!on_raft);
+        let box_ = crate::collision::selection_box(Block::TestWaterloggedPlant, 0, 3, 0);
+        assert_eq!(Some(b), box_);
+        assert!(b.max[1] < 4.0 && b.min[0] > 0.0);
     }
 
     #[test]

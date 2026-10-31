@@ -60,22 +60,28 @@ pub fn block_box(block: Block, x: i32, y: i32, z: i32) -> Option<Aabb> {
 pub struct SelectionBox {
     pub pos: [i32; 3],
     pub aabb: Aabb,
+    /// The box is a plain water cell (`liquid`, not waterlogged), which an
+    /// eye in water looks through (sea-flora-and-shellfish 2).
+    pub plain_water: bool,
 }
 
 /// The selection box of `block` at `(x, y, z)` (basic-gameplay.md section 5):
 /// every non-air block has the full cell, or its collision box where that is
 /// smaller than the cell. Plants and liquids have no collision box and so get
-/// the full cell.
+/// the full cell, unless `data/blocks.toml` gives a `selection_inset`
+/// (waterlogged plants, sea-flora-and-shellfish 2).
 pub fn selection_box(block: Block, x: i32, y: i32, z: i32) -> Option<Aabb> {
     if block == Block::Air {
         return None;
     }
     let (fx, fy, fz) = (x as f64, y as f64, z as f64);
+    let s = f64::from(block.info().selection_inset) / 16.0;
     match block.info().collision {
         Collision::Inset => block_box(block, x, y, z),
-        Collision::None | Collision::Full => {
-            Some(Aabb::new([fx, fy, fz], [fx + 1.0, fy + 1.0, fz + 1.0]))
-        }
+        Collision::None | Collision::Full => Some(Aabb::new(
+            [fx + s, fy, fz + s],
+            [fx + 1.0 - s, fy + 1.0 - s, fz + 1.0 - s],
+        )),
     }
 }
 
@@ -128,13 +134,15 @@ pub fn block_selection_boxes_in<W: CollisionWorld + ?Sized>(
     for x in lo(0)..=hi(0) {
         for y in lo(1)..=hi(1) {
             for z in lo(2)..=hi(2) {
-                if let Some(aabb) = selection_box(world.block_at(x, y, z), x, y, z) {
+                let block = world.block_at(x, y, z);
+                if let Some(aabb) = selection_box(block, x, y, z) {
                     let touches =
                         (0..3).all(|i| aabb.min[i] <= query.max[i] && aabb.max[i] >= query.min[i]);
                     if touches {
                         out.push(SelectionBox {
                             pos: [x, y, z],
                             aabb,
+                            plain_water: block.info().liquid,
                         });
                     }
                 }

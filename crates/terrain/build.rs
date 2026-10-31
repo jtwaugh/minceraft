@@ -222,10 +222,17 @@ fn gen_blocks(doc: &Value, out: &mut String, json: &mut String) -> Vec<String> {
             !waterlogged || collision == "none",
             "waterlogged block {name} must have collision = \"none\""
         );
+        let inset = b
+            .get("selection_inset")
+            .map_or(0, |_| int(b, "selection_inset"));
+        assert!(
+            (0..8).contains(&inset) && (inset == 0 || collision == "none"),
+            "block {name}: selection_inset must be 0..8 and needs collision = \"none\""
+        );
         let c = color(&b["color"]);
         writeln!(
             infos,
-            "    BlockInfo {{ name: {name:?}, fire_encouragement: {}, flammability: {}, collision: Collision::{col}, opacity: {opacity}, opaque_cube: {opaque}, liquid: {liquid}, waterlogged: {waterlogged}, color: {c:?} }},",
+            "    BlockInfo {{ name: {name:?}, fire_encouragement: {}, flammability: {}, collision: Collision::{col}, opacity: {opacity}, opaque_cube: {opaque}, liquid: {liquid}, waterlogged: {waterlogged}, selection_inset: {inset}, color: {c:?} }},",
             fire[0].as_integer().unwrap(),
             fire[1].as_integer().unwrap()
         )

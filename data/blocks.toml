@@ -17,6 +17,9 @@
 #               water rule (body in water, swimming, climbing out, falling in)
 #               treats it as water. Must have collision = "none". The terrain
 #               generator's liquid checks ignore it.
+# selection_inset = optional, default 0: the selection box (targeting) is
+#               inset this many 1/16ths on the four sides and the top. Only
+#               for blocks with collision = "none"; tuned for feel.
 # color       = flat fallback colour (#rrggbb) for maps / untextured views.
 
 [[block]]
@@ -645,6 +648,7 @@ collision = "none"
 opacity = 3
 opaque_cube = false
 waterlogged = true
+selection_inset = 3
 color = "#6fb043"
 
 # Village blocks (villages-and-villagers.md 2.4). The generator never places
