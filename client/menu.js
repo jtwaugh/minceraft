@@ -4,6 +4,7 @@ import { ALPHA, menuEntries } from './scenes.js';
 import { textureCanvas, textureSize, interfaceScale } from './uipx.js';
 import { panelImage } from './panel.js';
 import { buttonCss } from './uistyle.js';
+import { randomSeed, withSeed, DEFAULT_SEED } from './seed.js';
 
 // Nine-slice panel pieces, 4x4 texels each, and the water tile the sea scrolls.
 export const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
@@ -30,6 +31,7 @@ export function menuModel(alpha, debug) {
     label: e.name.replace(/ \(alpha\)$/, ''),
     href: e.href,
     alpha: e.key === 'testplay' && alpha,
+    seedBox: e.key === 'testplay',
     scenes: (e.scenes ?? []).map((s) => ({ name: s.name, description: s.description, href: s.href })),
   }));
 }
@@ -37,6 +39,7 @@ export function menuModel(alpha, debug) {
 function link(doc, href, text, title) {
   const a = doc.createElement('a');
   a.href = href;
+  a.dataset.href = href;
   a.textContent = text;
   if (title) a.title = title;
   return a;
@@ -63,10 +66,39 @@ export function renderMenu(doc, root, model) {
       }
       section.appendChild(ul);
     }
+    if (entry.seedBox) section.appendChild(seedBox(doc, section));
     root.appendChild(section);
   }
 }
 
+/**
+ * Seed row for Test play: a text box and a Random button. Every link in the
+ * section gets ?seed= from the box (no ?seed= while it is blank: the default).
+ */
+function seedBox(doc, section) {
+  const row = doc.createElement('p');
+  row.className = 'seed';
+  const label = doc.createElement('label');
+  label.textContent = 'Seed ';
+  const input = doc.createElement('input');
+  input.id = 'seed';
+  input.placeholder = DEFAULT_SEED;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  label.appendChild(input);
+  const random = doc.createElement('button');
+  random.type = 'button';
+  random.textContent = 'Random';
+  const sync = () => {
+    for (const a of section.querySelectorAll('a[data-href]')) a.href = withSeed(a.dataset.href, input.value);
+  };
+  input.addEventListener('input', sync);
+  random.addEventListener('click', () => { input.value = randomSeed(); sync(); });
+  row.append(label, random);
+  // A value the browser restores on Back still reaches the links.
+  setTimeout(sync, 0);
+  return row;
+}
 
 /** Menu scale: the shared rule, bounded so the 160x120 layout fits. */
 export function menuScale(viewportW, viewportH) {
