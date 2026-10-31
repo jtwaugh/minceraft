@@ -5,7 +5,7 @@ scope: game
 source: "#1566"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -22,7 +22,8 @@ Checked against the code on `master`:
 - **Fog (section 4).** `scene.js` reads `Walk.load_radius()` (line ~355) and uses `fogFar` with the radial curve in `viewer/fog.js`; the doc's "fog end follows `load_radius`" holds.
 - **Harness.** `client/test/dsl.mjs` has `start ... stream`, running `controller.js` over the real wasm with `regions.loaded|freed|pending|x|z`; it meshes nothing. There is no worker, no arrival event and no per-frame vertex count.
 - **Determinism tests.** `crates/game/src/stream.rs` has `streamed_walk_matches_one_large_region`; `crates/terrain` and `crates/layout` have the overlapping-region tests. Nothing tests when a region joins the world, because it always joins in the tick that asks.
-- **Not done yet:** every item in sections 2 to 4. Section 1 describes the present code and is accurate.
+- **Phase A done (plan #1568).** `Walker::region_border` (`crates/game/src/walk.rs`, `Walk.region_border` in `crates/game-web`) exports a neighbour's facing strip with edits applied (PR #1581); `padRegion` (`client/regionpad.js`) reads only those strips, so `region_blocks` is called once per meshed region (PR #1589).
+- **Not done yet:** sections 2 to 4 (Phases B to D). Section 1 otherwise describes the present code; its per-neighbour copy is gone.
 
 ## Reconciliation notes
 
