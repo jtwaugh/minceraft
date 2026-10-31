@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::structure_error::StructureError;
-use crate::structure_piece::{Connector, Facing, PieceKind, Pool, Spawn, SpawnKind};
+use crate::structure_piece::{Connector, Facing, PieceKind, Pool};
 
 /// A parsed template: cells are x-fastest, then z, then y.
 pub struct ParsedStructure {
@@ -18,24 +18,47 @@ pub struct ParsedStructure {
     /// Village piece kind (villages-and-villagers 2.1), if the template is one.
     pub kind: Option<PieceKind>,
     pub connectors: Vec<Connector>,
-    pub spawns: Vec<Spawn>,
+    /// Villager spawn cells.
+    pub spawns: Vec<[i32; 3]>,
     /// Allowed quarter turns, ascending; all four unless `rotation` says otherwise.
     pub rotations: Vec<u8>,
 }
 
-/// Looks up `key` as a string in `v` and maps it with `pick`; a value
-/// `pick` rejects becomes `bad(value)`.
-fn choice<T>(
+const KINDS: [(&str, PieceKind); 6] = [
+    ("plaza", PieceKind::Plaza),
+    ("dock", PieceKind::Dock),
+    ("boardwalk", PieceKind::Boardwalk),
+    ("building", PieceKind::Building),
+    ("cap", PieceKind::Cap),
+    ("decor", PieceKind::Decor),
+];
+const FACINGS: [(&str, Facing); 4] = [
+    ("+x", Facing::PosX),
+    ("-x", Facing::NegX),
+    ("+z", Facing::PosZ),
+    ("-z", Facing::NegZ),
+];
+const POOLS: [(&str, Pool); 4] = [
+    ("boardwalks", Pool::Boardwalks),
+    ("buildings", Pool::Buildings),
+    ("decor", Pool::Decor),
+    ("caps", Pool::Caps),
+];
+
+/// Looks up the string `key` in `v` among `names`; an unlisted value
+/// becomes `bad(value)`.
+fn choice<T: Copy>(
     v: &toml::Value,
     key: &'static str,
-    pick: fn(&str) -> Option<T>,
+    names: &[(&str, T)],
     bad: fn(String) -> StructureError,
 ) -> Result<T, StructureError> {
     let s = v
         .get(key)
         .and_then(|s| s.as_str())
         .ok_or(StructureError::Field(key))?;
-    pick(s).ok_or_else(|| bad(s.to_string()))
+    let found = names.iter().find(|(n, _)| *n == s);
+    found.map(|&(_, t)| t).ok_or_else(|| bad(s.to_string()))
 }
 
 /// A `cell` that must lie inside `size`.
@@ -69,52 +92,33 @@ fn list<T>(
 }
 
 fn connector(v: &toml::Value, size: [i32; 3]) -> Result<Connector, StructureError> {
-    let facing = |s: &str| match s {
-        "+x" => Some(Facing::PosX),
-        "-x" => Some(Facing::NegX),
-        "+z" => Some(Facing::PosZ),
-        "-z" => Some(Facing::NegZ),
-        _ => None,
-    };
-    let pool = |s: &str| match s {
-        "boardwalks" => Some(Pool::Boardwalks),
-        "buildings" => Some(Pool::Buildings),
-        "decor" => Some(Pool::Decor),
-        "caps" => Some(Pool::Caps),
-        _ => None,
-    };
     Ok(Connector {
         cell: cell_in(v, "connectors", size)?,
-        facing: choice(v, "facing", facing, StructureError::BadFacing)?,
-        pool: choice(v, "pool", pool, StructureError::BadPool)?,
+        facing: choice(v, "facing", &FACINGS, StructureError::BadFacing)?,
+        pool: choice(v, "pool", &POOLS, StructureError::BadPool)?,
     })
 }
 
-fn spawn(v: &toml::Value, size: [i32; 3]) -> Result<Spawn, StructureError> {
-    let kind = |s: &str| (s == "villager").then_some(SpawnKind::Villager);
-    Ok(Spawn {
-        cell: cell_in(v, "spawns", size)?,
-        kind: choice(v, "kind", kind, StructureError::BadSpawnKind)?,
-    })
+/// A spawn marker's cell; `villager` is the only spawn kind.
+fn spawn(v: &toml::Value, size: [i32; 3]) -> Result<[i32; 3], StructureError> {
+    choice(v, "kind", &[("villager", ())], StructureError::BadSpawnKind)?;
+    cell_in(v, "spawns", size)
 }
 
 fn rotations(v: &toml::Value) -> Result<Vec<u8>, StructureError> {
     if v.get("rotation").is_none() {
         return Ok(vec![0, 1, 2, 3]);
     }
-    let mut out = list(v, "rotation", |r| {
-        let n = r.as_integer().ok_or(StructureError::Field("rotation"))?;
-        u8::try_from(n)
-            .ok()
-            .filter(|&q| q < 4)
-            .ok_or(StructureError::BadRotation(n))
+    let mut out = list(v, "rotation", |r| match r.as_integer() {
+        Some(n @ 0..=3) => Ok(n as u8),
+        Some(n) => Err(StructureError::BadRotation(n)),
+        None => Err(StructureError::Field("rotation")),
     })?;
     out.sort_unstable();
     out.dedup();
-    if out.is_empty() {
-        return Err(StructureError::Field("rotation"));
-    }
-    Ok(out)
+    (!out.is_empty())
+        .then_some(out)
+        .ok_or(StructureError::Field("rotation"))
 }
 
 fn int3(v: &toml::Value, key: &'static str) -> Result<[i32; 3], StructureError> {
@@ -201,29 +205,15 @@ pub fn parse_structure(
             }
         }
     }
-    let kind = match v.get("kind") {
-        None => None,
-        Some(_) => Some(choice(
-            &v,
-            "kind",
-            |s| match s {
-                "plaza" => Some(PieceKind::Plaza),
-                "dock" => Some(PieceKind::Dock),
-                "boardwalk" => Some(PieceKind::Boardwalk),
-                "building" => Some(PieceKind::Building),
-                "cap" => Some(PieceKind::Cap),
-                "decor" => Some(PieceKind::Decor),
-                _ => None,
-            },
-            StructureError::BadKind,
-        )?),
-    };
+    let kind = v
+        .get("kind")
+        .map(|_| choice(&v, "kind", &KINDS, StructureError::BadKind));
     Ok(ParsedStructure {
         size,
         origin_offset,
         raft,
         blocks,
-        kind,
+        kind: kind.transpose()?,
         connectors: list(&v, "connectors", |c| connector(c, size))?,
         spawns: list(&v, "spawns", |s| spawn(s, size))?,
         rotations: rotations(&v)?,

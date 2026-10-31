@@ -5,7 +5,7 @@
 //! `Structure::parse` (feature `toml-io`) reads other sources at run time.
 
 pub use crate::structure_error::StructureError;
-use crate::structure_piece::{Connector, PieceKind, Spawn};
+use crate::structure_piece::{Connector, PieceKind};
 
 /// A template as emitted by `build.rs`.
 pub(crate) struct StaticStructure {
@@ -28,7 +28,8 @@ pub struct Structure {
     /// Village piece kind, if the template is one (villages-and-villagers 2.2).
     pub kind: Option<PieceKind>,
     pub connectors: Vec<Connector>,
-    pub spawns: Vec<Spawn>,
+    /// Villager spawn cells.
+    pub spawns: Vec<[i32; 3]>,
     /// Allowed quarter turns, ascending.
     pub rotations: Vec<u8>,
 }

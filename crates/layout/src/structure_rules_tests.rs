@@ -48,13 +48,7 @@ fn village_keys_parse() {
             },
         ]
     );
-    assert_eq!(
-        p.spawns,
-        vec![Spawn {
-            cell: [1, 1, 1],
-            kind: SpawnKind::Villager
-        }]
-    );
+    assert_eq!(p.spawns, vec![[1, 1, 1]]);
     let plain = parse("").unwrap();
     assert_eq!(plain.blocks, p.blocks);
 }

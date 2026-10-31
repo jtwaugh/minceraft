@@ -38,15 +38,3 @@ pub struct Connector {
     pub facing: Facing,
     pub pool: Pool,
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SpawnKind {
-    Villager,
-}
-
-/// A spawn marker: a template cell and what spawns there.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Spawn {
-    pub cell: [i32; 3],
-    pub kind: SpawnKind,
-}

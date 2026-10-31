@@ -343,7 +343,7 @@ mod structure_piece;
 #[cfg(feature = "toml-io")]
 mod structure_rules;
 pub use structure::{Structure, StructureError};
-pub use structure_piece::{Connector, Facing, PieceKind, Pool, Spawn, SpawnKind};
+pub use structure_piece::{Connector, Facing, PieceKind, Pool};
 mod validation;
 mod validation_decorated;
 pub use validation::{
