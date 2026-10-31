@@ -18,6 +18,8 @@ fn main() {
     println!("cargo:rerun-if-changed={}", biomes_path.display());
     let flora_path = root.join("flora.toml");
     println!("cargo:rerun-if-changed={}", flora_path.display());
+    let sea_ice_path = root.join("sea_ice.toml");
+    println!("cargo:rerun-if-changed={}", sea_ice_path.display());
     println!("cargo:rerun-if-changed=flora_check.rs");
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -52,6 +54,7 @@ fn main() {
     gen_lookup(&biomes, &mut out);
     gen_trees(&biomes, &block_names, &mut out);
     gen_flora(&flora_path, &block_names, &biome_names(&biomes));
+    gen_sea_ice(&read(&sea_ice_path), &mut out);
     writeln!(
         out,
         "/// Legend for viewers: blocks and biomes with colours and ramps (JSON)."
@@ -160,6 +163,36 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     writeln!(out, "];").unwrap();
     let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("flora.rs");
     std::fs::write(dest, out).unwrap();
+}
+
+/// Sea-ice band constants from `data/sea_ice.toml`.
+fn gen_sea_ice(doc: &Value, out: &mut String) {
+    let t_ice = num(&doc["t_ice"]);
+    assert!(
+        (0.0..0.5).contains(&t_ice),
+        "data/sea_ice.toml: t_ice must be in [0, 0.5)"
+    );
+    writeln!(
+        out,
+        "/// Solid sea ice below this T; the floe band is `[SEA_ICE_T_ICE, 0.5)`."
+    )
+    .unwrap();
+    writeln!(out, "pub const SEA_ICE_T_ICE: f64 = {t_ice:?};").unwrap();
+    for (k, doc_line) in [
+        ("floe_scale", "Blocks per cell of the floe noise."),
+        (
+            "floe_strength",
+            "Floe noise strength `k` in `t + k * n < 0.5`.",
+        ),
+    ] {
+        let v = num(&doc[k]);
+        assert!(v > 0.0, "data/sea_ice.toml: {k} must be positive");
+        writeln!(out, "/// {doc_line}").unwrap();
+        writeln!(out, "pub const SEA_ICE_{}: f64 = {v:?};", k.to_uppercase()).unwrap();
+    }
+    let salt = int(doc, "floe_salt");
+    writeln!(out, "/// Seed salt of the floe noise.").unwrap();
+    writeln!(out, "pub const SEA_ICE_FLOE_SALT: u32 = {salt};").unwrap();
 }
 
 fn read(p: &PathBuf) -> Value {

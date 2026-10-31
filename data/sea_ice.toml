@@ -1,0 +1,12 @@
+# Sea-ice band (docs/design/sea-ice-floes.md). build.rs checks these and
+# generates the SEA_ICE_* constants in crates/terrain/src/data.rs.
+#   t_ice          colder than this the sea top is solid ice; the band is
+#                  [t_ice, 0.5), where the ice breaks into floes and gaps
+#   floe_scale     blocks per cell of the floe noise n(x, z)
+#   floe_strength  k in `t + k * n(x, z) < 0.5`, the floe test inside the band
+#   floe_salt      seed salt of the floe noise
+
+t_ice = 0.40
+floe_scale = 6.0
+floe_strength = 0.1
+floe_salt = 7101
