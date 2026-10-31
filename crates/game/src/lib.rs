@@ -14,6 +14,7 @@ pub mod crops;
 pub mod data_error;
 pub mod events;
 pub mod farm;
+pub mod fish_bodies;
 pub mod forage;
 pub mod growth;
 pub mod growth_odds;
