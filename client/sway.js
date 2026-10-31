@@ -6,6 +6,7 @@
 export const SWAY_AMPLITUDE = 0.08; // blocks, at weight 1
 export const SWAY_SPEED = 1.6; // radians per second
 export const SWAY_WAVE = 0.45; // radians per block
+export const TRUNK_SWAY_AMPLITUDE = SWAY_AMPLITUDE / 4; // blocks, trunk lean at weight 1
 
 /** Wave phase (radians, wrapped to one turn) for `nowMs` of frame time; 0 when `reducedMotion`. */
 export function swayPhase(nowMs, reducedMotion) {
@@ -16,4 +17,9 @@ export function swayPhase(nowMs, reducedMotion) {
 export function swayOffset(weight, x, z, phase, amplitude = SWAY_AMPLITUDE) {
   const a = amplitude * weight;
   return [a * Math.sin(phase + (x + 0.6 * z) * SWAY_WAVE), a * Math.cos(phase + (z - 0.6 * x) * SWAY_WAVE)];
+}
+
+/** [dx, dz] trunk lean in blocks of a log vertex at world (x, z) with weight 0..1: the plant wave, smaller. */
+export function trunkLean(weight, x, z, phase) {
+  return swayOffset(weight, x, z, phase, TRUNK_SWAY_AMPLITUDE);
 }
