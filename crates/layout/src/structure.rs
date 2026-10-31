@@ -5,7 +5,7 @@
 //! `Structure::parse` (feature `toml-io`) reads other sources at run time.
 
 pub use crate::structure_error::StructureError;
-use crate::structure_piece::{Connector, PieceKind};
+use crate::structure_piece::{Connector, Facing, PieceKind};
 
 /// A template as emitted by `build.rs`.
 pub(crate) struct StaticStructure {
@@ -85,18 +85,49 @@ impl Structure {
         for y in 0..sy {
             for z in 0..sz {
                 for x in 0..sx {
-                    let mut dx = x as i32 + self.origin_offset[0];
-                    let mut dz = z as i32 + self.origin_offset[2];
-                    for _ in 0..rotation % 4 {
-                        (dx, dz) = (-dz, dx);
-                    }
-                    let dy = y as i32 + self.origin_offset[1];
-                    let b = self.blocks[(y * sz + z) * sx + x];
-                    out.push((origin[0] + dx, origin[1] + dy, origin[2] + dz, b));
+                    let [wx, wy, wz] = self.place([x, y, z].map(|c| c as i32), origin, rotation);
+                    out.push((wx, wy, wz, self.blocks[(y * sz + z) * sx + x]));
                 }
             }
         }
         out
+    }
+
+    /// The world cell of template cell `cell`, placed as in [`Structure::cells`].
+    fn place(&self, cell: [i32; 3], origin: [i32; 3], rotation: u8) -> [i32; 3] {
+        let mut dx = cell[0] + self.origin_offset[0];
+        let mut dz = cell[2] + self.origin_offset[2];
+        for _ in 0..rotation % 4 {
+            (dx, dz) = (-dz, dx);
+        }
+        let dy = cell[1] + self.origin_offset[1];
+        [origin[0] + dx, origin[1] + dy, origin[2] + dz]
+    }
+
+    /// The connectors placed as in [`Structure::cells`]: world cells, facings
+    /// turned the same quarter turns.
+    pub fn connectors_at(&self, origin: [i32; 3], rotation: u8) -> Vec<Connector> {
+        self.connectors
+            .iter()
+            .map(|c| Connector {
+                cell: self.place(c.cell, origin, rotation),
+                facing: (0..rotation % 4).fold(c.facing, |f, _| turn(f)),
+                pool: c.pool,
+            })
+            .collect()
+    }
+
+    /// The villager spawn cells placed as in [`Structure::cells`].
+    pub fn spawns_at(&self, origin: [i32; 3], rotation: u8) -> Vec<[i32; 3]> {
+        self.spawns
+            .iter()
+            .map(|&c| self.place(c, origin, rotation))
+            .collect()
+    }
+
+    /// Whether the template may be placed turned `rotation` quarter turns (mod 4).
+    pub fn rotation_allowed(&self, rotation: u8) -> bool {
+        self.rotations.contains(&(rotation % 4))
     }
 
     /// The non-air cells of [`Structure::cells`]; with `raft` set these are
@@ -105,5 +136,15 @@ impl Structure {
         let mut c = self.cells(origin, rotation);
         c.retain(|&(_, _, _, b)| b != terrain::Block::Air as u8);
         c
+    }
+}
+
+/// One quarter turn of a facing, matching `(dx, dz) -> (-dz, dx)`.
+fn turn(f: Facing) -> Facing {
+    match f {
+        Facing::PosX => Facing::PosZ,
+        Facing::PosZ => Facing::NegX,
+        Facing::NegX => Facing::NegZ,
+        Facing::NegZ => Facing::PosX,
     }
 }

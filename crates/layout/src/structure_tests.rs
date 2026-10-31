@@ -54,6 +54,99 @@ fn cells_are_pure() {
     assert_eq!(s.cells(ORIGIN, 1), Structure::raft_start().cells(ORIGIN, 1));
 }
 
+/// `raft_start` (origin_offset [-2, 0, -2]) with markers on asymmetric cells.
+fn marked() -> Structure {
+    let mut s = Structure::raft_start();
+    s.connectors = vec![
+        Connector {
+            cell: [4, 1, 1],
+            facing: Facing::PosX,
+            pool: Pool::Boardwalks,
+        },
+        Connector {
+            cell: [0, 1, 3],
+            facing: Facing::NegZ,
+            pool: Pool::Caps,
+        },
+    ];
+    s.spawns = vec![[1, 1, 0], [3, 1, 4]];
+    s
+}
+
+/// The world cell `cells` gives template cell `c`.
+fn block_at(s: &Structure, c: [i32; 3], r: u8) -> [i32; 3] {
+    let [sx, _, sz] = s.size;
+    let (x, y, z, _) = s.cells(ORIGIN, r)[((c[1] * sz + c[2]) * sx + c[0]) as usize];
+    [x, y, z]
+}
+
+#[test]
+fn markers_land_on_their_blocks() {
+    let s = marked();
+    assert_ne!(s.origin_offset, [0, 0, 0]);
+    for r in 0..4u8 {
+        let conns = s.connectors_at(ORIGIN, r);
+        for (placed, c) in conns.iter().zip(&s.connectors) {
+            assert_eq!(placed.cell, block_at(&s, c.cell, r), "rotation {r}");
+            assert_eq!(placed.pool, c.pool);
+        }
+        let spawns = s.spawns_at(ORIGIN, r);
+        for (placed, &c) in spawns.iter().zip(&s.spawns) {
+            assert_eq!(*placed, block_at(&s, c, r), "rotation {r}");
+        }
+        assert_eq!(spawns.len(), 2);
+    }
+    // Rotation 1 by hand: [4,1,1] -> offset (2, -1) -> (1, 2).
+    assert_eq!(s.connectors_at(ORIGIN, 1)[0].cell, [101, 64, -38]);
+}
+
+#[test]
+fn facings_turn_a_quarter_per_rotation() {
+    let s = marked();
+    let facings = |r| {
+        s.connectors_at(ORIGIN, r)
+            .iter()
+            .map(|c| c.facing)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(facings(0), [Facing::PosX, Facing::NegZ]);
+    assert_eq!(facings(1), [Facing::PosZ, Facing::PosX]);
+    assert_eq!(facings(2), [Facing::NegX, Facing::PosZ]);
+    assert_eq!(facings(3), [Facing::NegZ, Facing::NegX]);
+    assert_eq!(facings(4), facings(0));
+    assert_eq!(s.connectors_at(ORIGIN, 4), s.connectors_at(ORIGIN, 0));
+}
+
+#[test]
+fn facing_matches_the_turned_offset() {
+    let step = |f| match f {
+        Facing::PosX => (1, 0),
+        Facing::NegX => (-1, 0),
+        Facing::PosZ => (0, 1),
+        Facing::NegZ => (0, -1),
+    };
+    let s = marked();
+    for r in 0..4u8 {
+        for (placed, c) in s.connectors_at(ORIGIN, r).iter().zip(&s.connectors) {
+            let (mut dx, mut dz) = step(c.facing);
+            for _ in 0..r {
+                (dx, dz) = (-dz, dx);
+            }
+            assert_eq!(step(placed.facing), (dx, dz), "rotation {r}");
+        }
+    }
+}
+
+#[test]
+fn rotation_allowed_reads_the_list() {
+    let mut s = Structure::raft_start();
+    assert!((0..8).all(|r| s.rotation_allowed(r)));
+    assert!(s.connectors_at(ORIGIN, 1).is_empty() && s.spawns_at(ORIGIN, 1).is_empty());
+    s.rotations = vec![0, 2];
+    assert!(s.rotation_allowed(0) && s.rotation_allowed(2) && s.rotation_allowed(6));
+    assert!(!s.rotation_allowed(1) && !s.rotation_allowed(3) && !s.rotation_allowed(5));
+}
+
 #[cfg(feature = "toml-io")]
 #[test]
 fn asymmetric_template_rotates_offsets() {
