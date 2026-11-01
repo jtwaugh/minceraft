@@ -37,8 +37,9 @@ fn no_placements_is_byte_identical() {
             } else {
                 terrain::generate_region(seed, -20, -20, 48, 48)
             };
-            assert_eq!(a.region.blocks, b.blocks);
-            assert_eq!(a.region.blocks, c.blocks);
+            // `a` also has sea flora; sea_flora_pass_tests checks it changes
+            // nothing else.
+            assert_eq!(b.blocks, c.blocks);
             assert!(a.raft_cells.is_empty());
         }
     }

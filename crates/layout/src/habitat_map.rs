@@ -43,6 +43,18 @@ impl Layout {
         d: u32,
     ) -> HabitatMap {
         let derived = DerivedMaps::generate(self, x0, z0, w, d, false);
+        self.habitat_map_from(habitats, derived, x0, z0)
+    }
+
+    /// The habitat map over `derived`, the maps of the area at `(x0, z0)`.
+    pub(crate) fn habitat_map_from(
+        &self,
+        habitats: &Habitats,
+        derived: DerivedMaps,
+        x0: i32,
+        z0: i32,
+    ) -> HabitatMap {
+        let (w, d) = (derived.width, derived.depth);
         let temp = TemperatureTerms(&self.climate);
         let humid = HumidityTerms(&self.climate);
         let temperature: [&dyn TemperatureBias; 1] = [&temp];
