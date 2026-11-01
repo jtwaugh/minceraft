@@ -2,12 +2,12 @@
 //! See docs/design/fish-and-fishing.md section 3.1 and reconciliation notes
 //! 3, 4 and 8.
 //!
-//! The daily stock reset, swimming and catches are separate tickets.
+//! Swimming and catches are separate tickets.
 
 use crate::fish_bodies::FishBodies;
 use crate::fish_entities::{FishStore, SchoolId};
 use crate::fish_spawn_config::FishSpawnConfig;
-use crate::phase::PhaseClock;
+use crate::phase::{Phase, PhaseClock};
 use crate::rng::Rng;
 use layout::{Fish, FishColumn, HabitatId, Habitats};
 use terrain::SEA_LEVEL;
@@ -74,8 +74,15 @@ impl FishSpawner {
         tick == 0 || self.clock.at(tick).0 != self.clock.at(tick - 1).0
     }
 
+    /// True on the first tick of a gathering phase, when the stock resets.
+    fn enters_gathering(&self, tick: u64) -> bool {
+        self.clock.at(tick).0 == Phase::Gathering
+            && (tick == 0 || self.clock.at(tick - 1).0 != Phase::Gathering)
+    }
+
     /// One sim tick: remove fish beyond the despawn radius of the raft centre
-    /// `raft` (returning them to the stock), then, on a phase change, top the
+    /// `raft` (returning them to the stock), then, on a phase change, reset
+    /// the stock to full if the clock just entered gathering and top the
     /// fish within the target radius up to the target count. `column` is the
     /// column accessor (`FishColumns::column`); `None` means no water.
     pub fn tick(
@@ -96,6 +103,9 @@ impl FishSpawner {
         }
         if !self.is_phase_change(tick) {
             return;
+        }
+        if self.enters_gathering(tick) {
+            self.stock = self.config.daily_stock;
         }
         let near = store
             .iter()
@@ -281,7 +291,10 @@ mod tests {
             }
             assert!(near(&store, raft, c.target_radius) <= c.target_count);
             assert!(store.iter().all(|f| dist(f.pos, raft) <= c.despawn_radius));
-            assert_eq!(sp.stock() + store.len() as u32, c.daily_stock, "{tick}");
+            if tick < DAY / 2 {
+                assert_eq!(sp.stock() + store.len() as u32, c.daily_stock, "{tick}");
+            }
+            assert!(sp.stock() <= c.daily_stock);
         }
         assert_eq!(spawn_ticks[0], 0);
         assert!(spawn_ticks.len() >= 3, "{spawn_ticks:?}");
@@ -316,8 +329,27 @@ mod tests {
         assert_eq!((store.len(), sp.stock()), (0, 5));
         sp.tick(2400, [100.0, 0.0], &mut store, open_sea);
         assert_eq!((store.len(), sp.stock()), (5, 0));
-        sp.tick(4800, [100.0, 0.0], &mut store, open_sea);
-        assert_eq!(store.len(), 5, "empty stock spawns nothing");
+        sp.tick(2401, [100.0, 0.0], &mut store, open_sea);
+        assert_eq!(store.len(), 5, "no spawns off a phase change");
+    }
+
+    #[test]
+    fn stock_resets_on_entering_gathering_only() {
+        let text = include_str!("../../../data/fish_spawn.toml")
+            .replace("daily_stock = 24", "daily_stock = 5");
+        let (mut sp, mut store) = spawner_with(FishSpawnConfig::parse(&text).unwrap(), 3);
+        sp.tick(0, [0.0, 0.0], &mut store, open_sea);
+        assert_eq!(sp.stock(), 0);
+        sp.tick(2400, [0.0, 0.0], &mut store, open_sea);
+        assert_eq!(sp.stock(), 0, "the service change does not reset");
+        sp.tick(4799, [0.0, 0.0], &mut store, open_sea);
+        assert_eq!(sp.stock(), 0);
+        sp.tick(4800, [0.0, 0.0], &mut store, open_sea);
+        assert_eq!(
+            sp.stock(),
+            0,
+            "refilled, then spent on the same tick's top-up"
+        );
     }
 
     #[test]
