@@ -19,6 +19,7 @@ const S = 16;
 /** Layer names in texture-array order. */
 export const NAMES = [...SHARED, 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
   'planter_side', 'planter_top', 'planter_bottom', 'planter_farmland_top',
+  'counter_top', 'counter_side', 'plate_rack',
   // no art yet (sea-flora-and-shellfish open question 7): flat grey until drawn
   'kelp_0', 'kelp_1', 'oyster', 'scallop'];
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
@@ -26,7 +27,7 @@ const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
 export const ANIM_FIRST = L.water_0, ANIM_END = L.water_flow_3 + 1;
 
 /** Layer for block id b on a face with vertical normal dy; `names` maps block id to name. */
-function tileFor(B, names, b, dy, fast) {
+export function tileFor(B, names, b, dy, fast) {
   switch (b) {
     case B.grass: return dy > 0 ? L.grass_top : dy < 0 ? L.dirt : L.grass_side;
     case B.water: return dy === 0 ? L.water_flow_0 : L.water_0;
@@ -41,6 +42,7 @@ function tileFor(B, names, b, dy, fast) {
     case B.planter_dirt: return dy > 0 ? L.planter_top : dy < 0 ? L.planter_bottom : L.planter_side;
     case B.planter_farmland_dry: case B.planter_farmland_wet:
       return dy > 0 ? L.planter_farmland_top : dy < 0 ? L.planter_bottom : L.planter_side;
+    case B.counter: return dy > 0 ? L.counter_top : L.counter_side;
     // eight growth stages share the four wheat textures, two stages each
     case B.wheat_0: case B.wheat_1: case B.wheat_2: case B.wheat_3:
     case B.wheat_4: case B.wheat_5: case B.wheat_6: case B.wheat_7: return L[`wheat_${(b - B.wheat_0) >> 1}`];
