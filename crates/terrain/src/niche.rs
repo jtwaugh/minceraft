@@ -1,16 +1,17 @@
 //! Environmental niches for flora (docs/design/swedish-summer-flora.md
 //! sections 3 and 4): the layers an entry's `niche` may name and the
 //! trapezoid response to one layer's value. Computed so far: height above
-//! sea (ground y minus `SEA_LEVEL`) and soil depth (dirt and grass blocks
-//! from the ground block down, before anything else).
+//! sea (ground y minus `SEA_LEVEL`), soil depth (dirt and grass blocks
+//! from the ground block down, before anything else) and light (the share of
+//! columns in a small cone around the column with no leaves above the ground).
 
-use crate::data::Block;
+use crate::data::{is_leaves, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT,
-    NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_LIGHT_RADIUS, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW,
+    NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
 };
-use crate::SEA_LEVEL;
+use crate::{HEIGHT, SEA_LEVEL};
 use alloc::vec::Vec;
 
 /// A column layer a `niche` range applies to.
@@ -52,8 +53,29 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
             };
             Some((0..=y).rev().take_while(soil).count() as f64)
         }
+        NicheLayer::Light => Some(light(world, x, y, z)),
         _ => None,
     }
+}
+
+/// Share of the columns within `FLORA_LIGHT_RADIUS` of `(x, z)` (a circle,
+/// the column itself included) with no leaf block above `y`. Flora runs after
+/// trees, so their leaves are in place.
+pub(crate) fn light(world: &World, x: i32, y: i32, z: i32) -> f64 {
+    let r = FLORA_LIGHT_RADIUS;
+    let (mut open, mut all) = (0u32, 0u32);
+    for dz in -r..=r {
+        for dx in -r..=r {
+            if dx * dx + dz * dz > r * r {
+                continue;
+            }
+            all += 1;
+            if !(y + 1..HEIGHT as i32).any(|y| is_leaves(world.get(x + dx, y, z + dz))) {
+                open += 1;
+            }
+        }
+    }
+    open as f64 / all as f64
 }
 
 /// Product of `f`'s niche responses at the column whose air cell is `top`.

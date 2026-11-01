@@ -3,8 +3,10 @@
 use crate::climate::biome_for;
 use crate::data::{Biome, Block};
 use crate::decorate::{generate_decorated_with, World};
+use crate::decorate::{MARGIN_CELLS, READ_REACH};
 use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
-use crate::niche::NicheLayer;
+use crate::flora::{FloraRequires, FLORA_LIGHT_RADIUS};
+use crate::niche::{light, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -1135,5 +1137,77 @@ fn entries_without_a_niche_match_entries_whose_niche_always_holds() {
             "seed {seed}"
         );
         assert!(a.blocks == crate::generate_decorated(seed, -50, 30, 120, 90).blocks);
+    }
+}
+
+/// Hand-built Plains grass at y 70 over 13 by 5 columns, with a leaf roof at
+/// y 76 over x >= 6. Light at x 0, 6 and 10 of the middle row, and which of
+/// them got a daisy.
+fn light_placed(table: &[Flora]) -> ([f64; 3], [bool; 3]) {
+    let (w, d) = (13, 5);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let biome = vec![Biome::Plains as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&biome);
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            for y in 0..70 {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+            world.set(x, 70, z, Block::Grass as u8);
+            if x >= 6 {
+                world.set(x, 76, z, Block::OakLeaves as u8);
+            }
+        }
+    }
+    let xs = [0, 6, 10];
+    let lit = xs.map(|x| light(&world, x, 70, 2));
+    place(&mut world, 12345, (0, 0, w as i32, d as i32), table);
+    (lit, xs.map(|x| world.get(x, 71, 2) == Block::Daisy as u8))
+}
+
+#[test]
+fn light_is_lower_under_leaves_and_its_niche_places_by_it() {
+    let (lit, _) = light_placed(&[]);
+    // At x 6 the 4 cone columns with x < 6 are open, of 13.
+    assert_eq!(lit, [1.0, 4.0 / 13.0, 0.0]);
+    // Under leaves the surface is the roof, so a shade plant needs `canopy`.
+    let [shade] = niche_entry!(&[(NicheLayer::Light, 0.0, 0.2)]);
+    let shade = Flora {
+        requires: Some(FloraRequires::Canopy),
+        ..shade
+    };
+    assert_eq!(light_placed(&[shade]).1, [false, false, true]);
+    let sun = niche_entry!(&[(NicheLayer::Light, 0.8, 1.0)]);
+    assert_eq!(light_placed(&sun).1, [true, false, false]);
+}
+
+#[test]
+fn light_cone_and_tree_reach_stay_inside_the_decoration_margin() {
+    // A tree writes at most 7 blocks out of its decoration cell (decorate.rs).
+    const TREE_REACH: i32 = 7;
+    const {
+        assert!(FLORA_LIGHT_RADIUS >= 0);
+        assert!(FLORA_LIGHT_RADIUS + TREE_REACH <= MARGIN_CELLS * 16);
+        assert!(FLORA_LIGHT_RADIUS <= READ_REACH);
+    }
+}
+
+#[test]
+fn light_niche_entry_is_independent_of_region() {
+    let seed = 12345;
+    let table = niche_entry!(&[(NicheLayer::Light, 0.0, 0.6)]);
+    let big = gen(seed, -64, -64, 192, 192, &table);
+    let all = gen(seed, -64, -64, 192, 192, &niche_entry!(&[]));
+    let n = count(&big, Block::Daisy);
+    assert!(n > 0 && n < count(&all, Block::Daisy), "{n}");
+    for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63), (60, -50, 33, 33)] {
+        let small = gen(seed, ox, oz, w, d, &table);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&small, x, y, z), at(&big, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
     }
 }

@@ -17,7 +17,9 @@
 #                 soil_depth | light | slope | sun_facing | hollow. The response is 1
 #                 inside and falls to 0 over niche_margin_<layer> outside; the product
 #                 multiplies the biome chance. height_above_sea is ground y minus sea
-#                 level; soil_depth counts dirt and grass from the ground block down.
+#                 level; soil_depth counts dirt and grass from the ground block down;
+#                 light is the fraction of columns within light_radius (the column
+#                 itself included) with no leaf block above the ground block.
 #                 Other layers are not computed yet and leave the chance as is.
 
 [settings]
@@ -29,6 +31,9 @@ coast_min_y = 62        # lowest sand y for requires = "coast"
 coast_max_y = 66        # highest sand y for requires = "coast"
 pad_land_radius = 4     # columns searched for land by a `pad` entry
 colour_scale = 20.0     # blocks per cell of the noise that picks the winner
+# Columns, within this distance (circle) of the column itself, that make up the
+# cone of the `light` layer. Shared with the client shade tint (#1610).
+light_radius = 2
 # Soft margins of the niche response, in each layer's own units.
 niche_margin_height_above_sea = 2.0
 niche_margin_soil_depth = 1.0
