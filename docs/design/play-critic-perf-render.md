@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
   E: todo
   F: todo
@@ -19,6 +19,7 @@ Checked against the code on `master`:
 
 - **Phase A done (plan #1562).** PRs #1585 (`FrameTimes` max, `hitches`, `HITCH_MS = 2 * FRAME_BUDGET_MS`, overlay and `frameStats()`) and #1651 (per-hitch work records, `formatLastHitch`, `records` in `frameStats()`) built section 1; the first bullet below describes the code before them.
 - **Phase B done (plan #1658).** PRs #1667 (CPU meshing moved to `client/regionmesh.js`, `meshRegionCpu`), #1670 (stale-neighbour remesh planned in the stream), #1676 (harness meshes regions; `regions.max_per_frame`, `chunks.max_per_tick`, `verts.max_per_frame` in `client/test/dsl.mjs`) and #1678 (`client/workbudget.js`, the `overbudget` event, `events.overbudget`) built section 2; the Section 2 bullets below describe the code before them.
+- **Phase C done (plan #1681).** PRs #1705 (UV snap built from shared constants in `client/texsnap.js`, tested at every view angle), #1735 (`client/meshcheck.js` crack check on opaque full-block faces) and #1706 (`client/test/regionborder.test.mjs`, padded neighbour regions mesh like the two together) built section 4; the Section 4 bullets below describe the code before them.
 - **Frame stats (section 1).** `client/frametimes.js` has `FrameTimes` (300-frame ring buffer, nearest-rank `percentile`, `summary()` = `{ frames, p50, p99 }`, `format()`) and `FRAME_BUDGET_MS` (1000 / 60). `client/scene.js` creates `frames = new FrameTimes(300)`, pushes `now - lastFrame` each frame, exposes `window.frameStats = () => frames.summary()` and builds the overlay text from `format()` plus an "over/within the 16.7 ms p99 budget" line. There is no max, no hitch count and no per-frame work record. `client/test/frametimes.test.mjs` tests it.
 - **Region meshing (section 2).** `meshRegion` in `client/scene.js` does the CPU half (`padRegion` from `client/regionpad.js`, `columnTints`, `meshBlocksWasm` from `viewer/meshwasm.js`, over `crates/web/src/mesh.rs`) and the GPU half (`upload`, `regionParts`, `meshes`) in one function. The `stale` map and the one-per-spare-frame remesh of neighbours also live in `scene.js`'s `render`. `padRegion` and `meshBlocksWasm` are plain JS over wasm, and `client/test/meshorigin.test.mjs` already calls `meshBlocksWasm` from Node, so the CPU half can run headless.
 - **Streaming (section 2).** `client/stream.js` `createStream({ budget = 1 })` turns `walk.drain_stream()` events into regions to mesh (at most `budget` per frame, nearest first) and regions to free. `controller.js` `streamRegions` returns `{ mesh, free, remesh, loaded, freed, pending, centre }` from it each frame. The DSL (`client/test/dsl.mjs`) has `start ... stream`, which runs this and exposes `regions.loaded|freed|pending|x|z`, but meshes nothing.
