@@ -330,8 +330,7 @@ tan planks with dark seams inside a dark gray hoop rim), barrel_side
 (tan staves with dark brown seams and two dark gray hoops with a light
 gray glint)
 dock_planks (weathered boards, rougher than raft_planks: two boards of
-three rows each, split by dark brown gap rows two pixels wider than
-raft_planks' seams, with stone gray weathering patches among the tan and
+three rows each, split by full-width dark brown gap rows, with stone gray weathering patches among the tan and
 brown), dock_post_top (end grain of a dark salt-worn post: concentric
 dark brown and brown rings inside a dark gray rim), dock_post_side
 (dark, vertical grain in dark brown and dark gray with brown streaks and
