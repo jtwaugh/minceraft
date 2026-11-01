@@ -4,15 +4,16 @@
 //! sea (ground y minus `SEA_LEVEL`), soil depth (dirt and grass blocks
 //! from the ground block down, before anything else), light (the share of
 //! columns in a small cone around the column with no leaves above the ground),
-//! slope and sun-facing (from the surface height of the four neighbours) and
-//! hollow (surface height minus the mean of rings around the column).
+//! slope and sun-facing (from the surface height of the four neighbours),
+//! hollow (surface height minus the mean of rings around the column) and
+//! forest edge (distance from an open column to the nearest leaf column).
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT,
-    NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE,
-    NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_EDGE_RADIUS, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, FLORA_SUN,
+    FLORA_SUN_FACING_FLAT, NICHE_MARGIN_EDGE, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW,
+    NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
 };
 use crate::trees::libm_sqrt;
 use crate::{HEIGHT, SEA_LEVEL};
@@ -27,6 +28,7 @@ pub enum NicheLayer {
     Slope,
     SunFacing,
     Hollow,
+    Edge,
 }
 
 impl NicheLayer {
@@ -39,6 +41,7 @@ impl NicheLayer {
             NicheLayer::Slope => NICHE_MARGIN_SLOPE,
             NicheLayer::SunFacing => NICHE_MARGIN_SUN_FACING,
             NicheLayer::Hollow => NICHE_MARGIN_HOLLOW,
+            NicheLayer::Edge => NICHE_MARGIN_EDGE,
         }
     }
 }
@@ -73,6 +76,7 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
         }
         NicheLayer::Light => Some(light(world, x, y, z)),
         NicheLayer::Hollow => Some(hollow(world, x, z)),
+        NicheLayer::Edge => Some(edge(world, x, y, z)),
     }
 }
 
@@ -137,12 +141,34 @@ pub(crate) fn light(world: &World, x: i32, y: i32, z: i32) -> f64 {
                 continue;
             }
             all += 1;
-            if !(y + 1..HEIGHT as i32).any(|y| is_leaves(world.get(x + dx, y, z + dz))) {
+            if !leafy(world, x + dx, y, z + dz) {
                 open += 1;
             }
         }
     }
     open as f64 / all as f64
+}
+
+/// Whether the column at `(x, z)` has a leaf block above `y`.
+fn leafy(world: &World, x: i32, y: i32, z: i32) -> bool {
+    (y + 1..HEIGHT as i32).any(|y| is_leaves(world.get(x, y, z)))
+}
+
+/// Straight-line distance, in columns, from `(x, z)` to the nearest column
+/// within `FLORA_EDGE_RADIUS` (a circle) with a leaf block above `y`: 0 if
+/// `(x, z)` itself has one, `FLORA_EDGE_RADIUS` if no column in reach does.
+pub(crate) fn edge(world: &World, x: i32, y: i32, z: i32) -> f64 {
+    let r = FLORA_EDGE_RADIUS;
+    let mut best = r * r;
+    for dz in -r..=r {
+        for dx in -r..=r {
+            let d = dx * dx + dz * dz;
+            if d < best && leafy(world, x + dx, y, z + dz) {
+                best = d;
+            }
+        }
+    }
+    libm_sqrt(best as f64)
 }
 
 /// Product of `f`'s niche responses at the column whose air cell is `top`.

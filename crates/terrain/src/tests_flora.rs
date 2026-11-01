@@ -5,8 +5,8 @@ use crate::data::{Biome, Block};
 use crate::decorate::{generate_decorated_with, World};
 use crate::decorate::{MARGIN_CELLS, READ_REACH};
 use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
-use crate::flora::{FloraRequires, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS};
-use crate::niche::{hollow, light, NicheLayer};
+use crate::flora::{FloraRequires, FLORA_EDGE_RADIUS, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS};
+use crate::niche::{edge, hollow, light, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -1354,4 +1354,56 @@ fn hollow_niche_entry_is_independent_of_region() {
             }
         }
     }
+}
+
+/// Hand-built Plains grass at y 70 over 30 by 5 columns, with a leaf roof at
+/// y 76 over x < 4. Edge at x 2, 4, 7 and 20 of the middle row, and which of
+/// them got a daisy.
+fn edge_placed(table: &[Flora]) -> ([f64; 4], [bool; 4]) {
+    let (w, d) = (30, 5);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let biome = vec![Biome::Plains as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&biome);
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            for y in 0..70 {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+            world.set(x, 70, z, Block::Grass as u8);
+            if x < 4 {
+                world.set(x, 76, z, Block::OakLeaves as u8);
+            }
+        }
+    }
+    let xs = [2, 4, 7, 20];
+    let e = xs.map(|x| edge(&world, x, 70, 2));
+    place(&mut world, 12345, (0, 0, w as i32, d as i32), table);
+    (e, xs.map(|x| world.get(x, 71, 2) == Block::Daisy as u8))
+}
+
+#[test]
+fn edge_is_the_distance_to_leaves_and_its_niche_places_by_it() {
+    assert_eq!(FLORA_EDGE_RADIUS, 8, "x 20 assumes the cap is under 17");
+    let (e, _) = edge_placed(&[]);
+    assert_eq!(e, [0.0, 1.0, 4.0, 8.0]);
+    let band = niche_entry!(&[(NicheLayer::Edge, 1.0, 6.0)]);
+    assert_eq!(edge_placed(&band).1, [false, true, true, false]);
+    let far = niche_entry!(&[(NicheLayer::Edge, 8.0, 8.0)]);
+    assert_eq!(edge_placed(&far).1, [false, false, false, true]);
+}
+
+#[test]
+fn edge_search_and_tree_reach_stay_inside_the_decoration_margin() {
+    // A tree writes at most 7 blocks out of its decoration cell (decorate.rs).
+    const TREE_REACH: i32 = 7;
+    const {
+        assert!(FLORA_EDGE_RADIUS > 0);
+        assert!(FLORA_EDGE_RADIUS + TREE_REACH <= MARGIN_CELLS * 16);
+        assert!(FLORA_EDGE_RADIUS <= READ_REACH);
+    }
+}
+
+#[test]
+fn edge_niche_entry_is_independent_of_region() {
+    region_independent(&niche_entry!(&[(NicheLayer::Edge, 1.0, 6.0)]));
 }

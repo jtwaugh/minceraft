@@ -152,6 +152,9 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     writeln!(out, "pub const FLORA_SUN_FACING_FLAT: f64 = {flat:?};").unwrap();
     let radius = int(&doc["settings"], "light_radius");
     writeln!(out, "pub const FLORA_LIGHT_RADIUS: i32 = {radius};").unwrap();
+    let radius = int(&doc["settings"], "edge_radius");
+    assert!(radius > 0, "flora.toml: edge_radius must be positive");
+    writeln!(out, "pub const FLORA_EDGE_RADIUS: i32 = {radius};").unwrap();
     let radii: Vec<i64> = doc["settings"]["hollow_radii"]
         .as_array()
         .expect("hollow_radii array")

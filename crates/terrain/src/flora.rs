@@ -419,9 +419,11 @@ mod tests {
             e.niche = vec![("slope".into(), bad)];
             assert!(check(&[e]).unwrap_err().contains("two numbers"));
         }
-        let mut e = entry();
-        e.niche = vec![("light".into(), vec![Some(0.5), Some(0.5)])];
-        assert!(check(&[e]).is_ok());
+        for layer in ["light", "edge"] {
+            let mut e = entry();
+            e.niche = vec![(layer.into(), vec![Some(0.5), Some(0.5)])];
+            assert!(check(&[e]).is_ok());
+        }
         let (mut a, mut b) = (entry(), entry());
         a.name = "a".into();
         b.name = "b".into();
