@@ -1,7 +1,7 @@
-//! Parsing and validation of `data/sea_flora.toml`, shared by `build.rs`
-
-//! (feature `toml-io`). `build.rs` includes this file by path, so keep it free
-//! of crate-internal dependencies beyond `rule_check`.
+//! Parsing and validation of `data/sea_flora.toml`, run by `build.rs`, which
+//! includes this file by path, so keep it free of crate-internal dependencies
+//! beyond `rule_check`. Until `SeaFlora::from_toml` is switched over, the
+//! parser in `sea_flora.rs` must give the same errors.
 
 use serde::Deserialize;
 

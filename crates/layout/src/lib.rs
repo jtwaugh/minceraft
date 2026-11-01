@@ -337,8 +337,11 @@ mod search;
 pub use search::{search_seeds, Scored, SearchParams, SearchProgress, TermScores};
 mod scoring_extra;
 pub use scoring_extra::{extra_islands, ExtraIslands};
+#[cfg(feature = "toml-io")]
 mod sea_flora;
+#[cfg(feature = "toml-io")]
 pub use sea_flora::{SeaFlora, SeaFloraEntry, SeaFloraShape};
+#[cfg(feature = "toml-io")]
 mod sea_flora_pass;
 mod structure;
 #[cfg(test)]
@@ -416,7 +419,7 @@ mod scoring_extra_tests;
 mod scoring_island_tests;
 #[cfg(test)]
 mod scoring_tests;
-#[cfg(test)]
+#[cfg(all(test, feature = "toml-io"))]
 mod sea_flora_baked_tests;
 #[cfg(all(test, feature = "toml-io"))]
 mod sea_flora_pass_tests;

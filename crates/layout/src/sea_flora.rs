@@ -1,14 +1,10 @@
 //! Sea flora entries (docs/design/sea-flora-and-shellfish.md sections 3
-//! and 4) from `data/sea_flora.toml`, baked by `build.rs` (`sea_flora_rules.rs`) for
-//! `shipped`; `from_toml` (feature `toml-io`) reads a file at run time.
+//! and 4) from `data/sea_flora.toml`, loaded at run time (feature
+//! `toml-io`). Nothing places them yet.
 
-#[cfg(feature = "toml-io")]
 use serde::Deserialize;
 
-use crate::habitat::HabitatId;
-#[cfg(feature = "toml-io")]
-use crate::habitat::Habitats;
-#[cfg(feature = "toml-io")]
+use crate::habitat::{HabitatId, Habitats};
 use crate::rule_check::check_range;
 
 /// An entry as emitted by `build.rs`; habitats are rule indices and `column`
@@ -31,8 +27,8 @@ include!(concat!(env!("OUT_DIR"), "/sea_flora.rs"));
 
 /// A column's height range in cells, inclusive, and the fewest water cells
 /// left above its top cell (0: the top may touch the surface).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "toml-io", derive(Deserialize), serde(deny_unknown_fields))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SeaFloraColumn {
     pub height_min: u32,
     pub height_max: u32,
@@ -76,7 +72,6 @@ pub struct SeaFlora {
 }
 
 impl SeaFlora {
-    #[cfg(feature = "toml-io")]
     /// Parse a sea flora file; habitat names are resolved against `habitats`.
     pub fn from_toml(text: &str, habitats: &Habitats) -> Result<Self, String> {
         let entries = parse_sea_flora(text, habitats)?;
@@ -118,7 +113,6 @@ impl SeaFlora {
     }
 }
 
-#[cfg(feature = "toml-io")]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawEntry {
@@ -136,14 +130,12 @@ struct RawEntry {
     chance: f64,
 }
 
-#[cfg(feature = "toml-io")]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawFile {
     sea_flora: Vec<RawEntry>,
 }
 
-#[cfg(feature = "toml-io")]
 /// Each of `names` through `f`, or an error naming the entry.
 fn resolve<T>(
     what: &str,
@@ -158,7 +150,6 @@ fn resolve<T>(
     names.iter().map(id).collect()
 }
 
-#[cfg(feature = "toml-io")]
 /// Parse and validate the sea flora file.
 fn parse_sea_flora(text: &str, habitats: &Habitats) -> Result<Vec<SeaFloraEntry>, String> {
     let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
