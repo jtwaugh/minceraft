@@ -4,8 +4,9 @@ import { ALPHA, SCENES, sceneById, menuEntries } from '../scenes.js';
 
 const testPlay = (entries) => entries.find((e) => e.key === 'testplay');
 
-test('scene list has the single chunk (no id) and raft', () => {
+test('scene list is the open world (no id) and raft', () => {
   assert.equal(SCENES[0].id, null);
+  assert.deepEqual(SCENES.map((s) => s.name), ['Open world', 'Raft']);
   assert.ok(SCENES.some((s) => s.id === 'raft'));
   assert.equal(typeof ALPHA, 'boolean');
 });

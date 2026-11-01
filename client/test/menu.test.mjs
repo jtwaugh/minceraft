@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hudScale } from '../hud.js';
-import { menuModel, menuScale, menuDebug, PANEL, SEA_TILE, WORDMARK, wordmarkTexels } from '../menu.js';
+import { menuModel, menuScale, menuDebug, renderMenu, pixelLabels, PANEL, SEA_TILE, WORDMARK, wordmarkTexels } from '../menu.js';
 import { SCENES } from '../scenes.js';
 
 test('menu links are relative and cover every scene', () => {
@@ -77,6 +77,7 @@ test('styleMenu sets the button variables and generates raised and pressed CSS',
     head: { appendChild: (el) => { sheets[el.id] = el; } },
     getElementById: (id) => sheets[id] ?? null,
     querySelector: () => null,
+    querySelectorAll: () => [],
     createElement: (tag) => (tag === 'canvas' ? canvas() : { id: '', textContent: '' }),
   };
   assert.equal(styleMenu(doc, { innerWidth: 1366, innerHeight: 768 }, set), true);
@@ -87,4 +88,68 @@ test('styleMenu sets the button variables and generates raised and pressed CSS',
   assert.match(css, /border-image-source/);
   styleMenu(doc, { innerWidth: 1920, innerHeight: 1080 }, set);
   assert.equal(Object.keys(sheets).length, 1);
+});
+
+// A small DOM: enough elements for renderMenu (tags, children, attributes,
+// listeners and selectors by tag, class or attribute).
+function fakeDoc() {
+  const matches = (el, sel) => sel.split(',').some((one) => {
+    const s = one.trim();
+    if (s === '[data-label]') return 'label' in el.dataset;
+    if (s === 'a[data-href]') return el.tag === 'a' && 'href' in el.dataset;
+    if (s.startsWith('.')) return el.className === s.slice(1);
+    return el.tag === s;
+  });
+  const all = (el) => el.children.flatMap((c) => [c, ...all(c)]);
+  const make = (tag) => {
+    const el = {
+      tag, children: [], dataset: {}, attrs: {}, listeners: {}, className: '', hidden: false, textContent: '', style: {},
+      appendChild(c) { el.children.push(c); return c; },
+      append(...cs) { el.children.push(...cs); },
+      replaceChildren(...cs) { el.children = cs; },
+      setAttribute(k, v) { el.attrs[k] = v; },
+      addEventListener(k, f) { el.listeners[k] = f; },
+      querySelectorAll: (sel) => all(el).filter((c) => matches(c, sel)),
+      querySelector: (sel) => el.querySelectorAll(sel)[0] ?? null,
+      focus() {},
+    };
+    return el;
+  };
+  return { createElement: make, root: make('main') };
+}
+
+test('Test play opens a picker with the seed box and the two scenes', () => {
+  const doc = fakeDoc();
+  renderMenu(doc, doc.root, menuModel(true, false));
+  const [world, play] = doc.root.children;
+  assert.equal(world.querySelector('a').dataset.label, 'World gen');
+  const toggle = play.querySelector('button');
+  const picker = play.querySelector('.picker');
+  assert.equal(picker.hidden, true);
+  toggle.listeners.click();
+  assert.equal(picker.hidden, false);
+  assert.equal(toggle.attrs['aria-expanded'], 'true');
+  assert.ok(picker.querySelector('input'));
+  assert.deepEqual(picker.querySelectorAll('li').map((li) => li.children[0].dataset.label), ['Open world', 'Raft']);
+  toggle.listeners.click();
+  assert.equal(picker.hidden, true);
+});
+
+test('pixelLabels draws every label in the pixel font and keeps the text as aria-label', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const set = JSON.parse(await readFile(new URL('../../viewer/textures.json', import.meta.url)));
+  const doc = fakeDoc();
+  renderMenu(doc, doc.root, menuModel(true, false));
+  const create = doc.createElement;
+  doc.createElement = (tag) => (tag === 'canvas'
+    ? { tag, width: 0, height: 0, style: {}, getContext: () => ({ fillRect() {} }), children: [], dataset: {} }
+    : create(tag));
+  doc.querySelectorAll = doc.root.querySelectorAll;
+  pixelLabels(doc, set, 2);
+  const labels = doc.root.querySelectorAll('[data-label]');
+  assert.deepEqual(labels.map((el) => el.dataset.label), ['World gen', 'Test play', 'alpha', 'Seed', 'Random', 'Open world', 'Raft']);
+  for (const el of labels) {
+    assert.equal(el.attrs['aria-label'], el.dataset.label);
+    assert.deepEqual(el.children.map((c) => c.tag), ['canvas']);
+  }
 });
