@@ -1,0 +1,21 @@
+# Workplace: a smokehouse with racks of fish (docs/design/villages-and-villagers.md 2.1, 2.3).
+kind = "building"
+size = [5, 4, 5]      # x, y, z
+origin_offset = [-2, 0, -4]
+palette = { P = "dock_planks", L = "oak_log", W = "raft_planks", T = "thatch", R = "drying_rack", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPP", "PPPPP", "PPPPP", "PPPPP", "PPPPP"],
+  # y = 1 (door at the south edge, racks inside)
+  ["LWWWL", "WR.RW", "W...W", "W...W", "LW.WL"],
+  # y = 2
+  ["LWWWL", "W...W", "W...W", "W...W", "LW.WL"],
+  # y = 3 (roof)
+  ["TTTTT", "TTTTT", "TTTTT", "TTTTT", "TTTTT"],
+]
+connectors = [
+  { cell = [2, 1, 4], facing = "+z", pool = "boardwalks" },  # the door
+]
+spawns = [
+  { cell = [2, 1, 2], kind = "villager" },
+]
