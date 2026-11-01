@@ -245,12 +245,15 @@ function needsYouActions(i) {
         text: "Posts this as you; the spec editor opens the PR.", body: "/decide ", ok: "Post decision"}));
   } else if (i.type === "pr") {
     out.push(`<a class="btn primary" href="${GH}/pull/${i.number}/files" target="_blank" rel="noopener">Review the diff ↗</a>`);
+    out.push(btn("Approve & merge", {op: {action: "approve-merge", number: i.number}, title: `Approve and merge PR #${i.number}`,
+      text: "Approves the PR as you with no comment, then merges it (merge commit). If it's your own PR, GitHub won't take " +
+        "the approval, so it just merges.", ok: "Approve & merge"}, "primary"));
     out.push(btn("Ask @claude to review", {action: "comment", number: i.number, title: `Ask Claude to review PR #${i.number}`,
       text: "Posts this as you. An @claude comment starts Claude on the PR; it replies there.",
       body: "@claude Review this PR: say whether it's ready to merge, and list anything that should change first.", ok: "Post comment"}));
     out.push(btn("Comment", {action: "comment", number: i.number, title: `Comment on PR #${i.number}`, body: "", ok: "Post comment"}));
     out.push(btn("Close PR", {action: "close", number: i.number, reason: "not_planned", title: `Close PR #${i.number}`,
-      text: "Closes the PR without merging. Merge it on GitHub.", body: "", ok: "Close"}));
+      text: "Closes the PR without merging.", body: "", ok: "Close"}));
   } else if (i.type === "unapproved") {
     out.push(btn("Approve (label factory)", {action: "label", number: i.number, label: "factory",
       title: `Approve ticket #${i.number}`, text: "Adds the factory label; the tick starts it once its dependencies close.", ok: "Approve"}, "primary"));
