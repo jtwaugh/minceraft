@@ -340,16 +340,21 @@ mod tests {
         let (mut sp, mut store) = spawner_with(FishSpawnConfig::parse(&text).unwrap(), 3);
         sp.tick(0, [0.0, 0.0], &mut store, open_sea);
         assert_eq!(sp.stock(), 0);
+        let ids: Vec<_> = store.iter().take(2).map(|f| f.id).collect();
+        for id in ids {
+            store.remove(id);
+        }
         sp.tick(2400, [0.0, 0.0], &mut store, open_sea);
         assert_eq!(sp.stock(), 0, "the service change does not reset");
+        let ids: Vec<_> = store.iter().take(2).map(|f| f.id).collect();
+        for id in ids {
+            store.remove(id);
+        }
         sp.tick(4799, [0.0, 0.0], &mut store, open_sea);
         assert_eq!(sp.stock(), 0);
         sp.tick(4800, [0.0, 0.0], &mut store, open_sea);
-        assert_eq!(
-            sp.stock(),
-            0,
-            "refilled, then spent on the same tick's top-up"
-        );
+        assert_eq!(store.len(), 6, "1 left + a refilled stock of 5 spawned");
+        assert_eq!(sp.stock(), 0);
     }
 
     #[test]
