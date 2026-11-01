@@ -20,7 +20,9 @@ import json
 import os
 import re
 import secrets
+import shlex
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -38,6 +40,7 @@ class State:
         self.repo_dir, self.repo, self.every = repo_dir, repo, every
         self.data, self.error, self.at = None, None, 0.0
         self.busy = False
+        self.prev_runner = None  # FACTORY_RUNNER before the page cleared it, for "switch back"
         self.pending = []  # writes GitHub hasn't shown back yet: {"action", "number", "label", "at"}
         self.lock = threading.Lock()
         self.wake = threading.Event()
@@ -123,7 +126,8 @@ class State:
         with self.lock:
             n = len(self.pending)
         return {"data": self.overlaid(), "error": self.error, "refreshed_at": self.at,
-                "busy": self.busy, "every": self.every, "pending": n}
+                "busy": self.busy, "every": self.every, "pending": n,
+                "prev_runner": self.prev_runner}
 
 
 def gh_write(args, dry):
@@ -134,8 +138,104 @@ def gh_write(args, dry):
     return p.returncode == 0, (p.stderr or p.stdout).strip()[:500]
 
 
+TICK_WORKFLOW = "factory-tick.yml"
+NEVER_LIVE_TICK = ("Never run .github/scripts/factory_tick.py without --dry-run: run bare, it ticks live "
+                   "and writes to GitHub as me. `python3 .github/scripts/factory_health.py --repro` runs it dry.")
+
+
+def investigate_prompt(state, topic):
+    """What a local Claude is asked to look into. Built here from the last read, never from the request."""
+    d = state.data or {}
+    h, runs = d.get("health") or {}, d.get("agent_runs") or []
+    rules = ("Investigate only: don't push, comment, re-run workflows or change repo settings without "
+             f"asking me first. {NEVER_LIVE_TICK} End with the cause and the fix you propose.")
+    if topic == "runner":
+        lost = [x for x in runs if re.search("lost communication", x.get("error") or "", re.I)]
+        names = sorted({x["runner"] for x in lost if x.get("runner")}) or ["the self-hosted runner"]
+        cur = (d.get("runner") or {}).get("value") or "unset (ubuntu-latest)"
+        return (f"The factory's self-hosted runner ({', '.join(names)}) lost communication with GitHub "
+                f"mid-run on {len(lost)} recent agent runs:\n"
+                + "".join(f"- {x['title']}: {x['url']}\n" for x in lost)
+                + f"vars.FACTORY_RUNNER is {cur}. Find out why it drops. If the runner is on this machine, "
+                  "check its service and _diag logs, sleep and power settings, network, disk and memory; "
+                  f"if it isn't, say what to check on the machine it's on. {rules}")
+    f = h.get("first_failure") or {}
+    lines = [f"The Mince Raft factory tick ({TICK_WORKFLOW}) needs a look."]
+    if h.get("workflow_state") not in (None, "active"):
+        lines.append(f"The workflow is {h['workflow_state']}.")
+    if h.get("failing"):
+        lines.append(f"It has failed {h['failing']} time(s) in a row since {f.get('at')}; first failed run: "
+                     f"{f.get('url')}. The error: {' / '.join(f.get('why') or []) or 'see the log'}.")
+    elif h.get("latest"):
+        lines.append(f"The last tick ran at {h['latest']['at']}.")
+    for c in (d.get("next_tick") or {}).get("crashed") or []:
+        lines.append(f"In a dry run the {c['pass']} pass crashes: {c['error']}")
+    lines.append(f"Find the cause, with `gh run view <id> --log-failed` and the scripts in .github/scripts. {rules}")
+    return "\n".join(lines)
+
+
+def open_terminal(state, prompt, dry):
+    """Start an interactive Claude in a new Terminal window in the repo, with the prompt as its first message."""
+    fd, path = tempfile.mkstemp(prefix="factory-investigate-", suffix=".txt")
+    with os.fdopen(fd, "w") as fh:
+        fh.write(prompt)
+    # The prompt goes through a file, so nothing from GitHub is ever parsed by the shell.
+    cmd = (f"cd {shlex.quote(state.repo_dir)} && p=$(cat {shlex.quote(path)}) && "
+           f"rm -f {shlex.quote(path)} && claude \"$p\"")
+    if dry:
+        os.remove(path)
+        print(f"[dry terminal] {cmd}", flush=True)
+        return True, "dry run: no terminal opened"
+    if sys.platform != "darwin":
+        return False, f"Opening a terminal only works on macOS. Run this yourself: {cmd}"
+    script = cmd.replace("\\", "\\\\").replace('"', '\\"')
+    p = subprocess.run(["osascript", "-e", f'tell application "Terminal" to do script "{script}"',
+                        "-e", 'tell application "Terminal" to activate'], capture_output=True, text=True)
+    return p.returncode == 0, (p.stderr.strip() or "Claude is starting in a new Terminal window.")[:500]
+
+
+def act_ops(state, body, dry):
+    """Remediation for the alerts. Every target is checked against the last read."""
+    kind, d, R = body.get("action"), state.data or {}, ["-R", state.repo]
+    h = d.get("health") or {}
+    if kind == "investigate":
+        if body.get("topic") not in ("runner", "tick"):
+            raise ValueError("unknown topic")
+        return open_terminal(state, investigate_prompt(state, body["topic"]), dry)
+    if kind == "rerun":
+        known = {x["id"] for x in d.get("agent_runs") or [] if x.get("conclusion") not in (None, "success")}
+        known |= {t["id"] for t in (h.get("latest"), h.get("first_failure")) if t and t.get("id")}
+        ids = body.get("runs")
+        if not isinstance(ids, list) or not ids or not all(isinstance(i, int) and i in known for i in ids):
+            raise ValueError("runs must be failed runs the dashboard listed")
+        for i in ids:
+            ok, msg = gh_write(["run", "rerun", str(i), "--failed", *R], dry)
+            if not ok:
+                return ok, f"run {i}: {msg}"
+        return True, f"re-running {len(ids)} run(s)"
+    if kind in ("tick-run", "tick-enable"):
+        return gh_write(["workflow", kind[5:], TICK_WORKFLOW, *R], dry)
+    if kind == "runner":
+        if body.get("to") == "hosted":
+            cur = (d.get("runner") or {}).get("value")
+            ok, msg = gh_write(["variable", "delete", "FACTORY_RUNNER", *R], dry)
+            if ok and cur:
+                state.prev_runner = cur
+            return ok, msg
+        if body.get("to") == "back" and state.prev_runner:
+            ok, msg = gh_write(["variable", "set", "FACTORY_RUNNER", "--body", state.prev_runner, *R], dry)
+            if ok:
+                state.prev_runner = None
+            return ok, msg
+        raise ValueError("runner: to must be hosted, or back after switching")
+    return None
+
+
 def act(state, body, dry):
     """One write. Returns (ok, message); raises ValueError on a bad request."""
+    done = act_ops(state, body, dry)
+    if done is not None:
+        return done
     n = body.get("number")
     if not isinstance(n, int) or n <= 0:
         raise ValueError("bad issue number")

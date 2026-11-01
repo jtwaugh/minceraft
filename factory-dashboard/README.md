@@ -30,9 +30,9 @@ Needs Python 3.9+ and the GitHub CLI, with nothing to install.
 
 ## What it shows
 
-- **Banners:** the tick failing, stale or disabled (with the error from the
-  first failed run), the self-hosted runner dropping agent runs, a tick pass
-  crashing.
+- **Alerts:** one line each, opened for the detail: the tick failing, stale
+  or disabled (with the error from the first failed run), the self-hosted
+  runner dropping agent runs, a tick pass crashing.
 - **Overview:** last tick, items waiting on you, active and failed agent
   runs, open and blocked PRs, ticks in the last 48 h.
 - **Waiting on you:** the needs-you queue, by the needs-you pass's own rules,
@@ -62,6 +62,13 @@ out as you through `gh`:
   GitHub; *Ask @claude to review* comments asking Claude for a review;
   *Close PR* closes it unmerged. Merging stays on GitHub.
 - **Comment** on any waiting issue.
+- **Alerts:** *Investigate locally* opens Terminal in your checkout and
+  starts Claude with what the alert knows, told to investigate only and
+  never to run a live tick. *Re-run* re-runs failed jobs the page listed.
+  *Run the tick now* and *Enable the tick* dispatch or enable
+  `factory-tick.yml`. *Use GitHub-hosted runners* deletes `FACTORY_RUNNER`
+  (agents go to `ubuntu-latest`); the page offers to switch back until the
+  server restarts.
 
 Closing a no-PR question by itself doesn't restart its ticket; use Retry.
 
@@ -83,6 +90,8 @@ confirmed. Restarting the server forgets them.
 
 The server listens on 127.0.0.1 only and checks the Host header. Writes
 need a token that changes every launch, and it only allows comments,
-closing issues, and the `factory`, `local` and `hold` labels. Don't expose
+closing issues and PRs, the `factory`, `local` and `hold` labels, re-running
+failed runs it listed, running or enabling the tick, clearing or restoring
+`FACTORY_RUNNER`, and opening a local Terminal. Don't expose
 the port or run it on a shared machine: anything that can reach the port
 and read the page can post as you.
