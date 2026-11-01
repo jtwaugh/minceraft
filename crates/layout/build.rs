@@ -26,6 +26,8 @@ mod habitat_rule;
 mod habitat_rules;
 #[path = "src/rule_check.rs"]
 mod rule_check;
+#[path = "src/sea_flora_entry.rs"]
+mod sea_flora_entry;
 #[path = "src/sea_flora_rules.rs"]
 mod sea_flora_rules;
 #[path = "src/structure_dir.rs"]
@@ -114,6 +116,7 @@ fn main() {
         "src/habitat_rule.rs",
         "src/habitat_rules.rs",
         "src/fish_rules.rs",
+        "src/sea_flora_entry.rs",
         "src/sea_flora_rules.rs",
         "src/structure_dir.rs",
         "src/structure_error.rs",
@@ -220,28 +223,29 @@ fn main() {
         rules.iter().position(|r| r.id == n)
     })
     .unwrap_or_else(|e| panic!("{}: {e}", sea_flora_path.display()));
-    let mut out = String::from("pub(crate) static SHIPPED_SEA_FLORA: &[StaticEntry] = &[\n");
+    let mut out = String::from("fn shipped_entries() -> Vec<SeaFloraEntry> {\n    vec![\n");
     for e in &entries {
         writeln!(
             out,
-            "    StaticEntry {{ name: {:?}, blocks: &{:?}, column: {}, habitats: &{:?}, \
-             bottom: &{:?}, depth_min: {}, depth_max: {}, shore_distance_max: {}, \
-             cluster_scale: {:?}, salt: {}, chance: {:?} }},",
+            "        SeaFloraEntry {{ name: {:?}.into(), shape: SeaFloraShape::{:?}, \
+             blocks: vec!{:?}, habitats: vec!{:?}, bottom: vec!{:?}, depth_min: {}, \
+             depth_max: {}, shore_distance_max: {:?}, cluster_scale: {:?}, salt: {}, \
+             chance: {:?} }},",
             e.name,
+            e.shape,
             e.blocks,
-            opt(&e.column),
             e.habitats,
             e.bottom,
             e.depth_min,
             e.depth_max,
-            opt(&e.shore_distance_max),
+            e.shore_distance_max,
             e.cluster_scale,
             e.salt,
             e.chance
         )
         .unwrap();
     }
-    out.push_str("];\n");
+    out.push_str("    ]\n}\n");
     std::fs::write(out_dir.join("sea_flora.rs"), out).unwrap();
 
     // Validation thresholds.

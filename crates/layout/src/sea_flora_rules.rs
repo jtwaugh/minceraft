@@ -1,11 +1,21 @@
 //! Parsing and validation of `data/sea_flora.toml`, shared by `build.rs`
 //! (which bakes the shipped table into the crate) and `SeaFlora::from_toml`
 //! (feature `toml-io`). `build.rs` includes this file by path, so keep it
-//! free of crate-internal dependencies beyond `rule_check`.
+//! free of crate-internal dependencies beyond `sea_flora_entry` and
+//! `rule_check`.
 
 use serde::Deserialize;
 
 use crate::rule_check::check_range;
+use crate::sea_flora_entry::{SeaFloraEntry, SeaFloraShape};
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawColumn {
+    height_min: u32,
+    height_max: u32,
+    surface_gap_min: u32,
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -18,9 +28,7 @@ struct RawEntry {
     depth_min: u32,
     depth_max: u32,
     shore_distance_max: Option<u32>,
-    height_min: Option<u32>,
-    height_max: Option<u32>,
-    surface_gap_min: Option<u32>,
+    column: Option<RawColumn>,
     cluster_scale: f64,
     salt: u32,
     chance: f64,
@@ -33,24 +41,6 @@ struct RawFile {
     sea_flora: Vec<RawEntry>,
 }
 
-/// One entry with names resolved: blocks to block ids, habitats to rule
-/// indices. `column` is `(height_min, height_max, surface_gap_min)` for a
-/// `column` entry and `None` for a `cluster`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SeaFloraRule {
-    pub name: String,
-    pub blocks: Vec<u8>,
-    pub column: Option<(u32, u32, u32)>,
-    pub habitats: Vec<usize>,
-    pub bottom: Vec<u8>,
-    pub depth_min: u32,
-    pub depth_max: u32,
-    pub shore_distance_max: Option<u32>,
-    pub cluster_scale: f64,
-    pub salt: u32,
-    pub chance: f64,
-}
-
 fn resolve<T>(
     what: &str,
     kind: &str,
@@ -58,7 +48,7 @@ fn resolve<T>(
     f: &dyn Fn(&str) -> Option<T>,
 ) -> Result<Vec<T>, String> {
     if names.is_empty() {
-        return Err(format!("{what}: {kind} is empty"));
+        return Err(format!("{what}: no {kind}"));
     }
     names
         .iter()
@@ -66,41 +56,42 @@ fn resolve<T>(
         .collect()
 }
 
-/// Parse and validate the sea flora file.
+/// Parse and validate the sea flora file. `habitat_index` maps a habitat id
+/// to its position in the habitat rule list.
 pub fn parse_sea_flora(
     text: &str,
     block_id: &dyn Fn(&str) -> Option<u8>,
     habitat_index: &dyn Fn(&str) -> Option<usize>,
-) -> Result<Vec<SeaFloraRule>, String> {
+) -> Result<Vec<SeaFloraEntry>, String> {
     let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
-    let mut out: Vec<SeaFloraRule> = Vec::new();
+    let mut out: Vec<SeaFloraEntry> = Vec::new();
     for r in raw.sea_flora {
         let what = format!("sea flora '{}'", r.name);
-        if out.iter().any(|p| p.name == r.name) {
-            return Err(format!("duplicate sea flora name '{}'", r.name));
+        if let Some(p) = out.iter().find(|p| p.name == r.name || p.salt == r.salt) {
+            return Err(format!("{what}: name or salt already used by '{}'", p.name));
         }
-        if let Some(p) = out.iter().find(|p| p.salt == r.salt) {
-            return Err(format!(
-                "{what}: salt {} already used by '{}'",
-                r.salt, p.name
-            ));
-        }
-        let blocks = resolve(&what, "block", &r.blocks, block_id)?;
-        let habitats = resolve(&what, "habitat", &r.habitats, habitat_index)?;
-        let bottom = resolve(&what, "bottom block", &r.bottom, block_id)?;
         check_range(&what, "depth", Some(r.depth_min), Some(r.depth_max))?;
-        check_range(&what, "height", r.height_min, r.height_max)?;
-        let column_fields = (r.height_min, r.height_max, r.surface_gap_min);
-        let (column, n_blocks) = match (r.shape.as_str(), column_fields) {
-            ("column", (Some(lo), Some(hi), Some(gap))) => (Some((lo, hi, gap)), 2),
-            ("column", _) => {
+        let shape = match (r.shape.as_str(), r.column) {
+            ("column", Some(c)) => {
+                check_range(&what, "height", Some(c.height_min), Some(c.height_max))?;
+                SeaFloraShape::Column {
+                    height_min: c.height_min,
+                    height_max: c.height_max,
+                    surface_gap_min: c.surface_gap_min,
+                }
+            }
+            ("cluster", None) => SeaFloraShape::Cluster,
+            (s, _) => {
                 return Err(format!(
-                    "{what}: a column needs height_min, height_max and surface_gap_min"
+                    "{what}: shape '{s}' (only a column has a column table)"
                 ))
             }
-            ("cluster", (None, None, None)) => (None, 1),
-            ("cluster", _) => return Err(format!("{what}: a cluster takes no height fields")),
-            (s, _) => return Err(format!("{what}: unknown shape '{s}'")),
+        };
+        let blocks = resolve(&what, "block", &r.blocks, block_id)?;
+        let n_blocks = if shape == SeaFloraShape::Cluster {
+            1
+        } else {
+            2
         };
         if blocks.len() != n_blocks {
             return Err(format!("{what}: a {} takes {n_blocks} block(s)", r.shape));
@@ -111,12 +102,12 @@ pub fn parse_sea_flora(
         if !(0.0..=1.0).contains(&r.chance) {
             return Err(format!("{what}: chance must be in 0 to 1"));
         }
-        out.push(SeaFloraRule {
+        out.push(SeaFloraEntry {
             name: r.name,
+            shape,
             blocks,
-            column,
-            habitats,
-            bottom,
+            habitats: resolve(&what, "habitat", &r.habitats, habitat_index)?,
+            bottom: resolve(&what, "bottom block", &r.bottom, block_id)?,
             depth_min: r.depth_min,
             depth_max: r.depth_max,
             shore_distance_max: r.shore_distance_max,

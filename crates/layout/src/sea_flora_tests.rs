@@ -10,9 +10,7 @@ habitats = ["cold_open"]
 bottom = ["gravel"]
 depth_min = 4
 depth_max = 16
-height_min = 3
-height_max = 12
-surface_gap_min = 0
+column = { height_min = 3, height_max = 12, surface_gap_min = 0 }
 cluster_scale = 16.0
 salt = 1
 chance = 0.5
@@ -31,6 +29,8 @@ cluster_scale = 8.0
 salt = 2
 chance = 0.3
 "#;
+
+const COLUMN: &str = "column = { height_min = 3, height_max = 12, surface_gap_min = 0 }\n";
 
 fn load(text: &str) -> Result<SeaFlora, String> {
     SeaFlora::from_toml(text, &Habitats::shipped())
@@ -73,12 +73,16 @@ fn shipped_file_has_kelp_oyster_and_scallop() {
     let oyster = f.get("oyster").unwrap();
     assert_eq!(oyster.shape, SeaFloraShape::Cluster);
     assert_eq!(oyster.shore_distance_max, Some(6));
-    assert!(oyster.habitats.contains(&h.id_of("rocky_shore").unwrap()));
+    assert!(oyster.habitats.contains(&h.id_of("rocky_shore").unwrap().0));
     let scallop = f.get("scallop").unwrap();
     assert_eq!(scallop.blocks, [terrain::block_id("scallop").unwrap()]);
     for e in &f.entries {
         for name in ["frozen", "deep_water"] {
-            assert!(!e.habitats.contains(&h.id_of(name).unwrap()), "{}", e.name);
+            assert!(
+                !e.habitats.contains(&h.id_of(name).unwrap().0),
+                "{}",
+                e.name
+            );
         }
     }
 }
@@ -123,11 +127,11 @@ fn unknown_bottom_is_rejected() {
 fn empty_lists_are_rejected() {
     rejects(
         &kelp_with("[\"cold_open\"]", "[]"),
-        "sea flora 'kelp': habitat is empty",
+        "sea flora 'kelp': no habitat",
     );
     rejects(
         &kelp_with("[\"gravel\"]", "[]"),
-        "sea flora 'kelp': bottom block is empty",
+        "sea flora 'kelp': no bottom block",
     );
 }
 
@@ -148,33 +152,34 @@ fn duplicate_salt_is_rejected() {
     let oyster = OYSTER.replace("salt = 2", "salt = 1");
     rejects(
         &format!("{KELP}{oyster}"),
-        "sea flora 'oyster': salt 1 already used by 'kelp'",
+        "sea flora 'oyster': name or salt already used by 'kelp'",
     );
 }
 
 #[test]
 fn duplicate_name_is_rejected() {
     let again = KELP.replace("salt = 1", "salt = 5");
-    rejects(&format!("{KELP}{again}"), "duplicate sea flora name 'kelp'");
+    rejects(
+        &format!("{KELP}{again}"),
+        "sea flora 'kelp': name or salt already used by 'kelp'",
+    );
 }
 
 #[test]
 fn shape_fields_must_match() {
-    rejects(
-        &kelp_with("surface_gap_min = 0\n", ""),
-        "sea flora 'kelp': a column needs",
-    );
+    assert!(load(&kelp_with(", surface_gap_min = 0", "")).is_err());
+    rejects(&kelp_with(COLUMN, ""), "sea flora 'kelp': shape 'column'");
     rejects(
         &kelp_with("[\"kelp_0\", \"kelp_1\"]", "[\"kelp_0\"]"),
         "sea flora 'kelp': a column takes 2 block(s)",
     );
     rejects(
-        &OYSTER.replace("chance", "height_min = 1\nchance"),
-        "sea flora 'oyster': a cluster takes no height fields",
+        &OYSTER.replace("chance", &format!("{COLUMN}chance")),
+        "sea flora 'oyster': shape 'cluster'",
     );
     rejects(
         &kelp_with("\"column\"", "\"blob\""),
-        "sea flora 'kelp': unknown shape 'blob'",
+        "sea flora 'kelp': shape 'blob'",
     );
 }
 
