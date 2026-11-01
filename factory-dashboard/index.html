@@ -35,17 +35,29 @@ header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-
 header h1 { font-size: 16px; margin: 0; font-weight: 650; }
 header .meta { color: var(--muted); font-size: 12.5px; }
 header .spacer { flex: 1; }
-main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
-.grid { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
-section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
-section > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+main { max-width: 1240px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+/* Two independent columns, so a long list on one side never leaves a hole on the other. */
+.cols { display: grid; gap: 16px; align-items: start; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.col { display: grid; gap: 16px; min-width: 0; }
+@media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; overflow: hidden; }
+section > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 650;
   margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
 section > h2 .count { background: var(--chip); color: var(--ink); border-radius: 999px; padding: 0 8px;
-  font-size: 12px; letter-spacing: 0; text-transform: none; }
+  font-size: 12px; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+section > h2 .hint { margin-left: auto; font-weight: 400; letter-spacing: 0; text-transform: none; }
+/* An empty section shrinks to its header line, so it doesn't weigh as much as a full one. */
+section.none > h2 { border-bottom: 0; }
+section.none > h2 .count { color: var(--muted); }
 .empty { color: var(--muted); padding: 12px 14px; }
 .item { padding: 10px 14px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
 .item:first-of-type { border-top: 0; }
 .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+/* Title line: the title wraps inside itself so the time stays top-right. */
+.row:has(> .when) { flex-wrap: nowrap; }
+.row:has(> .when) > .title { flex: 1 1 auto; min-width: 0; }
+.row .when { margin-left: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.more > summary { border-top: 1px solid var(--line); font-size: 12.5px; }
 .num { font-variant-numeric: tabular-nums; color: var(--muted); }
 .title { font-weight: 550; overflow-wrap: anywhere; }
 .why { color: var(--muted); overflow-wrap: anywhere; }
@@ -59,6 +71,15 @@ section > h2 .count { background: var(--chip); color: var(--ink); border-radius:
 button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--chip); color: var(--ink);
   border-radius: 7px; padding: 4px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
+a.btn { font-size: 12.5px; border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+  border-radius: 7px; padding: 4px 10px; text-decoration: none; }
+a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+a.btn:hover { border-color: var(--accent); text-decoration: none; }
+section.reports { background: transparent; border-style: dashed; }
+section.reports .item { padding: 8px 14px; }
+section.reports .why { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+section.reports .title { font-weight: 500; flex: none !important; white-space: nowrap; }
+@media (max-width: 600px) { section.reports .row { flex-wrap: wrap; } }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: .5; cursor: default; }
 .banner { border-radius: 10px; padding: 10px 14px; border: 1px solid var(--line); }
@@ -86,6 +107,9 @@ dialog .actions { justify-content: flex-end; }
   max-width: calc(100vw - 32px); }
 #toast.show { opacity: 1; }
 details summary { cursor: pointer; color: var(--muted); padding: 10px 14px; }
+details[open] > summary.h { border-bottom: 1px solid var(--line); }
+summary.h .sub { text-transform: none; letter-spacing: 0; font-weight: 400; }
+summary.h { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; font-weight: 650; }
 </style>
 </head>
 <body>
@@ -208,6 +232,14 @@ function needsYouActions(i) {
     if (!i.options.length)
       out.push(btn("/decide …", {action: "comment", number: i.number, title: `Decide #${i.number}`,
         text: "Posts this as you; the spec editor opens the PR.", body: "/decide ", ok: "Post decision"}));
+  } else if (i.type === "pr") {
+    out.push(`<a class="btn primary" href="${GH}/pull/${i.number}/files" target="_blank" rel="noopener">Review the diff ↗</a>`);
+    out.push(btn("Ask @claude to review", {action: "comment", number: i.number, title: `Ask Claude to review PR #${i.number}`,
+      text: "Posts this as you. An @claude comment starts Claude on the PR; it replies there.",
+      body: "@claude Review this PR: say whether it's ready to merge, and list anything that should change first.", ok: "Post comment"}));
+    out.push(btn("Comment", {action: "comment", number: i.number, title: `Comment on PR #${i.number}`, body: "", ok: "Post comment"}));
+    out.push(btn("Close PR", {action: "close", number: i.number, reason: "not_planned", title: `Close PR #${i.number}`,
+      text: "Closes the PR without merging. Merge it on GitHub.", body: "", ok: "Close"}));
   } else if (i.type === "unapproved") {
     out.push(btn("Approve (label factory)", {action: "label", number: i.number, label: "factory",
       title: `Approve ticket #${i.number}`, text: "Adds the factory label; the tick starts it once its dependencies close.", ok: "Approve"}, "primary"));
@@ -260,7 +292,14 @@ function render(p) {
   for (const e of d.errors || []) parts.push(`<div class="banner warn"><b>Part of the page couldn't be read</b><span class="err">${esc(e)}</span></div>`);
 
   // Overview numbers.
-  const ny = d.needs_you || [], st = d.started || [], bl = d.blocked || [], prs = d.open_prs || [];
+  // The tick's own tracker issues (e.g. "Factory: stalled work") sit in the needs-you list,
+  // but they're reports, not things blocking work: shown apart and left out of the counts.
+  const isReport = i => i.kind === "issue" && i.type === "other" && /^Factory: /.test(i.title || "");
+  const prBy = Object.fromEntries((d.open_prs || []).map(p => [p.number, p]));
+  const allNy = (d.needs_you || []).map(i => i.kind === "pr" && prBy[i.number]
+    ? {...i, title: i.title || prBy[i.number].title, created_at: i.created_at || prBy[i.number].created_at, prInfo: prBy[i.number]} : i);
+  const reports = allNy.filter(isReport), ny = allNy.filter(i => !isReport(i));
+  const st = d.started || [], bl = d.blocked || [], prs = d.open_prs || [];
   const failedRuns = runs.filter(r => ["failure", "timed_out", "startup_failure"].includes(r.conclusion)).length;
   const activeRuns = runs.filter(r => r.status !== "completed").length;
   parts.push(`<section><h2>Overview</h2><div class="stats">
@@ -272,62 +311,90 @@ function render(p) {
     <div class="stat"><div class="k">Ticks, last 48 h</div><div class="v">${h.ticks_48h ?? "–"}</div><div class="s">longest gap ${h.longest_gap_h ?? "–"} h</div></div>
   </div></section>`);
 
+  // A section with a count; an empty one collapses to its header line.
+  const card = (title, items, none) => items.length
+    ? `<section><h2>${title} <span class="count">${items.length}</span></h2>${items.join("")}</section>`
+    : `<section class="none"><h2>${title} <span class="count">0</span><span class="hint">${esc(none)}</span></h2></section>`;
+  const when = iso => iso ? `<span class="when" title="${esc(clock(iso))}">${esc(ago(iso))}</span>` : "";
+  const left = [], right = [];
+
+  // The second line of a waiting item: a pill for what kind of ask it is, then the detail.
+  const nyLead = i => {
+    if (i.type === "pr") {
+      const p = i.prInfo || {}, fromIssue = /issue-(\d+)/.exec(p.head || "");
+      const external = /^Not a factory ticket/.test(i.reason);
+      const detail = external ? "Not from the factory, so nothing merges it for you." : i.reason;
+      return `<span class="pill warn">needs review</span><span class="why">${esc(detail)}` +
+        `${fromIssue ? ` · from ${issue(fromIssue[1])}` : ""}${p.head && p.head !== i.title ? ` · ${esc(p.head)}` : ""}</span>`;
+    }
+    return `<span class="why">${esc(i.reason)}${i.ticket ? ` · ticket ${issue(i.ticket)}` : ""}</span>`;
+  };
+
   // Needs you.
-  parts.push(`<section><h2>Waiting on you <span class="count">${ny.length}</span></h2>${ny.length ? ny.map(i => `
+  left.push(card("Waiting on you", ny.map(i => `
     <div class="item">
       <div class="row"><span class="num">${i.kind === "pr" ? pr(i.number) : issue(i.number)}</span>
-        <span class="title">${esc(i.title)}</span>
-        ${i.blocks ? `<span class="pill warn">blocks ${i.blocks}</span>` : ""}
-        <span class="num">${esc(ago(i.created_at))}</span></div>
-      <div class="why">${esc(i.reason)}${i.ticket ? ` · ticket ${issue(i.ticket)}` : ""}</div>
+        <span class="title">${esc(i.title || "(untitled)")}</span>${when(i.created_at)}</div>
+      <div class="row">${i.blocks ? `<span class="pill warn">blocks ${i.blocks}</span>` : ""}${nyLead(i)}</div>
       <div class="actions">${needsYouActions(i)}</div>
-    </div>`).join("") : `<div class="empty">Nothing waits on you.</div>`}</section>`);
+    </div>`), "Nothing waits on you."));
+  if (reports.length)
+    left.push(`<section class="reports">${reports.map(r => `<div class="item"><div class="row">
+      <span class="pill">report</span><span class="num">${issue(r.number)}</span><span class="title">${esc(r.title)}</span>
+      <span class="why">tracker the tick keeps; not a blocker</span>${when(r.created_at)}</div></div>`).join("")}</section>`);
 
-  const grid = [];
   // Started tickets with no PR.
   const stLabel = {running: ["ok", "building"], starting: ["ok", "starting"], "open-pr": ["warn", "opening PR"],
     restart: ["warn", "restarts next tick"], asked: ["bad", "question open"], ask: ["bad", "asks next tick"]};
-  grid.push(`<section><h2>Started, no PR yet <span class="count">${st.length}</span></h2>${st.length ? st.map(t => {
+  left.push(card("Started, no PR yet", st.map(t => {
     const [cls, word] = t.stuck ? ["bad", "STUCK"] : (stLabel[t.state] || ["", t.state]);
-    return `<div class="item"><div class="row"><span class="num">${issue(t.number)}</span><span class="title">${esc(t.title)}</span></div>
-      <div class="row"><span class="pill ${cls}">${esc(word)}</span><span class="why">start ${t.starts} of ${t.budget} · last ${esc(ago(t.last_started))}</span></div></div>`;
-  }).join("") : `<div class="empty">None.</div>`}</section>`);
-
-  // Blocked PRs.
-  const blCls = {fixing: "ok", queued: "ok", you: "", waiting: "bad", stuck: "bad"};
-  grid.push(`<section><h2>Blocked PRs <span class="count">${bl.length}</span></h2>${bl.length ? bl.map(b => `
-    <div class="item"><div class="row"><span class="num">${pr(b.number)}</span><span class="title">${esc(b.title)}</span></div>
-      <div class="row"><span class="pill ${blCls[b.state] || ""}">${esc(b.cause)}</span><span class="why">${esc(b.what)}${b.ticket ? ` · ticket ${issue(b.ticket)}` : ""}</span></div></div>`).join("")
-    : `<div class="empty">Nothing blocked.</div>`}</section>`);
+    return `<div class="item"><div class="row"><span class="num">${issue(t.number)}</span><span class="title">${esc(t.title)}</span>${when(t.last_started)}</div>
+      <div class="row"><span class="pill ${cls}">${esc(word)}</span><span class="why">start ${t.starts} of ${t.budget}</span></div></div>`;
+  }), "None."));
 
   // Open PRs.
   const verdict = p => p.failed.length ? ["bad", `failed: ${p.failed.join(", ")}`] : p.mergeable === "dirty" ? ["bad", "conflict"]
     : p.pending ? ["", "checks running"] : p.verdict === "ready" ? ["ok", "ready"] : p.verdict === "nits" ? ["warn", "nits"]
     : p.verdict === "blocked" ? ["bad", "reviewer blocked"] : p.draft ? ["", "draft"] : ["", p.verdict || "open"];
-  grid.push(`<section><h2>Open PRs <span class="count">${prs.length}</span></h2>${prs.length ? prs.map(p => {
+  left.push(card("Open PRs", prs.map(p => {
     const [cls, word] = verdict(p);
-    return `<div class="item"><div class="row"><span class="num">${pr(p.number)}</span><span class="title">${esc(p.title)}</span></div>
-      <div class="row"><span class="pill ${cls}">${esc(word)}</span><span class="why">${esc(p.head)} · ${esc(ago(p.created_at))}</span></div></div>`;
-  }).join("") : `<div class="empty">No open PRs.</div>`}</section>`);
+    return `<div class="item"><div class="row"><span class="num">${pr(p.number)}</span><span class="title">${esc(p.title)}</span>${when(p.created_at)}</div>
+      <div class="row"><span class="pill ${cls}">${esc(word)}</span>${p.head !== p.title ? `<span class="why">${esc(p.head)}</span>` : ""}</div></div>`;
+  }), "No open PRs."));
 
-  // Agent runs.
+  // Blocked PRs.
+  const blCls = {fixing: "ok", queued: "ok", you: "", waiting: "bad", stuck: "bad"};
+  left.push(card("Blocked PRs", bl.map(b => `
+    <div class="item"><div class="row"><span class="num">${pr(b.number)}</span><span class="title">${esc(b.title)}</span></div>
+      <div class="row"><span class="pill ${blCls[b.state] || ""}">${esc(b.cause)}</span><span class="why">${esc(b.what)}${b.ticket ? ` · ticket ${issue(b.ticket)}` : ""}</span></div></div>`),
+    "Nothing blocked."));
+
+  // Agent runs: the newest few, older ones folded away.
+  const SHOW = 10;
   const runCls = r => r.status !== "completed" ? ["ok", r.status] : r.conclusion === "success" ? ["", "success"]
     : r.conclusion === "cancelled" ? ["", "cancelled"] : ["bad", r.conclusion];
-  grid.push(`<section><h2>Recent agent runs <span class="count">${runs.length}</span></h2>${runs.map(r => {
+  const runRows = runs.map(r => {
     const [cls, word] = runCls(r);
-    return `<div class="item"><div class="row"><span class="pill ${cls}">${esc(word)}</span>
-      <a class="title" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a></div>
-      <div class="why">${esc(r.workflow)} · ${esc(ago(r.at))}${r.runner ? ` · ${esc(r.runner)}` : ""}</div>
+    return `<div class="item"><div class="row">
+      <a class="title" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>${when(r.at)}</div>
+      <div class="row"><span class="pill ${cls}">${esc(word)}</span><span class="why">${esc(r.workflow)}${r.runner ? ` · ${esc(r.runner)}` : ""}</span></div>
       ${r.error ? `<div class="err">${esc(r.error)}</div>` : ""}</div>`;
-  }).join("")}</section>`);
-  parts.push(`<div class="grid">${grid.join("")}</div>`);
+  });
+  const older = runRows.slice(SHOW);
+  const olderFailed = runs.slice(SHOW).filter(r => runCls(r)[0] === "bad").length;
+  right.push(`<section${runs.length ? "" : ` class="none"`}><h2>Recent agent runs <span class="count">${runs.length}</span>
+    ${runs.length ? "" : `<span class="hint">None.</span>`}</h2>${runRows.slice(0, SHOW).join("")}
+    ${older.length ? `<details class="more"><summary>${older.length} older run(s)${olderFailed ? `, ${olderFailed} failed` : ""}</summary>${older.join("")}</details>` : ""}</section>`);
 
   // Next tick.
   const acts = (d.next_tick && d.next_tick.actions) || [];
   const link = t => { const [k, n] = t.split("#"); return /^\d+$/.test(n) ? (k === "pr" ? pr(n) : issue(n)) : esc(t); };
-  parts.push(`<section><details${acts.length && acts.length <= 12 ? " open" : ""}><summary>Next tick would do ${acts.length} thing(s) (dry run, nothing written)</summary>
+  right.push(`<section><details${acts.length && acts.length <= 12 ? " open" : ""}><summary class="h">Next tick would do ${acts.length} thing(s)
+    <span class="sub">· dry run, nothing written</span></summary>
     ${acts.map(a => `<div class="item"><div class="row"><span class="pill">${esc(a.kind)}</span><span class="num">${link(a.target)}</span>
       <span class="why">${esc(a.reason)}</span></div></div>`).join("") || `<div class="empty">Nothing to do.</div>`}</details></section>`);
+
+  parts.push(`<div class="cols"><div class="col">${left.join("")}</div><div class="col">${right.join("")}</div></div>`);
 
   main.innerHTML = parts.join("");
 }
