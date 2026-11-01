@@ -140,6 +140,16 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     }
     let radius = int(&doc["settings"], "pad_land_radius");
     writeln!(out, "pub const FLORA_PAD_LAND_RADIUS: i32 = {radius};").unwrap();
+    let (sx, sz) = (
+        num(&doc["settings"]["sun_x"]),
+        num(&doc["settings"]["sun_z"]),
+    );
+    let len = (sx * sx + sz * sz).sqrt();
+    assert!(len > 0.0, "flora.toml: sun_x, sun_z must not both be 0");
+    let (sx, sz) = (sx / len, sz / len);
+    writeln!(out, "pub const FLORA_SUN: (f64, f64) = ({sx:?}, {sz:?});").unwrap();
+    let flat = num(&doc["settings"]["sun_facing_flat"]);
+    writeln!(out, "pub const FLORA_SUN_FACING_FLAT: f64 = {flat:?};").unwrap();
     for layer in flora_check::NICHE_LAYERS {
         let k = format!("niche_margin_{layer}");
         let m = num(doc["settings"]

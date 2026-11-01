@@ -18,6 +18,11 @@
 #                 inside and falls to 0 over niche_margin_<layer> outside; the product
 #                 multiplies the biome chance. height_above_sea is ground y minus sea
 #                 level; soil_depth counts dirt and grass from the ground block down.
+#                 slope is the steepness (rise per block, central differences of the
+#                 surface height of the four neighbours); sun_facing is 1 where the
+#                 downhill direction points at the sun, 0 where it points away,
+#                 sun_facing_flat on flat ground. Surface height is the top
+#                 movement-blocking or liquid block, ignoring leaves, logs and plants.
 #                 Other layers are not computed yet and leave the chance as is.
 
 [settings]
@@ -29,6 +34,9 @@ coast_min_y = 62        # lowest sand y for requires = "coast"
 coast_max_y = 66        # highest sand y for requires = "coast"
 pad_land_radius = 4     # columns searched for land by a `pad` entry
 colour_scale = 20.0     # blocks per cell of the noise that picks the winner
+sun_x = 0.0             # horizontal direction towards the noon sun (x, z);
+sun_z = 1.0             # normalised by build.rs
+sun_facing_flat = 0.5   # sun_facing of a column with no slope
 # Soft margins of the niche response, in each layer's own units.
 niche_margin_height_above_sea = 2.0
 niche_margin_soil_depth = 1.0

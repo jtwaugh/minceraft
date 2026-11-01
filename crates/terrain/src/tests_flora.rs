@@ -1097,19 +1097,91 @@ fn niche_places_where_it_holds_and_not_where_it_fails() {
     assert_eq!(niche_placed(&cols, &niche_entry!(&[])), [true, true, true]);
 }
 
+/// Which of the columns `x = 1, z in zs` got a daisy on a hand-built
+/// 3-wide Plains ridge whose grass height along z is `RIDGE`, rising
+/// towards +z (the sun) and falling after its peak at z = 7. An oak trunk
+/// stands at (0, 1) with leaves over it and a daisy at (1, 0), which must
+/// not tilt (1, 1).
+fn ridge_placed(zs: &[i32], table: &[Flora]) -> Vec<bool> {
+    const RIDGE: [i32; 14] = [70, 70, 70, 70, 71, 72, 73, 74, 73, 72, 71, 70, 70, 70];
+    let (w, d) = (3, RIDGE.len());
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let biome = vec![Biome::Plains as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&biome);
+    for (z, &g) in RIDGE.iter().enumerate() {
+        for x in 0..w as i32 {
+            for y in 0..=g {
+                let b = if y == g { Block::Grass } else { Block::Stone };
+                world.set(x, y, z as i32, b as u8);
+            }
+        }
+    }
+    for y in 71..75 {
+        world.set(0, y, 1, Block::OakLog as u8);
+    }
+    for z in 0..3 {
+        world.set(0, 75, z, Block::OakLeaves as u8);
+    }
+    world.set(1, 71, 0, Block::Daisy as u8);
+    place(&mut world, 12345, (0, 0, w as i32, d as i32), table);
+    let daisy = |&z: &i32| world.get(1, RIDGE[z as usize] + 1, z) == Block::Daisy as u8;
+    zs.iter().map(daisy).collect()
+}
+
+#[test]
+fn slope_and_sun_facing_place_only_where_they_hold() {
+    assert_eq!(
+        crate::flora::FLORA_SUN,
+        (0.0, 1.0),
+        "the ridge assumes the sun at +z"
+    );
+    assert_eq!(crate::flora::FLORA_SUN_FACING_FLAT, 0.5);
+    // Flat ground, the ramp up towards the sun, the peak, the ramp down.
+    let zs = [1, 5, 7, 10];
+    let p = |niche: &'static [(NicheLayer, f64, f64)]| ridge_placed(&zs, &niche_entry!(niche));
+    assert_eq!(
+        p(&[(NicheLayer::Slope, 0.8, 2.0)]),
+        [false, true, false, true]
+    );
+    assert_eq!(
+        p(&[(NicheLayer::Slope, 0.0, 0.1)]),
+        [true, false, true, false]
+    );
+    // Facing the sun: the downhill side of the ramp falls towards +z.
+    assert_eq!(
+        p(&[(NicheLayer::SunFacing, 0.9, 1.0)]),
+        [false, false, false, true]
+    );
+    assert_eq!(
+        p(&[(NicheLayer::SunFacing, 0.0, 0.1)]),
+        [false, true, false, false]
+    );
+    assert_eq!(
+        p(&[(NicheLayer::SunFacing, 0.5, 0.5)]),
+        [true, false, true, false]
+    );
+}
+
 #[test]
 fn niche_entry_is_independent_of_region() {
-    let seed = 12345;
-    let table = niche_entry!(&[
+    region_independent(&niche_entry!(&[
         (NicheLayer::HeightAboveSea, 2.0, 8.0),
         (NicheLayer::SoilDepth, 2.0, 3.0)
-    ]);
-    let big = gen(seed, -64, -64, 192, 192, &table);
+    ]));
+    region_independent(&niche_entry!(&[
+        (NicheLayer::Slope, 0.5, 2.0),
+        (NicheLayer::SunFacing, 0.6, 1.0)
+    ]));
+}
+
+fn region_independent(table: &[Flora]) {
+    let seed = 12345;
+    let big = gen(seed, -64, -64, 192, 192, table);
     let all = gen(seed, -64, -64, 192, 192, &niche_entry!(&[]));
     let n = count(&big, Block::Daisy);
     assert!(n > 0 && n < count(&all, Block::Daisy), "{n}");
     for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63), (60, -50, 33, 33)] {
-        let small = gen(seed, ox, oz, w, d, &table);
+        let small = gen(seed, ox, oz, w, d, table);
         for z in oz..oz + d as i32 {
             for x in ox..ox + w as i32 {
                 for y in 0..HEIGHT {
