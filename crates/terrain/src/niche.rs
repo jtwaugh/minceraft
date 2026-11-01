@@ -3,16 +3,18 @@
 //! trapezoid response to one layer's value. Computed so far: height above
 //! sea (ground y minus `SEA_LEVEL`), soil depth (dirt and grass blocks
 //! from the ground block down, before anything else), light (the share of
-//! columns in a small cone around the column with no leaves above the ground)
-//! and hollow (surface height minus the mean of rings around the column).
+//! columns in a small cone around the column with no leaves above the ground),
+//! slope and sun-facing (from the surface height of the four neighbours) and
+//! hollow (surface height minus the mean of rings around the column).
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, NICHE_MARGIN_HEIGHT_ABOVE_SEA,
-    NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH,
-    NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT,
+    NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE,
+    NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
 };
+use crate::trees::libm_sqrt;
 use crate::{HEIGHT, SEA_LEVEL};
 use alloc::vec::Vec;
 
@@ -42,7 +44,7 @@ impl NicheLayer {
 }
 
 /// Value of a column-only layer for the column at `(x, z)` whose ground block
-/// is at `y`; `None` for a layer not computed yet, which leaves the chance as is.
+/// is at `y`.
 pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -> Option<f64> {
     match layer {
         NicheLayer::HeightAboveSea => Some((y - SEA_LEVEL) as f64),
@@ -55,10 +57,32 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
             };
             Some((0..=y).rev().take_while(soil).count() as f64)
         }
+        NicheLayer::Slope => {
+            let (gx, gz) = gradient(world, x, z);
+            Some(libm_sqrt(gx * gx + gz * gz))
+        }
+        NicheLayer::SunFacing => {
+            let (gx, gz) = gradient(world, x, z);
+            let len = libm_sqrt(gx * gx + gz * gz);
+            if len == 0.0 {
+                return Some(FLORA_SUN_FACING_FLAT);
+            }
+            // Downhill is minus the gradient; its cosine with the sun, as 0 to 1.
+            let cos = -(gx * FLORA_SUN.0 + gz * FLORA_SUN.1) / len;
+            Some((1.0 + cos) * 0.5)
+        }
         NicheLayer::Light => Some(light(world, x, y, z)),
         NicheLayer::Hollow => Some(hollow(world, x, z)),
-        _ => None,
     }
+}
+
+/// Central-difference gradient `(d/dx, d/dz)` of [`surface_height`] at `(x, z)`.
+fn gradient(world: &World, x: i32, z: i32) -> (f64, f64) {
+    let h = |x, z| surface_height(world, x, z) as f64;
+    (
+        (h(x + 1, z) - h(x - 1, z)) * 0.5,
+        (h(x, z + 1) - h(x, z - 1)) * 0.5,
+    )
 }
 
 /// [`surface_height`] at `(x, z)` minus its mean over 8 columns (axis and

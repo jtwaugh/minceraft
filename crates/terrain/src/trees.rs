@@ -370,7 +370,7 @@ fn big_oak(w: &mut World, rng: &mut Rng, x: i32, y: i32, z: i32) -> bool {
 
 // Minimal no_std math (sqrt via Newton; sin/cos via range-reduced Taylor).
 
-fn libm_sqrt(v: f64) -> f64 {
+pub(crate) fn libm_sqrt(v: f64) -> f64 {
     if v <= 0.0 {
         return 0.0;
     }

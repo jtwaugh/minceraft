@@ -20,12 +20,15 @@
 #                 level; soil_depth counts dirt and grass from the ground block down;
 #                 light is the fraction of columns within light_radius (the column
 #                 itself included) with no leaf block above the ground block;
+#                 slope is the steepness (rise per block, central differences of the
+#                 surface height of the four neighbours); sun_facing is 1 where the
+#                 downhill direction points at the sun, 0 where it points away,
+#                 sun_facing_flat on flat ground;
 #                 hollow is the column's surface height minus the mean surface height
 #                 of 8 columns (the 4 axis and 4 diagonal directions) on each ring of
 #                 hollow_radii, all rings weighted equally: negative in a hollow,
 #                 positive on a ridge. Surface height is the top movement-blocking or
 #                 liquid block, ignoring leaves, logs and plants (undecorated terrain).
-#                 Other layers are not computed yet and leave the chance as is.
 
 [settings]
 patch_noise_salt = 7001
@@ -36,6 +39,9 @@ coast_min_y = 62        # lowest sand y for requires = "coast"
 coast_max_y = 66        # highest sand y for requires = "coast"
 pad_land_radius = 4     # columns searched for land by a `pad` entry
 colour_scale = 20.0     # blocks per cell of the noise that picks the winner
+sun_x = 0.0             # horizontal direction towards the noon sun (x, z);
+sun_z = 1.0             # normalised by build.rs
+sun_facing_flat = 0.5   # sun_facing of a column with no slope
 # Columns, within this distance (circle) of the column itself, that make up the
 # cone of the `light` layer. Shared with the client shade tint (#1610).
 light_radius = 2
