@@ -1,6 +1,6 @@
 //! Parsing and validation of `data/sea_flora.toml`, run by `build.rs`, which
 //! includes this file by path, so keep it free of crate-internal dependencies
-//! beyond `rule_check`. Until `SeaFlora::from_toml` is switched over, the
+//! beyond `rule_check`; its column type is named as in the crate so `Debug` output is a literal. Until `SeaFlora::from_toml` is switched over, the
 //! parser in `sea_flora.rs` must give the same errors.
 
 use serde::Deserialize;
@@ -11,7 +11,7 @@ use crate::rule_check::check_range;
 /// left above its top cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ColumnRule {
+pub struct SeaFloraColumn {
     pub height_min: u32,
     pub height_max: u32,
     pub surface_gap_min: u32,
@@ -28,7 +28,7 @@ struct RawEntry {
     depth_min: u32,
     depth_max: u32,
     shore_distance_max: Option<u32>,
-    column: Option<ColumnRule>,
+    column: Option<SeaFloraColumn>,
     cluster_scale: f64,
     salt: u32,
     chance: f64,
@@ -45,7 +45,7 @@ struct RawFile {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SeaFloraRule {
     pub name: String,
-    pub column: Option<ColumnRule>,
+    pub column: Option<SeaFloraColumn>,
     pub blocks: Vec<u8>,
     pub habitats: Vec<usize>,
     pub bottom: Vec<u8>,

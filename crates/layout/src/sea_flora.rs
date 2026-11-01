@@ -8,10 +8,10 @@ use crate::habitat::{HabitatId, Habitats};
 use crate::rule_check::check_range;
 
 /// An entry as emitted by `build.rs`; habitats are rule indices and `column`
-/// is `(height_min, height_max, surface_gap_min)`.
+/// is set for a `column` shape.
 pub(crate) struct StaticSeaFlora {
     pub name: &'static str,
-    pub column: Option<(u32, u32, u32)>,
+    pub column: Option<SeaFloraColumn>,
     pub blocks: &'static [u8],
     pub habitats: &'static [usize],
     pub bottom: &'static [u8],
@@ -84,16 +84,9 @@ impl SeaFlora {
             .iter()
             .map(|r| SeaFloraEntry {
                 name: r.name.to_string(),
-                shape: match r.column {
-                    Some((height_min, height_max, surface_gap_min)) => {
-                        SeaFloraShape::Column(SeaFloraColumn {
-                            height_min,
-                            height_max,
-                            surface_gap_min,
-                        })
-                    }
-                    None => SeaFloraShape::Cluster,
-                },
+                shape: r
+                    .column
+                    .map_or(SeaFloraShape::Cluster, SeaFloraShape::Column),
                 blocks: r.blocks.to_vec(),
                 habitats: r.habitats.iter().copied().map(HabitatId).collect(),
                 bottom: r.bottom.to_vec(),
