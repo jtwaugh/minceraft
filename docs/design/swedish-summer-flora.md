@@ -4,7 +4,7 @@ status: accepted
 scope: generator
 source: "#1686"
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -21,7 +21,8 @@ phases:
 - `crates/layout/src/derived.rs` has `shore_distance`, capped at `SHORE_DISTANCE_CAP = 64` and padded by `SHORE_PAD` so it is region-independent. It is a layout product (habitats, fish), not an input to flora today.
 - `Biases` (`crates/terrain/src/lib.rs`) is a struct of slices of trait objects (`DensityBias`, `OpenWater`, ...) plus options. There is no per-column flora input yet, so the hydrology hook of 3.4 is a new field or trait of the same shape.
 - `berry_bush` exists (Taiga 0.012, Shrubland 0.015); `frost_grass` has `snow_stays = true`, the model for the evergreen berries and lichen.
-- Not present: any `niche` table, light/slope/aspect/TPI/edge/exposure/wetness/disturbance layers, any of the section 2 plants, and any season clock.
+- Phase A done (plan #1690; PRs #1708, #1713, #1715, #1716, #1717): `crates/terrain/src/niche.rs` and the `niche` table in `data/flora.toml` give the validated trapezoid response and the layers height_above_sea, soil_depth, light, slope, sun_facing and hollow, with margins and radii in `[settings]`; no entry uses a niche yet.
+- Not present: forest edge, exposure, tree kind, wetness, disturbance layers, any of the section 2 plants, and any season clock.
 
 ## Reconciliation notes
 
