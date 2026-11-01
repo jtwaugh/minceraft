@@ -26,7 +26,7 @@ class Replay(unittest.TestCase):
 
     def test_each_case_is_reported(self):
         text = self.reasons()
-        for expected in ["orphan-ticket:issue#452", "orphan-ticket:issue#500", "orphan-ticket:issue#521",
+        for expected in ["orphan-ticket:issue#521",
                          "plan-as-dependency:issue#519",
                          "accepted-doc-without-phases:docs/design/raft-scene-feedback.md"]:
             self.assertIn(expected, text)

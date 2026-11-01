@@ -81,10 +81,22 @@ class Test(unittest.TestCase):
 
     def test_orphan_tickets(self):
         k = keys(load())
-        for n in (452, 500, 521):
-            self.assertIn(f"orphan-ticket:issue#{n}", k)
+        self.assertIn("orphan-ticket:issue#521", k)
+        for n in (452, 500):  # closed: nothing left to adopt
+            self.assertNotIn(f"orphan-ticket:issue#{n}", k)
         self.assertNotIn("orphan-ticket:issue#507", k)
         self.assertNotIn("orphan-ticket:issue#470", k)  # a decision, not a ticket
+
+    def test_open_non_ticket_issue_is_not_orphan(self):
+        s = load()
+        s.issues.append({"number": 9001, "title": "Ticket #521: no pull request after 3 starts",
+                         "state": "open", "labels": ["needs-you"], "kind": "ticket",
+                         "parent": None, "body": ""})
+        s.issues.append({"number": 9002, "title": "Play critic findings", "state": "open",
+                         "labels": [], "kind": "ticket", "parent": None, "body": ""})
+        k = keys(s)
+        self.assertNotIn("orphan-ticket:issue#9001", k)
+        self.assertNotIn("orphan-ticket:issue#9002", k)
 
     def test_plan_as_dependency(self):
         k = keys(load())

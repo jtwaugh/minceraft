@@ -56,7 +56,10 @@ def check(snap):
         if i.get("kind") != "ticket":
             continue
         n = f"issue#{i['number']}"
-        if i.get("parent") not in plans:
+        # Only open work tickets: closed ones can't be adopted usefully, and
+        # alerts, questions and findings issues get kind "ticket" by default.
+        is_work = {"factory", "planned"} & set(i.get("labels", []))
+        if i.get("state") == "open" and is_work and i.get("parent") not in plans:
             out.add(Violation("orphan-ticket", n, "belongs to no plan"))
         for d in i.get("depends_on", []):
             if d in plans:
