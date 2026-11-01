@@ -4,7 +4,7 @@ use terrain::{Region, HEIGHT, SEA_LEVEL};
 
 use crate::{
     build_route, build_route_layout, raft_footprint, ChannelEval, Exclusion, Habitats, Layout,
-    Level, SeaFlora, WorldConfig, NO_HABITAT,
+    Level, SeaFlora, SeaFloraShape, WorldConfig, NO_HABITAT,
 };
 use terrain::ProtectedMask;
 
@@ -24,6 +24,17 @@ fn shellfish() -> BTreeMap<u8, String> {
         .map(|e| (e.blocks[0], e.name.clone()))
         .filter(|(_, n)| n != "kelp")
         .collect()
+}
+
+/// `(seed, x0, z0)` of `KELP_SIZE` squares with kelp (bottoms are mostly dirt,
+/// so kelp is rare near the start).
+const KELP_AREAS: [(u64, i32, i32); 3] = [(3, -256, 256), (1, 256, 256), (31, 256, 256)];
+const KELP_SIZE: u32 = 256;
+
+/// Kelp block ids to `true` for the top segment.
+fn kelp_ids() -> BTreeMap<u8, bool> {
+    let k = SeaFlora::shipped().get("kelp").unwrap().blocks.clone();
+    BTreeMap::from([(k[0], false), (k[1], true)])
 }
 
 /// Every cell `(x, y, z, block)` whose block is a shellfish.
@@ -123,7 +134,9 @@ fn nothing_in_channel_spawn_water_or_raft_footprint() {
 
 #[test]
 fn only_water_cells_become_flora() {
-    let ids = shellfish();
+    let mut ids = shellfish();
+    let kelp = kelp_ids();
+    ids.extend(kelp.keys().map(|&k| (k, String::new())));
     for seed in SEEDS {
         let (l, _) = route_layout(seed);
         let (x0, z0, w, d) = AREA;
@@ -138,7 +151,8 @@ fn only_water_cells_become_flora() {
                     changed += 1;
                 }
             }
-            assert_eq!(changed, placed(&after).len());
+            let kelp_cells = after.blocks.iter().filter(|b| kelp.contains_key(b)).count();
+            assert_eq!(changed, placed(&after).len() + kelp_cells);
         }
     }
 }
@@ -186,4 +200,80 @@ fn region_order_does_not_change_flora() {
             assert_eq!(r.blocks, rows[k].blocks, "tile {k}");
         }
     }
+}
+
+/// Kelp columns `(x, z, bottom y, height)` of `r`, checking each is a stack
+/// of middle cells under one top cell.
+fn kelp_columns(r: &Region) -> Vec<(i32, i32, i32, u32)> {
+    let ids = kelp_ids();
+    let mut out = Vec::new();
+    for (c, col) in r.blocks.chunks_exact(HEIGHT).enumerate() {
+        let (x, z) = (
+            r.x0 + (c as u32 % r.width) as i32,
+            r.z0 + (c as u32 / r.width) as i32,
+        );
+        let ys: Vec<usize> = (0..HEIGHT).filter(|&y| ids.contains_key(&col[y])).collect();
+        let Some(&y0) = ys.first() else { continue };
+        let n = ys.len();
+        assert_eq!(ys, (y0..y0 + n).collect::<Vec<_>>(), "{x},{z} contiguous");
+        assert!(ids[&col[y0 + n - 1]], "{x},{z} top");
+        assert!(ys[..n - 1].iter().all(|&y| !ids[&col[y]]), "{x},{z} middle");
+        out.push((x, z, y0 as i32, n as u32));
+    }
+    out
+}
+
+#[test]
+fn kelp_columns_follow_their_entry() {
+    let flora = SeaFlora::shipped();
+    let e = flora.get("kelp").unwrap();
+    let SeaFloraShape::Column(c) = e.shape else {
+        panic!()
+    };
+    let habitats = Habitats::shipped();
+    let (mut total, mut tall) = (0, 0);
+    for (seed, x0, z0) in KELP_AREAS {
+        let (l, _) = route_layout(seed);
+        let (w, d) = (KELP_SIZE, KELP_SIZE);
+        let r = l.generate_layout_region(x0, z0, w, d, false).region;
+        let map = l.habitat_map(x0, z0, w, d);
+        for (x, z, y, h) in kelp_columns(&r) {
+            let i = ((z - z0) as u32 * w + (x - x0) as u32) as usize;
+            let depth = u32::from(map.derived.water_depth[i]);
+            let hab = &habitats.rules[usize::from(map.habitat[i])].id;
+            assert!(e.habitats.iter().any(|id| habitats.rules[id.0].id == *hab));
+            assert!(e.bottom.contains(&map.derived.bottom_block[i]));
+            assert!((e.depth_min..=e.depth_max).contains(&depth));
+            assert_eq!(y, SEA_LEVEL - depth as i32, "bottom");
+            assert!((c.height_min..=c.height_max).contains(&h), "{h}");
+            assert!(depth - h >= c.surface_gap_min, "top rule {depth} {h}");
+            total += 1;
+            tall += usize::from(h > c.height_min);
+        }
+    }
+    assert!(total > 0, "kelp appears");
+    assert!(tall > 0, "heights vary");
+}
+
+#[test]
+fn kelp_is_the_same_across_a_split_column_border() {
+    let mut seen = 0;
+    for (seed, x0, z0) in KELP_AREAS {
+        let (l, _) = route_layout(seed);
+        let (w, d) = (KELP_SIZE, KELP_SIZE);
+        for decorate in [false, true] {
+            let whole = kelp_columns(&l.generate_layout_region(x0, z0, w, d, decorate).region);
+            let half = (w / 2) as i32;
+            let left = l.generate_layout_region(x0, z0, w / 2, d, decorate).region;
+            let right = l
+                .generate_layout_region(x0 + half, z0, w - w / 2, d, decorate)
+                .region;
+            let mut parts = kelp_columns(&left);
+            parts.extend(kelp_columns(&right));
+            parts.sort_by_key(|&(x, z, ..)| (z, x));
+            seen += whole.len();
+            assert_eq!(whole, parts);
+        }
+    }
+    assert!(seen > 0);
 }

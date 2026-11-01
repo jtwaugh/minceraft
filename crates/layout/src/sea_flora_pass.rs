@@ -1,6 +1,6 @@
 //! Sea flora placement (docs/design/sea-flora-and-shellfish.md sections 3
 //! and 4): a pass over the blocks `Layout::generate_layout_region` returns.
-//! Only `cluster` entries (shellfish) are placed so far.
+//! Both `cluster` (shellfish) and `column` (kelp) entries are placed.
 //!
 //! Choices made here:
 //! - A column is skipped when it is frozen or `deep_water`, within a
@@ -9,6 +9,9 @@
 //! - Entries are tried in file order; the first that fits the column and
 //!   passes its patch noise and per-column hash takes it.
 //! - The flora block replaces the lowest water cell, on the bottom block.
+//! - A kelp column's height is hashed from the seed and the column; one
+//!   that would leave fewer than `surface_gap_min` water cells above it is
+//!   shortened to fit, and skipped if that is under `height_min`.
 
 use terrain::noise::{hash_f64, mix64, OctavePerlin, Rng};
 use terrain::{Block, ProtectedMask, Region, HEIGHT, SEA_LEVEL};
@@ -30,10 +33,9 @@ fn patch_noise(seed: u64, e: &SeaFloraEntry) -> OctavePerlin {
 fn fits(e: &SeaFloraEntry, map: &HabitatMap, i: usize) -> bool {
     let m = &map.derived;
     let depth = u32::from(m.water_depth[i]);
-    e.shape == SeaFloraShape::Cluster
-        && e.habitats
-            .iter()
-            .any(|h| h.0 == usize::from(map.habitat[i]))
+    e.habitats
+        .iter()
+        .any(|h| h.0 == usize::from(map.habitat[i]))
         && e.bottom.contains(&m.bottom_block[i])
         && (e.depth_min..=e.depth_max).contains(&depth)
         && e.shore_distance_max
@@ -129,8 +131,30 @@ impl Layout {
                     let patch = (v * 0.5 + 0.5).clamp(0.0, 1.0) * 2.0;
                     hash_f64(self.seed, x, z, y, u64::from(e.salt)) < e.chance * patch
                 };
-                if let Some((e, _)) = flora.entries.iter().zip(&noises).find(grows) {
+                let Some((e, _)) = flora.entries.iter().zip(&noises).find(grows) else {
+                    continue;
+                };
+                let SeaFloraShape::Column(c) = e.shape else {
                     region.blocks[cell] = e.blocks[0];
+                    continue;
+                };
+                let span = c.height_max - c.height_min + 1;
+                let r = hash_f64(self.seed, x, z, y, u64::from(e.salt) | 1 << 32);
+                let tall = c.height_min + (r * f64::from(span)) as u32;
+                let fit = u32::from(map.derived.water_depth[i]).saturating_sub(c.surface_gap_min);
+                let height = tall.min(fit).min(c.height_max);
+                let top = y + height as i32 - 1;
+                if height >= c.height_min
+                    && (y..=top).all(|yy| {
+                        region.blocks[region.index(lx, yy as u32, lz)] == Block::Water as u8
+                    })
+                {
+                    for yy in y..top {
+                        let c = region.index(lx, yy as u32, lz);
+                        region.blocks[c] = e.blocks[0];
+                    }
+                    let c = region.index(lx, top as u32, lz);
+                    region.blocks[c] = e.blocks[1];
                 }
             }
         }
