@@ -112,7 +112,7 @@ CLAUDE.md keeps screenshots for judging looks, only when the maintainer asks. Mo
 
 - `finding.mjs` and `critic.md` accept `kind` `perf` and `render`.
 - The critic's goals include walking or flying across region borders in a streamed world (`start walk stream`), not only the raft scene.
-- The verify pass replays `perf` and `render` repros like any other. Section 3 findings are advisory.
+- The verify pass replays `perf` and `render` repros like any other. Section 3 findings are advisory. To let a player-mode critic assert them, the work-per-frame paths (section 2) and the render-fault paths (e.g. `render.faults`) move out of the `debug` observation class into a new class (e.g. `diagnostic`) in `client/tools/observe.mjs`. It is returned in player mode on streamed worlds only, and the critic prompt names those paths. (Decided in #1743.)
 
 > **Reconciler:** see notes 9 and 11. `start walk stream` exists in the DSL.
 
