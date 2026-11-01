@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory Dashboard</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2026; --muted: #5d6673; --line: #dfe3e8;
+  --accent: #2f6fdb; --ok: #1f8a4c; --warn: #b26b00; --bad: #c4352b; --chip: #eef1f5;
+  --okbg: #e6f4ec; --warnbg: #fdf1dc; --badbg: #fbe7e5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --panel: #1a1e24; --ink: #e6e9ee; --muted: #9aa3af; --line: #2c323b;
+    --accent: #6ea0ff; --ok: #4cc27f; --warn: #e6a23c; --bad: #ff6b5e; --chip: #242a32;
+    --okbg: #16291f; --warnbg: #2e2412; --badbg: #331a18;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --panel: #1a1e24; --ink: #e6e9ee; --muted: #9aa3af; --line: #2c323b;
+  --accent: #6ea0ff; --ok: #4cc27f; --warn: #e6a23c; --bad: #ff6b5e; --chip: #242a32;
+  --okbg: #16291f; --warnbg: #2e2412; --badbg: #331a18;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+header .meta { color: var(--muted); font-size: 12.5px; }
+header .spacer { flex: 1; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+.grid { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+section > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+  margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+section > h2 .count { background: var(--chip); color: var(--ink); border-radius: 999px; padding: 0 8px;
+  font-size: 12px; letter-spacing: 0; text-transform: none; }
+.empty { color: var(--muted); padding: 12px 14px; }
+.item { padding: 10px 14px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.item:first-of-type { border-top: 0; }
+.row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.num { font-variant-numeric: tabular-nums; color: var(--muted); }
+.title { font-weight: 550; overflow-wrap: anywhere; }
+.why { color: var(--muted); overflow-wrap: anywhere; }
+.err { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--bad); overflow-wrap: anywhere; }
+.pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600;
+  background: var(--chip); white-space: nowrap; }
+.pill.ok { background: var(--okbg); color: var(--ok); }
+.pill.warn { background: var(--warnbg); color: var(--warn); }
+.pill.bad { background: var(--badbg); color: var(--bad); }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+  border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+.banner { border-radius: 10px; padding: 10px 14px; border: 1px solid var(--line); }
+.banner.bad { background: var(--badbg); border-color: var(--bad); }
+.banner.warn { background: var(--warnbg); border-color: var(--warn); }
+.banner b { display: block; margin-bottom: 2px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); }
+.stat { background: var(--panel); padding: 10px 14px; }
+.stat .k { color: var(--muted); font-size: 12px; }
+.stat .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.stat .s { color: var(--muted); font-size: 12px; }
+section > .stats { border-radius: 0 0 10px 10px; overflow: hidden; }
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink);
+  width: min(560px, calc(100vw - 32px)); padding: 0; }
+dialog::backdrop { background: rgb(0 0 0 / .4); }
+dialog form { padding: 16px; display: grid; gap: 10px; }
+dialog h3 { margin: 0; font-size: 15px; }
+dialog p { margin: 0; color: var(--muted); }
+dialog textarea { width: 100%; min-height: 110px; font: 13px/1.4 ui-monospace, Menlo, monospace; padding: 8px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); resize: vertical; }
+dialog label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+dialog .actions { justify-content: flex-end; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  max-width: calc(100vw - 32px); }
+#toast.show { opacity: 1; }
+details summary { cursor: pointer; color: var(--muted); padding: 10px 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Factory</h1>
+  <span id="tickpill" class="pill">loading</span>
+  <span class="meta" id="meta">Reading GitHub; the first read takes about a minute.</span>
+  <span class="spacer"></span>
+  <button id="refresh" type="button">Refresh</button>
+  <button id="theme" type="button" title="Switch light/dark">Theme</button>
+</header>
+<main id="main"></main>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgform">
+    <h3 id="dlgtitle"></h3>
+    <p id="dlgtext"></p>
+    <textarea id="dlgbody"></textarea>
+    <label id="dlgclosewrap"><input type="checkbox" id="dlgclose" checked> <span id="dlgclosetext"></span></label>
+    <div class="actions">
+      <button value="cancel" type="submit">Cancel</button>
+      <button value="ok" class="primary" type="submit" id="dlgok">Send</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" role="status"></div>
+
+<script>
+const CFG = /*CONFIG*/{};
+const GH = `https://github.com/${CFG.repo || "jtwaugh/minceraft"}`;
+let last = null;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ago = iso => {
+  if (!iso) return "";
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return "just now";
+  if (m < 120) return `${m} min ago`;
+  if (m < 2880) return `${Math.floor(m / 60)} h ${m % 60} min ago`;
+  return `${Math.floor(m / 1440)} days ago`;
+};
+const clock = iso => iso ? new Date(iso).toLocaleString([], {weekday: "short", hour: "2-digit", minute: "2-digit"}) : "";
+const issue = n => `<a href="${GH}/issues/${n}" target="_blank" rel="noopener">#${n}</a>`;
+const pr = n => `<a href="${GH}/pull/${n}" target="_blank" rel="noopener">#${n}</a>`;
+const btn = (label, act, cls = "") => CFG.readOnly ? "" :
+  `<button type="button" class="${cls}" data-act='${esc(JSON.stringify(act))}'>${esc(label)}</button>`;
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+async function post(path, body) {
+  const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json", "X-Dashboard-Token": CFG.token},
+    body: JSON.stringify(body || {})});
+  return r.json().catch(() => ({ok: false, message: `HTTP ${r.status}`}));
+}
+
+// One confirm dialog for every write: shows exactly what will be posted.
+function confirmAct(a) {
+  const d = document.getElementById("dlg");
+  document.getElementById("dlgtitle").textContent = a.title;
+  document.getElementById("dlgtext").textContent = a.text || "";
+  const body = document.getElementById("dlgbody");
+  body.style.display = a.body !== undefined ? "" : "none";
+  body.value = a.body || "";
+  const cw = document.getElementById("dlgclosewrap");
+  cw.style.display = a.alsoClose ? "" : "none";
+  document.getElementById("dlgclosetext").textContent = a.alsoClose ? `Also close question #${a.alsoClose}` : "";
+  document.getElementById("dlgclose").checked = true;
+  document.getElementById("dlgok").textContent = a.ok || "Send";
+  d.returnValue = "";
+  d.showModal();
+  d.onclose = async () => {
+    if (d.returnValue !== "ok") return;
+    const steps = [];
+    if (a.action === "comment") steps.push({action: "comment", number: a.number, body: body.value});
+    if (a.action === "close") steps.push({action: "close", number: a.number, reason: a.reason, comment: a.body !== undefined ? body.value : ""});
+    if (a.action === "label") steps.push({action: "label", number: a.number, label: a.label});
+    if (a.alsoClose && document.getElementById("dlgclose").checked)
+      steps.push({action: "close", number: a.alsoClose, reason: "completed", comment: a.closeNote || ""});
+    for (const s of steps) {
+      const r = await post("/api/act", s);
+      if (!r.ok) { toast(`Failed on #${s.number}: ${r.message}`); return; }
+    }
+    toast(`Done. Shown here now; GitHub confirms it on the next read.`);
+    poll();
+  };
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]");
+  if (b) confirmAct(JSON.parse(b.dataset.act));
+});
+
+// ---- builders for each kind of waiting item
+function needsYouActions(i) {
+  const out = [];
+  if (i.type === "factory-question" && i.ticket) {
+    out.push(btn(`Retry #${i.ticket} with @claude`, {
+      action: "comment", number: i.ticket, title: `Comment on ticket #${i.ticket}`,
+      text: "Posts this as you. An @claude comment starts the implementer on the ticket.",
+      body: `@claude Implement this ticket. Earlier runs ended without a pull request.`,
+      alsoClose: i.number, closeNote: `Retried via @claude on #${i.ticket} (factory dashboard).`, ok: "Post comment"}, "primary"));
+    out.push(btn(`Build it myself (label local)`, {
+      action: "label", number: i.ticket, label: "local", title: `Label #${i.ticket} local`,
+      text: "The factory stops starting this ticket; you build it in a local session.",
+      alsoClose: i.number, closeNote: `Building #${i.ticket} locally (factory dashboard).`, ok: "Add label"}));
+  } else if (i.type === "factory-question" && i.pr) {
+    out.push(btn(`Ask @claude on PR #${i.pr}`, {
+      action: "comment", number: i.pr, title: `Comment on PR #${i.pr}`,
+      text: "Posts this as you. Say what Claude should do.", body: "@claude ",
+      alsoClose: i.number, closeNote: `Answered on #${i.pr} (factory dashboard).`, ok: "Post comment"}, "primary"));
+  } else if (i.type === "spec-question" && !i.research) {
+    for (const [letter, text] of i.options)
+      out.push(btn(`/decide ${letter}`, {
+        action: "comment", number: i.number, title: `Decide #${i.number}: option ${letter}`,
+        text: text.replace(/[*`]/g, ""), body: `/decide ${letter}`, ok: "Post decision"}));
+    if (!i.options.length)
+      out.push(btn("/decide …", {action: "comment", number: i.number, title: `Decide #${i.number}`,
+        text: "Posts this as you; the spec editor opens the PR.", body: "/decide ", ok: "Post decision"}));
+  } else if (i.type === "unapproved") {
+    out.push(btn("Approve (label factory)", {action: "label", number: i.number, label: "factory",
+      title: `Approve ticket #${i.number}`, text: "Adds the factory label; the tick starts it once its dependencies close.", ok: "Approve"}, "primary"));
+  }
+  if (i.kind === "issue") {
+    out.push(btn("Comment", {action: "comment", number: i.number, title: `Comment on #${i.number}`, body: "", ok: "Post comment"}));
+    if (i.type === "factory-question" || i.type === "unapproved")
+      out.push(btn("Close", {action: "close", number: i.number, reason: i.type === "unapproved" ? "not_planned" : "completed",
+        title: `Close #${i.number}`, text: i.type === "unapproved" ? "Closes the ticket as not planned." :
+        "Closing a no-PR question does not restart its ticket; use Retry for that.", body: "", ok: "Close"}));
+  }
+  return out.join("");
+}
+
+function render(p) {
+  const d = p.data, main = document.getElementById("main");
+  const pill = document.getElementById("tickpill"), meta = document.getElementById("meta");
+  const parts = [];
+  if (p.error) parts.push(`<div class="banner bad"><b>Couldn't refresh</b>${esc(p.error)}${d ? " Showing the last good read." : ""}</div>`);
+  if (!d) {
+    pill.className = "pill"; pill.textContent = p.busy ? "reading" : "no data";
+    main.innerHTML = parts.join("") || `<div class="empty">Reading GitHub…</div>`;
+    return;
+  }
+  const h = d.health || {};
+  const stale = h.latest && (Date.now() - new Date(h.latest.at)) > 12 * 3600e3;
+  const tickState = !h.latest ? ["bad", "no ticks"] : h.workflow_state !== "active" ? ["bad", "tick disabled"]
+    : h.failing ? ["bad", `tick failing ×${h.failing}`] : stale ? ["bad", "tick stale"] : ["ok", "tick healthy"];
+  pill.className = `pill ${tickState[0]}`; pill.textContent = tickState[1];
+  meta.textContent = `${d.repo} · read ${ago(d.generated_at)}${p.busy ? " · reading now…" : ""} · ` +
+    `${d.requests} reads, ${d.not_modified} free` + (p.pending ? ` · ${p.pending} change(s) not yet confirmed` : "") + (d.rate ? ` · API ${d.rate.remaining}/${d.rate.limit} left` : "");
+
+  // Banners: the things worth a look first.
+  if (h.workflow_state && h.workflow_state !== "active")
+    parts.push(`<div class="banner bad"><b>The factory tick is ${esc(h.workflow_state)}</b>Nothing ticks until it's enabled again.</div>`);
+  if (h.failing && h.first_failure)
+    parts.push(`<div class="banner bad"><b>Tick broken since ${esc(clock(h.first_failure.at))} (${h.failing} failed in a row)</b>
+      <a href="${esc(h.first_failure.url)}" target="_blank" rel="noopener">first failed run</a>
+      <div class="err">${(h.first_failure.why || []).map(esc).join("<br>")}</div></div>`);
+  else if (stale)
+    parts.push(`<div class="banner bad"><b>No tick for ${esc(ago(h.latest.at).replace(" ago", ""))}</b>Scheduled runs may have been dropped.</div>`);
+  const runs = d.agent_runs || [];
+  const lost = runs.filter(r => /lost communication/i.test(r.error || ""));
+  if (lost.length >= 2)
+    parts.push(`<div class="banner warn"><b>Self-hosted runner keeps dropping (${lost.length} of the recent agent runs)</b>
+      ${esc([...new Set(lost.map(r => r.runner).filter(Boolean))].join(", ") || "runner")} lost contact mid-run. Those tickets will keep failing until it's back,
+      or <code>FACTORY_RUNNER</code> points at <code>ubuntu-latest</code>.</div>`);
+  if (d.next_tick && d.next_tick.crashed.length)
+    parts.push(`<div class="banner bad"><b>A tick pass crashes in the dry run</b>${d.next_tick.crashed.map(c => `${esc(c.pass)}: <span class="err">${esc(c.error)}</span>`).join("<br>")}</div>`);
+  for (const e of d.errors || []) parts.push(`<div class="banner warn"><b>Part of the page couldn't be read</b><span class="err">${esc(e)}</span></div>`);
+
+  // Overview numbers.
+  const ny = d.needs_you || [], st = d.started || [], bl = d.blocked || [], prs = d.open_prs || [];
+  const failedRuns = runs.filter(r => ["failure", "timed_out", "startup_failure"].includes(r.conclusion)).length;
+  const activeRuns = runs.filter(r => r.status !== "completed").length;
+  parts.push(`<section><h2>Overview</h2><div class="stats">
+    <div class="stat"><div class="k">Last tick</div><div class="v">${h.latest ? esc(ago(h.latest.at)) : "–"}</div>
+      <div class="s">${h.latest ? `<a href="${esc(h.latest.url)}" target="_blank" rel="noopener">${esc(h.latest.conclusion)}</a> · ${esc(h.latest.event)}` : ""}</div></div>
+    <div class="stat"><div class="k">Waiting on you</div><div class="v">${ny.length}</div><div class="s">${ny.filter(i => i.blocks).length} block other tickets</div></div>
+    <div class="stat"><div class="k">Agent runs active</div><div class="v">${activeRuns}</div><div class="s">${failedRuns} failed of the last ${runs.length}</div></div>
+    <div class="stat"><div class="k">Open PRs</div><div class="v">${prs.length}</div><div class="s">${bl.length} blocked</div></div>
+    <div class="stat"><div class="k">Ticks, last 48 h</div><div class="v">${h.ticks_48h ?? "–"}</div><div class="s">longest gap ${h.longest_gap_h ?? "–"} h</div></div>
+  </div></section>`);
+
+  // Needs you.
+  parts.push(`<section><h2>Waiting on you <span class="count">${ny.length}</span></h2>${ny.length ? ny.map(i => `
+    <div class="item">
+      <div class="row"><span class="num">${i.kind === "pr" ? pr(i.number) : issue(i.number)}</span>
+        <span class="title">${esc(i.title)}</span>
+        ${i.blocks ? `<span class="pill warn">blocks ${i.blocks}</span>` : ""}
+        <span class="num">${esc(ago(i.created_at))}</span></div>
+      <div class="why">${esc(i.reason)}${i.ticket ? ` · ticket ${issue(i.ticket)}` : ""}</div>
+      <div class="actions">${needsYouActions(i)}</div>
+    </div>`).join("") : `<div class="empty">Nothing waits on you.</div>`}</section>`);
+
+  const grid = [];
+  // Started tickets with no PR.
+  const stLabel = {running: ["ok", "building"], starting: ["ok", "starting"], "open-pr": ["warn", "opening PR"],
+    restart: ["warn", "restarts next tick"], asked: ["bad", "question open"], ask: ["bad", "asks next tick"]};
+  grid.push(`<section><h2>Started, no PR yet <span class="count">${st.length}</span></h2>${st.length ? st.map(t => {
+    const [cls, word] = t.stuck ? ["bad", "STUCK"] : (stLabel[t.state] || ["", t.state]);
+    return `<div class="item"><div class="row"><span class="num">${issue(t.number)}</span><span class="title">${esc(t.title)}</span></div>
+      <div class="row"><span class="pill ${cls}">${esc(word)}</span><span class="why">start ${t.starts} of ${t.budget} · last ${esc(ago(t.last_started))}</span></div></div>`;
+  }).join("") : `<div class="empty">None.</div>`}</section>`);
+
+  // Blocked PRs.
+  const blCls = {fixing: "ok", queued: "ok", you: "", waiting: "bad", stuck: "bad"};
+  grid.push(`<section><h2>Blocked PRs <span class="count">${bl.length}</span></h2>${bl.length ? bl.map(b => `
+    <div class="item"><div class="row"><span class="num">${pr(b.number)}</span><span class="title">${esc(b.title)}</span></div>
+      <div class="row"><span class="pill ${blCls[b.state] || ""}">${esc(b.cause)}</span><span class="why">${esc(b.what)}${b.ticket ? ` · ticket ${issue(b.ticket)}` : ""}</span></div></div>`).join("")
+    : `<div class="empty">Nothing blocked.</div>`}</section>`);
+
+  // Open PRs.
+  const verdict = p => p.failed.length ? ["bad", `failed: ${p.failed.join(", ")}`] : p.mergeable === "dirty" ? ["bad", "conflict"]
+    : p.pending ? ["", "checks running"] : p.verdict === "ready" ? ["ok", "ready"] : p.verdict === "nits" ? ["warn", "nits"]
+    : p.verdict === "blocked" ? ["bad", "reviewer blocked"] : p.draft ? ["", "draft"] : ["", p.verdict || "open"];
+  grid.push(`<section><h2>Open PRs <span class="count">${prs.length}</span></h2>${prs.length ? prs.map(p => {
+    const [cls, word] = verdict(p);
+    return `<div class="item"><div class="row"><span class="num">${pr(p.number)}</span><span class="title">${esc(p.title)}</span></div>
+      <div class="row"><span class="pill ${cls}">${esc(word)}</span><span class="why">${esc(p.head)} · ${esc(ago(p.created_at))}</span></div></div>`;
+  }).join("") : `<div class="empty">No open PRs.</div>`}</section>`);
+
+  // Agent runs.
+  const runCls = r => r.status !== "completed" ? ["ok", r.status] : r.conclusion === "success" ? ["", "success"]
+    : r.conclusion === "cancelled" ? ["", "cancelled"] : ["bad", r.conclusion];
+  grid.push(`<section><h2>Recent agent runs <span class="count">${runs.length}</span></h2>${runs.map(r => {
+    const [cls, word] = runCls(r);
+    return `<div class="item"><div class="row"><span class="pill ${cls}">${esc(word)}</span>
+      <a class="title" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a></div>
+      <div class="why">${esc(r.workflow)} · ${esc(ago(r.at))}${r.runner ? ` · ${esc(r.runner)}` : ""}</div>
+      ${r.error ? `<div class="err">${esc(r.error)}</div>` : ""}</div>`;
+  }).join("")}</section>`);
+  parts.push(`<div class="grid">${grid.join("")}</div>`);
+
+  // Next tick.
+  const acts = (d.next_tick && d.next_tick.actions) || [];
+  const link = t => { const [k, n] = t.split("#"); return /^\d+$/.test(n) ? (k === "pr" ? pr(n) : issue(n)) : esc(t); };
+  parts.push(`<section><details${acts.length && acts.length <= 12 ? " open" : ""}><summary>Next tick would do ${acts.length} thing(s) (dry run, nothing written)</summary>
+    ${acts.map(a => `<div class="item"><div class="row"><span class="pill">${esc(a.kind)}</span><span class="num">${link(a.target)}</span>
+      <span class="why">${esc(a.reason)}</span></div></div>`).join("") || `<div class="empty">Nothing to do.</div>`}</details></section>`);
+
+  main.innerHTML = parts.join("");
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/state", {cache: "no-store"});
+    last = await r.json();
+    render(last);
+  } catch (e) {
+    document.getElementById("meta").textContent = "The dashboard server isn't answering. Is serve.py still running?";
+  }
+}
+
+document.getElementById("refresh").onclick = async () => {
+  await post("/api/refresh");
+  toast("Reading GitHub now; takes about a minute.");
+  setTimeout(poll, 500);
+};
+document.getElementById("theme").onclick = () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch (e) {}
+};
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+setInterval(() => { if (last) render(last); }, 30000); // keep "x min ago" current
+setInterval(poll, 10000);  // local and cheap: GitHub is only read every few minutes
+poll();
+</script>
+</body>
+</html>
