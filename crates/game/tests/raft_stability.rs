@@ -152,7 +152,8 @@ fn climb(dir: [i32; 2]) -> (Player, Raft) {
         if dir[1] != 0 {
             edge(dir[1], z0, z1) + 3.0 * dir[1] as f64
         } else {
-            c[1]
+            // One row off centre: the centre row ends in a station block.
+            c[1] + 1.0
         },
     ];
     let mut pl = Player::new(start, &phys);
