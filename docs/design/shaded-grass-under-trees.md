@@ -5,13 +5,15 @@ scope: both
 source: "#1610"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
 ---
 
 ## Current state
 
-Nothing of this idea is built. What exists and is relied on:
+- Phase A is done (plan #1623, PRs #1671, #1696, #1733): `[blend] shade_mix` and `shade_radius` in `data/biomes.toml` and the legend, the per-column canopy fraction in `viewer/shade.js` (`shadeFractions`), and the shaded `ground` grass top-face tint in `viewer/mesh.js`. Phase B (flora, `dry_grass` case fix) is not built.
+
+What exists and is relied on (written before Phase A):
 
 - `viewer/mesh.js` `columnTints(wasm, ctx, seed, wx, wz, size, R)` builds per-column `grass`, `leaf`, `water` and `dry` tints from `ramp3(biome.<ramp>, humidity)`, box-blurs them over `[blend] radius` (`data/biomes.toml`, `radius = 3`) with the exact integer `boxSum`, and averages them per block corner (`corners`). It takes no blocks: it reads only the biome, humidity and temperature maps.
 - `meshBlocks(ctx, blocks, tints, size, pad, ...)` picks a tint per block through `tintFor` (~line 446) and uses `tints.corners` for per-vertex colour. `meshBlocks` already has the blocks it needs (`at(x, y, z)`, with `pad` columns around the area).
