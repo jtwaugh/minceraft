@@ -13,7 +13,7 @@
 
 import { faceLayers } from '../viewer/mesh.js';
 import { buildMips } from '../viewer/mips.js';
-import { NAMES as SHARED, TINTED } from '../viewer/tilelist.js';
+import { FALLBACK, NAMES as SHARED, TINTED } from '../viewer/tilelist.js';
 
 const S = 16;
 /** Layer names in texture-array order. */
@@ -44,7 +44,7 @@ function tileFor(B, names, b, dy, fast) {
     // eight growth stages share the four wheat textures, two stages each
     case B.wheat_0: case B.wheat_1: case B.wheat_2: case B.wheat_3:
     case B.wheat_4: case B.wheat_5: case B.wheat_6: case B.wheat_7: return L[`wheat_${(b - B.wheat_0) >> 1}`];
-    default: return L[names[b]] ?? L.stone; // stone, dirt, sand, gravel, ice, cross plants
+    default: return L[names[b]] ?? L[FALLBACK[names[b]]] ?? L.stone; // stone, dirt, sand, gravel, ice, cross plants
   }
 }
 

@@ -21,6 +21,8 @@
 // Positions are local to the meshed area: x and z from 0 to size, y the
 // world y. The renderer adds a per-mesh offset.
 
+import { shadeFractions } from './shade.js';
+
 export const H = 128;
 export const VERTEX_BYTES = 16;
 export const POS_SCALE = 1 / 16, UV_SCALE = 1 / 16, SHADE_SCALE = 1 / 128;
@@ -78,6 +80,8 @@ const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper, B.f
 export const WATERLOGGED = flags([B.test_waterlogged_plant, B.kelp_0, B.kelp_1, B.oyster, B.scallop]);
 // Water or a waterlogged block: water faces between them are hidden.
 const isWater = (b) => b === B.water || WATERLOGGED[b] === 1;
+// Ice or floe ice: both draw as ice and hide each other's faces.
+const isIce = (b) => b === B.ice || b === B.floe_ice;
 
 /**
  * Meshing context: names, colours and biomes from the legend() JSON, plus
@@ -226,6 +230,33 @@ export function columnTints(wasm, ctx, seed, wx, wz, size, R = ctx.legend.blend.
     grass, leaf, water, dry, bio, tmp, centre: { biome: ctx.BIOMES[bio[mid]], t: tmp[mid] },
     padded: { pad, n, grass: padG, leaf: padL, water: padW, dry: padD },
   };
+}
+
+/**
+ * `tints` plus `ground` (and `corners.ground`): the tint of the grass block.
+ * Canopy shade (docs/design/shaded-grass-under-trees.md; a tint on top of
+ * AO, not a light): the grass tint mixed toward `dry` by shade_mix times the
+ * shaded fraction (viewer/shade.js) of the column, or at a corner the mean of
+ * the 4 columns meeting there. The fractions cover the inner columns and a
+ * ring of 1 when the pad allows; with pad 0 the edge columns stand in for the
+ * ring. `ground` is `grass` when shade_mix is 0 or there is no dry tint.
+ */
+export function groundTints(ctx, blocks, tints, size, pad) {
+  const mix = ctx.legend?.blend?.shade_mix ?? 0, cs = tints.corners;
+  if (!(mix > 0) || !tints.dry || !tints.grass) return { ...tints, ground: tints.grass, corners: cs && { ...cs, ground: cs.grass } };
+  const ring = pad > 0 ? 1 : 0, sn = size + 2 * ring;
+  const frac = shadeFractions(blocks, sn, pad - ring, ctx.legend.blend.shade_radius);
+  const fAt = (x, z) => frac[Math.min(sn - 1, Math.max(0, z + ring)) * sn + Math.min(sn - 1, Math.max(0, x + ring))];
+  const ground = tints.grass.map((g, c) => lerp3(g, tints.dry[c], mix * fAt(c % size, Math.floor(c / size))).map(Math.fround));
+  let cg = cs?.grass;
+  if (cs?.dry) {
+    cg = new Float32Array(cs.grass.length);
+    for (let z = 0; z < cs.n; z++) for (let x = 0; x < cs.n; x++) {
+      const f = (fAt(x - 1, z - 1) + fAt(x, z - 1) + fAt(x - 1, z) + fAt(x, z)) / 4;
+      for (let k = (z * cs.n + x) * 3, j = k; j < k + 3; j++) cg[j] = cs.grass[j] + (cs.dry[j] - cs.grass[j]) * (mix * f);
+    }
+  }
+  return { ...tints, ground, corners: cs && { ...cs, ground: cg } };
 }
 
 const WHITE = [1, 1, 1];
@@ -421,7 +452,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     const base = col(x, z);
     let y = H - 1;
-    while (y > 0 && (blocks[base + y] === B.air || isWater(blocks[base + y]) || blocks[base + y] === B.ice)) y--;
+    while (y > 0 && (blocks[base + y] === B.air || isWater(blocks[base + y]) || isIce(blocks[base + y]))) y--;
     minY = Math.min(minY, y); sumY += y;
   }
   const y0 = Math.max(0, minY - 8);
@@ -467,10 +498,13 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
   const XUV = [[0, 0], [1, 0], [1, 1], [0, 1]];
   // The tint of block b in column (x, z): WHITE, one [r, g, b], or (with
   // corners) a function of the corner offset (0 or 1).
+  tints = groundTints(ctx, blocks, tints, size, pad);
+  // the grass block reads the `ground` grid (grass shaded under leaves), everything else `grass`
   const tintOf = (b, x, z) => {
-    const c = z * size + x, flat = tintFor(ctx, b, tints.grass[c], tints.leaf[c], tints.water?.[c], tints.dry?.[c]);
+    const c = z * size + x, gr = b === B.grass ? 'ground' : 'grass';
+    const flat = tintFor(ctx, b, tints[gr][c], tints.leaf[c], tints.water?.[c], tints.dry?.[c]);
     return flat === WHITE || !tints.corners ? flat : (ox, oz) => {
-      const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners.grass, l = tints.corners.leaf, w = tints.corners.water, dr = tints.corners.dry;
+      const k = ((z + oz) * tints.corners.n + x + ox) * 3, g = tints.corners[gr], l = tints.corners.leaf, w = tints.corners.water, dr = tints.corners.dry;
       return tintFor(ctx, b, [g[k], g[k + 1], g[k + 2]], [l[k], l[k + 1], l[k + 2]], w && [w[k], w[k + 1], w[k + 2]], dr && [dr[k], dr[k + 1], dr[k + 2]]);
     };
   };
@@ -530,7 +564,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         if (b === B.grass && f.d[1] > 0) layer = pickLayer(ctx, layer, origin[0] + x, y, origin[1] + z);
         if (b === B.water) {
           // water: only next to air, plants or leaves (not water, ice or solids)
-          if (isWater(n) || n === B.ice || SOLID_N[n]) continue;
+          if (isWater(n) || isIce(n) || SOLID_N[n]) continue;
           let depth = 1;
           while (depth < 255 && y - depth >= 0 && isWater(blocks[base + y - depth])) depth++;
           const flatTint = f.d[1] > 0 && waterTint(tint);
@@ -539,8 +573,8 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
             if (!tops) waterTops.set(y, tops = new Array(size * size).fill(null));
             tops[c] = { key: `${layer},${depth},${flatTint}`, layer, depth, tint: flatTint.split(',').map((v) => v / 255) };
           } else boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint, 0, null, 0, depth);
-        } else if (b === B.ice) {
-          if (n === B.ice || SOLID_N[n]) continue;
+        } else if (isIce(b)) {
+          if (isIce(n) || SOLID_N[n]) continue;
           boxFace(2, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
         } else if (b === B.cactus) {
           // inset sides always show; top/bottom hidden by more cactus or solid ground

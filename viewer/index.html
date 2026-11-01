@@ -183,7 +183,7 @@
 </main>
 <details id="dev"><summary>stats</summary><dl id="devgrid"></dl></details>
 <script type="module">
-import { REQUIRED, NAMES as SHARED, TINTED, VARIANTS } from './tilelist.js';
+import { FALLBACK, REQUIRED, NAMES as SHARED, TINTED, VARIANTS } from './tilelist.js';
 import init, * as wasm from './pkg/terrain_web.js';
 import { B, VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, variantTable, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
@@ -1005,7 +1005,7 @@ function tileFor(b, dy, fast = false) {
     case B.cactus: return dy ? T.cactus_top : T.cactus_side;
     case B.pumpkin: return dy ? T.pumpkin_top : T.pumpkin_side;
     case B.snow_layer: return T.snow;
-    default: return T[NAMES[b]] ?? T.stone; // cross plants
+    default: return T[NAMES[b]] ?? T[FALLBACK[NAMES[b]]] ?? T.stone; // cross plants, floe ice
   }
 }
 
