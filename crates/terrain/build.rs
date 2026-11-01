@@ -140,6 +140,8 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     }
     let radius = int(&doc["settings"], "pad_land_radius");
     writeln!(out, "pub const FLORA_PAD_LAND_RADIUS: i32 = {radius};").unwrap();
+    let radius = int(&doc["settings"], "light_radius");
+    writeln!(out, "pub const FLORA_LIGHT_RADIUS: i32 = {radius};").unwrap();
     for layer in flora_check::NICHE_LAYERS {
         let k = format!("niche_margin_{layer}");
         let m = num(doc["settings"]
