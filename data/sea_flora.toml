@@ -1,0 +1,42 @@
+# Sea flora (docs/design/sea-flora-and-shellfish.md sections 3 and 4). Fields
+# are documented in crates/layout/src/sea_flora.rs. Chances, scales and salts
+# are this game's own numbers, tuned here.
+
+[[sea_flora]]
+name = "kelp"
+shape = "column"
+blocks = ["kelp_0", "kelp_1"]
+habitats = ["cold_open", "temperate_open", "rocky_shore"]
+bottom = ["gravel", "stone", "sand"]
+depth_min = 4
+depth_max = 16
+column = { height_min = 3, height_max = 12, surface_gap_min = 0 }
+cluster_scale = 16.0
+salt = 1
+chance = 0.35
+
+# Near shore: 6 is the rocky_shore limit in data/habitats.toml.
+[[sea_flora]]
+name = "oyster"
+shape = "cluster"
+blocks = ["oyster"]
+habitats = ["rocky_shore", "temperate_open"]
+bottom = ["gravel", "stone"]
+depth_min = 1
+depth_max = 5
+shore_distance_max = 6
+cluster_scale = 8.0
+salt = 2
+chance = 0.3
+
+[[sea_flora]]
+name = "scallop"
+shape = "cluster"
+blocks = ["scallop"]
+habitats = ["cold_open", "temperate_open"]
+bottom = ["sand", "gravel"]
+depth_min = 3
+depth_max = 12
+cluster_scale = 12.0
+salt = 3
+chance = 0.08
