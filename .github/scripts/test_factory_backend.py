@@ -77,6 +77,14 @@ class Test(unittest.TestCase):
         b.apply(s, Action("request_replan", doc, {"file": doc}, "m"))
         self.assertEqual(len(calls), 1)
 
+    def test_request_replan_passes_section_and_notes(self):
+        b, calls = backend()
+        doc = "docs/design/x.md"
+        b.apply(snap(), Action("request_replan", doc,
+                               {"file": doc, "section": "Phase A", "notes": "N"}, "m"))
+        self.assertEqual(calls, [["workflow", "run", PLAN_WORKFLOW, "--repo", "o/r", "-f", f"file={doc}",
+                                  "-f", "section=Phase A", "-f", "notes=N"]])
+
     def test_open_question_creates_then_updates(self):
         b, calls = backend()
         s = snap()

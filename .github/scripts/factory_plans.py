@@ -11,8 +11,15 @@ alone: orphans are the invariants pass's concern.
 (docs/design/factory-orchestrator.md Phase A, design rule 2)
 
 A plan in the state store closes by design rule 3 instead: every stored
-ticket is `done` and no answered decision lacks a ticket. A plan held back
-by an unlinked decision is reported once. (Phase B)
+ticket is `done` and no answered decision lacks a ticket. (Phase B)
+
+When every ticket is done but an answered decision has no ticket, the
+answer still needs building, and nothing else would plan it: the planner
+skips a phase whose plan is open. So the plan closes without a phase-done
+request and the planner is asked for that section again (`request_replan`
+with the section, which skips that check), told which decisions are left.
+A plan with no plan-source can't be re-planned; it is reported once and
+stays open.
 """
 import sqlite3
 
@@ -22,6 +29,22 @@ QUESTIONS_ANSWERED = (
     "All questions answered. Closing this plan; the phase will be planned "
     "again with the answers. To do it now: "
     "`gh workflow run claude-plan.yml -f file=<doc>`.")
+
+
+def _replan(target, n, src, loose):
+    refs = ", ".join(f"#{d}" for d in loose)
+    comment = (f"Every ticket is done, but answered decision(s) {refs} have no ticket yet. "
+               "Closing this plan and asking the planner for what they still need; "
+               "the phase is marked done when that plan finishes.")
+    notes = (f"Follow-up to plan #{n}, whose tickets are all done. Plan only what the answers "
+             f"to {refs} still need; don't plan the done tickets again.")
+    # Dispatch first: if it fails the tick stops with the plan still open, to
+    # retry; the planner takes minutes, so the plan is closed before it applies.
+    return [Action("request_replan", src["file"], {"file": src["file"], "section": src.get("section", ""),
+                                                   "notes": notes}, f"plan #{n}: re-plan {refs}"),
+            Action("close_issue", target, {"reason": "completed", "comment": comment},
+                   "every ticket done; decisions left to plan"),
+            Action("report", src["file"], {"kind": "plan-replanned"}, f"plan #{n}: re-plan {refs}")]
 
 
 def _stored(store, plan):
@@ -49,6 +72,10 @@ def close_finished_plans(snap):
         if stored:
             states, loose = stored
             if any(s != "done" for s in states):
+                continue
+            src = plan.get("plan_source") or {}
+            if loose and src.get("file"):
+                actions += _replan(target, plan["number"], src, loose)
                 continue
             if loose:
                 reason = ("held back: answered decision without a ticket: "

@@ -53,12 +53,26 @@ class Test(unittest.TestCase):
         first, _ = run(snap)
         self.assertEqual(first, [])
 
-    def test_unlinked_decision_reported_once(self):
+    def test_unlinked_decision_replans_the_section(self):
         snap = snap_with({2: "done"}, [(9, "a", None), (8, None, None)])
+        first, second = run(snap)
+        # The planner is asked first, then the plan closes with no phase-done request.
+        self.assertEqual([a.kind for a in first], ["request_replan", "close_issue", "report"])
+        replan = first[0].payload
+        self.assertEqual((replan["file"], replan["section"]), (SRC["file"], SRC["section"]))
+        self.assertIn("#9", replan["notes"])
+        self.assertNotIn("#8", replan["notes"])
+        self.assertEqual(first[1].payload["reason"], "completed")
+        self.assertIn("#9", first[1].payload["comment"])
+        self.assertEqual(second, [])
+        self.assertEqual(snap.plans[0]["state"], "closed")
+
+    def test_unlinked_decision_without_plan_source_reported_once(self):
+        snap = snap_with({2: "done"}, [(9, "a", None)])
+        snap.plans[0]["plan_source"] = None
         first, second = run(snap)
         self.assertEqual([a.kind for a in first], ["report"])
         self.assertIn("#9", first[0].reason)
-        self.assertNotIn("#8", first[0].reason)
         self.assertEqual(second, [])
         self.assertEqual(snap.plans[0]["state"], "open")
 
