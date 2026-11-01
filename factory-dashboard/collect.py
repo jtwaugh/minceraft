@@ -113,7 +113,54 @@ def main():
                 "research": "research" in labels,
             })
         items.sort(key=lambda i: (-i["blocks"], i["number"]))
-        return items
+        # A spec question you already answered waits on the spec editor, not on you.
+        out["decided"], kept = [], []
+        for i in items:
+            d = decision_of(i) if i["type"] == "spec-question" else None
+            if d:
+                out["decided"].append({"number": i["number"], "title": i["title"], **d})
+            else:
+                kept.append(i)
+        for i in kept:
+            if i["type"] == "pr":
+                i.update(review_state(i["number"]))
+        return kept
+
+    def decision_of(i):
+        """The first `/decide X` comment from a trusted user, or None."""
+        import tickets
+        cs = by.get(i["number"], {}).get("comments")
+        if cs is None:  # the loader reads comments only for decisions with a parent
+            cs = [{"user": c["user"]["login"], "body": c.get("body") or "", "created_at": c["created_at"]}
+                  for c in gh_cache.get_all(f"repos/{name}/issues/{i['number']}/comments")]
+        for c in cs:
+            m = re.match(r"\s*/decide\s+(\S.*)", c["body"])
+            if m and c["user"] in tickets.TRUSTED:
+                return {"decision": m.group(1).strip()[:80], "at": c["created_at"]}
+        return None
+
+    me = []
+
+    def review_state(n):
+        """Your approval of the PR's current head, and its CI, for the approve-then-merge buttons."""
+        if not me:
+            me.append(get("user")["login"])
+        pr = next(p for p in snap.prs if p["number"] == n)
+        full = r(f"pulls/{n}")
+        mine = [v for v in gh_cache.get_all(f"repos/{name}/pulls/{n}/reviews")
+                if (v.get("user") or {}).get("login") == me[0] and v["state"] != "COMMENTED"]
+        approved = bool(mine) and mine[-1]["state"] == "APPROVED" and mine[-1].get("commit_id") == pr["sha"]
+        checks = r(f"commits/{pr['sha']}/check-runs?per_page=100").get("check_runs", [])
+        status = r(f"commits/{pr['sha']}/status")
+        bad = {"failure", "timed_out", "cancelled", "action_required", "startup_failure"}
+        if any(c["conclusion"] in bad for c in checks) or status.get("state") in ("failure", "error"):
+            ci = "failed"
+        elif any(c["status"] != "completed" for c in checks) or (status.get("statuses") and status["state"] == "pending"):
+            ci = "running"
+        else:
+            ci = "passed" if checks or status.get("statuses") else "none"
+        return {"approved": approved, "own": (full.get("user") or {}).get("login") == me[0],
+                "ci": ci, "sha": pr["sha"]}
     section("needs_you", needs_you)
 
     # -- started tickets with no PR (factory_stalled_tickets.state_of)

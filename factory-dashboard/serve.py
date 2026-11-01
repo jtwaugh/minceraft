@@ -76,11 +76,15 @@ class State:
 
     def note(self, body):
         """Remember a write that changes what the page lists, until a read shows it."""
-        if body.get("action") in ("close", "label", "approve-merge"):
-            action = "close" if body["action"] == "approve-merge" else body["action"]  # a merged PR leaves the list
+        kind = body.get("action")
+        if kind == "comment" and re.match(r"\s*/decide\s+\S", body.get("body") or ""):
+            kind = "decide"  # the question leaves the queue for "decided"
+        if kind in ("close", "label", "merge", "approve", "decide"):
+            action = "close" if kind == "merge" else kind  # a merged PR leaves the list
             with self.lock:
-                self.pending.append({"action": action, "number": body["number"],
-                                     "label": body.get("label"), "at": time.time()})
+                self.pending.append({"action": action, "number": body["number"], "label": body.get("label"),
+                                     "decision": (body.get("body") or "").strip()[8:].strip()[:80],
+                                     "at": time.time()})
 
     def settle(self, started):
         """Drop writes that a read begun after them confirms, or that are too old."""
@@ -93,6 +97,10 @@ class State:
             here = [i for i in ny if i["number"] == w["number"]]
             if w["action"] == "close":
                 return not here and all(t["number"] != w["number"] for t in st)
+            if w["action"] == "decide":
+                return not here
+            if w["action"] == "approve":
+                return all(i.get("approved") for i in here)
             return all(w["label"] in i.get("labels", []) for i in here)
 
         with self.lock:
@@ -107,18 +115,29 @@ class State:
         if not self.data or not pending:
             return self.data
         closed = {w["number"] for w in pending if w["action"] == "close"}
+        decided = {w["number"]: w for w in pending if w["action"] == "decide"}
+        approved = {w["number"] for w in pending if w["action"] == "approve"}
         labels = {}
         for w in pending:
             if w["action"] == "label":
                 labels.setdefault(w["number"], set()).add(w["label"])
         d = dict(self.data)
-        ny = []
+        ny, dec = [], list(d.get("decided") or [])
         for i in d.get("needs_you") or []:
             add = labels.get(i["number"], set())
             if i["number"] in closed or (i["type"] == "unapproved" and "factory" in add):
                 continue
-            ny.append({**i, "labels": sorted(set(i.get("labels", [])) | add)} if add else i)
-        d["needs_you"] = ny
+            if i["number"] in decided:
+                w = decided[i["number"]]
+                dec.append({"number": i["number"], "title": i["title"], "decision": w["decision"],
+                            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(w["at"]))})
+                continue
+            if add:
+                i = {**i, "labels": sorted(set(i.get("labels", [])) | add)}
+            if i["number"] in approved:
+                i = {**i, "approved": True}
+            ny.append(i)
+        d["needs_you"], d["decided"] = ny, dec
         if d.get("started") is not None:
             d["started"] = [t for t in d["started"] if t["number"] not in closed]
         return d
@@ -232,20 +251,32 @@ def act_ops(state, body, dry):
     return None
 
 
-def approve_merge(state, n, dry):
-    """Approve a PR with no comment, then merge it. Only for a PR the last read lists as needing review."""
-    ny = (state.data or {}).get("needs_you") or []
-    if not any(i.get("type") == "pr" and i.get("number") == n for i in ny):
+def waiting_pr(state, n):
+    """The needs-you entry for PR n, with this page's own unconfirmed approvals applied."""
+    ny = (state.overlaid() or {}).get("needs_you") or []
+    found = next((i for i in ny if i.get("type") == "pr" and i.get("number") == n), None)
+    if not found:
         raise ValueError(f"#{n} isn't a PR waiting on your review")
-    R = ["-R", state.repo]
-    ok, msg = gh_write(["pr", "review", str(n), "--approve", *R], dry)
-    own = not ok and re.search(r"own pull request", msg, re.I)
-    if not ok and not own:
-        return ok, f"approve failed: {msg}"
-    ok, mmsg = gh_write(["pr", "merge", str(n), "--merge", *R], dry)
-    if not ok:
-        return ok, f"{'approved, but ' if not own else ''}merge failed: {mmsg}"
-    return True, f"#{n} merged" + (" (your own PR, so not approved)" if own else " after approving it")
+    return found
+
+
+def approve(state, n, dry):
+    """Approve a PR's current head with no comment. Merging is a separate step, once CI passes."""
+    i = waiting_pr(state, n)
+    if i.get("own"):
+        raise ValueError(f"#{n} is your own PR: GitHub won't take your approval")
+    return gh_write(["pr", "review", str(n), "--approve", "-R", state.repo], dry)
+
+
+def merge(state, n, dry):
+    """Merge a PR you approved (or your own), only once CI has passed on the head you saw."""
+    i = waiting_pr(state, n)
+    if not (i.get("approved") or i.get("own")):
+        raise ValueError(f"approve #{n} first")
+    if i.get("ci") not in ("passed", "none"):
+        raise ValueError(f"CI on #{n} hasn't passed (it's {i.get('ci')})")
+    # --match-head-commit: if anything was pushed since the last read, GitHub refuses the merge.
+    return gh_write(["pr", "merge", str(n), "--merge", "--match-head-commit", i["sha"], "-R", state.repo], dry)
 
 
 def act(state, body, dry):
@@ -272,8 +303,10 @@ def act(state, body, dry):
                 return ok, msg
         return gh_write(["api", "-X", "PATCH", base, "-f", "state=closed",
                          "-f", f"state_reason={reason}"], dry)
-    if kind == "approve-merge":
-        return approve_merge(state, n, dry)
+    if kind == "approve":
+        return approve(state, n, dry)
+    if kind == "merge":
+        return merge(state, n, dry)
     if kind == "label":
         label = body.get("label")
         if label not in LABELS:

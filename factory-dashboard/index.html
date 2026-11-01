@@ -251,9 +251,17 @@ function needsYouActions(i) {
         text: "Posts this as you; the spec editor opens the PR.", body: "/decide ", ok: "Post decision"}));
   } else if (i.type === "pr") {
     out.push(`<a class="btn primary" href="${GH}/pull/${i.number}/files" target="_blank" rel="noopener">Review the diff ↗</a>`);
-    out.push(btn("Approve & merge", {op: {action: "approve-merge", number: i.number}, title: `Approve and merge PR #${i.number}`,
-      text: "Approves the PR as you with no comment, then merges it (merge commit). If it's your own PR, GitHub won't take " +
-        "the approval, so it just merges.", ok: "Approve & merge"}, "primary"));
+    // Two steps: approve what you reviewed, then merge once CI has passed on that head.
+    const ciOk = i.ci === "passed" || i.ci === "none";
+    if (!i.own && !i.approved)
+      out.push(btn("Approve", {op: {action: "approve", number: i.number}, title: `Approve PR #${i.number}`,
+        text: "Approves the PR's current head as you, with no comment. Merge becomes available once CI passes.", ok: "Approve"}, "primary"));
+    else if (ciOk)
+      out.push(btn("Merge", {op: {action: "merge", number: i.number}, title: `Merge PR #${i.number}`,
+        text: (i.own ? "Your own PR, so there's no approval. " : "") + "Merges it with a merge commit. " +
+          "If anything was pushed since the last read, GitHub refuses it.", ok: "Merge"}, "primary"));
+    else if (!CFG.readOnly)
+      out.push(`<button type="button" disabled title="Merge unlocks when every check passes">${i.ci === "failed" ? "Merge: CI failed" : "Merge: waiting on CI"}</button>`);
     out.push(btn("Ask @claude to review", {action: "comment", number: i.number, title: `Ask Claude to review PR #${i.number}`,
       text: "Posts this as you. An @claude comment starts Claude on the PR; it replies there.",
       body: "@claude Review this PR: say whether it's ready to merge, and list anything that should change first.", ok: "Post comment"}));
@@ -377,7 +385,9 @@ function render(p) {
       const p = i.prInfo || {}, fromIssue = /issue-(\d+)/.exec(p.head || "");
       const external = /^Not a factory ticket/.test(i.reason);
       const detail = external ? "Not from the factory, so nothing merges it for you." : i.reason;
-      return `<span class="pill warn">needs review</span><span class="why">${esc(detail)}` +
+      const ci = {passed: ["ok", "CI passed"], none: ["", "no checks"], running: ["", "CI running"], failed: ["bad", "CI failed"]}[i.ci];
+      return (i.approved ? `<span class="pill ok">approved</span>` : i.own ? `<span class="pill">your PR</span>` : `<span class="pill warn">needs review</span>`) +
+        (ci ? `<span class="pill ${ci[0]}">${ci[1]}</span>` : "") + `<span class="why">${esc(detail)}` +
         `${fromIssue ? ` · from ${issue(fromIssue[1])}` : ""}${p.head && p.head !== i.title ? ` · ${esc(p.head)}` : ""}</span>`;
     }
     return `<span class="why">${esc(i.reason)}${i.ticket ? ` · ticket ${issue(i.ticket)}` : ""}</span>`;
@@ -398,6 +408,13 @@ function render(p) {
     left.push(`<section class="reports">${reports.map(r => `<div class="item"><div class="row">
       <span class="pill">report</span><span class="num">${issue(r.number)}</span><span class="title">${esc(r.title)}</span>
       <span class="why">tracker the tick keeps; not a blocker</span>${when(r.created_at)}</div></div>`).join("")}</section>`);
+
+  // Spec questions you answered: they wait on the spec editor's PR now, not on you.
+  const decided = d.decided || [];
+  if (decided.length)
+    left.push(`<section class="reports">${decided.map(q => `<div class="item"><div class="row">
+      <span class="pill ok">decided ${esc(q.decision)}</span><span class="num">${issue(q.number)}</span><span class="title">${esc(q.title)}</span>
+      <span class="why">waiting on the spec editor's PR</span>${when(q.at)}</div></div>`).join("")}</section>`);
 
   // Started tickets with no PR.
   const stLabel = {running: ["ok", "building"], starting: ["ok", "starting"], "open-pr": ["warn", "opening PR"],

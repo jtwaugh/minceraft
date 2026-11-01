@@ -55,12 +55,18 @@ out as you through `gh`:
 - **No-PR question:** *Retry #N with @claude* comments on the ticket (which
   starts the implementer) and closes the question. *Build it myself* labels
   the ticket `local` and closes the question.
-- **Spec question:** one `/decide X` button per option.
+- **Spec question:** one `/decide X` button per option. Once you've
+  decided, the question leaves the queue straight away and shows apart as
+  *decided*, waiting on the spec editor's PR. A question with a `/decide`
+  comment on GitHub, from the page or not, stays out of the queue.
 - **Unapproved ticket:** *Approve* adds `factory`; *Close* closes it as not
   planned.
-- **PR waiting on review:** *Approve & merge* approves it as you with no
-  comment, then merges it with a merge commit (for your own PR, which GitHub
-  won't let you approve, it just merges); *Review the diff* opens the PR's
+- **PR waiting on review:** two steps. *Approve* approves its current head
+  as you, with no comment. The button then becomes *Merge*, which stays
+  disabled until every check on that head has passed, and merges with a
+  merge commit, refused by GitHub if anything was pushed since the last
+  read. Your own PR, which GitHub won't let you approve, goes straight to
+  *Merge*, still gated on CI. *Review the diff* opens the PR's
   files on GitHub; *Ask @claude to review* comments asking Claude for a
   review; *Close PR* closes it unmerged.
 - **Comment** on any waiting issue.
@@ -74,7 +80,7 @@ out as you through `gh`:
 
 Closing a no-PR question by itself doesn't restart its ticket; use Retry.
 
-A close or label shows on the page as soon as GitHub accepts it. The server
+A close, label, approval or decision shows on the page as soon as GitHub accepts it. The server
 holds the change over the last read until a read begun after it agrees, or
 for 15 minutes, whichever comes first. The header counts changes not yet
 confirmed. Restarting the server forgets them.
@@ -84,7 +90,7 @@ confirmed. Restarting the server forgets them.
 - **RAM:** the server idles at about 20 MB. Each refresh runs a separate
   reader process (about 90 MB at peak, for about a minute) that exits when
   done. The page is plain HTML and JS with no framework.
-- **API:** about 165 reads per refresh, mostly conditional requests that
+- **API:** about 165 reads per refresh, plus a few per PR waiting on review, mostly conditional requests that
   come back 304 and don't count against the limit. ETags are kept in
   `~/.cache/minceraft-dashboard/http.json`.
 
@@ -92,8 +98,8 @@ confirmed. Restarting the server forgets them.
 
 The server listens on 127.0.0.1 only and checks the Host header. Writes
 need a token that changes every launch, and it only allows comments,
-closing issues and PRs, approving and merging a PR listed as waiting on
-review, the `factory`, `local` and `hold` labels, re-running
+closing issues and PRs, approving a PR listed as waiting on review and
+merging it once approved and green, the `factory`, `local` and `hold` labels, re-running
 failed runs it listed, running or enabling the tick, clearing or restoring
 `FACTORY_RUNNER`, and opening a local Terminal. Don't expose
 the port or run it on a shared machine: anything that can reach the port
