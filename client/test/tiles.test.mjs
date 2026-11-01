@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLevels } from '../tiles.js';
+import { buildLevels, tileFor, NAMES } from '../tiles.js';
+import { B } from '../../viewer/mesh.js';
 
 const S = 16;
 // One leaf-like layer: scattered opaque tinted texels (colour 0, tint grey), rest clear.
@@ -43,4 +44,16 @@ test('tint scales with alpha on partial coverage', () => {
     const a = colourLevels[l][i * 4 + 3];
     if (a > 0) assert.ok(Math.abs(t / a - 200 / 255) < 0.03, `level ${l} texel ${i}`);
   });
+});
+
+test('counter has its own top and side tiles; plate rack uses plate_rack on every face', () => {
+  const names = [];
+  names[B.stone] = 'stone'; names[B.counter] = 'counter'; names[B.plate_rack] = 'plate_rack';
+  const layer = (n) => { const i = NAMES.indexOf(n); assert.ok(i >= 0, n); return i; };
+  const at = (b, dy) => tileFor(B, names, b, dy, false);
+  assert.equal(at(B.counter, 1), layer('counter_top'));
+  assert.equal(at(B.counter, 0), layer('counter_side'));
+  assert.equal(at(B.counter, -1), layer('counter_side'));
+  for (const dy of [1, 0, -1]) assert.equal(at(B.plate_rack, dy), layer('plate_rack'));
+  assert.equal(at(B.stone, 0), layer('stone'));
 });
