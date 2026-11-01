@@ -2,14 +2,17 @@
 //! sections 3 and 4): the layers an entry's `niche` may name and the
 //! trapezoid response to one layer's value. Computed so far: height above
 //! sea (ground y minus `SEA_LEVEL`), soil depth (dirt and grass blocks
-//! from the ground block down, before anything else), slope and sun-facing
-//! (from the surface height of the four neighbours).
+//! from the ground block down, before anything else), light (the share of
+//! columns in a small cone around the column with no leaves above the ground),
+//! slope and sun-facing (from the surface height of the four neighbours) and
+//! hollow (surface height minus the mean of rings around the column).
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, FLORA_SUN, FLORA_SUN_FACING_FLAT, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW,
-    NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT,
+    NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE,
+    NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
 };
 use crate::trees::libm_sqrt;
 use crate::{HEIGHT, SEA_LEVEL};
@@ -41,7 +44,7 @@ impl NicheLayer {
 }
 
 /// Value of a column-only layer for the column at `(x, z)` whose ground block
-/// is at `y`; `None` for a layer not computed yet, which leaves the chance as is.
+/// is at `y`.
 pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -> Option<f64> {
     match layer {
         NicheLayer::HeightAboveSea => Some((y - SEA_LEVEL) as f64),
@@ -68,7 +71,8 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
             let cos = -(gx * FLORA_SUN.0 + gz * FLORA_SUN.1) / len;
             Some((1.0 + cos) * 0.5)
         }
-        _ => None,
+        NicheLayer::Light => Some(light(world, x, y, z)),
+        NicheLayer::Hollow => Some(hollow(world, x, z)),
     }
 }
 
@@ -79,6 +83,31 @@ fn gradient(world: &World, x: i32, z: i32) -> (f64, f64) {
         (h(x + 1, z) - h(x - 1, z)) * 0.5,
         (h(x, z + 1) - h(x, z - 1)) * 0.5,
     )
+}
+
+/// [`surface_height`] at `(x, z)` minus its mean over 8 columns (axis and
+/// diagonal directions) on each ring of `FLORA_HOLLOW_RADII`: negative in a
+/// hollow, positive on a ridge.
+pub(crate) fn hollow(world: &World, x: i32, z: i32) -> f64 {
+    let mut sum = 0i32;
+    for r in FLORA_HOLLOW_RADII {
+        // r / sqrt(2), rounded, so diagonal columns lie about r away too.
+        let q = (r * 7071 + 5000) / 10000;
+        for (dx, dz) in [
+            (r, 0),
+            (-r, 0),
+            (0, r),
+            (0, -r),
+            (q, q),
+            (q, -q),
+            (-q, q),
+            (-q, -q),
+        ] {
+            sum += surface_height(world, x + dx, z + dz);
+        }
+    }
+    let n = (FLORA_HOLLOW_RADII.len() * 8) as f64;
+    surface_height(world, x, z) as f64 - sum as f64 / n
 }
 
 /// The highest movement-blocking or liquid block of a column, skipping
@@ -94,6 +123,26 @@ pub(crate) fn surface_height(world: &World, x: i32, z: i32) -> i32 {
             )
     };
     (0..HEIGHT as i32).rev().find(terrain).unwrap_or(-1)
+}
+
+/// Share of the columns within `FLORA_LIGHT_RADIUS` of `(x, z)` (a circle,
+/// the column itself included) with no leaf block above `y`. Flora runs after
+/// trees, so their leaves are in place.
+pub(crate) fn light(world: &World, x: i32, y: i32, z: i32) -> f64 {
+    let r = FLORA_LIGHT_RADIUS;
+    let (mut open, mut all) = (0u32, 0u32);
+    for dz in -r..=r {
+        for dx in -r..=r {
+            if dx * dx + dz * dz > r * r {
+                continue;
+            }
+            all += 1;
+            if !(y + 1..HEIGHT as i32).any(|y| is_leaves(world.get(x + dx, y, z + dz))) {
+                open += 1;
+            }
+        }
+    }
+    open as f64 / all as f64
 }
 
 /// Product of `f`'s niche responses at the column whose air cell is `top`.

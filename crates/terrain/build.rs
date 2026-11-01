@@ -150,6 +150,20 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     writeln!(out, "pub const FLORA_SUN: (f64, f64) = ({sx:?}, {sz:?});").unwrap();
     let flat = num(&doc["settings"]["sun_facing_flat"]);
     writeln!(out, "pub const FLORA_SUN_FACING_FLAT: f64 = {flat:?};").unwrap();
+    let radius = int(&doc["settings"], "light_radius");
+    writeln!(out, "pub const FLORA_LIGHT_RADIUS: i32 = {radius};").unwrap();
+    let radii: Vec<i64> = doc["settings"]["hollow_radii"]
+        .as_array()
+        .expect("hollow_radii array")
+        .iter()
+        .map(|v| v.as_integer().expect("hollow_radii integers"))
+        .collect();
+    assert!(
+        !radii.is_empty() && radii.iter().all(|&r| r > 0),
+        "flora.toml: hollow_radii must be a non-empty list of positive integers"
+    );
+    let n = radii.len();
+    writeln!(out, "pub const FLORA_HOLLOW_RADII: [i32; {n}] = {radii:?};").unwrap();
     for layer in flora_check::NICHE_LAYERS {
         let k = format!("niche_margin_{layer}");
         let m = num(doc["settings"]
