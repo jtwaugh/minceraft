@@ -12,6 +12,7 @@ pub mod collision;
 pub mod commands;
 pub mod crops;
 pub mod data_error;
+pub mod day;
 pub mod events;
 pub mod farm;
 pub mod fish_bodies;
