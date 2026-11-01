@@ -174,6 +174,25 @@ class IncrementalTest(unittest.TestCase):
         self.assertNotIn("user", second[0])  # only the fields the loader reads are kept
         self.assertNotIn("since=", asked[2])  # the hourly full re-read
 
+    def test_incremental_read_rereads_open_issues_saved_without_a_parent(self):
+        # Attaching a sub-issue doesn't bump updated_at, so `since` never returns it.
+        import factory_tick
+        url = "https://api.github.com/repos/o/r/issues/9"
+        saved = {"1": self.issue(1, "x"), "2": dict(self.issue(2, "x"), parent_issue_url=url),
+                 "3": dict(self.issue(3, "x"), state="closed"), "4": self.issue(4, "x", "Plan: P"),
+                 "5": self.issue(5, "x")}
+        state = {"issues": saved, "issues_since": "x", "issues_full_at": "2999-01-01T00:00:00+00:00",
+                 "issues_keep": list(factory_tick.KEEP)}
+        got = []
+
+        def get(path):
+            got.append(path)
+            return dict(self.issue(1, "x"), parent_issue_url=url)
+        with mock.patch.dict(os.environ, {"GITHUB_EVENT_NAME": "workflow_run"}):
+            out = factory_tick.read_issues("o/r", state, lambda p: [self.issue(5, "y")], get=get)
+        self.assertEqual(got, ["repos/o/r/issues/1"])  # not parented, closed, a plan, or just read
+        self.assertEqual(out[0]["parent_issue_url"], url)
+
     def test_created_at_survives_read_issues(self):
         import factory_tick
         raw = dict(self.issue(1, "x"), created_at="2026-10-20T00:00:00Z")
