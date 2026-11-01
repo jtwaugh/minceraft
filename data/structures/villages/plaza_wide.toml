@@ -1,0 +1,23 @@
+# A wide plaza, the root of a village (docs/design/villages-and-villagers.md 2.1, 2.2).
+kind = "plaza"
+size = [9, 2, 7]      # x, y, z
+origin_offset = [-4, 0, -3]
+palette = { P = "dock_planks", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPPPPPP", "PPPPPPPPP", "PPPPPPPPP", "PPPPPPPPP", "PPPPPPPPP", "PPPPPPPPP", "PPPPPPPPP"],
+  # y = 1 (connectors and spawns)
+  [".........", ".........", ".........", ".........", ".........", ".........", "........."],
+]
+connectors = [
+  { cell = [4, 1, 0], facing = "-z", pool = "boardwalks" },  # the dock
+  { cell = [4, 1, 6], facing = "+z", pool = "boardwalks" },
+  { cell = [8, 1, 3], facing = "+x", pool = "boardwalks" },
+  { cell = [0, 1, 3], facing = "-x", pool = "boardwalks" },
+  { cell = [0, 1, 5], facing = "-x", pool = "decor" },
+]
+spawns = [
+  { cell = [2, 1, 2], kind = "villager" },
+  { cell = [6, 1, 2], kind = "villager" },
+  { cell = [4, 1, 4], kind = "villager" },
+]

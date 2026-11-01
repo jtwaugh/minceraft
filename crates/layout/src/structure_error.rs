@@ -47,6 +47,16 @@ pub enum StructureError {
         field: &'static str,
         cell: [i32; 3],
     },
+    /// A connector or spawn cell is not at `y = 1`, just above the floor.
+    NotAtFloorHeight {
+        field: &'static str,
+        cell: [i32; 3],
+    },
+    /// A connector is not on the template edge it faces.
+    ConnectorOffEdge {
+        cell: [i32; 3],
+        facing: &'static str,
+    },
 }
 
 impl fmt::Display for StructureError {
@@ -86,6 +96,13 @@ impl fmt::Display for StructureError {
             Self::BadFacing(s) => write!(f, "connector facing `{s}` is not +x, -x, +z or -z"),
             Self::BadSpawnKind(s) => write!(f, "unknown spawn kind `{s}`"),
             Self::BadRotation(n) => write!(f, "rotation {n} is not a quarter turn from 0 to 3"),
+            Self::NotAtFloorHeight { field, cell } => {
+                write!(f, "{field} cell {cell:?} is not at floor height (y = 1)")
+            }
+            Self::ConnectorOffEdge { cell, facing } => write!(
+                f,
+                "connector cell {cell:?} is not on the template edge it faces ({facing})"
+            ),
             Self::CellOutOfBounds { field, cell } => {
                 write!(f, "{field} cell {cell:?} lies outside the template size")
             }

@@ -88,17 +88,38 @@ fn list<T>(
 }
 
 fn connector(v: &toml::Value, size: [i32; 3]) -> Result<Connector, StructureError> {
-    Ok(Connector {
-        cell: cell(v, "connectors", size)?,
-        facing: choice(v, "facing", &FACINGS, StructureError::BadFacing)?,
-        pool: choice(v, "pool", &POOLS, StructureError::BadPool)?,
-    })
+    let cell = cell(v, "connectors", size)?;
+    let facing = choice(v, "facing", &FACINGS, StructureError::BadFacing)?;
+    let pool = choice(v, "pool", &POOLS, StructureError::BadPool)?;
+    if cell[1] != 1 {
+        return Err(StructureError::NotAtFloorHeight {
+            field: "connectors",
+            cell,
+        });
+    }
+    let (axis, edge, name) = match facing {
+        Facing::PosX => (0, size[0] - 1, "+x"),
+        Facing::NegX => (0, 0, "-x"),
+        Facing::PosZ => (2, size[2] - 1, "+z"),
+        Facing::NegZ => (2, 0, "-z"),
+    };
+    if cell[axis] != edge {
+        return Err(StructureError::ConnectorOffEdge { cell, facing: name });
+    }
+    Ok(Connector { cell, facing, pool })
 }
 
 /// A spawn marker's cell; `villager` is the only spawn kind.
 fn spawn(v: &toml::Value, size: [i32; 3]) -> Result<[i32; 3], StructureError> {
     choice(v, "kind", &[("villager", ())], StructureError::BadSpawnKind)?;
-    cell(v, "spawns", size)
+    let cell = cell(v, "spawns", size)?;
+    if cell[1] != 1 {
+        return Err(StructureError::NotAtFloorHeight {
+            field: "spawns",
+            cell,
+        });
+    }
+    Ok(cell)
 }
 
 fn rotations(v: &toml::Value) -> Result<Vec<u8>, StructureError> {

@@ -27,6 +27,8 @@ const SNOW_LAYER: u8 = 24;
 const SOLID: [u8; 18] = [
     1, 2, 3, 4, 5, 8, 9, 10, 23, 25, 26, 27, 28, 29, 30, 39, 40, 41,
 ];
+/// `front_layer` entry for a block with no front-face override.
+pub const NO_FRONT: u8 = 0xFF;
 /// Oak, birch and spruce leaves: solid only with `fast`.
 const LEAVES: [u8; 3] = [11, 12, 13];
 
@@ -124,6 +126,20 @@ pub fn mesh_blocks(
     fast: bool,
     greedy: bool,
     face_layer: &[u8],
+    tints: &Tints,
+    origin: [i32; 2],
+    variants: &Variants,
+) -> Mesh {
+    let args = (blocks, size, pad, fast, greedy, face_layer);
+    mesh_blocks_front(args, &[], tints, origin, variants)
+}
+
+/// `mesh_blocks` with a `front_layer` table (256 entries, indexed by block):
+/// an entry other than `NO_FRONT` replaces the layer of that block's +Z face
+/// (in the area's own coordinates) and nothing else. An empty table has none.
+pub fn mesh_blocks_front(
+    (blocks, size, pad, fast, greedy, face_layer): (&[u8], usize, usize, bool, bool, &[u8]),
+    front_layer: &[u8],
     tints: &Tints,
     origin: [i32; 2],
     variants: &Variants,
@@ -234,6 +250,11 @@ pub fn mesh_blocks(
                         0
                     };
                     let mut layer = layer_of(face_layer, b, d[1], fast);
+                    if let Some(&l) = front_layer.get(b as usize).filter(|&&l| l != NO_FRONT) {
+                        if d[2] > 0 {
+                            layer = l;
+                        }
+                    }
                     if b == GRASS && d[1] > 0 {
                         layer = pick_layer(
                             variants,
@@ -1077,5 +1098,107 @@ mod tests {
         let (p, q) = (tops([0, 0]), tops([1, 0]));
         assert_eq!(at(&p, 1, 0), at(&q, 1, 0));
         assert!(at(&p, 1, 0).is_some());
+    }
+
+    /// Layers (as stored in the vertex bytes) of every opaque quad of a stone
+    /// area meshed with a stone front layer of 200.
+    fn front_layers(
+        size: usize,
+        pad: usize,
+        origin: [i32; 2],
+        f: impl Fn(i32, i32) -> bool,
+    ) -> Vec<(usize, u8)> {
+        let blocks = world(size, pad, |x, z, y| {
+            if y == 40 && f(x, z) {
+                crate::tables::b::DIRT
+            } else {
+                0
+            }
+        });
+        let mut front = alloc::vec![NO_FRONT; 256];
+        front[crate::tables::b::DIRT as usize] = 200;
+        let m = mesh_blocks_front(
+            (&blocks, size, pad, false, true, &layers()),
+            &front,
+            &Tints::NONE,
+            origin,
+            &Variants::NONE,
+        );
+        let mut v: Vec<_> = m
+            .opaque
+            .bytes()
+            .chunks(64)
+            .map(|q| (q.len(), q[8]))
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn empty_front_table_changes_nothing() {
+        let blocks = world(
+            3,
+            0,
+            |_, _, y| if y == 40 { crate::tables::b::DIRT } else { 0 },
+        );
+        let args = (&blocks[..], 3, 0, false, true, &layers()[..]);
+        let a = mesh_blocks(
+            args.0,
+            3,
+            0,
+            false,
+            true,
+            args.5,
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
+        let none = alloc::vec![NO_FRONT; 256];
+        let b = mesh_blocks_front(args, &none, &Tints::NONE, [0, 0], &Variants::NONE);
+        assert_eq!(a.opaque.bytes(), b.opaque.bytes());
+    }
+
+    #[test]
+    fn front_layer_covers_plus_z_only_and_merges_runs() {
+        // a run along x: the +Z faces merge into one quad with the front layer
+        let run = front_layers(4, 0, [0, 0], |_, z| z == 0);
+        let fronts = run.iter().filter(|q| q.1 == 200).count();
+        assert_eq!(fronts, 1);
+        // the other five faces never get it: top, bottom, -Z, two ends
+        assert_eq!(run.len(), 6);
+        // a run along z exposes one +Z face
+        let col = front_layers(4, 0, [0, 0], |x, _| x == 0);
+        assert_eq!(col.iter().filter(|q| q.1 == 200).count(), 1);
+        // a front face differing from its neighbour does not merge
+        let blocks = world(2, 0, |x, z, y| match (y, x, z) {
+            (40, 0, 0) => crate::tables::b::DIRT,
+            (40, 1, 0) => crate::tables::b::GRASS,
+            _ => 0,
+        });
+        let mut front = alloc::vec![NO_FRONT; 256];
+        front[crate::tables::b::DIRT as usize] = 200;
+        let m = mesh_blocks_front(
+            (&blocks, 2, 0, false, true, &layers()),
+            &front,
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
+        let n = m.opaque.bytes().chunks(64).filter(|q| q[8] == 200).count();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn front_layer_does_not_depend_on_the_area() {
+        let o = [10, 20];
+        let f = |x: i32, z: i32| ((x + o[0]) + 2 * (z + o[1])).rem_euclid(3) != 0;
+        // the pad ring only culls: with or without it the inner faces agree
+        // when the pad holds the neighbouring world blocks
+        let bare = front_layers(4, 0, o, f);
+        let padded = front_layers(4, 1, o, |x, z| {
+            f(x, z) && (0..4).contains(&x) && (0..4).contains(&z)
+        });
+        assert_eq!(bare, padded);
+        assert!(bare.iter().any(|q| q.1 == 200));
     }
 }
