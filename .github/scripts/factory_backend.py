@@ -257,8 +257,11 @@ class GhBackend(Backend):
             self._gh("workflow", "run", DOCS_WORKFLOW, "--repo", r, "-f", f"plan={n}")
         elif k == "request_replan":
             # No section: the planner picks the phase and skips it if a plan
-            # appeared since (plan_targets.py).
-            self._gh("workflow", "run", PLAN_WORKFLOW, "--repo", r, "-f", f"file={p['file']}")
+            # appeared since (plan_targets.py). A section (a held plan's) is
+            # planned as given; planner_apply.py still refuses a second open plan.
+            args = ["-f", f"file={p['file']}"]
+            args += [x for k in ("section", "notes") if p.get(k) for x in ("-f", f"{k}={p[k]}")]
+            self._gh("workflow", "run", PLAN_WORKFLOW, "--repo", r, *args)
         elif k == "start_fix":
             # Dispatch first: a marker without a run would read as a fix in progress.
             self._gh("workflow", "run", FIX_WORKFLOW, "--repo", r, "-f", f"pr={n}", "-f", f"task={p['task']}",
