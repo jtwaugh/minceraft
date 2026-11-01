@@ -104,6 +104,12 @@ def main():
                 "ticket": int(m.group(1)) if m and m.group(1) else None,
                 "pr": int(m.group(2)) if m and m.group(2) else None,
                 "options": re.findall(r"^\s*[-*]\s*\**([A-Z])\**[:.)]\s*(.+)$", body, re.M)[:8],
+                # The question's own prose: the body minus options, file line and the /decide boilerplate.
+                "question": "\n".join(
+                    ln for ln in re.sub(r"<!--.*?-->", "", body, flags=re.S).splitlines()
+                    if ln.strip() and not re.match(r"\s*[-*]\s*\**[A-Z]\**[:.)]\s", ln)
+                    and not ln.startswith(("**File:**", "Answer by commenting")))[:1500]
+                    if "spec-question" in labels else "",
                 "research": "research" in labels,
             })
         items.sort(key=lambda i: (-i["blocks"], i["number"]))
