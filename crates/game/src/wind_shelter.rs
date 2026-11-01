@@ -121,7 +121,7 @@ mod tests {
         let s = 0.3;
         let h = |x: f64, _z: f64| 64.0 - s * x;
         let step = 0.01f64;
-        let mut prev = None;
+        let mut prev: Option<f64> = None;
         for i in 0..400 {
             let a = i as f64 * step;
             // Unit-ish rotation without trig: (cos, sin) by a rational parametrisation.
