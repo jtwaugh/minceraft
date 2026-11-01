@@ -73,24 +73,14 @@ fn shipped_file_has_kelp_oyster_and_scallop() {
     let oyster = f.get("oyster").unwrap();
     assert_eq!(oyster.shape, SeaFloraShape::Cluster);
     assert_eq!(oyster.shore_distance_max, Some(6));
-    assert!(oyster.habitats.contains(&h.id_of("rocky_shore").unwrap().0));
+    assert!(oyster.habitats.contains(&h.id_of("rocky_shore").unwrap()));
     let scallop = f.get("scallop").unwrap();
     assert_eq!(scallop.blocks, [terrain::block_id("scallop").unwrap()]);
     for e in &f.entries {
         for name in ["frozen", "deep_water"] {
-            assert!(
-                !e.habitats.contains(&h.id_of(name).unwrap().0),
-                "{}",
-                e.name
-            );
+            assert!(!e.habitats.contains(&h.id_of(name).unwrap()), "{}", e.name);
         }
     }
-}
-
-#[test]
-fn shipped_file_matches_run_time_parse() {
-    let text = include_str!("../../../data/sea_flora.toml");
-    assert_eq!(load(text).unwrap(), SeaFlora::shipped());
 }
 
 #[test]

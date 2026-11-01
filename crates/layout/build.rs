@@ -3,7 +3,6 @@
 //!
 //! - `habitats.rs` from `data/habitats.toml` (included by `src/habitat.rs`)
 //! - `fish.rs` from `data/fish.toml` (`src/fish.rs`)
-//! - `sea_flora.rs` from `data/sea_flora.toml` (`src/sea_flora.rs`)
 //! - `validation.rs` from `data/validation.toml` (`src/validation.rs`)
 //! - `route.rs` from `data/route.toml` (`src/route.rs`)
 //! - `scoring.rs` from `data/scoring.toml` (`src/scoring.rs`)
@@ -26,10 +25,6 @@ mod habitat_rule;
 mod habitat_rules;
 #[path = "src/rule_check.rs"]
 mod rule_check;
-#[path = "src/sea_flora_entry.rs"]
-mod sea_flora_entry;
-#[path = "src/sea_flora_rules.rs"]
-mod sea_flora_rules;
 #[path = "src/structure_dir.rs"]
 mod structure_dir;
 #[path = "src/structure_error.rs"]
@@ -116,8 +111,6 @@ fn main() {
         "src/habitat_rule.rs",
         "src/habitat_rules.rs",
         "src/fish_rules.rs",
-        "src/sea_flora_entry.rs",
-        "src/sea_flora_rules.rs",
         "src/structure_dir.rs",
         "src/structure_error.rs",
         "src/structure_piece.rs",
@@ -126,7 +119,6 @@ fn main() {
         println!("cargo:rerun-if-changed={f}");
     }
     let fish_path = root.join("fish.toml");
-    let sea_flora_path = root.join("sea_flora.toml");
     let validation_path = root.join("validation.toml");
     let route_path = root.join("route.toml");
     let scoring_path = root.join("scoring.toml");
@@ -139,7 +131,6 @@ fn main() {
     let villages_dir = root.join("structures/villages");
     for p in [
         &fish_path,
-        &sea_flora_path,
         &validation_path,
         &route_path,
         &scoring_path,
@@ -217,36 +208,6 @@ fn main() {
     }
     out.push_str("];\n");
     std::fs::write(out_dir.join("fish.rs"), out).unwrap();
-
-    // Sea flora: block names to ids, habitat names to rule indices.
-    let entries = sea_flora_rules::parse_sea_flora(&read(&sea_flora_path), &block_id, &|n| {
-        rules.iter().position(|r| r.id == n)
-    })
-    .unwrap_or_else(|e| panic!("{}: {e}", sea_flora_path.display()));
-    let mut out = String::from("fn shipped_entries() -> Vec<SeaFloraEntry> {\n    vec![\n");
-    for e in &entries {
-        writeln!(
-            out,
-            "        SeaFloraEntry {{ name: {:?}.into(), shape: SeaFloraShape::{:?}, \
-             blocks: vec!{:?}, habitats: vec!{:?}, bottom: vec!{:?}, depth_min: {}, \
-             depth_max: {}, shore_distance_max: {:?}, cluster_scale: {:?}, salt: {}, \
-             chance: {:?} }},",
-            e.name,
-            e.shape,
-            e.blocks,
-            e.habitats,
-            e.bottom,
-            e.depth_min,
-            e.depth_max,
-            e.shore_distance_max,
-            e.cluster_scale,
-            e.salt,
-            e.chance
-        )
-        .unwrap();
-    }
-    out.push_str("    ]\n}\n");
-    std::fs::write(out_dir.join("sea_flora.rs"), out).unwrap();
 
     // Validation thresholds.
     let t: Thresholds = toml::from_str(&read(&validation_path))

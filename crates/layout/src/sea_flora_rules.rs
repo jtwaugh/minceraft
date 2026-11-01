@@ -1,13 +1,10 @@
-//! Parsing and validation of `data/sea_flora.toml`, shared by `build.rs`
-//! (which bakes the shipped table into the crate) and `SeaFlora::from_toml`
-//! (feature `toml-io`). `build.rs` includes this file by path, so keep it
-//! free of crate-internal dependencies beyond `sea_flora_entry` and
-//! `rule_check`.
+//! Parsing and validation of `data/sea_flora.toml` for `SeaFlora::from_toml`.
 
 use serde::Deserialize;
 
+use crate::habitat::Habitats;
 use crate::rule_check::check_range;
-use crate::sea_flora_entry::{SeaFloraEntry, SeaFloraShape};
+use crate::sea_flora::{SeaFloraEntry, SeaFloraShape};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,32 +34,25 @@ struct RawEntry {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawFile {
-    #[serde(default)]
     sea_flora: Vec<RawEntry>,
 }
 
+/// Each of `names` through `f`, or an error naming the entry.
 fn resolve<T>(
     what: &str,
     kind: &str,
     names: &[String],
-    f: &dyn Fn(&str) -> Option<T>,
+    f: impl Fn(&str) -> Option<T>,
 ) -> Result<Vec<T>, String> {
     if names.is_empty() {
         return Err(format!("{what}: no {kind}"));
     }
-    names
-        .iter()
-        .map(|n| f(n).ok_or_else(|| format!("{what}: unknown {kind} '{n}'")))
-        .collect()
+    let id = |n: &String| f(n).ok_or_else(|| format!("{what}: unknown {kind} '{n}'"));
+    names.iter().map(id).collect()
 }
 
-/// Parse and validate the sea flora file. `habitat_index` maps a habitat id
-/// to its position in the habitat rule list.
-pub fn parse_sea_flora(
-    text: &str,
-    block_id: &dyn Fn(&str) -> Option<u8>,
-    habitat_index: &dyn Fn(&str) -> Option<usize>,
-) -> Result<Vec<SeaFloraEntry>, String> {
+/// Parse and validate the sea flora file.
+pub fn parse_sea_flora(text: &str, habitats: &Habitats) -> Result<Vec<SeaFloraEntry>, String> {
     let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
     let mut out: Vec<SeaFloraEntry> = Vec::new();
     for r in raw.sea_flora {
@@ -71,28 +61,20 @@ pub fn parse_sea_flora(
             return Err(format!("{what}: name or salt already used by '{}'", p.name));
         }
         check_range(&what, "depth", Some(r.depth_min), Some(r.depth_max))?;
-        let shape = match (r.shape.as_str(), r.column) {
+        let (shape, n_blocks) = match (r.shape.as_str(), r.column) {
             ("column", Some(c)) => {
                 check_range(&what, "height", Some(c.height_min), Some(c.height_max))?;
-                SeaFloraShape::Column {
+                let shape = SeaFloraShape::Column {
                     height_min: c.height_min,
                     height_max: c.height_max,
                     surface_gap_min: c.surface_gap_min,
-                }
+                };
+                (shape, 2)
             }
-            ("cluster", None) => SeaFloraShape::Cluster,
-            (s, _) => {
-                return Err(format!(
-                    "{what}: shape '{s}' (only a column has a column table)"
-                ))
-            }
+            ("cluster", None) => (SeaFloraShape::Cluster, 1),
+            (s, _) => return Err(format!("{what}: shape '{s}' and column table disagree")),
         };
-        let blocks = resolve(&what, "block", &r.blocks, block_id)?;
-        let n_blocks = if shape == SeaFloraShape::Cluster {
-            1
-        } else {
-            2
-        };
+        let blocks = resolve(&what, "block", &r.blocks, terrain::block_id)?;
         if blocks.len() != n_blocks {
             return Err(format!("{what}: a {} takes {n_blocks} block(s)", r.shape));
         }
@@ -106,8 +88,8 @@ pub fn parse_sea_flora(
             name: r.name,
             shape,
             blocks,
-            habitats: resolve(&what, "habitat", &r.habitats, habitat_index)?,
-            bottom: resolve(&what, "bottom block", &r.bottom, block_id)?,
+            habitats: resolve(&what, "habitat", &r.habitats, |n| habitats.id_of(n))?,
+            bottom: resolve(&what, "bottom block", &r.bottom, terrain::block_id)?,
             depth_min: r.depth_min,
             depth_max: r.depth_max,
             shore_distance_max: r.shore_distance_max,
