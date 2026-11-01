@@ -929,13 +929,14 @@ mod tests {
 
     #[test]
     fn tinted_faces_use_column_or_corner_tints() {
-        // one grass block over stone; grass grid red in the column data
+        // one grass block over stone; the grass block reads the ground grid
+        // (the fifth), red in the column data
         let b = world(1, 0, |_, _, y| match y {
             40 => crate::tables::b::GRASS,
             _ => 0,
         });
-        let mut data = alloc::vec![0.5f32; 4 * 3 + 4 * 4 * 3];
-        data[..3].copy_from_slice(&[1.0, 0.0, 0.25]);
+        let mut data = alloc::vec![0.5f32; 5 * 3 + 5 * 4 * 3];
+        data[4 * 3..5 * 3].copy_from_slice(&[1.0, 0.0, 0.25]);
         let col = Tints {
             size: 1,
             data: &data,
@@ -958,8 +959,9 @@ mod tests {
             .bytes()
             .chunks(16)
             .all(|v| v[10..13] == [255, 0, 64]));
-        // corner grass grid starts after the four column grids: corner (1, 0) is green
-        let at = 4 * 3 + 3;
+        // corner ground grid starts after the five column grids and four
+        // corner grids: corner (1, 0) is green
+        let at = 5 * 3 + 4 * 4 * 3 + 3;
         data[at..at + 3].copy_from_slice(&[0.0, 1.0, 0.0]);
         let cor = Tints {
             size: 1,
