@@ -1,0 +1,14 @@
+# A small garden plot, scenery only (docs/design/villages-and-villagers.md 2.3).
+kind = "building"
+size = [5, 2, 5]      # x, y, z
+origin_offset = [-2, 0, 0]
+palette = { P = "dock_planks", F = "planter_farmland_wet", W = "wheat_4", "." = "air" }
+layers = [
+  # y = 0 (floor with a planted bed)
+  ["PPPPP", "PFFFP", "PFFFP", "PFFFP", "PPPPP"],
+  # y = 1
+  [".....", ".WWW.", ".WWW.", ".WWW.", "....."],
+]
+connectors = [
+  { cell = [2, 1, 4], facing = "+z", pool = "boardwalks" },
+]

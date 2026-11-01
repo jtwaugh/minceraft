@@ -14,7 +14,7 @@
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
 #   niche         optional layer name -> [lo, hi], lo <= hi; layers: height_above_sea |
-#                 soil_depth | light | slope | sun_facing | hollow | edge | exposure. The response is 1
+#                 soil_depth | light | slope | sun_facing | hollow | edge | exposure | conifer. The response is 1
 #                 inside and falls to 0 over niche_margin_<layer> outside; the product
 #                 multiplies the biome chance. height_above_sea is ground y minus sea
 #                 level; soil_depth counts dirt and grass from the ground block down;
@@ -39,7 +39,12 @@
 #                 or exposure_cap steps; count / exposure_cap, 0 to 1. A column is water
 #                 where its surface height block is a liquid (undecorated terrain), so
 #                 0 inland and in a cove sheltered from the wind, near 1 on a shore
-#                 facing open water.
+#                 facing open water;
+#                 conifer is the share, among the leaf columns (a leaf block above the
+#                 ground block) within tree_kind_radius (circle) of the column, whose
+#                 topmost leaf is spruce leaves: 1 all spruce (acidic ground), 0 all
+#                 oak or birch (richer ground). conifer_none, a neutral value, where
+#                 no leaf column is in reach.
 
 [settings]
 patch_noise_salt = 7001
@@ -67,6 +72,11 @@ hollow_radii = [4, 8, 16]
 # Search radius, and cap, of the `edge` layer. Must stay within READ_REACH and,
 # with a tree's reach, inside the decoration margin (a test checks it).
 edge_radius = 8
+# Search radius of the `conifer` layer. Must stay within READ_REACH and, with a
+# tree's reach, inside the decoration margin (a test checks it).
+tree_kind_radius = 8
+# Value of the `conifer` layer where no leaf column lies within tree_kind_radius.
+conifer_none = 0.5
 # Soft margins of the niche response, in each layer's own units.
 niche_margin_height_above_sea = 2.0
 niche_margin_soil_depth = 1.0
@@ -76,6 +86,7 @@ niche_margin_sun_facing = 0.2
 niche_margin_hollow = 1.0
 niche_margin_edge = 1.0
 niche_margin_exposure = 0.2
+niche_margin_conifer = 0.25
 
 [[flora]]
 name = "daisy"

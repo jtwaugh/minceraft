@@ -6,10 +6,10 @@ use crate::decorate::{generate_decorated_with, World};
 use crate::decorate::{MARGIN_CELLS, READ_REACH};
 use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
 use crate::flora::{
-    FloraRequires, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS,
-    FLORA_WIND,
+    FloraRequires, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
+    FLORA_LIGHT_RADIUS, FLORA_TREE_KIND_RADIUS, FLORA_WIND,
 };
-use crate::niche::{edge, exposure, hollow, light, NicheLayer};
+use crate::niche::{conifer, edge, exposure, hollow, light, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -1469,4 +1469,51 @@ fn exposure_ray_stays_inside_the_decoration_margin() {
 #[test]
 fn exposure_niche_is_accepted_and_independent_of_region() {
     region_independent(&niche_entry!(&[(NicheLayer::Exposure, 0.2, 1.0)]));
+}
+
+/// Hand-built grass at y 70 over 20 by 5 columns, with a leaf roof at y 76 of
+/// `leaves` over x 0..4 (none if `None`). Conifer at x 2 and x 19 of the middle row.
+fn conifer_at(leaves: &[Block]) -> [f64; 2] {
+    let (w, d) = (20, 5);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32);
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            world.set(x, 70, z, Block::Grass as u8);
+            if !leaves.is_empty() && x < 4 {
+                // Alternate kinds along z so a mix gives the share.
+                world.set(x, 76, z, leaves[z as usize % leaves.len()] as u8);
+            }
+        }
+    }
+    [conifer(&world, 2, 70, 2), conifer(&world, 19, 70, 2)]
+}
+
+#[test]
+fn conifer_is_the_spruce_share_of_nearby_leaf_columns() {
+    assert_eq!(FLORA_CONIFER_NONE, 0.5, "the none case assumes 0.5");
+    assert_eq!(
+        conifer_at(&[Block::SpruceLeaves]),
+        [1.0, FLORA_CONIFER_NONE]
+    );
+    assert_eq!(conifer_at(&[Block::OakLeaves])[0], 0.0);
+    assert_eq!(conifer_at(&[Block::BirchLeaves])[0], 0.0);
+    // Rows z 0..5 alternate spruce, oak: 3 of 5 are spruce.
+    assert_eq!(conifer_at(&[Block::SpruceLeaves, Block::OakLeaves])[0], 0.6);
+    assert_eq!(conifer_at(&[]), [FLORA_CONIFER_NONE; 2]);
+}
+
+#[test]
+fn conifer_search_and_tree_reach_stay_inside_the_decoration_margin() {
+    const TREE_REACH: i32 = 7;
+    const {
+        assert!(FLORA_TREE_KIND_RADIUS > 0);
+        assert!(FLORA_TREE_KIND_RADIUS + TREE_REACH <= MARGIN_CELLS * 16);
+        assert!(FLORA_TREE_KIND_RADIUS <= READ_REACH);
+    }
+}
+
+#[test]
+fn conifer_niche_entry_is_independent_of_region() {
+    region_independent(&niche_entry!(&[(NicheLayer::Conifer, 0.0, 0.5)]));
 }

@@ -1,0 +1,14 @@
+# A dead-end cap that steps down towards the ground (docs/design/villages-and-villagers.md 2.1, 2.2).
+kind = "cap"
+size = [3, 2, 4]      # x, y, z
+origin_offset = [-1, 0, 0]
+palette = { P = "dock_planks", S = "plank_step", "." = "air" }
+layers = [
+  # y = 0 (floor, then steps)
+  ["PPP", "SSS", "SSS", "SSS"],
+  # y = 1 (connector)
+  ["...", "...", "...", "..."],
+]
+connectors = [
+  { cell = [1, 1, 0], facing = "-z", pool = "boardwalks" },  # joins the boardwalk
+]

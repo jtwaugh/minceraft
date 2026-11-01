@@ -24,6 +24,9 @@ fn templates_exist_and_have_a_kind() {
         "work_market_stall",
         "work_boat_shed",
         "work_cooperage",
+        "work_fisher_hut",
+        "work_net_loft",
+        "work_smokehouse",
     ] {
         assert!(list.iter().any(|(n, _)| *n == name), "{name}");
     }

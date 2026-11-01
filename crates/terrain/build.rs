@@ -166,6 +166,15 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     let radius = int(&doc["settings"], "edge_radius");
     assert!(radius > 0, "flora.toml: edge_radius must be positive");
     writeln!(out, "pub const FLORA_EDGE_RADIUS: i32 = {radius};").unwrap();
+    let radius = int(&doc["settings"], "tree_kind_radius");
+    assert!(radius > 0, "flora.toml: tree_kind_radius must be positive");
+    writeln!(out, "pub const FLORA_TREE_KIND_RADIUS: i32 = {radius};").unwrap();
+    let none = num(&doc["settings"]["conifer_none"]);
+    assert!(
+        (0.0..=1.0).contains(&none),
+        "flora.toml: conifer_none must be in 0..=1"
+    );
+    writeln!(out, "pub const FLORA_CONIFER_NONE: f64 = {none:?};").unwrap();
     let radii: Vec<i64> = doc["settings"]["hollow_radii"]
         .as_array()
         .expect("hollow_radii array")
