@@ -5,8 +5,11 @@ use crate::data::{Biome, Block};
 use crate::decorate::{generate_decorated_with, World};
 use crate::decorate::{MARGIN_CELLS, READ_REACH};
 use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
-use crate::flora::{FloraRequires, FLORA_EDGE_RADIUS, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS};
-use crate::niche::{edge, hollow, light, NicheLayer};
+use crate::flora::{
+    FloraRequires, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS,
+    FLORA_WIND,
+};
+use crate::niche::{edge, exposure, hollow, light, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -1406,4 +1409,64 @@ fn edge_search_and_tree_reach_stay_inside_the_decoration_margin() {
 #[test]
 fn edge_niche_entry_is_independent_of_region() {
     region_independent(&niche_entry!(&[(NicheLayer::Edge, 1.0, 6.0)]));
+}
+
+/// Hand-built grass at y 70 over 80 by 7 columns, with water (surface at y 63)
+/// from x 40 on, except a land spit at x 66..70 across rows z 0..3. With the
+/// wind from +x the ray runs towards larger x: x 39 at z 5 faces open water,
+/// x 39 at z 1 has the spit across its ray (a cove), x 10 is inland.
+fn exposure_world(blocks: &mut [u8]) -> World<'_> {
+    let (w, d) = (80, 7);
+    let mut world = World::for_test(blocks, w, d);
+    for z in 0..d {
+        for x in 0..w {
+            let wet = x >= 40 && !((66..70).contains(&x) && z < 3);
+            let g = if wet { 62 } else { 70 };
+            for y in 0..g {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+            if wet {
+                world.set(x, 63, z, Block::Water as u8);
+            } else {
+                world.set(x, g, z, Block::Grass as u8);
+            }
+        }
+    }
+    world
+}
+
+#[test]
+fn exposure_scores_a_shore_facing_water_above_a_cove_or_inland() {
+    assert_eq!(FLORA_WIND, (1.0, 0.0), "the layout assumes wind from +x");
+    assert_eq!(FLORA_EXPOSURE_CAP, 48);
+    let mut blocks = vec![0u8; 80 * 7 * HEIGHT];
+    let world = exposure_world(&mut blocks);
+    let shore = exposure(&world, 39, 5);
+    let cove = exposure(&world, 39, 1);
+    let inland = exposure(&world, 10, 5);
+    assert_eq!(shore, 40.0 / 48.0);
+    assert_eq!(cove, 26.0 / 48.0);
+    assert_eq!(inland, 0.0);
+    assert!(shore > cove && cove > inland);
+}
+
+#[test]
+fn exposure_is_capped_and_in_unit_range() {
+    let mut blocks = vec![0u8; 80 * 7 * HEIGHT];
+    let world = exposure_world(&mut blocks);
+    assert_eq!(exposure(&world, 0, 5), 0.0);
+    assert!(exposure(&world, 39, 5) <= 1.0);
+}
+
+#[test]
+fn exposure_ray_stays_inside_the_decoration_margin() {
+    const {
+        assert!(FLORA_EXPOSURE_CAP > 0);
+        assert!(FLORA_EXPOSURE_CAP <= MARGIN_CELLS * 16);
+    }
+}
+
+#[test]
+fn exposure_niche_is_accepted_and_independent_of_region() {
+    region_independent(&niche_entry!(&[(NicheLayer::Exposure, 0.2, 1.0)]));
 }
