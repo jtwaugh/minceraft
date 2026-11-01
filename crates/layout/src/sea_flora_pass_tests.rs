@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use terrain::{Region, HEIGHT, SEA_LEVEL};
 
 use crate::{
-    build_route, build_route_layout, raft_footprint, ChannelEval, Habitats, Layout, Level,
-    SeaFlora, WorldConfig, NO_HABITAT,
+    build_route, build_route_layout, raft_footprint, ChannelEval, Exclusion, Habitats, Layout,
+    Level, SeaFlora, WorldConfig, NO_HABITAT,
 };
 use terrain::ProtectedMask;
 
@@ -79,7 +79,7 @@ fn every_shellfish_sits_where_its_entry_allows() {
 
 #[test]
 fn nothing_in_channel_spawn_water_or_raft_footprint() {
-    let mut checked = 0;
+    let (mut checked, mut spawn_water) = (0, 0);
     for seed in SEEDS {
         let (l, levels) = route_layout(seed);
         let channels: Vec<ChannelEval> = l.density.iter().filter_map(ChannelEval::new).collect();
@@ -99,8 +99,26 @@ fn nothing_in_channel_spawn_water_or_raft_footprint() {
                 checked += 1;
             }
         }
+        // The route's spawn water lies inside channel reach and is deepened
+        // to `deep_water`, so nothing grows there anyway. Move a spawn-water
+        // zone onto shellfish placed above: only `flora_free` clears it.
+        let r = l.generate_layout_region(x0, z0, w, d, false).region;
+        let &(fx, _, fz, _) = placed(&r).first().unwrap();
+        let mut zoned = l.clone();
+        zoned.flora_free = vec![Exclusion::Circle {
+            center: (f64::from(fx), f64::from(fz)),
+            radius: levels[0].spawn_water_radius,
+        }];
+        let in_zone = |&(x, _, z, _): &(i32, i32, i32, u8)| zoned.flora_free[0].protected(x, 0, z);
+        for decorate in [false, true] {
+            let r = l.generate_layout_region(x0, z0, w, d, decorate).region;
+            spawn_water += placed(&r).into_iter().filter(in_zone).count();
+            let r = zoned.generate_layout_region(x0, z0, w, d, decorate).region;
+            assert_eq!(placed(&r).into_iter().filter(in_zone).count(), 0);
+        }
     }
     assert!(checked > 0);
+    assert!(spawn_water > 0, "shellfish would grow in the moved zone");
 }
 
 #[test]
