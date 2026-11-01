@@ -1,0 +1,21 @@
+# A small hut, a little narrower, with a front deck (docs/design/villages-and-villagers.md 2.1 to 2.3).
+kind = "building"
+size = [5, 4, 5]      # x, y, z
+origin_offset = [-2, 0, -4]
+palette = { P = "dock_planks", L = "dock_post", T = "thatch", "." = "air" }
+layers = [
+  # y = 0
+  ["PPPPP", "PPPPP", "PPPPP", "PPPPP", "PPPPP"],
+  # y = 1
+  [".LPL.", ".P.P.", ".P.P.", ".L.L.", "....."],
+  # y = 2
+  [".LPL.", ".....", ".P.P.", ".L.L.", "....."],
+  # y = 3
+  [".TTT.", ".TTT.", ".TTT.", ".TTT.", "....."],
+]
+connectors = [
+  { cell = [2, 1, 4], facing = "+z", pool = "boardwalks" },  # the front deck
+]
+spawns = [
+  { cell = [2, 1, 2], kind = "villager" },
+]

@@ -1,0 +1,21 @@
+# A cooperage: a small walled workshop with barrels (docs/design/villages-and-villagers.md 2.3).
+kind = "building"
+size = [5, 4, 5]      # x, y, z
+origin_offset = [-2, 0, -4]
+palette = { P = "dock_planks", S = "spruce_log", W = "dock_planks", T = "thatch", B = "barrel", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPP", "PPPPP", "PPPPP", "PPPPP", "PPPPP"],
+  # y = 1 (walls with a doorway at the front, barrels inside the back corners)
+  ["SWWWS", "WB.BW", "W...W", "W...W", "SW.WS"],
+  # y = 2
+  ["SWWWS", "W...W", "W...W", "W...W", "SW.WS"],
+  # y = 3 (roof)
+  ["TTTTT", "TTTTT", "TTTTT", "TTTTT", "TTTTT"],
+]
+connectors = [
+  { cell = [2, 1, 4], facing = "+z", pool = "boardwalks" },
+]
+spawns = [
+  { cell = [2, 1, 2], kind = "villager" },
+]

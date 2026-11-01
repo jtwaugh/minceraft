@@ -26,6 +26,9 @@ fn templates_exist_and_have_a_kind() {
         "boardwalk_tee",
         "boardwalk_cross",
         "boardwalk_stepped",
+        "work_market_stall",
+        "work_boat_shed",
+        "work_cooperage",
         "work_fisher_hut",
         "work_net_loft",
         "work_smokehouse",
@@ -34,6 +37,17 @@ fn templates_exist_and_have_a_kind() {
     }
     for (name, s) in &list {
         assert!(s.kind.is_some(), "{name} has no kind");
+    }
+}
+
+#[test]
+fn homes_have_a_villager_and_one_to_three_connectors() {
+    let list = Structure::village_templates();
+    for name in ["home_hut_a", "home_hut_b", "home_house", "home_longhouse"] {
+        let (_, s) = list.iter().find(|(n, _)| *n == name).expect(name);
+        assert_eq!(s.kind, Some(PieceKind::Building), "{name}");
+        assert!((1..=3).contains(&s.connectors.len()), "{name}");
+        assert!(!s.spawns.is_empty(), "{name} has no villager");
     }
 }
 
