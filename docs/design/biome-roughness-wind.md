@@ -25,7 +25,7 @@ Checked against `master` (5a68a3b).
 ## Reconciliation notes
 
 - **Depends on unbuilt docs.** Phase A needs wind Phase A (the `wind` function, `data/wind.toml`, export). The planner can plan this doc as soon as it is merged, but the factory should not start its tickets before wind Phase A's are closed; suggest the first ticket's `Depends on` points at that plan's last ticket. The debug readout fields need wind Phase B's readout.
-- **Shared cell cache has no owner yet.** Both this doc and `land-sea-breeze.md` want to build it, and #1788 would too. Whichever is planned first builds it as `land-sea-breeze.md` specifies (cell size and sample step as separate keys, a fixed fill window, bounded cache, cold/warm tests). Suggest adding `R` as one more per-cell value on that cache rather than a second cache, and that this doc's ticket fall back to building it only if the breeze has not. See open question 1.
+- **Shared cell cache has no owner yet.** Both this doc and `land-sea-breeze.md` want to build it, and #1788 would too. Whichever of the three is built first builds it as `land-sea-breeze.md` specifies (cell size and sample step as separate keys, a fixed fill window, bounded cache, cold/warm tests); the others add a value per cell. `R` is one more per-cell value on that cache rather than a second cache, and this doc's ticket builds the cache only if the breeze (or shelter) has not. (Decided in #1812.)
 - **Table placement.** Author's option A (`[roughness]` in `data/wind.toml`) is consistent with CLAUDE.md ("data lives in `data/*.toml`") and keeps `crates/terrain` and its build script untouched. The coverage test needs the biome names: use `BIOME_INFO` names from the `terrain` crate (the game crate already depends on it) and compare them with the table's keys. Confirm the exact field name on `BiomeInfo` when writing the test.
 - **Water is not a biome.** The heightmap's biome byte is the climate biome even over sea, so the water value is a twelfth, separate key (for example `water`) that the coverage test must exempt from the "names a real biome" half. Water is decided by `top_y < SEA_LEVEL`, which also covers frozen sea (as in `land-sea-breeze.md`), answering the author's "confirm" item.
 - **Smoothing window.** As in `land-sea-breeze.md`, a cell value must depend only on the seed and the cell, so the neighbourhood (tens of blocks) reaches into adjacent cells. Fill from a fixed window around the cell centre, never one cut by what is cached. `[manual check]`: "negligible cost" for the fill; measurable form: a cell fill is no slower than the breeze's own fill plus a small constant on the native bench profile, with cold and warm caches asserted equal.
@@ -110,10 +110,6 @@ The author's phases in section 3 are used as written; the header lists only Phas
 
 ## Open questions
 
-1. **Who builds the shared cell cache?**
-   - A. Whichever of the breeze, shelter or this doc is planned first builds it as `land-sea-breeze.md` specifies; the others add a value per cell.
-   - B. Plan the breeze's Phase A first and make this doc's ticket depend on it.
-   - C. This doc builds a roughness-only cache now and merges it with the breeze's later. Duplicates work; not suggested.
 2. **Where does the water value live in the table?**
    - A. A separate `water` key beside the biome keys, exempt from the "names a real biome" test.
    - B. A nested `[roughness.biome]` table and a top-level `water` value.
