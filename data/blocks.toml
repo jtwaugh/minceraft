@@ -779,10 +779,30 @@ waterlogged = true
 selection_inset = 2
 color = "#c98f6b"
 
+# Villages (villages-and-villagers A, 2.4): dock and boardwalk surface and
+# the stilts under it. Full cubes; the generator never places them.
+[[block]]
+id = 81
+name = "dock_planks"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#9a7448"
+
+[[block]]
+id = 82
+name = "dock_post"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#4f3a22"
+
 # Chest (cooking-stations.md 2): a full opaque cube. The generator never
 # places it; `crate` (28) stays unused by structures.
 [[block]]
-id = 81
+id = 83
 name = "chest"
 fire = [0, 0]
 collision = "full"

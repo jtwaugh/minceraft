@@ -97,6 +97,10 @@ pub fn build_layout(world: &WorldConfig, levels: &[Level]) -> Layout {
             center: anchor,
             radius,
         });
+        layout.flora_free.push(Exclusion::Circle {
+            center: anchor,
+            radius: l.spawn_water_radius,
+        });
         layout.structures.push(StructurePlacement {
             structure: "raft_start".into(),
             origin: [l.anchorage[0], SEA_LEVEL, l.anchorage[1]],

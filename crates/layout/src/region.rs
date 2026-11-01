@@ -22,6 +22,8 @@ pub struct Layout {
     pub climate: Vec<ClimateBias>,
     pub exclusions: Vec<Exclusion>,
     pub structures: Vec<StructurePlacement>,
+    /// Zones the sea flora pass leaves empty (each level's spawn water).
+    pub flora_free: Vec<Exclusion>,
 }
 
 /// A structure template placed in the world (design: world-layout 4.2).
@@ -153,7 +155,8 @@ impl Layout {
         self.generate(x0, z0, w, d, decorate, |_| true)
     }
 
-    /// Like [`Layout::generate_region`], also returning the raft mask.
+    /// Like [`Layout::generate_region`], also returning the raft mask. With
+    /// `toml-io`, the sea flora pass runs on the blocks.
     pub fn generate_layout_region(
         &self,
         x0: i32,
@@ -162,8 +165,12 @@ impl Layout {
         d: u32,
         decorate: bool,
     ) -> LayoutRegion {
+        #[cfg(feature = "toml-io")]
+        let region = self.generate_with_sea_flora(x0, z0, w, d, decorate);
+        #[cfg(not(feature = "toml-io"))]
+        let region = self.generate_region(x0, z0, w, d, decorate);
         LayoutRegion {
-            region: self.generate_region(x0, z0, w, d, decorate),
+            region,
             raft_cells: self.raft_cells(x0, z0, w, d),
         }
     }
