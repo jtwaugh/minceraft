@@ -6,11 +6,14 @@ const G_GRASS: usize = 0;
 const G_LEAF: usize = 1;
 const G_WATER: usize = 2;
 const G_DRY: usize = 3;
-const GRIDS: usize = 4;
+/// The grass block's own tint: grass shaded toward dry under leaves
+/// (`groundTints` in `viewer/mesh.js`).
+const G_GROUND: usize = 4;
+const GRIDS: usize = 5;
 
 /// The tint data `mesh_blocks` takes, in the wasm layout: per-column grass,
-/// leaf, water and dry tints (`size * size * 3` f32 each, in that order),
-/// then, if `corners`, the same four grids per block corner
+/// leaf, water, dry and ground tints (`size * size * 3` f32 each, in that
+/// order), then, if `corners`, the same five grids per block corner
 /// (`(size + 1)^2 * 3` each). `colors` is the block colour table (256 * 3 u8).
 /// Anything missing reads as white (1.0) or black (colours).
 pub struct Tints<'a> {
@@ -83,14 +86,24 @@ impl Tints<'_> {
     /// Tint of block `b` in column (x, z), or `None` if it is white.
     pub fn block(&self, b: u8, x: usize, z: usize) -> Option<[f64; 3]> {
         let g = |k| self.column(k, x, z);
-        self.tint_for(b, g(G_GRASS), g(G_LEAF), g(G_WATER), g(G_DRY))
+        self.tint_for(b, g(grass_grid(b)), g(G_LEAF), g(G_WATER), g(G_DRY))
     }
 
     /// Tint of block `b` at the block corner offset (ox, oz) of column (x, z).
     pub fn vertex(&self, b: u8, x: usize, z: usize, ox: usize, oz: usize) -> [f64; 3] {
         let g = |k| self.corner(k, x + ox, z + oz);
-        self.tint_for(b, g(G_GRASS), g(G_LEAF), g(G_WATER), g(G_DRY))
+        self.tint_for(b, g(grass_grid(b)), g(G_LEAF), g(G_WATER), g(G_DRY))
             .unwrap_or([1.0; 3])
+    }
+}
+
+/// The grid block `b` takes its grass tint from: the grass block reads
+/// `ground`, every other block `grass`.
+fn grass_grid(b: u8) -> usize {
+    if b == GRASS {
+        G_GROUND
+    } else {
+        G_GRASS
     }
 }
 
@@ -174,7 +187,7 @@ mod tests {
     fn column_and_corner_grids_are_laid_out_in_order() {
         // size 2: columns 4 * 3 floats per grid, corners 9 * 3 per grid
         let (n, cn) = (4 * 3, 9 * 3);
-        let data: Vec<f32> = (0..4 * n + 4 * cn).map(|i| i as f32).collect();
+        let data: Vec<f32> = (0..5 * n + 5 * cn).map(|i| i as f32).collect();
         let t = Tints {
             size: 2,
             data: &data,
@@ -186,20 +199,38 @@ mod tests {
             t.column(G_DRY, 0, 1),
             [(3 * n + 6) as f64, (3 * n + 7) as f64, (3 * n + 8) as f64]
         );
-        let o = 4 * n;
+        assert_eq!(t.column(G_GROUND, 0, 0)[0], (4 * n) as f64);
+        let o = 5 * n;
         assert_eq!(
             t.corner(G_GRASS, 2, 0),
             [(o + 6) as f64, (o + 7) as f64, (o + 8) as f64]
         );
         assert_eq!(t.corner(G_LEAF, 0, 2)[0], (o + cn + 18) as f64);
+        assert_eq!(t.corner(G_GROUND, 0, 0)[0], (o + 4 * cn) as f64);
+    }
+
+    #[test]
+    fn the_grass_block_reads_ground_and_grass_flora_reads_grass() {
+        let (n, cn) = (4 * 3, 9 * 3);
+        let data: Vec<f32> = (0..5 * n + 5 * cn).map(|i| i as f32).collect();
+        let t = Tints {
+            size: 2,
+            data: &data,
+            corners: true,
+            colors: &[],
+        };
+        assert_eq!(t.block(GRASS, 0, 0).unwrap()[0], (4 * n) as f64);
+        assert_eq!(t.block(TALL_GRASS, 0, 0).unwrap()[0], 0.0);
+        assert_eq!(t.vertex(GRASS, 0, 0, 0, 0)[0], (5 * n + 4 * cn) as f64);
+        assert_eq!(t.vertex(TALL_GRASS, 0, 0, 0, 0)[0], (5 * n) as f64);
     }
 
     #[test]
     fn vertex_reads_the_corner_at_the_offset() {
         let (n, cn) = (4 * 3, 9 * 3);
-        let mut data = vec![0f32; 4 * n + 4 * cn];
+        let mut data = vec![0f32; 5 * n + 5 * cn];
         // water grid of the corners, corner (2, 1) = 0.5
-        let at = 4 * n + 2 * cn + (3 + 2) * 3;
+        let at = 5 * n + 2 * cn + (3 + 2) * 3;
         data[at..at + 3].copy_from_slice(&[0.5; 3]);
         let t = Tints {
             size: 2,

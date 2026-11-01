@@ -60,9 +60,9 @@ impl MeshOut {
 /// weights) as packed by `viewer/meshwasm.js`. Features the Rust mesher
 /// doesn't have yet are listed in `viewer/test/mesh_parity.test.mjs`.
 ///
-/// `tints` is the grass, leaf, water and dry tints of each column
+/// `tints` is the grass, leaf, water, dry and ground tints of each column
 /// (`size * size * 3` f32 each, in that order), then with the corners flag the
-/// same four per block corner (`(size + 1)^2 * 3` each). `colors` is the block
+/// same five per block corner (`(size + 1)^2 * 3` each). `colors` is the block
 /// colour table, 256 * 3 u8 (`ctx.COLORS`).
 #[wasm_bindgen]
 pub fn mesh_blocks(
