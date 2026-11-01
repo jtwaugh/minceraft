@@ -73,6 +73,8 @@ pub mod b {
     pub const TEST_WATERLOGGED_PLANT: u8 = 68;
     pub const KELP_0: u8 = 77;
     pub const KELP_1: u8 = 78;
+    pub const OYSTER: u8 = 79;
+    pub const SCALLOP: u8 = 80;
 }
 
 use b::*;
@@ -125,8 +127,9 @@ pub const UPPER_HALF: [bool; 256] = flags(&[
     DUNE_GRASS_UPPER,
 ]);
 /// Plants that are also water (`waterlogged` in `data/blocks.toml`), drawn as
-/// a water cell plus a cross plant.
-pub const WATERLOGGED: [bool; 256] = flags(&[TEST_WATERLOGGED_PLANT, KELP_0, KELP_1]);
+/// a water cell plus a cross plant or, for shellfish, a cluster.
+pub const WATERLOGGED: [bool; 256] =
+    flags(&[TEST_WATERLOGGED_PLANT, KELP_0, KELP_1, OYSTER, SCALLOP]);
 /// Blocks whose tiles vary from block to block.
 pub const VARIES: [bool; 256] = flags(&[GRASS, SAND, GRAVEL, STONE, SNOW_LAYER]);
 

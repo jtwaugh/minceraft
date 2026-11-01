@@ -753,3 +753,28 @@ opaque_cube = false
 waterlogged = true
 selection_inset = 3
 color = "#5f8236"
+
+# Oysters and scallops (sea-flora-and-shellfish B, 2 and 3): waterlogged
+# clusters of small boxes on the cell floor, all inside a 2/16 inset. The
+# generator never places them yet.
+[[block]]
+id = 79
+name = "oyster"
+fire = [0, 0]
+collision = "none"
+opacity = 3
+opaque_cube = false
+waterlogged = true
+selection_inset = 2
+color = "#8a8478"
+
+[[block]]
+id = 80
+name = "scallop"
+fire = [0, 0]
+collision = "none"
+opacity = 3
+opaque_cube = false
+waterlogged = true
+selection_inset = 2
+color = "#c98f6b"

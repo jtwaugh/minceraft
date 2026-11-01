@@ -6,7 +6,9 @@
 use crate::ao::{face_ao, flips, rot};
 use crate::greedy::{merge, GRID_AXES};
 use crate::plants::cross;
-use crate::shapes::{bounds, box_hidden, face_corners, flat, flat_lift, is_box, LEAF_WEIGHT};
+use crate::shapes::{
+    bounds, box_hidden, cluster, face_corners, flat, flat_lift, is_box, is_cluster, LEAF_WEIGHT,
+};
 use crate::tables::{face_uv, CROSS, FACES, VARIES, WATERLOGGED};
 use crate::{js_round, pick_layer, variant_at, Quads, Tint, Tints, Variants};
 use alloc::vec::Vec;
@@ -170,8 +172,15 @@ pub fn mesh_blocks(
                 let mut b = blocks[base + y];
                 if WATERLOGGED[b as usize] {
                     // the plant inside, then the cell's water faces as `water`
-                    let side = layer_of(face_layer, b, 0, false);
-                    cross(&mut out.cutout, b, [x, y, z], origin, side, tints, variants);
+                    if is_cluster(b) {
+                        let w = [origin[0] + x as i32, y as i32, origin[1] + z as i32];
+                        let floor = solid(at(x as i32, y as i32 - 1, z as i32));
+                        let layer = |dy| layer_of(face_layer, b, dy, false);
+                        cluster(&mut out.cutout, [x, y, z], w, layer, floor);
+                    } else {
+                        let side = layer_of(face_layer, b, 0, false);
+                        cross(&mut out.cutout, b, [x, y, z], origin, side, tints, variants);
+                    }
                     b = WATER;
                 }
                 if let Some(lift) = flat_lift(b) {
@@ -617,10 +626,49 @@ mod tests {
     }
 
     #[test]
+    fn shellfish_draw_as_water_plus_a_cluster() {
+        use crate::tables::b::{OYSTER, SCALLOP};
+        for b in [OYSTER, SCALLOP] {
+            // stone to 40, water 41..=44, the shellfish on the floor at 41 and
+            // floating at 43 in the middle of a 3x3 pool
+            let pool = |logged: bool| {
+                world(3, 0, move |x, z, y| match y {
+                    0..=40 => STONE,
+                    41 | 43 if logged && x == 1 && z == 1 => b,
+                    41..=44 => WATER,
+                    _ => 0,
+                })
+            };
+            let (m, w) = (
+                plain(&pool(true), 3, 0, [0, 0]),
+                plain(&pool(false), 3, 0, [0, 0]),
+            );
+            // no faces between the cluster cells and the water around them
+            assert_eq!(m.water.bytes(), w.water.bytes());
+            // 3 boxes of 5 faces on stone, of 6 faces in the water
+            assert_eq!((m.cutout.faces(), w.cutout.faces()), (15 + 18, 0));
+            for v in m.cutout.bytes().chunks(16) {
+                let p = |k: usize| i16::from_le_bytes([v[k], v[k + 1]]);
+                // inside the middle cell, at most 3/16 above its floor
+                assert!((16 + 2..=32 - 2).contains(&p(0)), "{}", p(0));
+                assert!((16 + 2..=32 - 2).contains(&p(4)), "{}", p(4));
+                let floor = if p(2) >= 43 * 16 { 43 * 16 } else { 41 * 16 };
+                assert!((0..=3).contains(&(p(2) - floor)), "{}", p(2));
+            }
+        }
+    }
+
+    #[test]
     fn waterlogged_cells_do_not_depend_on_the_area() {
+        for b in [LOGGED, crate::tables::b::OYSTER] {
+            logged_cells_do_not_depend_on_the_area(b);
+        }
+    }
+
+    fn logged_cells_do_not_depend_on_the_area(b: u8) {
         let f = |x: i32, z: i32, y: usize| match y {
             0..=40 => STONE,
-            41..=43 if (x * 3 + z * 5).rem_euclid(4) == 0 => LOGGED,
+            41..=43 if (x * 3 + z * 5).rem_euclid(4) == 0 => b,
             41..=43 => WATER,
             _ => 0,
         };
