@@ -798,3 +798,14 @@ collision = "full"
 opacity = 255
 opaque_cube = true
 color = "#4f3a22"
+
+# Chest (cooking-stations.md 2): a full opaque cube. The generator never
+# places it; `crate` (28) stays unused by structures.
+[[block]]
+id = 83
+name = "chest"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#9c6b3a"
