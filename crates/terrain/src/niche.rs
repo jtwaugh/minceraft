@@ -1,11 +1,17 @@
 //! Environmental niches for flora (docs/design/swedish-summer-flora.md
 //! sections 3 and 4): the layers an entry's `niche` may name and the
-//! trapezoid response to one layer's value.
+//! trapezoid response to one layer's value. Computed so far: height above
+//! sea (ground y minus `SEA_LEVEL`) and soil depth (dirt and grass blocks
+//! from the ground block down, before anything else).
 
+use crate::data::Block;
+use crate::decorate::World;
 use crate::flora::{
-    NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE,
-    NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT,
+    NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
 };
+use crate::SEA_LEVEL;
+use alloc::vec::Vec;
 
 /// A column layer a `niche` range applies to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,6 +37,51 @@ impl NicheLayer {
         }
     }
 }
+
+/// Value of a column-only layer for the column at `(x, z)` whose ground block
+/// is at `y`; `None` for a layer not computed yet, which leaves the chance as is.
+pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -> Option<f64> {
+    match layer {
+        NicheLayer::HeightAboveSea => Some((y - SEA_LEVEL) as f64),
+        NicheLayer::SoilDepth => {
+            let soil = |y: &i32| {
+                matches!(
+                    Block::from_u8(world.get(x, *y, z)),
+                    Block::Dirt | Block::Grass
+                )
+            };
+            Some((0..=y).rev().take_while(soil).count() as f64)
+        }
+        _ => None,
+    }
+}
+
+/// Product of `f`'s niche responses at the column whose air cell is `top`.
+/// Layer values are cached per column in `cache` as `(layer, top, value)`.
+pub(crate) fn fit(
+    world: &World,
+    f: &Flora,
+    (x, top, z): (i32, i32, i32),
+    cache: &mut Vec<Cached>,
+) -> f64 {
+    f.niche
+        .iter()
+        .map(|&(layer, lo, hi)| {
+            let v = match cache.iter().find(|c| c.0 == layer && c.1 == top) {
+                Some(c) => c.2,
+                None => {
+                    let v = column(world, layer, x, top - 1, z);
+                    cache.push((layer, top, v));
+                    v
+                }
+            };
+            v.map_or(1.0, |v| response(v, lo, hi, layer.margin()))
+        })
+        .product()
+}
+
+/// One cached layer value: the layer, the air cell it was read for, the value.
+pub type Cached = (NicheLayer, i32, Option<f64>);
 
 /// 1 for `value` in `[lo, hi]`, falling linearly to 0 at `margin` outside it.
 pub fn response(value: f64, lo: f64, hi: f64, margin: f64) -> f64 {

@@ -15,7 +15,10 @@
 #   biomes        biome name -> chance per eligible column (0 to 1)
 #   niche         optional layer name -> [lo, hi], lo <= hi; layers: height_above_sea |
 #                 soil_depth | light | slope | sun_facing | hollow. The response is 1
-#                 inside and falls to 0 over niche_margin_<layer> outside. Not used yet.
+#                 inside and falls to 0 over niche_margin_<layer> outside; the product
+#                 multiplies the biome chance. height_above_sea is ground y minus sea
+#                 level; soil_depth counts dirt and grass from the ground block down.
+#                 Other layers are not computed yet and leave the chance as is.
 
 [settings]
 patch_noise_salt = 7001

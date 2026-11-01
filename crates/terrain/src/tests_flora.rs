@@ -2,9 +2,10 @@
 
 use crate::climate::biome_for;
 use crate::data::{Biome, Block};
-use crate::decorate::generate_decorated_with;
-use crate::flora::{Flora, FloraShape, FloraTint, FLORA};
-use crate::{Biases, Generator, Region, HEIGHT};
+use crate::decorate::{generate_decorated_with, World};
+use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
+use crate::niche::NicheLayer;
+use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
 static TEST: [Flora; 2] = [
@@ -1023,4 +1024,116 @@ fn dune_grass_is_on_coastal_sand_in_warm_biomes_and_region_independent() {
         );
     }
     assert!(n > 0, "no dune grass");
+}
+
+/// A Plains and Forest daisy with `niche`, its chance so high that every
+/// column where the niche response is above zero gets one.
+macro_rules! niche_entry {
+    ($niche:expr) => {
+        [Flora {
+            name: "n",
+            block: Block::Daisy,
+            upper: None,
+            shape: FloraShape::Cross,
+            ground: &[Block::Grass],
+            tint: FloraTint::None,
+            cluster_scale: 8.0,
+            salt: 11,
+            requires: None,
+            snow_stays: false,
+            biomes: &[(Biome::Plains, 1e9), (Biome::Forest, 1e9)],
+            niche: $niche,
+        }]
+    };
+}
+
+/// Hand-built Plains columns along x, one per `(ground y, soil depth)`:
+/// stone, then dirt, with grass as the top soil block. Which got a daisy.
+fn niche_placed(cols: &[(i32, i32)], table: &[Flora]) -> Vec<bool> {
+    let w = cols.len();
+    let mut blocks = vec![0u8; w * HEIGHT];
+    let biome = vec![Biome::Plains as u8; w];
+    let mut world = World::for_test(&mut blocks, w as i32, 1).with_biome(&biome);
+    for (x, &(g, soil)) in cols.iter().enumerate() {
+        for y in 0..=g {
+            let b = match y {
+                _ if y == g => Block::Grass,
+                _ if y > g - soil => Block::Dirt,
+                _ => Block::Stone,
+            };
+            world.set(x as i32, y, 0, b as u8);
+        }
+    }
+    place(&mut world, 12345, (0, 0, w as i32, 1), table);
+    let daisy =
+        |(x, &(g, _)): (usize, &(i32, i32))| world.get(x as i32, g + 1, 0) == Block::Daisy as u8;
+    cols.iter().enumerate().map(daisy).collect()
+}
+
+#[test]
+fn niche_places_where_it_holds_and_not_where_it_fails() {
+    let sea = SEA_LEVEL;
+    let height = niche_entry!(&[(NicheLayer::HeightAboveSea, 2.0, 4.0)]);
+    let cols = [
+        (sea + 3, 3),
+        (sea + 2, 3),
+        (sea + 4, 3),
+        (sea + 20, 3),
+        (sea - 4, 3),
+    ];
+    assert_eq!(
+        niche_placed(&cols, &height),
+        [true, true, true, false, false]
+    );
+    let soil = niche_entry!(&[(NicheLayer::SoilDepth, 6.0, 8.0)]);
+    let cols = [(70, 7), (70, 6), (70, 8), (70, 1), (70, 20)];
+    assert_eq!(niche_placed(&cols, &soil), [true, true, true, false, false]);
+    let both = niche_entry!(&[
+        (NicheLayer::HeightAboveSea, 2.0, 4.0),
+        (NicheLayer::SoilDepth, 6.0, 8.0)
+    ]);
+    let cols = [(sea + 3, 7), (sea + 3, 1), (sea + 20, 7)];
+    assert_eq!(niche_placed(&cols, &both), [true, false, false]);
+    assert_eq!(niche_placed(&cols, &niche_entry!(&[])), [true, true, true]);
+}
+
+#[test]
+fn niche_entry_is_independent_of_region() {
+    let seed = 12345;
+    let table = niche_entry!(&[
+        (NicheLayer::HeightAboveSea, 2.0, 8.0),
+        (NicheLayer::SoilDepth, 2.0, 3.0)
+    ]);
+    let big = gen(seed, -64, -64, 192, 192, &table);
+    let all = gen(seed, -64, -64, 192, 192, &niche_entry!(&[]));
+    let n = count(&big, Block::Daisy);
+    assert!(n > 0 && n < count(&all, Block::Daisy), "{n}");
+    for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63), (60, -50, 33, 33)] {
+        let small = gen(seed, ox, oz, w, d, &table);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&small, x, y, z), at(&big, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn entries_without_a_niche_match_entries_whose_niche_always_holds() {
+    static WIDE: [(NicheLayer, f64, f64); 2] = [
+        (NicheLayer::HeightAboveSea, -1000.0, 1000.0),
+        (NicheLayer::SoilDepth, 0.0, 1000.0),
+    ];
+    assert!(FLORA.iter().all(|f| f.niche.is_empty()));
+    let wide: Vec<Flora> = FLORA.iter().map(|f| Flora { niche: &WIDE, ..*f }).collect();
+    for seed in [12345u64, 9] {
+        let a = gen(seed, -50, 30, 120, 90, &FLORA);
+        assert!(
+            a.blocks == gen(seed, -50, 30, 120, 90, &wide).blocks,
+            "seed {seed}"
+        );
+        assert!(a.blocks == crate::generate_decorated(seed, -50, 30, 120, 90).blocks);
+    }
 }
