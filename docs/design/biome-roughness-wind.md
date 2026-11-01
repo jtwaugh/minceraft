@@ -25,7 +25,7 @@ Checked against `master` (5a68a3b).
 ## Reconciliation notes
 
 - **Depends on unbuilt docs.** Phase A needs wind Phase A (the `wind` function, `data/wind.toml`, export). The planner can plan this doc as soon as it is merged, but the factory should not start its tickets before wind Phase A's are closed; suggest the first ticket's `Depends on` points at that plan's last ticket. The debug readout fields need wind Phase B's readout.
-- **Shared cell cache has no owner yet.** Both this doc and `land-sea-breeze.md` want to build it, and #1788 would too. Whichever is planned first builds it as `land-sea-breeze.md` specifies (cell size and sample step as separate keys, a fixed fill window, bounded cache, cold/warm tests). Suggest adding `R` as one more per-cell value on that cache rather than a second cache, and that this doc's ticket fall back to building it only if the breeze has not. See open question 1.
+- **Shared cell cache has no owner yet.** Both this doc and `land-sea-breeze.md` want to build it, and #1788 would too. Whichever of the three is built first builds it as `land-sea-breeze.md` specifies (cell size and sample step as separate keys, a fixed fill window, bounded cache, cold/warm tests); the others add a value per cell. `R` is one more per-cell value on that cache rather than a second cache, and this doc's ticket builds the cache only if the breeze (or shelter) has not. (Decided in #1812.)
 - **Table placement.** Author's option A (`[roughness]` in `data/wind.toml`) is consistent with CLAUDE.md ("data lives in `data/*.toml`") and keeps `crates/terrain` and its build script untouched. The coverage test needs the biome names: use `BIOME_INFO` names from the `terrain` crate (the game crate already depends on it) and compare them with the table's keys. Confirm the exact field name on `BiomeInfo` when writing the test.
 - **Water is not a biome.** The heightmap's biome byte is the climate biome even over sea, so the water value is a twelfth, separate `water` key beside the biome keys in `[roughness]` (not a nested table), which the coverage test must exempt from the "names a real biome" half. Water is decided by `top_y < SEA_LEVEL`, which also covers frozen sea (as in `land-sea-breeze.md`), answering the author's "confirm" item. (Decided in #1813.)
 - **Smoothing window.** As in `land-sea-breeze.md`, a cell value must depend only on the seed and the cell, so the neighbourhood (tens of blocks) reaches into adjacent cells. Fill from a fixed window around the cell centre, never one cut by what is cached. `[manual check]`: "negligible cost" for the fill; measurable form: a cell fill is no slower than the breeze's own fill plus a small constant on the native bench profile, with cold and warm caches asserted equal.
@@ -72,7 +72,7 @@ Wind (`wind.md`) blows just as hard through a rainforest as across a desert or t
   - B. Scale the biome's roughness by its tree count from the generator's tree-count rule (biome term plus tree-density noise, SPEC step 13 and 9.1), evaluated per chunk. Closer to the trees the player sees, but needs a new public `terrain` function returning a chunk's tree count without decorating it.
   - C. Count leaves in decorated regions. Exact, but needs decoration, which is too expensive for wind.
   - **A preferred** for the first phase. B can come later if the forests feel wrong.
-- Want: **the effect.** Speed multiplier `f = 1 − R · drag · g(h)`, clamped to a floor (wind never stops entirely from roughness alone). `h` is the height above the local ground and `g` eases from 1 at the ground to 0 at a blending height. `drag`, the floor and the blending height (around canopy height, e.g. 8–20 blocks) go in data. Gusts are damped a little less than the mean wind, so a forest still has the odd gust through it. That ratio goes in data too.
+- Want: **the effect.** Speed multiplier `f = 1 − R · drag · g(h)`, clamped to a floor (wind never stops entirely from roughness alone). `h` is the height above the local ground and `g` eases from 1 at the ground to 0 at a blending height. `drag`, the floor and the blending height (around canopy height, e.g. 8–20 blocks) go in data. Gusts are damped a little less than the mean wind, so a forest still has the odd gust through it. That ratio goes in data too. `g(h)` is a smoothstep, continuous in value and slope at both ends. (Decided in #1815.)
   - **Height input:** if #1788's `y` input is accepted, `h = y − ground`. Otherwise, assume a fixed near-ground height (full effect), which is what the player standing on the ground sees anyway.
 - Want: **order of the layers.** After fronts, breeze and terrain shelter and before the speed floor and ceiling. Roughness only changes speed, never direction.
 - Want: **client.** Nothing new: the effect arrives through the wind sample and uniforms. If wind option B (the per-cell texture proposed in #1788) lands, roughness shows across the view, so a forest in the distance sways less than the meadow next to it. Until then, it applies to the player's own spot.
@@ -114,9 +114,9 @@ The author's phases in section 3 are used as written; the header lists only Phas
    - A. Whichever of the breeze, shelter or this doc is planned first builds it as `land-sea-breeze.md` specifies; the others add a value per cell.
    - B. Plan the breeze's Phase A first and make this doc's ticket depend on it.
    - C. This doc builds a roughness-only cache now and merges it with the breeze's later. Duplicates work; not suggested.
+2. **Where does the water value live in the table?**
+   - A. A separate `water` key beside the biome keys, exempt from the "names a real biome" test.
+   - B. A nested `[roughness.biome]` table and a top-level `water` value.
 3. **Which gust damping ratio?**
    - A. A single ratio in data applied to `R · drag` for gusts (for example 0.6 of the mean's drag), tuned by the maintainer.
    - B. Gusts undamped (ratio 0) in Phase A, and add damping if forests feel dead.
-4. **Does `g(h)` use a smoothstep or a linear ramp?**
-   - A. Smoothstep, continuous in value and slope at both ends.
-   - B. Linear, simpler, with a visible kink at the blending height.
