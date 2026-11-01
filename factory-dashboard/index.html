@@ -82,10 +82,18 @@ section.reports .title { font-weight: 500; flex: none !important; white-space: n
 @media (max-width: 600px) { section.reports .row { flex-wrap: wrap; } }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: .5; cursor: default; }
-.banner { border-radius: 10px; padding: 10px 14px; border: 1px solid var(--line); }
-.banner.bad { background: var(--badbg); border-color: var(--bad); }
-.banner.warn { background: var(--warnbg); border-color: var(--warn); }
-.banner b { display: block; margin-bottom: 2px; }
+/* Alerts: a single line until opened. The colour is a left edge, not a filled block. */
+.alert { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 8px; }
+.alert.bad { border-left-color: var(--bad); }
+.alert.warn { border-left-color: var(--warn); }
+.alert > summary { padding: 8px 14px; color: var(--ink); display: flex; gap: 10px; align-items: baseline; list-style: none; }
+.alert > summary::before { content: "▸"; color: var(--muted); font-size: 11px; transition: transform .15s; }
+.alert > summary::-webkit-details-marker { display: none; }
+.alert[open] > summary::before { transform: rotate(90deg); }
+.alert.bad > summary b { color: var(--bad); } .alert.warn > summary b { color: var(--warn); }
+.alert > summary .meta { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.alert-body { padding: 2px 14px 12px 33px; display: grid; gap: 6px; }
+main > .alert + .alert { margin-top: -10px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); }
 .stat { background: var(--panel); padding: 10px 14px; }
 .stat .k { color: var(--muted); font-size: 12px; }
@@ -187,16 +195,19 @@ function confirmAct(a) {
   d.onclose = async () => {
     if (d.returnValue !== "ok") return;
     const steps = [];
+    if (a.op) steps.push(a.op);
     if (a.action === "comment") steps.push({action: "comment", number: a.number, body: body.value});
     if (a.action === "close") steps.push({action: "close", number: a.number, reason: a.reason, comment: a.body !== undefined ? body.value : ""});
     if (a.action === "label") steps.push({action: "label", number: a.number, label: a.label});
     if (a.alsoClose && document.getElementById("dlgclose").checked)
       steps.push({action: "close", number: a.alsoClose, reason: "completed", comment: a.closeNote || ""});
+    let last = "";
     for (const s of steps) {
       const r = await post("/api/act", s);
-      if (!r.ok) { toast(`Failed on #${s.number}: ${r.message}`); return; }
+      if (!r.ok) { toast(s.number ? `Failed on #${s.number}: ${r.message}` : `Failed: ${r.message}`); return; }
+      last = r.message;
     }
-    toast(`Done. Shown here now; GitHub confirms it on the next read.`);
+    toast(a.op ? (last || "Done.") : `Done. Shown here now; GitHub confirms it on the next read.`);
     poll();
   };
 }
@@ -258,7 +269,8 @@ function render(p) {
   const d = p.data, main = document.getElementById("main");
   const pill = document.getElementById("tickpill"), meta = document.getElementById("meta");
   const parts = [];
-  if (p.error) parts.push(`<div class="banner bad"><b>Couldn't refresh</b>${esc(p.error)}${d ? " Showing the last good read." : ""}</div>`);
+  if (p.error) parts.push(`<details class="alert bad"><summary><b>Couldn't refresh</b><span class="meta">${d ? "showing the last good read" : ""}</span></summary>
+    <div class="alert-body"><div class="err">${esc(p.error)}</div></div></details>`);
   if (!d) {
     pill.className = "pill"; pill.textContent = p.busy ? "reading" : "no data";
     main.innerHTML = parts.join("") || `<div class="empty">Reading GitHub…</div>`;
@@ -272,24 +284,57 @@ function render(p) {
   meta.textContent = `${d.repo} · read ${ago(d.generated_at)}${p.busy ? " · reading now…" : ""} · ` +
     `${d.requests} reads, ${d.not_modified} free` + (p.pending ? ` · ${p.pending} change(s) not yet confirmed` : "") + (d.rate ? ` · API ${d.rate.remaining}/${d.rate.limit} left` : "");
 
-  // Banners: the things worth a look first.
-  if (h.workflow_state && h.workflow_state !== "active")
-    parts.push(`<div class="banner bad"><b>The factory tick is ${esc(h.workflow_state)}</b>Nothing ticks until it's enabled again.</div>`);
-  if (h.failing && h.first_failure)
-    parts.push(`<div class="banner bad"><b>Tick broken since ${esc(clock(h.first_failure.at))} (${h.failing} failed in a row)</b>
-      <a href="${esc(h.first_failure.url)}" target="_blank" rel="noopener">first failed run</a>
-      <div class="err">${(h.first_failure.why || []).map(esc).join("<br>")}</div></div>`);
-  else if (stale)
-    parts.push(`<div class="banner bad"><b>No tick for ${esc(ago(h.latest.at).replace(" ago", ""))}</b>Scheduled runs may have been dropped.</div>`);
+  const when = iso => iso ? `<span class="when" title="${esc(clock(iso))}">${esc(ago(iso))}</span>` : "";
+  // Alerts: one line each, open for the detail and what to do about it.
+  const alert = (cls, head, meta, body, actions = []) => `<details class="alert ${cls}"><summary><b>${head}</b>` +
+    `${meta ? `<span class="meta">${meta}</span>` : ""}</summary><div class="alert-body">${body}` +
+    `${actions.filter(Boolean).length ? `<div class="actions">${actions.join("")}</div>` : ""}</div></details>`;
+  const investigate = topic => btn("Investigate locally", {op: {action: "investigate", topic},
+    title: "Investigate in a local Claude", ok: "Open Terminal",
+    text: "Opens Terminal in your minceraft checkout and starts Claude with what this alert knows. " +
+      "It's told to investigate only, and never to run a live tick."}, "primary");
+  const tickNow = btn("Run the tick now", {op: {action: "tick-run"}, title: "Run the factory tick now", ok: "Run it",
+    text: "Dispatches factory-tick.yml, live, as you."});
+  const runId = u => +(/\/runs\/(\d+)/.exec(u || "") || [])[1] || 0;
   const runs = d.agent_runs || [];
+
+  if (h.workflow_state && h.workflow_state !== "active")
+    parts.push(alert("bad", "Tick disabled", esc(h.workflow_state), "Nothing ticks until it's enabled again.", [
+      btn("Enable the tick", {op: {action: "tick-enable"}, title: "Enable factory-tick.yml", ok: "Enable",
+        text: "Turns the scheduled tick back on."}, "primary"), investigate("tick")]));
+  if (h.failing && h.first_failure) {
+    const f = h.first_failure, rid = (h.latest && h.latest.id) || runId(h.latest && h.latest.url);
+    parts.push(alert("bad", "Tick failing", `since ${esc(clock(f.at))} · ${h.failing} in a row`,
+      `<div class="err">${(f.why || []).map(esc).join("<br>") || "No error captured."}</div>
+       <div class="why"><a href="${esc(f.url)}" target="_blank" rel="noopener">First failed run</a>${h.latest && h.latest.url !== f.url ?
+         ` · <a href="${esc(h.latest.url)}" target="_blank" rel="noopener">latest</a>` : ""}</div>`,
+      [investigate("tick"), rid ? btn("Re-run the latest", {op: {action: "rerun", runs: [rid]}, title: "Re-run the failed tick",
+        ok: "Re-run", text: "Re-runs the failed jobs of the latest tick, live, as you. Worth it for a flake; a real fault fails again."}) : "", tickNow]));
+  } else if (stale)
+    parts.push(alert("bad", "Tick stale", `none for ${esc(ago(h.latest.at).replace(" ago", ""))}`,
+      "Scheduled runs may have been dropped.", [tickNow, investigate("tick")]));
+
   const lost = runs.filter(r => /lost communication/i.test(r.error || ""));
-  if (lost.length >= 2)
-    parts.push(`<div class="banner warn"><b>Self-hosted runner keeps dropping (${lost.length} of the recent agent runs)</b>
-      ${esc([...new Set(lost.map(r => r.runner).filter(Boolean))].join(", ") || "runner")} lost contact mid-run. Those tickets will keep failing until it's back,
-      or <code>FACTORY_RUNNER</code> points at <code>ubuntu-latest</code>.</div>`);
+  if (lost.length >= 2) {
+    const names = [...new Set(lost.map(r => r.runner).filter(Boolean))].join(", ") || "self-hosted runner";
+    // FACTORY_RUNNER holds JSON: "warm" or ["self-hosted", "x"]. Show it without the quoting.
+    const label = v => { try { const j = JSON.parse(v); return Array.isArray(j) ? j.join(", ") : String(j); } catch (e) { return v; } };
+    const cur = (d.runner || {}).value && label(d.runner.value), prev = p.prev_runner && label(p.prev_runner);
+    parts.push(alert("warn", "Runner dropping", `${lost.length} of the last ${runs.length} agent runs · ${esc(names)}`,
+      `${lost.map(r => `<div class="row"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>${when(r.at)}</div>`).join("")}
+       <div class="why">Agents run on ${cur ? `<code>${esc(cur)}</code>` : "GitHub-hosted <code>ubuntu-latest</code>"}.</div>`,
+      [investigate("runner"),
+       btn(`Re-run ${lost.length} dropped`, {op: {action: "rerun", runs: lost.map(r => r.id)}, title: "Re-run the dropped runs", ok: "Re-run",
+         text: `Re-runs the failed jobs of ${lost.length} run(s), live, as you. They go wherever FACTORY_RUNNER points now.`}),
+       cur ? btn("Use GitHub-hosted runners", {op: {action: "runner", to: "hosted"}, title: "Switch agents to ubuntu-latest", ok: "Switch",
+         text: `Deletes the FACTORY_RUNNER variable (now ${cur}), so agent runs go to ubuntu-latest. This page offers to switch back until it restarts.`}) : "",
+       !cur && prev ? btn(`Switch back to ${prev}`, {op: {action: "runner", to: "back"}, title: `Point agents at ${prev} again`, ok: "Switch back",
+         text: `Sets FACTORY_RUNNER back to ${prev}.`}) : ""]));
+  }
   if (d.next_tick && d.next_tick.crashed.length)
-    parts.push(`<div class="banner bad"><b>A tick pass crashes in the dry run</b>${d.next_tick.crashed.map(c => `${esc(c.pass)}: <span class="err">${esc(c.error)}</span>`).join("<br>")}</div>`);
-  for (const e of d.errors || []) parts.push(`<div class="banner warn"><b>Part of the page couldn't be read</b><span class="err">${esc(e)}</span></div>`);
+    parts.push(alert("bad", "Tick pass crashes", `${d.next_tick.crashed.length} in the dry run`,
+      d.next_tick.crashed.map(c => `<div>${esc(c.pass)}: <span class="err">${esc(c.error)}</span></div>`).join(""), [investigate("tick")]));
+  for (const e of d.errors || []) parts.push(alert("warn", "Partial read", "part of the page couldn't be read", `<div class="err">${esc(e)}</div>`));
 
   // Overview numbers.
   // The tick's own tracker issues (e.g. "Factory: stalled work") sit in the needs-you list,
@@ -315,7 +360,6 @@ function render(p) {
   const card = (title, items, none) => items.length
     ? `<section><h2>${title} <span class="count">${items.length}</span></h2>${items.join("")}</section>`
     : `<section class="none"><h2>${title} <span class="count">0</span><span class="hint">${esc(none)}</span></h2></section>`;
-  const when = iso => iso ? `<span class="when" title="${esc(clock(iso))}">${esc(ago(iso))}</span>` : "";
   const left = [], right = [];
 
   // The second line of a waiting item: a pill for what kind of ask it is, then the detail.

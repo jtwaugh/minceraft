@@ -63,7 +63,7 @@ def main():
 
         def brief(t):
             return t and {"conclusion": t["conclusion"], "at": t["created_at"],
-                          "url": t["html_url"], "event": t["event"]}
+                          "url": t["html_url"], "event": t["event"], "id": t["id"]}
         ok = next((t for t in ticks if t["conclusion"] == "success"), None)
         failing = ticks[:ticks.index(ok)] if ok else ticks
         first = failing[-1] if failing else None
@@ -206,6 +206,12 @@ def main():
         rows.sort(key=lambda x: x["at"], reverse=True)
         return rows[:25]
     section("agent_runs", agent_runs)
+
+    # -- where agent jobs run: vars.FACTORY_RUNNER, unset means GitHub-hosted ubuntu-latest
+    try:
+        out["runner"] = {"value": r("actions/variables/FACTORY_RUNNER").get("value")}
+    except Exception:  # unset: a 404
+        out["runner"] = {"value": None}
 
     out["requests"], out["not_modified"] = gh_cache.stats["requests"], gh_cache.stats["not_modified"]
 
