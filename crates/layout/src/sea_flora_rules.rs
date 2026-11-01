@@ -1,21 +1,18 @@
-//! Parsing and validation of `data/sea_flora.toml`, run by `build.rs`, which
-//! includes this file by path, so keep it free of crate-internal dependencies
-//! beyond `rule_check`. `SeaFloraColumn` is named as in the crate so its
-//! `Debug` output is a literal there. Until `SeaFlora::from_toml` is switched
-//! over, the parser in `sea_flora.rs` must give the same errors.
+//! Parsing and validation of `data/sea_flora.toml`, shared by `build.rs`
+//! (which bakes the shipped table into the crate) and `SeaFlora::from_toml`
+//! (feature `toml-io`). `build.rs` includes this file by path, so keep it
+//! free of crate-internal dependencies beyond `rule_check`.
 
 use serde::Deserialize;
 
 use crate::rule_check::check_range;
 
-/// A column's height range in cells, inclusive, and the fewest water cells
-/// left above its top cell.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SeaFloraColumn {
-    pub height_min: u32,
-    pub height_max: u32,
-    pub surface_gap_min: u32,
+struct RawColumn {
+    height_min: u32,
+    height_max: u32,
+    surface_gap_min: u32,
 }
 
 #[derive(Deserialize)]
@@ -29,7 +26,7 @@ struct RawEntry {
     depth_min: u32,
     depth_max: u32,
     shore_distance_max: Option<u32>,
-    column: Option<SeaFloraColumn>,
+    column: Option<RawColumn>,
     cluster_scale: f64,
     salt: u32,
     chance: f64,
@@ -41,12 +38,13 @@ struct RawFile {
     sea_flora: Vec<RawEntry>,
 }
 
-/// One entry with names resolved: `column` is set for a `column` shape,
-/// habitats are rule indices.
+/// One entry with names resolved: block ids, and habitats as rule indices.
+/// `column` is `[height_min, height_max, surface_gap_min]` for a column
+/// shape, `None` for a cluster.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SeaFloraRule {
+pub struct FloraRule {
     pub name: String,
-    pub column: Option<SeaFloraColumn>,
+    pub column: Option<[u32; 3]>,
     pub blocks: Vec<u8>,
     pub habitats: Vec<usize>,
     pub bottom: Vec<u8>,
@@ -73,14 +71,14 @@ fn resolve<T>(
 }
 
 /// Parse and validate the sea flora file. `block_id` maps a block name to its
-/// id and `habitat_index` a habitat id to its position in the rule list.
+/// id; `habitat_index` maps a habitat id to its position in the rule list.
 pub fn parse_sea_flora(
     text: &str,
     block_id: &dyn Fn(&str) -> Option<u8>,
     habitat_index: &dyn Fn(&str) -> Option<usize>,
-) -> Result<Vec<SeaFloraRule>, String> {
+) -> Result<Vec<FloraRule>, String> {
     let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
-    let mut out: Vec<SeaFloraRule> = Vec::new();
+    let mut out: Vec<FloraRule> = Vec::new();
     for r in raw.sea_flora {
         let what = format!("sea flora '{}'", r.name);
         if let Some(p) = out.iter().find(|p| p.name == r.name || p.salt == r.salt) {
@@ -90,7 +88,7 @@ pub fn parse_sea_flora(
         let (column, n_blocks) = match (r.shape.as_str(), r.column) {
             ("column", Some(c)) => {
                 check_range(&what, "height", Some(c.height_min), Some(c.height_max))?;
-                (Some(c), 2)
+                (Some([c.height_min, c.height_max, c.surface_gap_min]), 2)
             }
             ("cluster", None) => (None, 1),
             (s, _) => return Err(format!("{what}: shape '{s}' and column table disagree")),
@@ -105,12 +103,12 @@ pub fn parse_sea_flora(
         if !(0.0..=1.0).contains(&r.chance) {
             return Err(format!("{what}: chance must be in 0 to 1"));
         }
-        out.push(SeaFloraRule {
+        out.push(FloraRule {
+            habitats: resolve(&what, "habitat", &r.habitats, habitat_index)?,
+            bottom: resolve(&what, "bottom block", &r.bottom, block_id)?,
             name: r.name,
             column,
             blocks,
-            habitats: resolve(&what, "habitat", &r.habitats, habitat_index)?,
-            bottom: resolve(&what, "bottom block", &r.bottom, block_id)?,
             depth_min: r.depth_min,
             depth_max: r.depth_max,
             shore_distance_max: r.shore_distance_max,

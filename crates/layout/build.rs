@@ -123,7 +123,7 @@ fn main() {
         println!("cargo:rerun-if-changed={f}");
     }
     let fish_path = root.join("fish.toml");
-    let sea_flora_path = root.join("sea_flora.toml");
+    let flora_path = root.join("sea_flora.toml");
     let validation_path = root.join("validation.toml");
     let route_path = root.join("route.toml");
     let scoring_path = root.join("scoring.toml");
@@ -136,7 +136,7 @@ fn main() {
     let villages_dir = root.join("structures/villages");
     for p in [
         &fish_path,
-        &sea_flora_path,
+        &flora_path,
         &validation_path,
         &route_path,
         &scoring_path,
@@ -215,22 +215,33 @@ fn main() {
     out.push_str("];\n");
     std::fs::write(out_dir.join("fish.rs"), out).unwrap();
 
-    // Sea flora: block names resolve like structures', habitats like fish's.
-    let flora = sea_flora_rules::parse_sea_flora(&read(&sea_flora_path), &block_id, &|n| {
+    // Sea flora: blocks resolve to ids, habitats to positions in the rule list.
+    let flora = sea_flora_rules::parse_sea_flora(&read(&flora_path), &block_id, &|n| {
         rules.iter().position(|r| r.id == n)
     })
-    .unwrap_or_else(|e| panic!("{}: {e}", sea_flora_path.display()));
-    let mut out = String::from("pub(crate) static SHIPPED_SEA_FLORA: &[StaticSeaFlora] = &[\n");
+    .unwrap_or_else(|e| panic!("{}: {e}", flora_path.display()));
+    let mut out = String::from("fn shipped_entries() -> Vec<SeaFloraEntry> {\n    vec![\n");
     for f in &flora {
+        let shape = match f.column {
+            Some([height_min, height_max, surface_gap_min]) => format!(
+                "SeaFloraShape::Column(SeaFloraColumn {{ height_min: {height_min}, \
+                 height_max: {height_max}, surface_gap_min: {surface_gap_min} }})"
+            ),
+            None => "SeaFloraShape::Cluster".into(),
+        };
+        let habitats: Vec<String> = f
+            .habitats
+            .iter()
+            .map(|h| format!("HabitatId({h})"))
+            .collect();
         writeln!(
             out,
-            "    StaticSeaFlora {{ name: {:?}, column: {:?}, blocks: &{:?}, habitats: &{:?}, \
-             bottom: &{:?}, depth_min: {}, depth_max: {}, shore_distance_max: {}, \
-             cluster_scale: {:?}, salt: {}, chance: {:?} }},",
+            "        SeaFloraEntry {{ name: {:?}.to_string(), shape: {shape}, blocks: vec!{:?}, \
+             habitats: vec![{}], bottom: vec!{:?}, depth_min: {}, depth_max: {}, \
+             shore_distance_max: {}, cluster_scale: {:?}, salt: {}, chance: {:?} }},",
             f.name,
-            f.column,
             f.blocks,
-            f.habitats,
+            habitats.join(", "),
             f.bottom,
             f.depth_min,
             f.depth_max,
@@ -241,7 +252,7 @@ fn main() {
         )
         .unwrap();
     }
-    out.push_str("];\n");
+    out.push_str("    ]\n}\n");
     std::fs::write(out_dir.join("sea_flora.rs"), out).unwrap();
 
     // Validation thresholds.

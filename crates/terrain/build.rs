@@ -148,6 +148,17 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     assert!(len > 0.0, "flora.toml: sun_x, sun_z must not both be 0");
     let (sx, sz) = (sx / len, sz / len);
     writeln!(out, "pub const FLORA_SUN: (f64, f64) = ({sx:?}, {sz:?});").unwrap();
+    let (wx, wz) = (
+        num(&doc["settings"]["wind_x"]),
+        num(&doc["settings"]["wind_z"]),
+    );
+    let len = (wx * wx + wz * wz).sqrt();
+    assert!(len > 0.0, "flora.toml: wind_x, wind_z must not both be 0");
+    let (wx, wz) = (wx / len, wz / len);
+    writeln!(out, "pub const FLORA_WIND: (f64, f64) = ({wx:?}, {wz:?});").unwrap();
+    let cap = int(&doc["settings"], "exposure_cap");
+    assert!(cap > 0, "flora.toml: exposure_cap must be positive");
+    writeln!(out, "pub const FLORA_EXPOSURE_CAP: i32 = {cap};").unwrap();
     let flat = num(&doc["settings"]["sun_facing_flat"]);
     writeln!(out, "pub const FLORA_SUN_FACING_FLAT: f64 = {flat:?};").unwrap();
     let radius = int(&doc["settings"], "light_radius");
@@ -155,6 +166,15 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     let radius = int(&doc["settings"], "edge_radius");
     assert!(radius > 0, "flora.toml: edge_radius must be positive");
     writeln!(out, "pub const FLORA_EDGE_RADIUS: i32 = {radius};").unwrap();
+    let radius = int(&doc["settings"], "tree_kind_radius");
+    assert!(radius > 0, "flora.toml: tree_kind_radius must be positive");
+    writeln!(out, "pub const FLORA_TREE_KIND_RADIUS: i32 = {radius};").unwrap();
+    let none = num(&doc["settings"]["conifer_none"]);
+    assert!(
+        (0.0..=1.0).contains(&none),
+        "flora.toml: conifer_none must be in 0..=1"
+    );
+    writeln!(out, "pub const FLORA_CONIFER_NONE: f64 = {none:?};").unwrap();
     let radii: Vec<i64> = doc["settings"]["hollow_radii"]
         .as_array()
         .expect("hollow_radii array")

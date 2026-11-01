@@ -7,24 +7,6 @@ use serde::Deserialize;
 use crate::habitat::{HabitatId, Habitats};
 use crate::rule_check::check_range;
 
-/// An entry as emitted by `build.rs`; habitats are rule indices and `column`
-/// is set for a `column` shape.
-pub(crate) struct StaticSeaFlora {
-    pub name: &'static str,
-    pub column: Option<SeaFloraColumn>,
-    pub blocks: &'static [u8],
-    pub habitats: &'static [usize],
-    pub bottom: &'static [u8],
-    pub depth_min: u32,
-    pub depth_max: u32,
-    pub shore_distance_max: Option<u32>,
-    pub cluster_scale: f64,
-    pub salt: u32,
-    pub chance: f64,
-}
-
-include!(concat!(env!("OUT_DIR"), "/sea_flora.rs"));
-
 /// A column's height range in cells, inclusive, and the fewest water cells
 /// left above its top cell (0: the top may touch the surface).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
@@ -78,27 +60,10 @@ impl SeaFlora {
         Ok(SeaFlora { entries })
     }
 
-    /// The shipped `data/sea_flora.toml`, baked in at build time.
+    /// The shipped `data/sea_flora.toml`.
     pub fn shipped() -> Self {
-        let entries = SHIPPED_SEA_FLORA
-            .iter()
-            .map(|r| SeaFloraEntry {
-                name: r.name.to_string(),
-                shape: r
-                    .column
-                    .map_or(SeaFloraShape::Cluster, SeaFloraShape::Column),
-                blocks: r.blocks.to_vec(),
-                habitats: r.habitats.iter().copied().map(HabitatId).collect(),
-                bottom: r.bottom.to_vec(),
-                depth_min: r.depth_min,
-                depth_max: r.depth_max,
-                shore_distance_max: r.shore_distance_max,
-                cluster_scale: r.cluster_scale,
-                salt: r.salt,
-                chance: r.chance,
-            })
-            .collect();
-        SeaFlora { entries }
+        let text = include_str!("../../../data/sea_flora.toml");
+        Self::from_toml(text, &Habitats::shipped()).expect("data/sea_flora.toml")
     }
 
     pub fn get(&self, name: &str) -> Option<&SeaFloraEntry> {

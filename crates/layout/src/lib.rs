@@ -420,8 +420,6 @@ mod scoring_island_tests;
 #[cfg(test)]
 mod scoring_tests;
 #[cfg(all(test, feature = "toml-io"))]
-mod sea_flora_baked_tests;
-#[cfg(all(test, feature = "toml-io"))]
 mod sea_flora_pass_tests;
 #[cfg(all(test, feature = "toml-io"))]
 mod sea_flora_tests;
@@ -439,3 +437,5 @@ mod tests;
 mod validation_decorated_tests;
 #[cfg(test)]
 mod validation_tests;
+#[cfg(test)]
+mod village_templates_tests;
