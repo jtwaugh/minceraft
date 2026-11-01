@@ -1,0 +1,15 @@
+# Wind from drifting fronts and gusts (docs/design/wind.md Phase A), read by
+# crates/game/src/wind_config.rs. Numbers are this game's own; Beta has no
+# wind. Every key is required and must be finite. Sizes and time scales must
+# be above zero, the other numbers zero or above, and speed_floor <=
+# speed_ceiling. Distances are in blocks, times in seconds.
+
+front_size = 1500         # feature size of the pressure field P
+front_drift = [4.0, 1.5]  # (u, v) P drifts at, blocks per second; a front takes ~6 min to pass
+speed_scale = 6.0         # blocks per second per unit gradient of P (P sampled at x / front_size)
+gust_size = 48            # feature size of the gust noise
+gust_time_scale = 3.0     # seconds for the gust noise to change by one feature
+gust_strength = 0.5       # g in speed * (1 + g * gust), clamped at zero
+direction_wobble = 0.2    # largest sideways push from gusts, as a fraction of the speed
+speed_floor = 0.0         # wind speed is clamped to [speed_floor, speed_ceiling] ...
+speed_ceiling = 12.0      # ... in blocks per second
