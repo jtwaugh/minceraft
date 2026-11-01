@@ -61,6 +61,10 @@ section.none > h2 .count { color: var(--muted); }
 .num { font-variant-numeric: tabular-nums; color: var(--muted); }
 .title { font-weight: 550; overflow-wrap: anywhere; }
 .why { color: var(--muted); overflow-wrap: anywhere; }
+.question { white-space: pre-line; overflow-wrap: anywhere; }
+.options { margin: 0; padding-left: 18px; display: grid; gap: 3px; overflow-wrap: anywhere; }
+.question code, .options code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--chip);
+  padding: 0 3px; border-radius: 4px; }
 .err { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--bad); overflow-wrap: anywhere; }
 .pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600;
   background: var(--chip); white-space: nowrap; }
@@ -151,6 +155,8 @@ const GH = `https://github.com/${CFG.repo || "jtwaugh/minceraft"}`;
 let last = null;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Just enough Markdown for question text: inline code and bold, on already-escaped text.
+const md = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
 const ago = iso => {
   if (!iso) return "";
   const m = Math.round((Date.now() - new Date(iso)) / 60000);
@@ -383,6 +389,9 @@ function render(p) {
       <div class="row"><span class="num">${i.kind === "pr" ? pr(i.number) : issue(i.number)}</span>
         <span class="title">${esc(i.title || "(untitled)")}</span>${when(i.created_at)}</div>
       <div class="row">${i.blocks ? `<span class="pill warn">blocks ${i.blocks}</span>` : ""}${nyLead(i)}</div>
+      ${i.question ? `<div class="question">${md(i.question)}</div>` : ""}
+      ${i.options && i.options.length ? `<ul class="options">${i.options.map(([l, t]) =>
+        `<li><b>${esc(l)}.</b> ${md(t)}</li>`).join("")}</ul>` : ""}
       <div class="actions">${needsYouActions(i)}</div>
     </div>`), "Nothing waits on you."));
   if (reports.length)
