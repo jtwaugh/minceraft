@@ -92,8 +92,11 @@ The whole village stands on stilts at one floor height (rule 5), so the boardwal
 | Dock | One per village, from the plaza out over the water towards the anchorage | 1 | nothing further |
 | Boardwalk | Streets: straight, corner, tee, crossing, and a stepped run where the ground drops | 2 to 4 | boardwalks, buildings, decor, caps |
 | Building | Leaves: homes, workplaces, food | usually 1, up to 3 (a back deck) | decor, villager spawns |
+| Landing | A small secondary plaza among the buildings; not a root, and may continue the network | 2 to 4 | boardwalks, buildings, decor, villager spawns |
 | Cap | Closes a dead-end boardwalk: steps down to the ground, or a small landing over the water | 1 | nothing |
 | Decor | Lantern post, net rack, barrel stack | 1 | nothing |
+
+A landing is its own piece kind, `landing`: a boardwalk-like node with its own decor and spawns, separate from the one plaza and from the building leaves. (Decided in #1784.)
 
 ### 2.2 Templates and connectors
 
