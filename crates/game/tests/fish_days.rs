@@ -1,6 +1,6 @@
 //! Fish over several in-game days with the raft at anchor: the Phase B "done
 //! when" of docs/design/fish-and-fishing.md (sections 3.1 and 3.2), on real
-//! streamed terrain. The stock reset each morning is a separate ticket.
+//! streamed terrain.
 
 use game::collision::{Aabb, CollisionWorld};
 use game::fish_entities::FishEntity;
@@ -89,6 +89,8 @@ fn run() -> Vec<Vec<(EntityId, [f64; 3])>> {
     let mut trace = Vec::new();
     for tick in 0..TICKS {
         let stock = fw.stock();
+        let day_start = tick % 4800 == 0;
+        let day_stock = if day_start { config.daily_stock } else { stock };
         fw.tick(tick, anchor, &player, &world, |x, z| {
             streamer.fish_column(x, z)
         });
@@ -99,7 +101,7 @@ fn run() -> Vec<Vec<(EntityId, [f64; 3])>> {
             .collect();
         if !new.is_empty() {
             assert!(fw.is_phase_change(tick), "fish spawned at tick {tick}");
-            assert!(new.len() as u32 <= stock, "tick {tick}: over the stock");
+            assert!(new.len() as u32 <= day_stock, "tick {tick}: over the stock");
             spawn_ticks.push(tick);
         }
         for f in &new {
@@ -118,7 +120,11 @@ fn run() -> Vec<Vec<(EntityId, [f64; 3])>> {
             .filter(|f| (f.pos[0] - anchor[0]).hypot(f.pos[2] - anchor[1]) <= config.target_radius)
             .count() as u32;
         assert!(near <= config.target_count, "tick {tick}: {near} fish");
-        assert!(fw.store().len() as u32 + fw.stock() <= config.daily_stock);
+        if day_start {
+            assert_eq!(fw.stock() + new.len() as u32, config.daily_stock, "{tick}");
+        } else {
+            assert!(fw.stock() <= config.daily_stock);
+        }
         for f in fw.store().iter() {
             assert!(in_water(&world, f), "tick {tick}: {f:?} out of water");
         }
