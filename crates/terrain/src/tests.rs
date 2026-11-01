@@ -393,6 +393,7 @@ fn game_blocks_have_dense_ids_and_are_never_generated() {
         (Block::Net, 73, Collision::None, false),
         (Block::Counter, 74, Collision::Full, true),
         (Block::PlateRack, 75, Collision::Full, true),
+        (Block::Chest, 83, Collision::Full, true),
     ];
     for (b, id, collision, opaque) in game {
         assert_eq!(b as u8, id);
@@ -637,8 +638,8 @@ fn existing_block_ids_are_unchanged() {
         assert_eq!(block_id(name), Some(id), "{name}");
     }
     let mut names: Vec<_> = BLOCK_INFO.iter().map(|b| b.name).collect();
-    assert_eq!(names.len(), 83);
+    assert_eq!(names.len(), 84);
     names.sort();
     names.dedup();
-    assert_eq!(names.len(), 83);
+    assert_eq!(names.len(), 84);
 }

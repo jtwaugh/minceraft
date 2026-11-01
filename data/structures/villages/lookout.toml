@@ -1,0 +1,25 @@
+# A lookout tower (docs/design/villages-and-villagers.md 2.3).
+kind = "building"
+size = [3, 6, 3]      # x, y, z
+origin_offset = [-1, 0, 0]
+palette = { P = "dock_planks", L = "dock_post", H = "thatch", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPP", "PPP", "PPP"],
+  # y = 1 (posts at the corners)
+  ["L.L", "...", "L.L"],
+  # y = 2
+  ["L.L", "...", "L.L"],
+  # y = 3
+  ["L.L", "...", "L.L"],
+  # y = 4 (upper deck)
+  ["PPP", "PPP", "PPP"],
+  # y = 5 (roof)
+  ["HHH", "HHH", "HHH"],
+]
+connectors = [
+  { cell = [1, 1, 2], facing = "+z", pool = "decor" },
+]
+spawns = [
+  { cell = [1, 1, 1], kind = "villager" },
+]
