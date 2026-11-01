@@ -45,7 +45,7 @@ class Test(unittest.TestCase):
         s.branches += ["docs/a-sync", "docs/b-sync"]
         want = body(s)
         self.assertIn("## ", want)
-        self.assertIn("`orphan-ticket:issue#452`", want)
+        self.assertIn("`orphan-ticket:issue#521`", want)
         rng = random.Random(1)
         for _ in range(5):
             for f in (s.issues, s.plans, s.docs, s.branches, s.prs):
