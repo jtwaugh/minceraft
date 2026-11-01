@@ -7,15 +7,17 @@
 //! slope and sun-facing (from the surface height of the four neighbours),
 //! hollow (surface height minus the mean of rings around the column) and
 //! forest edge (distance from an open column to the nearest leaf column) and
-//! exposure (open water upwind of the column).
+//! exposure (open water upwind of the column) and conifer (share of spruce
+//! among the leaf columns near the column).
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS,
-    FLORA_SUN, FLORA_SUN_FACING_FLAT, FLORA_WIND, NICHE_MARGIN_EDGE, NICHE_MARGIN_EXPOSURE,
-    NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE,
-    NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
+    FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT, FLORA_TREE_KIND_RADIUS, FLORA_WIND,
+    NICHE_MARGIN_CONIFER, NICHE_MARGIN_EDGE, NICHE_MARGIN_EXPOSURE, NICHE_MARGIN_HEIGHT_ABOVE_SEA,
+    NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH,
+    NICHE_MARGIN_SUN_FACING,
 };
 use crate::trees::libm_sqrt;
 use crate::{HEIGHT, SEA_LEVEL};
@@ -32,6 +34,7 @@ pub enum NicheLayer {
     Hollow,
     Edge,
     Exposure,
+    Conifer,
 }
 
 impl NicheLayer {
@@ -46,6 +49,7 @@ impl NicheLayer {
             NicheLayer::Hollow => NICHE_MARGIN_HOLLOW,
             NicheLayer::Edge => NICHE_MARGIN_EDGE,
             NicheLayer::Exposure => NICHE_MARGIN_EXPOSURE,
+            NicheLayer::Conifer => NICHE_MARGIN_CONIFER,
         }
     }
 }
@@ -82,6 +86,7 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
         NicheLayer::Hollow => Some(hollow(world, x, z)),
         NicheLayer::Edge => Some(edge(world, x, y, z)),
         NicheLayer::Exposure => Some(exposure(world, x, z)),
+        NicheLayer::Conifer => Some(conifer(world, x, y, z)),
     }
 }
 
@@ -196,6 +201,35 @@ pub(crate) fn exposure(world: &World, x: i32, z: i32) -> f64 {
         water += 1;
     }
     water as f64 / FLORA_EXPOSURE_CAP as f64
+}
+
+/// Share of spruce among the leaf columns within `FLORA_TREE_KIND_RADIUS` of
+/// `(x, z)` (a circle): columns with a leaf block above `y`, spruce where the
+/// topmost leaf is spruce leaves. `FLORA_CONIFER_NONE` if there is none.
+pub(crate) fn conifer(world: &World, x: i32, y: i32, z: i32) -> f64 {
+    let r = FLORA_TREE_KIND_RADIUS;
+    let (mut spruce, mut all) = (0u32, 0u32);
+    for dz in -r..=r {
+        for dx in -r..=r {
+            if dx * dx + dz * dz > r * r {
+                continue;
+            }
+            let (px, pz) = (x + dx, z + dz);
+            let top = (y + 1..HEIGHT as i32)
+                .rev()
+                .map(|y| world.get(px, y, pz))
+                .find(|&b| is_leaves(b));
+            if let Some(b) = top {
+                all += 1;
+                spruce += (b == Block::SpruceLeaves as u8) as u32;
+            }
+        }
+    }
+    if all == 0 {
+        FLORA_CONIFER_NONE
+    } else {
+        spruce as f64 / all as f64
+    }
 }
 
 /// Product of `f`'s niche responses at the column whose air cell is `top`.
