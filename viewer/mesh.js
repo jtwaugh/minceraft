@@ -45,7 +45,7 @@ export const B = {
   test_waterlogged_plant: 68,
   thatch: 69, barrel: 70, plank_step: 71, drying_rack: 72, net: 73,
   counter: 74, plate_rack: 75, floe_ice: 76,
-  kelp_0: 77, kelp_1: 78,
+  kelp_0: 77, kelp_1: 78, oyster: 79, scallop: 80,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };

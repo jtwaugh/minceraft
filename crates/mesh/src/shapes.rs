@@ -80,6 +80,71 @@ pub fn flat(
     );
 }
 
+/// Shellfish drawn as a cluster of small boxes on the cell's floor.
+pub fn is_cluster(b: u8) -> bool {
+    matches!(b, OYSTER | SCALLOP)
+}
+
+/// Cluster boxes: the -x, -z corner of each box's slot, its width and its
+/// height range, all in 1/16ths. A box shifts up to `CLUSTER_JITTER` either
+/// way in x and z, so with the slots apart the boxes never touch and stay
+/// inside the block's selection inset (2/16).
+const CLUSTER_SLOTS: [[u8; 2]; 3] = [[3, 3], [10, 4], [5, 10]];
+const CLUSTER_W: u8 = 3;
+const CLUSTER_H: [u8; 2] = [2, 3];
+const CLUSTER_JITTER: u32 = 1;
+const CLUSTER_SALT: i32 = 0x3c6ef372;
+
+/// The boxes of a cluster at world coordinate `w`, block-local: `(lo, hi)`.
+pub fn cluster_boxes(w: [i32; 3]) -> [([f64; 3], [f64; 3]); 3] {
+    let h = crate::hash_at(w[0], w[1], w[2], CLUSTER_SALT) as u32;
+    let span = 2 * CLUSTER_JITTER + 1;
+    core::array::from_fn(|i| {
+        let bits = h >> (i * 5);
+        let [sx, sz] = CLUSTER_SLOTS[i].map(f64::from);
+        let jitter = |j: u32| j as f64 - CLUSTER_JITTER as f64;
+        let (x, z) = (sx + jitter(bits % span), sz + jitter((bits / span) % span));
+        let top = CLUSTER_H[(bits >> 4) as usize & 1] as f64;
+        let wd = CLUSTER_W as f64;
+        (
+            [x / 16.0, 0.0, z / 16.0],
+            [(x + wd) / 16.0, top / 16.0, (z + wd) / 16.0],
+        )
+    })
+}
+
+/// The faces of cluster block `b` at block (x, y, z), world coordinate `w`;
+/// `layer(dy)` is the tile of a face with vertical normal `dy`. Bottoms are
+/// left out on a solid floor.
+pub fn cluster(
+    out: &mut Quads,
+    [x, y, z]: [usize; 3],
+    w: [i32; 3],
+    layer: impl Fn(i32) -> u8,
+    on_solid: bool,
+) {
+    for bx in cluster_boxes(w) {
+        for f in &FACES {
+            if f.d[1] < 0 && on_solid {
+                continue;
+            }
+            let c = face_corners(f, bx);
+            let uv = c.map(|q| face_uv(f, q, 0, [1.0; 3]));
+            out.quad(
+                [x as f64, y as f64, z as f64],
+                &c,
+                &uv,
+                layer(f.d[1]),
+                f.s * (0.75 + y as f64 / 256.0),
+                &Tint::One([1.0; 3]),
+                None,
+                None,
+                0,
+            );
+        }
+    }
+}
+
 /// The corners of face `f` of the box `lo..hi`.
 pub fn face_corners(f: &Face, (lo, hi): ([f64; 3], [f64; 3])) -> [[f64; 3]; 4] {
     f.c.map(|c| [0, 1, 2].map(|j| lo[j] + f64::from(c[j]) * (hi[j] - lo[j])))
@@ -125,6 +190,34 @@ mod tests {
         assert_eq!(bounds(SNOW_LAYER).1, [1.0, 0.125, 1.0]);
         assert_eq!(bounds(CACTUS).0, [0.0625, 0.0, 0.0625]);
         assert_eq!(bounds(STONE), FULL);
+    }
+
+    #[test]
+    fn cluster_boxes_vary_by_world_coordinate_but_stay_apart_and_inset() {
+        let mut layouts = alloc::vec::Vec::new();
+        for x in -20..20 {
+            for z in -20..20 {
+                let bs = cluster_boxes([x, 41, z]);
+                assert_eq!(bs, cluster_boxes([x, 41, z]));
+                for (i, (lo, hi)) in bs.iter().enumerate() {
+                    assert_eq!(lo[1], 0.0);
+                    assert!(hi[1] == 2.0 / 16.0 || hi[1] == 3.0 / 16.0);
+                    for j in [0, 2] {
+                        assert!(lo[j] >= 2.0 / 16.0 && hi[j] <= 14.0 / 16.0);
+                        assert_eq!(hi[j] - lo[j], 3.0 / 16.0);
+                    }
+                    for (lo2, hi2) in &bs[i + 1..] {
+                        let apart = |j: usize| hi[j] < lo2[j] || hi2[j] < lo[j];
+                        assert!(apart(0) || apart(2), "{bs:?}");
+                    }
+                }
+                if !layouts.contains(&bs) {
+                    layouts.push(bs);
+                }
+            }
+        }
+        assert!(layouts.len() > 100, "{}", layouts.len());
+        assert!(is_cluster(OYSTER) && is_cluster(SCALLOP) && !is_cluster(BUSH));
     }
 
     #[test]
