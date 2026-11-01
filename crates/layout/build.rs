@@ -220,17 +220,28 @@ fn main() {
         rules.iter().position(|r| r.id == n)
     })
     .unwrap_or_else(|e| panic!("{}: {e}", flora_path.display()));
-    let mut out = String::from("pub(crate) static SHIPPED_FLORA: &[StaticFlora] = &[\n");
+    let mut out = String::from("fn shipped_entries() -> Vec<SeaFloraEntry> {\n    vec![\n");
     for f in &flora {
+        let shape = match f.column {
+            Some([height_min, height_max, surface_gap_min]) => format!(
+                "SeaFloraShape::Column(SeaFloraColumn {{ height_min: {height_min}, \
+                 height_max: {height_max}, surface_gap_min: {surface_gap_min} }})"
+            ),
+            None => "SeaFloraShape::Cluster".into(),
+        };
+        let habitats: Vec<String> = f
+            .habitats
+            .iter()
+            .map(|h| format!("HabitatId({h})"))
+            .collect();
         writeln!(
             out,
-            "    StaticFlora {{ name: {:?}, column: {:?}, blocks: &{:?}, habitats: &{:?}, \
-             bottom: &{:?}, depth_min: {}, depth_max: {}, shore_distance_max: {}, \
-             cluster_scale: {:?}, salt: {}, chance: {:?} }},",
+            "        SeaFloraEntry {{ name: {:?}.to_string(), shape: {shape}, blocks: vec!{:?}, \
+             habitats: vec![{}], bottom: vec!{:?}, depth_min: {}, depth_max: {}, \
+             shore_distance_max: {}, cluster_scale: {:?}, salt: {}, chance: {:?} }},",
             f.name,
-            f.column,
             f.blocks,
-            f.habitats,
+            habitats.join(", "),
             f.bottom,
             f.depth_min,
             f.depth_max,
@@ -241,7 +252,7 @@ fn main() {
         )
         .unwrap();
     }
-    out.push_str("];\n");
+    out.push_str("    ]\n}\n");
     std::fs::write(out_dir.join("sea_flora.rs"), out).unwrap();
 
     // Validation thresholds.
