@@ -1,7 +1,7 @@
 // client/tools/finding.mjs: finding schema. Run: node --test client/test/finding.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateFinding, parseFindings, SEVERITIES } from '../tools/finding.mjs';
+import { validateFinding, parseFindings, SEVERITIES, KINDS } from '../tools/finding.mjs';
 
 const good = () => ({
   kind: 'control-flow',
@@ -42,6 +42,19 @@ test('unknown kind, unknown severity and empty repro are rejected', () => {
   assert.match(validateFinding(with_('severity', 'urgent')).errors[0], /severity/);
   assert.match(validateFinding(with_('repro', '  \n')).errors[0], /repro/);
   assert.equal(validateFinding(with_('kind', 'layout')).ok, true);
+});
+
+test('perf and render kinds are accepted; other kinds still are not', () => {
+  assert.deepEqual(KINDS, ['control-flow', 'layout', 'perf', 'render']);
+  for (const kind of ['perf', 'render']) {
+    assert.deepEqual(validateFinding(with_('kind', kind)), { ok: true, errors: [] }, kind);
+  }
+  for (const kind of ['Perf', 'rendering', 'advisory', '']) {
+    assert.match(validateFinding(with_('kind', kind)).errors[0], /unknown kind/, kind);
+  }
+  const r = parseFindings(JSON.stringify([with_('kind', 'perf'), with_('kind', 'render'), with_('kind', 'bug')]));
+  assert.deepEqual(r.valid.map((f) => f.kind), ['perf', 'render']);
+  assert.equal(r.rejected.length, 1);
 });
 
 test('parseFindings splits valid from rejected', () => {
