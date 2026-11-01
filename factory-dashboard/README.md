@@ -36,7 +36,8 @@ Needs Python 3.9+ and the GitHub CLI, with nothing to install.
 - **Overview:** last tick, items waiting on you, active and failed agent
   runs, open and blocked PRs, ticks in the last 48 h.
 - **Waiting on you:** the needs-you queue, by the needs-you pass's own rules,
-  most-blocking first.
+  most-blocking first. The tick's own tracker issues (`Factory: stalled work`) show
+  apart as reports and don't count as waiting.
 - **Started, no PR yet:** each started ticket's state and its start count
   (n of 3).
 - **Blocked PRs** and what Claude is doing about each.
@@ -57,6 +58,9 @@ out as you through `gh`:
 - **Spec question:** one `/decide X` button per option.
 - **Unapproved ticket:** *Approve* adds `factory`; *Close* closes it as not
   planned.
+- **PR waiting on review:** *Review the diff* opens the PR's files on
+  GitHub; *Ask @claude to review* comments asking Claude for a review;
+  *Close PR* closes it unmerged. Merging stays on GitHub.
 - **Comment** on any waiting issue.
 
 Closing a no-PR question by itself doesn't restart its ticket; use Retry.
