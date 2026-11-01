@@ -437,3 +437,5 @@ mod tests;
 mod validation_decorated_tests;
 #[cfg(test)]
 mod validation_tests;
+#[cfg(test)]
+mod village_templates_tests;
