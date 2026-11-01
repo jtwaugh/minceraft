@@ -1,0 +1,22 @@
+# A boat shed: an open-ended roofed bay with a landing deck (docs/design/villages-and-villagers.md 2.3).
+kind = "building"
+size = [5, 4, 6]      # x, y, z
+origin_offset = [-2, 0, -5]
+palette = { P = "dock_planks", L = "dock_post", S = "spruce_log", T = "thatch", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPP", "PPPPP", "PPPPP", "PPPPP", "PPPPP", "PPPPP"],
+  # y = 1 (side walls, open at both ends)
+  ["S...S", "S...S", "S...S", "S...S", "S...S", "L...L"],
+  # y = 2
+  ["S...S", "S...S", "S...S", "S...S", "S...S", "L...L"],
+  # y = 3 (roof)
+  ["TTTTT", "TTTTT", "TTTTT", "TTTTT", "TTTTT", "TTTTT"],
+]
+connectors = [
+  { cell = [2, 1, 5], facing = "+z", pool = "boardwalks" },
+  { cell = [2, 1, 0], facing = "-z", pool = "decor" },
+]
+spawns = [
+  { cell = [2, 1, 3], kind = "villager" },
+]

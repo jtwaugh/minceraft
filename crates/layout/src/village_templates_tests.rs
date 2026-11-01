@@ -17,7 +17,14 @@ fn count_range(kind: PieceKind) -> (usize, usize) {
 #[test]
 fn templates_exist_and_have_a_kind() {
     let list = Structure::village_templates();
-    for name in ["plaza_small", "plaza_wide", "dock_straight"] {
+    for name in [
+        "plaza_small",
+        "plaza_wide",
+        "dock_straight",
+        "work_market_stall",
+        "work_boat_shed",
+        "work_cooperage",
+    ] {
         assert!(list.iter().any(|(n, _)| *n == name), "{name}");
     }
     for (name, s) in &list {
