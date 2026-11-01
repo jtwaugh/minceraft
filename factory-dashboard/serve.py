@@ -76,9 +76,10 @@ class State:
 
     def note(self, body):
         """Remember a write that changes what the page lists, until a read shows it."""
-        if body.get("action") in ("close", "label"):
+        if body.get("action") in ("close", "label", "approve-merge"):
+            action = "close" if body["action"] == "approve-merge" else body["action"]  # a merged PR leaves the list
             with self.lock:
-                self.pending.append({"action": body["action"], "number": body["number"],
+                self.pending.append({"action": action, "number": body["number"],
                                      "label": body.get("label"), "at": time.time()})
 
     def settle(self, started):
@@ -231,6 +232,22 @@ def act_ops(state, body, dry):
     return None
 
 
+def approve_merge(state, n, dry):
+    """Approve a PR with no comment, then merge it. Only for a PR the last read lists as needing review."""
+    ny = (state.data or {}).get("needs_you") or []
+    if not any(i.get("type") == "pr" and i.get("number") == n for i in ny):
+        raise ValueError(f"#{n} isn't a PR waiting on your review")
+    R = ["-R", state.repo]
+    ok, msg = gh_write(["pr", "review", str(n), "--approve", *R], dry)
+    own = not ok and re.search(r"own pull request", msg, re.I)
+    if not ok and not own:
+        return ok, f"approve failed: {msg}"
+    ok, mmsg = gh_write(["pr", "merge", str(n), "--merge", *R], dry)
+    if not ok:
+        return ok, f"{'approved, but ' if not own else ''}merge failed: {mmsg}"
+    return True, f"#{n} merged" + (" (your own PR, so not approved)" if own else " after approving it")
+
+
 def act(state, body, dry):
     """One write. Returns (ok, message); raises ValueError on a bad request."""
     done = act_ops(state, body, dry)
@@ -255,6 +272,8 @@ def act(state, body, dry):
                 return ok, msg
         return gh_write(["api", "-X", "PATCH", base, "-f", "state=closed",
                          "-f", f"state_reason={reason}"], dry)
+    if kind == "approve-merge":
+        return approve_merge(state, n, dry)
     if kind == "label":
         label = body.get("label")
         if label not in LABELS:

@@ -42,3 +42,12 @@ test('a repro containing a fence does not close the block early', () => {
   const r = renderReport([finding(1, 'a\n```\nb\n')], { runDate: 'd' });
   assert.match(r.body, /````input\na\n```\nb\n````\n/);
 });
+
+test('perf and render findings render like the other kinds', () => {
+  const perf = { ...finding(1), kind: 'perf' };
+  const render = { ...finding(2, 'start walk stream\nframe 60\n'), kind: 'render' };
+  const r = renderReport([perf, render], { runDate: 'd' });
+  assert.match(r.body, /## 1\. goal 1\n\n- Kind: perf\n- Severity: medium\n- Goal: goal 1\n/);
+  assert.match(r.body, /## 2\. goal 2\n\n- Kind: render\n- Severity: medium\n- Goal: goal 2\n/);
+  assert.match(r.body, /\*\*Repro:\*\*\n\n```input\nstart walk stream\nframe 60\n```\n/);
+});

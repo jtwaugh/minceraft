@@ -1,5 +1,5 @@
 // client/tools/finding.mjs: the play critic's finding schema (Node only).
-export const KINDS = ['control-flow', 'layout'];
+export const KINDS = ['control-flow', 'layout', 'perf', 'render'];
 export const SEVERITIES = ['low', 'medium', 'high'];
 const FIELDS = ['kind', 'severity', 'goal', 'observation', 'suggestion', 'repro'];
 
