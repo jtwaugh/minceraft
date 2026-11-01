@@ -71,6 +71,7 @@ pub mod b {
     pub const DUNE_GRASS_LOWER: u8 = 66;
     pub const DUNE_GRASS_UPPER: u8 = 67;
     pub const TEST_WATERLOGGED_PLANT: u8 = 68;
+    pub const FLOE_ICE: u8 = 76;
     pub const KELP_0: u8 = 77;
     pub const KELP_1: u8 = 78;
     pub const OYSTER: u8 = 79;
