@@ -1,14 +1,6 @@
-# Sea flora (docs/design/sea-flora-and-shellfish.md sections 3 and 4), read by
-# crates/layout/src/sea_flora.rs. Nothing places these yet. Chances, scales
-# and salts are this game's own numbers, tuned here.
-#   shape     column (blocks = [middle, top]) | cluster (blocks = [block])
-#   habitats  habitat ids (data/habitats.toml); bottom: seabed block names
-#   depth_min / depth_max, shore_distance_max (optional): inclusive
-#   column    column only: height_min / height_max cells tall, inclusive, and
-#             surface_gap_min, the fewest water cells above the top cell
-#             (0: the top may touch the surface, never rise above it)
-#   cluster_scale blocks per patch noise cell; salt unique per entry;
-#   chance    per eligible column, 0 to 1
+# Sea flora (docs/design/sea-flora-and-shellfish.md sections 3 and 4). Fields
+# are documented in crates/layout/src/sea_flora.rs. Chances, scales and salts
+# are this game's own numbers, tuned here.
 
 [[sea_flora]]
 name = "kelp"

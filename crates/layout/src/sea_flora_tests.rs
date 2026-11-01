@@ -63,11 +63,11 @@ fn shipped_file_has_kelp_oyster_and_scallop() {
     );
     assert_eq!(
         kelp.shape,
-        SeaFloraShape::Column {
+        SeaFloraShape::Column(SeaFloraColumn {
             height_min: 3,
             height_max: 12,
             surface_gap_min: 0
-        }
+        })
     );
     assert_eq!((kelp.depth_min, kelp.depth_max), (4, 16));
     let oyster = f.get("oyster").unwrap();
