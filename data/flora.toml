@@ -19,7 +19,12 @@
 #                 multiplies the biome chance. height_above_sea is ground y minus sea
 #                 level; soil_depth counts dirt and grass from the ground block down;
 #                 light is the fraction of columns within light_radius (the column
-#                 itself included) with no leaf block above the ground block.
+#                 itself included) with no leaf block above the ground block;
+#                 hollow is the column's surface height minus the mean surface height
+#                 of 8 columns (the 4 axis and 4 diagonal directions) on each ring of
+#                 hollow_radii, all rings weighted equally: negative in a hollow,
+#                 positive on a ridge. Surface height is the top movement-blocking or
+#                 liquid block, ignoring leaves, logs and plants (undecorated terrain).
 #                 Other layers are not computed yet and leave the chance as is.
 
 [settings]
@@ -34,6 +39,9 @@ colour_scale = 20.0     # blocks per cell of the noise that picks the winner
 # Columns, within this distance (circle) of the column itself, that make up the
 # cone of the `light` layer. Shared with the client shade tint (#1610).
 light_radius = 2
+# Ring radii, in blocks, of the `hollow` layer. The largest must stay inside the
+# decoration margin (a test checks it).
+hollow_radii = [4, 8, 16]
 # Soft margins of the niche response, in each layer's own units.
 niche_margin_height_above_sea = 2.0
 niche_margin_soil_depth = 1.0

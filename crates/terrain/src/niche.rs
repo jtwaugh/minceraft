@@ -2,14 +2,16 @@
 //! sections 3 and 4): the layers an entry's `niche` may name and the
 //! trapezoid response to one layer's value. Computed so far: height above
 //! sea (ground y minus `SEA_LEVEL`), soil depth (dirt and grass blocks
-//! from the ground block down, before anything else) and light (the share of
-//! columns in a small cone around the column with no leaves above the ground).
+//! from the ground block down, before anything else), light (the share of
+//! columns in a small cone around the column with no leaves above the ground)
+//! and hollow (surface height minus the mean of rings around the column).
 
-use crate::data::{is_leaves, Block};
+use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, FLORA_LIGHT_RADIUS, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW,
-    NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, NICHE_MARGIN_HEIGHT_ABOVE_SEA,
+    NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH,
+    NICHE_MARGIN_SUN_FACING,
 };
 use crate::{HEIGHT, SEA_LEVEL};
 use alloc::vec::Vec;
@@ -54,8 +56,49 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
             Some((0..=y).rev().take_while(soil).count() as f64)
         }
         NicheLayer::Light => Some(light(world, x, y, z)),
+        NicheLayer::Hollow => Some(hollow(world, x, z)),
         _ => None,
     }
+}
+
+/// [`surface_height`] at `(x, z)` minus its mean over 8 columns (axis and
+/// diagonal directions) on each ring of `FLORA_HOLLOW_RADII`: negative in a
+/// hollow, positive on a ridge.
+pub(crate) fn hollow(world: &World, x: i32, z: i32) -> f64 {
+    let mut sum = 0i32;
+    for r in FLORA_HOLLOW_RADII {
+        // r / sqrt(2), rounded, so diagonal columns lie about r away too.
+        let q = (r * 7071 + 5000) / 10000;
+        for (dx, dz) in [
+            (r, 0),
+            (-r, 0),
+            (0, r),
+            (0, -r),
+            (q, q),
+            (q, -q),
+            (-q, q),
+            (-q, -q),
+        ] {
+            sum += surface_height(world, x + dx, z + dz);
+        }
+    }
+    let n = (FLORA_HOLLOW_RADII.len() * 8) as f64;
+    surface_height(world, x, z) as f64 - sum as f64 / n
+}
+
+/// The highest movement-blocking or liquid block of a column, skipping
+/// leaves, logs and plants so that trees and flora leave it unchanged; -1 if none.
+pub(crate) fn surface_height(world: &World, x: i32, z: i32) -> i32 {
+    let terrain = |&y: &i32| {
+        let b = world.get(x, y, z);
+        (blocks_movement(b) || is_liquid(b))
+            && !is_leaves(b)
+            && !matches!(
+                Block::from_u8(b),
+                Block::OakLog | Block::BirchLog | Block::SpruceLog | Block::Cactus | Block::Pumpkin
+            )
+    };
+    (0..HEIGHT as i32).rev().find(terrain).unwrap_or(-1)
 }
 
 /// Share of the columns within `FLORA_LIGHT_RADIUS` of `(x, z)` (a circle,
