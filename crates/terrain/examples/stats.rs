@@ -62,6 +62,20 @@ fn main() {
         100.0 * top_counts[Block::Ice as usize] as f64 / n as f64,
         100.0 * top_counts[Block::FloeIce as usize] as f64 / n as f64
     );
+    // Floe band: sea columns with T in [t_ice, 0.5) and how many hold floe ice.
+    let cm = generate_climate(seed, x0, z0, w, d, &[], &[]);
+    let (mut band, mut floes) = (0, 0);
+    for z in 0..d {
+        for x in 0..w {
+            let t = cm.temperature[(z * w + x) as usize] as f64;
+            let i = r.index(x, 0, z);
+            if r.blocks[i + 62] == Block::Water as u8 && (0.40..0.5).contains(&t) {
+                band += 1;
+                floes += (r.blocks[i + 63] == Block::FloeIce as u8) as usize;
+            }
+        }
+    }
+    println!("sea band columns: {band}, floe columns: {floes}");
     print!("top block:");
     for (i, c) in top_counts.iter().enumerate() {
         if *c > 0 {

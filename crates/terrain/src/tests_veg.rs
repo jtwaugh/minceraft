@@ -260,13 +260,13 @@ fn check_snow_ice(r: &Region, cm: &ClimateMap) -> (usize, usize) {
         for x in 0..r.width {
             let c = col(r, x, z);
             let t = cm.temperature[(z * r.width + x) as usize] as f64;
-            // Sea ice: y = 63 is ice iff cold, never water when cold.
-            if t < 0.5 - 1e-6 {
+            // Sea ice: solid below t_ice, floes or water in the band up to 0.5.
+            if t < data::SEA_ICE_T_ICE - 1e-6 {
                 assert_ne!(c[63], WATER, "unfrozen sea at ({x},{z}), T={t}");
             } else if t > 0.5 + 1e-6 {
-                assert_ne!(c[63], ICE, "ice in warm column ({x},{z}), T={t}");
+                assert!(!is_sea_ice(c[63]), "ice in warm column ({x},{z}), T={t}");
             }
-            ice += (c[63] == ICE) as usize;
+            ice += is_sea_ice(c[63]) as usize;
             let mut top = -1i32;
             for y in (1..128).rev() {
                 let b = c[y];
@@ -704,12 +704,12 @@ fn open_water_skips_sea_ice_only_on_its_columns() {
             for x in 0..w {
                 let (ca, cb) = (col(&a, x, z), col(&b, x, z));
                 if x0 + (x as i32) < -120 {
-                    assert!(!cb.contains(&ICE), "ice at ({x},{z})");
+                    assert!(!cb.iter().any(|&b| is_sea_ice(b)), "ice at ({x},{z})");
                     for y in 0..HEIGHT {
-                        let want = if ca[y] == ICE { WATER } else { ca[y] };
+                        let want = if is_sea_ice(ca[y]) { WATER } else { ca[y] };
                         assert_eq!(cb[y], want, "({x},{y},{z})");
                     }
-                    opened += ca.contains(&ICE) as usize;
+                    opened += ca.iter().any(|&b| is_sea_ice(b)) as usize;
                 } else {
                     assert_eq!(ca, cb, "({x},{z})");
                 }

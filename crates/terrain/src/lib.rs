@@ -911,7 +911,7 @@ impl Generator {
                 }
 
                 let (t, h) = clim[cx as usize];
-                let frozen = t < 0.5 && !biases.open_water.is_some_and(|o| o.open(wx, wz));
+                let sea_top = self.sea_top(wx, wz, t, biases);
                 // Solid / water / air / sea ice (SPEC 3.6, 13).
                 for y in 0..HEIGHT {
                     let l = y >> 3;
@@ -926,8 +926,8 @@ impl Generator {
                     }
                     col[y] = if rho > 0.0 {
                         STONE
-                    } else if (y as i32) == SEA_LEVEL - 1 && frozen {
-                        ICE
+                    } else if (y as i32) == SEA_LEVEL - 1 {
+                        sea_top
                     } else if (y as i32) < SEA_LEVEL {
                         WATER
                     } else {
@@ -937,7 +937,7 @@ impl Generator {
 
                 let ci = cx as usize;
                 let biome = biome_for(t, h);
-                self.surface(wx, wz, sn[ci], gn[ci], dn[ci], biome, frozen, &mut col);
+                self.surface(wx, wz, sn[ci], gn[ci], dn[ci], biome, sea_top, &mut col);
                 f(cx, cz, &col, t, h);
             }
         }
@@ -948,6 +948,44 @@ impl Generator {
     /// `frozen`: the column's T < 0.5, so a water top placed at y = 63 by the
     /// beach/stone-patch rule becomes ice like the sea fill does.
     #[allow(clippy::too_many_arguments)]
+    /// Block at y = `SEA_LEVEL - 1` over open sea in the column (sea-ice-floes.md A):
+    /// solid ice below `SEA_ICE_T_ICE`, floe ice or water in the band up to
+    /// T = 0.5 (`t + k * n < 0.5`), water elsewhere and on `open_water`.
+    fn sea_top(&self, x: i32, z: i32, t: f64, biases: &Biases) -> u8 {
+        if t >= 0.5 || biases.open_water.is_some_and(|o| o.open(x, z)) {
+            WATER
+        } else if biases.hard_ice_edge || t < data::SEA_ICE_T_ICE {
+            ICE
+        } else if t + data::SEA_ICE_FLOE_STRENGTH * self.floe_noise(x, z) < 0.5 {
+            FLOE_ICE
+        } else {
+            WATER
+        }
+    }
+
+    /// Smooth value noise in [0, 1) with one lattice cell per `SEA_ICE_FLOE_SCALE` blocks.
+    fn floe_noise(&self, x: i32, z: i32) -> f64 {
+        let (fx, fz) = (
+            x as f64 / data::SEA_ICE_FLOE_SCALE,
+            z as f64 / data::SEA_ICE_FLOE_SCALE,
+        );
+        let (gx, gz) = (noise::floor(fx), noise::floor(fz));
+        let sm = |u: f64| u * u * (3.0 - 2.0 * u);
+        let (tx, tz) = (sm(fx - gx), sm(fz - gz));
+        let corner = |dx: i32, dz: i32| {
+            hash_f64(
+                self.seed,
+                gx as i32 + dx,
+                gz as i32 + dz,
+                0,
+                data::SEA_ICE_FLOE_SALT as u64,
+            )
+        };
+        let a = corner(0, 0) + (corner(1, 0) - corner(0, 0)) * tx;
+        let b = corner(0, 1) + (corner(1, 1) - corner(0, 1)) * tx;
+        a + (b - a) * tz
+    }
+
     fn surface(
         &self,
         x: i32,
@@ -956,7 +994,7 @@ impl Generator {
         gn: f64,
         dn: f64,
         biome: Biome,
-        frozen: bool,
+        sea_top: u8,
         col: &mut [u8; HEIGHT],
     ) {
         let seed = self.seed;
@@ -1002,11 +1040,7 @@ impl Generator {
                             }
                         }
                         if y < SEA_LEVEL && top == AIR {
-                            top = if frozen && y == SEA_LEVEL - 1 {
-                                ICE
-                            } else {
-                                WATER
-                            };
+                            top = if y == SEA_LEVEL - 1 { sea_top } else { WATER };
                         }
                         // Spec says `run = soil`; a negative soil would set
                         // run back to -1 and re-trigger the surface rule on
@@ -1040,3 +1074,6 @@ mod tests_veg;
 
 #[cfg(test)]
 mod tests_flora;
+
+#[cfg(test)]
+mod tests_ice;
