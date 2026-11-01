@@ -81,6 +81,54 @@ test('kelp meshes as plain water plus the plants, in both meshers', () => {
   for (const k of ['opaque', 'cutout', 'water', 'ice']) assert.deepEqual(quads(rs[k]), quads(m[k]), k);
 });
 
+for (const shell of ['oyster', 'scallop']) {
+  test(`${shell} meshes as plain water plus a cluster, in both meshers`, () => {
+    // 3x3 pool: stone to 40, water 41..=44, the shellfish on the floor at 41
+    // and floating at 43 in the middle
+    const pool = (logged) => {
+      const b = new Uint8Array(9 * H);
+      for (let c = 0; c < 9; c++) for (let y = 0; y <= 44; y++) {
+        b[c * H + y] = y <= 40 ? B.stone : logged && c === 4 && (y === 41 || y === 43) ? B[shell] : B.water;
+      }
+      return b;
+    };
+    for (const origin of [[0, 0], [-7, 13]]) {
+      const opts = { greedy: false, origin };
+      const m = meshBlocks(ctx, pool(true), white(3), 3, 0, opts);
+      const w = meshBlocks(ctx, pool(false), white(3), 3, 0, opts);
+      // no faces between the cluster cells and the water around them
+      assert.deepEqual(quads(m.water), quads(w.water));
+      // 3 boxes of 5 faces on stone, of 6 faces in the water
+      assert.equal(m.cutout.faces, 15 + 18);
+      assert.equal(w.cutout.faces, 0);
+      const dv = new DataView(m.cutout.verts);
+      for (let i = 0; i < m.cutout.faces * 4; i++) {
+        const p = (k) => dv.getInt16(i * VERTEX_BYTES + k, true);
+        // inside the middle cell, at most 3/16 above its floor
+        for (const k of [0, 4]) assert.ok(p(k) >= 16 + 2 && p(k) <= 32 - 2, `${p(k)}`);
+        const floor = p(2) >= 43 * 16 ? 43 * 16 : 41 * 16;
+        assert.ok(p(2) - floor >= 0 && p(2) - floor <= 3, `${p(2)}`);
+      }
+      const rs = meshBlocksWasm(wasm, ctx, pool(true), white(3), 3, 0, opts);
+      for (const k of ['opaque', 'cutout', 'water', 'ice']) assert.deepEqual(quads(rs[k]), quads(m[k]), k);
+    }
+  });
+}
+
+test('wasm mesher matches meshBlocks on a region strewn with shellfish', () => {
+  const size = 32, pad = 1, w = size + 2 * pad, origin = [2040, 1016];
+  const plain = wasm.generate_region_decorated(12345n, origin[0] - pad, origin[1] - pad, w, w);
+  const shells = [B.oyster, B.scallop];
+  const blocks = plain.map((b, i) => (b === B.water && (i * 7 + (i >> 7) * 3) % 5 === 0 ? shells[i & 1] : b));
+  const tints = randomTints(size, false);
+  for (const greedy of [false, true]) {
+    const js = meshBlocks(ctx, blocks, tints, size, pad, { greedy, origin });
+    const rs = meshBlocksWasm(wasm, ctx, blocks, tints, size, pad, { greedy, origin });
+    for (const k of ['opaque', 'cutout', 'water', 'ice']) assert.deepEqual(quads(rs[k]), quads(js[k]), k);
+    assert.ok(js.cutout.faces > 100, `${js.cutout.faces} cutout quads`);
+  }
+});
+
 // Reproducible tints that differ per column and per corner (exact in f32).
 function randomTints(size, corners) {
   let a = 777;

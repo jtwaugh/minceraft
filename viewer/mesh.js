@@ -74,8 +74,8 @@ export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.ro
 // Upper blocks of two-block plants.
 const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper, B.fern_double_upper, B.cattail_upper, B.dune_grass_upper]);
 // Plants that are also water (`waterlogged` in data/blocks.toml), drawn as a
-// water cell plus a cross plant.
-export const WATERLOGGED = flags([B.test_waterlogged_plant, B.kelp_0, B.kelp_1]);
+// water cell plus a cross plant or, for shellfish, a cluster.
+export const WATERLOGGED = flags([B.test_waterlogged_plant, B.kelp_0, B.kelp_1, B.oyster, B.scallop]);
 // Water or a waterlogged block: water faces between them are hidden.
 const isWater = (b) => b === B.water || WATERLOGGED[b] === 1;
 
@@ -324,6 +324,25 @@ export const swaysUnder = (b, fast) => (LEAVES[b] && !fast) || BUSHES[b] === 1;
 const BUSH_INSET = 2 / 16;
 const CACTUS_INSET = 1 / 16, SNOW_H = 1 / 8;
 
+// Shellfish drawn as a cluster of small boxes on the cell's floor.
+const CLUSTER = flags([B.oyster, B.scallop]);
+// Cluster boxes: the -x, -z corner of each box's slot, its width and its
+// height range, all in 1/16ths. A box shifts up to CLUSTER_JITTER either way
+// in x and z, so with the slots apart the boxes never touch and stay inside
+// the block's selection inset (2/16).
+const CLUSTER_SLOTS = [[3, 3], [10, 4], [5, 10]], CLUSTER_W = 3, CLUSTER_H = [2, 3];
+const CLUSTER_JITTER = 1, CLUSTER_SALT = 0x3c6ef372;
+// The boxes of a cluster at world coordinate (x, y, z), block-local: [lo, hi].
+export function clusterBoxes(x, y, z) {
+  const h = hashAt(x, y, z, CLUSTER_SALT) >>> 0, span = 2 * CLUSTER_JITTER + 1;
+  return CLUSTER_SLOTS.map(([sx, sz], i) => {
+    const bits = h >>> (i * 5);
+    const bx = sx + (bits % span) - CLUSTER_JITTER, bz = sz + (Math.floor(bits / span) % span) - CLUSTER_JITTER;
+    const top = CLUSTER_H[(bits >>> 4) & 1];
+    return [[bx / 16, 0, bz / 16], [(bx + CLUSTER_W) / 16, top / 16, (bz + CLUSTER_W) / 16]];
+  });
+}
+
 // Largest merged quad side (water tops and opaque cubes): uv is uint8 in 1/16, so 15 blocks fit.
 const WATER_MERGE_MAX = 15;
 // Face fi's merge grid: [plane axis, u axis, v axis] (0 x, 1 y, 2 z).
@@ -480,7 +499,13 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
       if (b === B.air) continue;
       if (WATERLOGGED[b]) {
         // the plant inside, then the cell's water faces as `water`
-        crossPlant(b, x, y, z, tintOf(b, x, z));
+        if (CLUSTER[b]) {
+          // bottoms are left out on a solid floor
+          const floor = SOLID_N[at(x, y - 1, z)];
+          for (const bx of clusterBoxes(origin[0] + x, y, origin[1] + z)) for (const f of FACES) {
+            if (!(f.d[1] < 0 && floor)) boxFace(3, x, y, z, f, bx[0], bx[1], layerOf(ctx, b, f.d[1]), WHITE);
+          }
+        } else crossPlant(b, x, y, z, tintOf(b, x, z));
         b = B.water;
       }
       const tint = tintOf(b, x, z);
