@@ -78,6 +78,8 @@ const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper, B.f
 export const WATERLOGGED = flags([B.test_waterlogged_plant, B.kelp_0, B.kelp_1, B.oyster, B.scallop]);
 // Water or a waterlogged block: water faces between them are hidden.
 const isWater = (b) => b === B.water || WATERLOGGED[b] === 1;
+// Ice or floe ice: both draw as ice and hide each other's faces.
+const isIce = (b) => b === B.ice || b === B.floe_ice;
 
 /**
  * Meshing context: names, colours and biomes from the legend() JSON, plus
@@ -421,7 +423,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     const base = col(x, z);
     let y = H - 1;
-    while (y > 0 && (blocks[base + y] === B.air || isWater(blocks[base + y]) || blocks[base + y] === B.ice)) y--;
+    while (y > 0 && (blocks[base + y] === B.air || isWater(blocks[base + y]) || isIce(blocks[base + y]))) y--;
     minY = Math.min(minY, y); sumY += y;
   }
   const y0 = Math.max(0, minY - 8);
@@ -530,7 +532,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         if (b === B.grass && f.d[1] > 0) layer = pickLayer(ctx, layer, origin[0] + x, y, origin[1] + z);
         if (b === B.water) {
           // water: only next to air, plants or leaves (not water, ice or solids)
-          if (isWater(n) || n === B.ice || SOLID_N[n]) continue;
+          if (isWater(n) || isIce(n) || SOLID_N[n]) continue;
           let depth = 1;
           while (depth < 255 && y - depth >= 0 && isWater(blocks[base + y - depth])) depth++;
           const flatTint = f.d[1] > 0 && waterTint(tint);
@@ -539,8 +541,8 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
             if (!tops) waterTops.set(y, tops = new Array(size * size).fill(null));
             tops[c] = { key: `${layer},${depth},${flatTint}`, layer, depth, tint: flatTint.split(',').map((v) => v / 255) };
           } else boxFace(1, x, y, z, f, FULL_LO, FULL_HI, layer, tint, 0, null, 0, depth);
-        } else if (b === B.ice) {
-          if (n === B.ice || SOLID_N[n]) continue;
+        } else if (isIce(b)) {
+          if (isIce(n) || SOLID_N[n]) continue;
           boxFace(2, x, y, z, f, FULL_LO, FULL_HI, layer, tint);
         } else if (b === B.cactus) {
           // inset sides always show; top/bottom hidden by more cactus or solid ground

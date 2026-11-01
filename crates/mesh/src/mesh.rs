@@ -19,6 +19,7 @@ pub const H: usize = 128;
 pub const AIR: u8 = 0;
 pub const WATER: u8 = 6;
 pub const ICE: u8 = 7;
+pub const FLOE_ICE: u8 = crate::tables::b::FLOE_ICE;
 const GRASS: u8 = 3;
 const CACTUS: u8 = 20;
 const SNOW_LAYER: u8 = 24;
@@ -32,6 +33,11 @@ const LEAVES: [u8; 3] = [11, 12, 13];
 /// Water or a waterlogged block: water faces between them are hidden.
 fn is_water(b: u8) -> bool {
     b == WATER || WATERLOGGED[b as usize]
+}
+
+/// Ice or floe ice: both draw as `ice` and hide each other's faces.
+fn is_ice(b: u8) -> bool {
+    b == ICE || b == FLOE_ICE
 }
 
 /// Whether `b` sways in the wind, so a snow layer on it sways too: cutout
@@ -129,7 +135,9 @@ pub fn mesh_blocks(
         for x in 0..size {
             let base = col(x, z);
             let mut y = H - 1;
-            while y > 0 && (matches!(blocks[base + y], AIR | ICE) || is_water(blocks[base + y])) {
+            while y > 0
+                && (matches!(blocks[base + y], AIR | ICE | FLOE_ICE) || is_water(blocks[base + y]))
+            {
                 y -= 1;
             }
             min_y = min_y.min(y);
@@ -204,7 +212,7 @@ pub fn mesh_blocks(
                     continue;
                 }
                 if b != WATER
-                    && b != ICE
+                    && !is_ice(b)
                     && !SOLID.contains(&b)
                     && !LEAVES.contains(&b)
                     && !is_box(b)
@@ -237,7 +245,7 @@ pub fn mesh_blocks(
                     }
                     let quads = match b {
                         WATER => {
-                            if is_water(n) || n == ICE || solid(n) {
+                            if is_water(n) || is_ice(n) || solid(n) {
                                 continue;
                             }
                             let mut k = 1;
@@ -261,8 +269,8 @@ pub fn mesh_blocks(
                             }
                             &mut out.water
                         }
-                        ICE => {
-                            if n == ICE || solid(n) {
+                        ICE | FLOE_ICE => {
+                            if is_ice(n) || solid(n) {
                                 continue;
                             }
                             &mut out.ice
@@ -754,6 +762,34 @@ mod tests {
             (fast.ice.faces(), fast.opaque.faces(), fast.cutout.faces()),
             (4, 12, 0)
         );
+    }
+
+    #[test]
+    fn floe_ice_meshes_like_ice() {
+        let b = world(1, 0, |_, _, y| match y {
+            40 => STONE,
+            41 => ICE,
+            42 => FLOE_ICE,
+            _ => 0,
+        });
+        let m = mesh_blocks(
+            &b,
+            1,
+            0,
+            false,
+            false,
+            &layers(),
+            &Tints::NONE,
+            [0, 0],
+            &Variants::NONE,
+        );
+        // the ice/floe pair hides its shared faces: 4 ice sides, 5 floe faces
+        assert_eq!(
+            (m.ice.faces(), m.opaque.faces(), m.cutout.faces()),
+            (9, 6, 0)
+        );
+        // the column-top scan passes floe ice like ice
+        assert_eq!(m.min_y, 40);
     }
 
     #[test]

@@ -25,6 +25,9 @@ export const NAMES = [
   // the leaves tile with its holes filled, for fast leaves
   'leaves_fast'];
 
+/** Blocks without a tile of their own yet -> the tile they borrow (floe art is a later ticket). */
+export const FALLBACK = { floe_ice: 'ice' };
+
 /** Tint palette characters (greyscale-and-tint pixels) per climate-tinted tile. */
 export const TINTED = { grass_top: '89', grass_top_1: '89', grass_top_2: '89', grass_side: '89',
   leaves: '89', tall_grass: '89', tall_grass_1: '89', tall_grass_2: '89', fern: '89', fern_1: '89',
