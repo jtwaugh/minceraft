@@ -10,7 +10,14 @@ between runs. Untrusted code must never reach one, so a job that uses it must:
   that could bypass it;
 - default to ubuntu-latest when the variable is unset.
 
-Only the three agent jobs named in EXPECTED may use it. The workflows are
+The tick's choice arrives as the `runner` dispatch input (factory_runner.py).
+A job whose runs-on takes it must also be reachable only by workflow_dispatch
+(the only event with inputs), through a top-level `&&` term or a workflow
+with no other trigger.
+
+Only the three agent jobs named in EXPECTED may use the variable, and only
+the two the tick dispatches (DISPATCHED) the input. The tick reads the
+variable as data (READERS) and stays on ubuntu-latest. The workflows are
 read with a small indentation parser, so this needs no PyYAML.
 """
 import os
@@ -22,7 +29,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WORKFLOWS = os.path.join(HERE, "..", "workflows")
 VAR = "vars.FACTORY_RUNNER"
 RUNS_ON = "${{ fromJSON(vars.FACTORY_RUNNER || '\"ubuntu-latest\"') }}"
+INPUT = "inputs.runner"
+RUNS_ON_INPUT = "${{ fromJSON(inputs.runner || vars.FACTORY_RUNNER || '\"ubuntu-latest\"') }}"
+DISPATCH = "github.event_name == 'workflow_dispatch'"
 EXPECTED = {("claude.yml", "implement"), ("claude.yml", "start"), ("claude-fix.yml", "fix")}
+DISPATCHED = {("claude.yml", "start"), ("claude-fix.yml", "fix")}
+READERS = {("factory-tick.yml", "tick")}
 MAINTAINERS = {"jtwaugh", "github-actions[bot]"}
 FORK_EVENTS = {"pull_request", "pull_request_target"}
 
@@ -120,10 +132,20 @@ def top_level_split(expr, op):
     return parts
 
 
-def maintainer_only(cond):
+def unwrap(cond):
     cond = cond.strip()
     if cond.startswith("${{") and cond.endswith("}}"):
         cond = cond[3:-2].strip()
+    return cond
+
+
+def dispatch_only(on, cond):
+    """Only workflow_dispatch reaches the job (maintainer_only has ruled out a top-level ||)."""
+    return on == {"workflow_dispatch"} or DISPATCH in top_level_split(unwrap(cond), "&&")
+
+
+def maintainer_only(cond):
+    cond = unwrap(cond)
     if not cond or len(top_level_split(cond, "||")) > 1:
         return False
     first = top_level_split(cond, "&&")[0]
@@ -142,9 +164,13 @@ def maintainer_only(cond):
 def violations(name, wf):
     bad = []
     for job, j in wf["jobs"].items():
-        if VAR not in j["text"]:
+        if VAR not in j["text"] and INPUT not in j["text"]:
             continue
         where = f"{name}: job {job}"
+        if (name, job) in READERS:
+            if VAR in j["runs-on"] or INPUT in j["text"]:
+                bad.append(f"{where}: only reads {VAR}; it must not run on it")
+            continue
         if name == "ci.yml":
             bad.append(f"{where}: ci.yml must not use {VAR}")
         forks = wf["on"] & FORK_EVENTS
@@ -152,7 +178,12 @@ def violations(name, wf):
             bad.append(f"{where}: workflow runs on {', '.join(sorted(forks))}, which runs fork code")
         if not maintainer_only(j["if"]):
             bad.append(f"{where}: needs an `if` whose first && term limits it to {sorted(MAINTAINERS)}")
-        if j["runs-on"] != RUNS_ON:
+        if j["runs-on"] == RUNS_ON_INPUT:
+            if not dispatch_only(wf["on"], j["if"]):
+                bad.append(f"{where}: runs-on takes {INPUT}, so the `if` needs a top-level {DISPATCH}")
+        elif INPUT in j["text"]:
+            bad.append(f"{where}: uses {INPUT} without runs-on {RUNS_ON_INPUT}")
+        elif j["runs-on"] != RUNS_ON:
             bad.append(f"{where}: runs-on must be {RUNS_ON} so unset means ubuntu-latest")
     return bad
 
@@ -185,13 +216,22 @@ class Repo(unittest.TestCase):
     def test_only_the_agent_jobs_use_it(self):
         users = {(n, j) for n, wf in repo_workflows().items()
                  for j, job in wf["jobs"].items() if VAR in job["text"]}
-        self.assertEqual(users, EXPECTED)
+        self.assertEqual(users, EXPECTED | READERS)
+
+    def test_only_the_dispatched_jobs_take_the_input(self):
+        wfs = repo_workflows()
+        users = {(n, j) for n, wf in wfs.items()
+                 for j, job in wf["jobs"].items() if INPUT in job["text"]}
+        self.assertEqual(users, DISPATCHED)
+        for n, j in DISPATCHED:
+            self.assertEqual(wfs[n]["jobs"][j]["runs-on"], RUNS_ON_INPUT)
 
     def test_other_jobs_keep_github_hosted(self):
         for n, wf in repo_workflows().items():
             for j, job in wf["jobs"].items():
                 if (n, j) not in EXPECTED:
                     self.assertNotIn(VAR, job["runs-on"], f"{n}: {j}")
+                    self.assertNotIn(INPUT, job["runs-on"], f"{n}: {j}")
 
     def test_parser_reads_the_real_jobs(self):
         wf = repo_workflows()["claude.yml"]
@@ -241,6 +281,31 @@ class Fixtures(unittest.TestCase):
         text = GOOD.replace("    if: contains(fromJSON('[\"jtwaugh\", \"github-actions[bot]\"]'), github.actor)\n",
                             "    if: |\n      github.actor == 'jtwaugh' && (\n        a || b\n      )\n")
         self.assertEqual(self.check(text), [])
+
+    def test_input_on_a_dispatch_only_workflow_passes(self):
+        self.assertEqual(self.check(GOOD.replace(RUNS_ON, RUNS_ON_INPUT)), [])
+
+    def test_input_reachable_by_other_events_fails(self):
+        text = GOOD.replace(RUNS_ON, RUNS_ON_INPUT).replace("  workflow_dispatch:", "  workflow_dispatch:\n  issues:")
+        self.assertTrue(any("top-level" in b for b in self.check(text)))
+        actors = "contains(fromJSON('[\"jtwaugh\", \"github-actions[bot]\"]'), github.actor)"
+        for cond in [f"github.actor == 'jtwaugh' && ({DISPATCH} || x)",
+                     f"github.actor == 'jtwaugh' && !({DISPATCH})"]:
+            bad = self.check(text.replace(actors, cond))
+            self.assertTrue(any("top-level" in b for b in bad), cond)
+        self.assertEqual(self.check(text.replace(actors, f"{actors} && {DISPATCH}")), [])
+
+    def test_input_with_another_runs_on_fails(self):
+        text = GOOD.replace("    steps: []", "    env:\n      X: ${{ inputs.runner }}\n    steps: []")
+        self.assertTrue(any("without runs-on" in b for b in self.check(text)))
+
+    def test_reader_must_not_run_on_it(self):
+        reader = GOOD.replace("  work:", "  tick:")
+        bad = self.check(reader, "factory-tick.yml")
+        self.assertTrue(any("must not run on it" in b for b in bad))
+        hosted = reader.replace(RUNS_ON, "ubuntu-latest").replace(
+            "    steps: []", "    env:\n      R: ${{ vars.FACTORY_RUNNER }}\n    steps: []")
+        self.assertEqual(self.check(hosted, "factory-tick.yml"), [])
 
     def test_bare_variable_fails(self):
         bad = self.check(GOOD.replace(RUNS_ON, "${{ vars.FACTORY_RUNNER }}"))

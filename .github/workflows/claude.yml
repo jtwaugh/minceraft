@@ -32,6 +32,10 @@ on:
         description: "Ticket to start"
         required: true
         type: string
+      runner:
+        description: "runs-on as JSON (the tick's choice, factory_runner.py); empty means FACTORY_RUNNER"
+        required: false
+        type: string
 
 env:
   ALLOWED_TOOLS: >-
@@ -154,8 +158,12 @@ jobs:
       # Same group as the implement job, so a ticket never runs twice at once.
       group: claude-${{ inputs.issue }}
       cancel-in-progress: false
-    # FACTORY_RUNNER: see the implement job.
-    runs-on: ${{ fromJSON(vars.FACTORY_RUNNER || '"ubuntu-latest"') }}
+    # FACTORY_RUNNER: see the implement job. The tick passes `runner`,
+    # ubuntu-latest when the warm worker is offline (factory_runner.py).
+    runs-on: ${{ fromJSON(inputs.runner || vars.FACTORY_RUNNER || '"ubuntu-latest"') }}
+    # Whether the job got a warm worker, from the same expression as runs-on.
+    env:
+      WARM: ${{ fromJSON(inputs.runner || vars.FACTORY_RUNNER || '"ubuntu-latest"') != 'ubuntu-latest' }}
     timeout-minutes: 60
     permissions:
       contents: write
@@ -164,7 +172,7 @@ jobs:
       id-token: write
       actions: read
     steps:
-      - if: vars.FACTORY_RUNNER == ''
+      - if: env.WARM != 'true'
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -172,7 +180,7 @@ jobs:
           # remote). A persisted workflow token would win and push as
           # github-actions[bot], which the reviewer then skips.
           persist-credentials: false
-      # Warm worker (FACTORY_RUNNER set): no checkout or toolchain setup.
+      # Warm worker (WARM): no checkout or toolchain setup.
       # The machine sets WORKER_REPO (its warm clone; optionally WORKER_ROOT,
       # see worker_worktree.py) and has the toolchain installed. The ticket
       # gets a worktree, and the workspace becomes a link to it, so local
@@ -180,7 +188,7 @@ jobs:
       # origin URL is reset to plain https here and in the last step, so
       # only the Claude app token, set by the action, pushes.
       - name: Prepare the ticket's worktree
-        if: vars.FACTORY_RUNNER != ''
+        if: env.WARM == 'true'
         env:
           ISSUE: ${{ inputs.issue }}
           ORIGIN: https://github.com/${{ github.repository }}
@@ -214,7 +222,7 @@ jobs:
             echo "go=true" >> "$GITHUB_OUTPUT"
             echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.mark.outputs.go == 'true' && vars.FACTORY_RUNNER == ''
+      - if: steps.mark.outputs.go == 'true' && env.WARM != 'true'
         uses: ./.github/actions/toolchain
       # Bun and the Claude CLI from the Actions cache (see the action)
       - id: claude-deps
@@ -297,7 +305,7 @@ jobs:
       # from the shared clone's origin, and give the runner its workspace
       # directory back (a link to a pruned worktree would dangle).
       - name: Prune finished worktrees
-        if: always() && vars.FACTORY_RUNNER != ''
+        if: always() && env.WARM == 'true'
         env:
           ORIGIN: https://github.com/${{ github.repository }}
         working-directory: /

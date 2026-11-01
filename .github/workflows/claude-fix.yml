@@ -34,6 +34,10 @@ on:
         description: "What to fix (the tick writes this)"
         required: true
         type: string
+      runner:
+        description: "runs-on as JSON (the tick's choice, factory_runner.py); empty means FACTORY_RUNNER"
+        required: false
+        type: string
 
 jobs:
   fix:
@@ -47,8 +51,9 @@ jobs:
     # Agent runs can move to a self-hosted runner: set the repo variable
     # FACTORY_RUNNER to a JSON label or list ("warm", ["self-hosted", "x"]).
     # Unset, it's ubuntu-latest. test_factory_runner_policy.py keeps it off
-    # fork-reachable jobs.
-    runs-on: ${{ fromJSON(vars.FACTORY_RUNNER || '"ubuntu-latest"') }}
+    # fork-reachable jobs. The tick passes `runner`, ubuntu-latest when the
+    # warm worker is offline (factory_runner.py).
+    runs-on: ${{ fromJSON(inputs.runner || vars.FACTORY_RUNNER || '"ubuntu-latest"') }}
     timeout-minutes: 60
     permissions:
       contents: write

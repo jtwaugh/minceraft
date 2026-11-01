@@ -54,6 +54,8 @@ class Snapshot:
     done_prs: list = field(default_factory=list)  # numbers of closed or merged PRs (a dependency on one is met)
     merged_prs: list = field(default_factory=list)  # recently merged PRs: number, base, body, merged_at
     store: object = None  # open state store (sqlite connection); None without $FACTORY_STORE
+    runner: str = '"ubuntu-latest"'  # runs-on JSON for dispatched agent jobs (factory_runner.py)
+    runner_note: str = ""  # why FACTORY_RUNNER wasn't used, if it's set and wasn't
 
     @classmethod
     def from_dict(cls, d):
@@ -172,6 +174,8 @@ class Snapshot:
         # Only docs/ branches matter (the stalls pass); reading just those is
         # one call however many claude/ branches pile up.
         load_started_tickets(snap, repo, get)
+        import factory_runner
+        snap.runner, snap.runner_note = factory_runner.load(repo, get)
         refs = get(f"repos/{repo}/git/matching-refs/heads/docs")  # every match, unpaged
         snap.branches = [r["ref"][len("refs/heads/"):] for r in refs
                          if r["ref"].startswith("refs/heads/docs/")]
@@ -600,6 +604,7 @@ def _main(argv):
     print(f"{len(snap.issues)} issues, {len(snap.prs)} PRs, "
           f"{len(snap.branches)} docs branches; {snap.requests} API requests, "
           f"{snap.not_modified} of them 304 (free)")
+    print(f"agent jobs run on {snap.runner}" + (f" ({snap.runner_note})" if snap.runner_note else ""))
     backend = FakeBackend()
     live = not (dry or "--fixture" in args)
     if live:
