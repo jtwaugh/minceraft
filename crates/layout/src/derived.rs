@@ -91,7 +91,14 @@ impl DerivedMaps {
             d + 2 * SHORE_PAD,
             decorate,
         );
-        let big = Self::from_region(&region);
+        Self::from_padded(&region)
+    }
+
+    /// Maps for the inner area of `region`, which is padded by
+    /// [`SHORE_PAD`] on each side.
+    pub(crate) fn from_padded(region: &Region) -> Self {
+        let (w, d) = (region.width - 2 * SHORE_PAD, region.depth - 2 * SHORE_PAD);
+        let big = Self::from_region(region);
         let mut out = DerivedMaps {
             width: w,
             depth: d,

@@ -6,14 +6,16 @@
 //! columns in a small cone around the column with no leaves above the ground),
 //! slope and sun-facing (from the surface height of the four neighbours),
 //! hollow (surface height minus the mean of rings around the column) and
-//! forest edge (distance from an open column to the nearest leaf column).
+//! forest edge (distance from an open column to the nearest leaf column) and
+//! exposure (open water upwind of the column).
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, FLORA_EDGE_RADIUS, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, FLORA_SUN,
-    FLORA_SUN_FACING_FLAT, NICHE_MARGIN_EDGE, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW,
-    NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS,
+    FLORA_SUN, FLORA_SUN_FACING_FLAT, FLORA_WIND, NICHE_MARGIN_EDGE, NICHE_MARGIN_EXPOSURE,
+    NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE,
+    NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
 };
 use crate::trees::libm_sqrt;
 use crate::{HEIGHT, SEA_LEVEL};
@@ -29,6 +31,7 @@ pub enum NicheLayer {
     SunFacing,
     Hollow,
     Edge,
+    Exposure,
 }
 
 impl NicheLayer {
@@ -42,6 +45,7 @@ impl NicheLayer {
             NicheLayer::SunFacing => NICHE_MARGIN_SUN_FACING,
             NicheLayer::Hollow => NICHE_MARGIN_HOLLOW,
             NicheLayer::Edge => NICHE_MARGIN_EDGE,
+            NicheLayer::Exposure => NICHE_MARGIN_EXPOSURE,
         }
     }
 }
@@ -77,6 +81,7 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
         NicheLayer::Light => Some(light(world, x, y, z)),
         NicheLayer::Hollow => Some(hollow(world, x, z)),
         NicheLayer::Edge => Some(edge(world, x, y, z)),
+        NicheLayer::Exposure => Some(exposure(world, x, z)),
     }
 }
 
@@ -169,6 +174,28 @@ pub(crate) fn edge(world: &World, x: i32, y: i32, z: i32) -> f64 {
         }
     }
     libm_sqrt(best as f64)
+}
+
+/// Share of `FLORA_EXPOSURE_CAP` taken by water columns met walking from
+/// `(x, z)` towards `FLORA_WIND`, one rounded step at a time, before the first
+/// land column. A column is water where its [`surface_height`] block is liquid.
+pub(crate) fn exposure(world: &World, x: i32, z: i32) -> f64 {
+    // Round to nearest; the offset keeps the truncation a floor.
+    let round = |v: f64| (v + 1024.5) as i32 - 1024;
+    let mut water = 0;
+    for i in 1..=FLORA_EXPOSURE_CAP {
+        let (wx, wz) = (
+            round(i as f64 * FLORA_WIND.0),
+            round(i as f64 * FLORA_WIND.1),
+        );
+        let (px, pz) = (x + wx, z + wz);
+        let h = surface_height(world, px, pz);
+        if h < 0 || !is_liquid(world.get(px, h, pz)) {
+            break;
+        }
+        water += 1;
+    }
+    water as f64 / FLORA_EXPOSURE_CAP as f64
 }
 
 /// Product of `f`'s niche responses at the column whose air cell is `top`.

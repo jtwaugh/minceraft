@@ -148,6 +148,17 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     assert!(len > 0.0, "flora.toml: sun_x, sun_z must not both be 0");
     let (sx, sz) = (sx / len, sz / len);
     writeln!(out, "pub const FLORA_SUN: (f64, f64) = ({sx:?}, {sz:?});").unwrap();
+    let (wx, wz) = (
+        num(&doc["settings"]["wind_x"]),
+        num(&doc["settings"]["wind_z"]),
+    );
+    let len = (wx * wx + wz * wz).sqrt();
+    assert!(len > 0.0, "flora.toml: wind_x, wind_z must not both be 0");
+    let (wx, wz) = (wx / len, wz / len);
+    writeln!(out, "pub const FLORA_WIND: (f64, f64) = ({wx:?}, {wz:?});").unwrap();
+    let cap = int(&doc["settings"], "exposure_cap");
+    assert!(cap > 0, "flora.toml: exposure_cap must be positive");
+    writeln!(out, "pub const FLORA_EXPOSURE_CAP: i32 = {cap};").unwrap();
     let flat = num(&doc["settings"]["sun_facing_flat"]);
     writeln!(out, "pub const FLORA_SUN_FACING_FLAT: f64 = {flat:?};").unwrap();
     let radius = int(&doc["settings"], "light_radius");

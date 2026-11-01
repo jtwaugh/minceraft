@@ -16,7 +16,7 @@ pub mod shapes;
 pub mod tables;
 pub mod tint;
 
-pub use mesh::{mesh_blocks, Mesh};
+pub use mesh::{mesh_blocks, mesh_blocks_front, Mesh, NO_FRONT};
 pub use quads::{Quads, Tint};
 pub use tables::{
     b, face_uv, Face, CROSS, FACES, LEAVES, OPAQUE, OPAQUE_FAST, UPPER_HALF, VARIES, WATERLOGGED,

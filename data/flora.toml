@@ -14,7 +14,7 @@
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
 #   niche         optional layer name -> [lo, hi], lo <= hi; layers: height_above_sea |
-#                 soil_depth | light | slope | sun_facing | hollow | edge. The response is 1
+#                 soil_depth | light | slope | sun_facing | hollow | edge | exposure. The response is 1
 #                 inside and falls to 0 over niche_margin_<layer> outside; the product
 #                 multiplies the biome chance. height_above_sea is ground y minus sea
 #                 level; soil_depth counts dirt and grass from the ground block down;
@@ -32,7 +32,14 @@
 #                 edge is the straight-line distance in columns to the nearest column
 #                 within edge_radius (circle) with a leaf block above the ground block:
 #                 0 where the column itself has one (not open), edge_radius where none
-#                 is within reach.
+#                 is within reach;
+#                 exposure is the share of exposure_cap columns of open water upwind:
+#                 step one column at a time (rounded) from the column towards
+#                 (wind_x, wind_z), counting water columns until the first land column
+#                 or exposure_cap steps; count / exposure_cap, 0 to 1. A column is water
+#                 where its surface height block is a liquid (undecorated terrain), so
+#                 0 inland and in a cove sheltered from the wind, near 1 on a shore
+#                 facing open water.
 
 [settings]
 patch_noise_salt = 7001
@@ -46,6 +53,11 @@ colour_scale = 20.0     # blocks per cell of the noise that picks the winner
 sun_x = 0.0             # horizontal direction towards the noon sun (x, z);
 sun_z = 1.0             # normalised by build.rs
 sun_facing_flat = 0.5   # sun_facing of a column with no slope
+wind_x = 1.0            # horizontal direction the prevailing wind comes from (x, z);
+wind_z = 0.0            # normalised by build.rs
+# Length, in columns, of the `exposure` ray and the count that scores 1. Must stay
+# inside the decoration margin (a test checks it).
+exposure_cap = 48
 # Columns, within this distance (circle) of the column itself, that make up the
 # cone of the `light` layer. Shared with the client shade tint (#1610).
 light_radius = 2
@@ -63,6 +75,7 @@ niche_margin_slope = 0.25
 niche_margin_sun_facing = 0.2
 niche_margin_hollow = 1.0
 niche_margin_edge = 1.0
+niche_margin_exposure = 0.2
 
 [[flora]]
 name = "daisy"

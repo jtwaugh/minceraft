@@ -1,0 +1,14 @@
+# A straight dock out over the water from the plaza (docs/design/villages-and-villagers.md 2.1, 2.2).
+kind = "dock"
+size = [3, 2, 8]      # x, y, z
+origin_offset = [-1, 0, -7]
+palette = { P = "dock_planks", L = "dock_post", "." = "air" }
+layers = [
+  # y = 0 (floor, posts at the corners)
+  ["LPL", "PPP", "PPP", "PPP", "PPP", "PPP", "PPP", "LPL"],
+  # y = 1
+  ["...", "...", "...", "...", "...", "...", "...", "..."],
+]
+connectors = [
+  { cell = [1, 1, 7], facing = "+z", pool = "caps" },  # joins the plaza
+]
