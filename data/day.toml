@@ -13,3 +13,12 @@ start_fraction = 0.3
 # `sun_azimuth_degrees` turns the whole path about the vertical axis, in 0..360.
 sun_tilt_degrees = 25.0
 sun_azimuth_degrees = 0.0
+
+# Scene brightness, 0..1. `min_daylight` is the brightness at night (dark but
+# playable). `dawn_width` and `dusk_width` are fractions of the day: dawn is a
+# smooth ramp centred on sunrise (0.25) and dusk one centred on sunset (0.75).
+# Each is above 0 and up to 1, and together they must not exceed 1 so the
+# ramps never overlap.
+min_daylight = 0.15
+dawn_width = 0.1
+dusk_width = 0.1
