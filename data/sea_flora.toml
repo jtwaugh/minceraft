@@ -1,0 +1,60 @@
+# Sea flora (docs/design/sea-flora-and-shellfish.md sections 3 and 4).
+# Read by crates/layout/src/sea_flora.rs. Nothing places these yet.
+# Chances, scales and salts are this game's own numbers, tuned here.
+#
+# [[sea_flora]]
+# name               unique
+# shape              column | cluster
+# blocks             block names (data/blocks.toml); column: [middle, top],
+#                    cluster: [block]
+# habitats           habitat ids (data/habitats.toml)
+# bottom             block names; the seabed block must be one
+# depth_min / depth_max   water depth in blocks, inclusive, min <= max
+# shore_distance_max optional; distance to land in columns, inclusive
+# height_min / height_max column only: cells tall, inclusive, min <= max
+# surface_gap_min    column only: fewest water cells left above the top cell;
+#                    0 lets the top touch the surface, never rise above it
+# cluster_scale      blocks per patch noise cell, > 0
+# salt               unique per entry
+# chance             chance per eligible column, 0 to 1
+
+[[sea_flora]]
+name = "kelp"
+shape = "column"
+blocks = ["kelp_0", "kelp_1"]
+habitats = ["cold_open", "temperate_open", "rocky_shore"]
+bottom = ["gravel", "stone", "sand"]
+depth_min = 4
+depth_max = 16
+height_min = 3
+height_max = 12
+surface_gap_min = 0
+cluster_scale = 16.0
+salt = 1
+chance = 0.35
+
+# Near shore: 6 is the rocky_shore limit in data/habitats.toml.
+[[sea_flora]]
+name = "oyster"
+shape = "cluster"
+blocks = ["oyster"]
+habitats = ["rocky_shore", "temperate_open"]
+bottom = ["gravel", "stone"]
+depth_min = 1
+depth_max = 5
+shore_distance_max = 6
+cluster_scale = 8.0
+salt = 2
+chance = 0.3
+
+[[sea_flora]]
+name = "scallop"
+shape = "cluster"
+blocks = ["scallop"]
+habitats = ["cold_open", "temperate_open"]
+bottom = ["sand", "gravel"]
+depth_min = 3
+depth_max = 12
+cluster_scale = 12.0
+salt = 3
+chance = 0.08
