@@ -94,7 +94,7 @@ class Snapshot:
         gh_cache.begin()
         get, paged = gh_cache.get, gh_cache.get_all
 
-        for i in read_issues(repo, gh_cache.state, paged):
+        for i in read_issues(repo, gh_cache.state, paged, get=get):
             if i.get("pull_request"):
                 if i["state"] == "closed":
                     snap.done_prs.append(i["number"])
@@ -325,7 +325,7 @@ FULL_EVENTS = ("schedule", "workflow_dispatch")  # these ticks always read every
 FULL_EVERY = 3600  # seconds between full re-reads of the issue list
 
 
-def read_issues(repo, state, paged, now=None):
+def read_issues(repo, state, paged, now=None, get=None):
     """Every issue and PR in the repo, as the issues API gives them, read
     incrementally. The list is kept in `state` (gh_cache keeps it between
     ticks); a tick asks only for what was updated since the newest
@@ -333,7 +333,10 @@ def read_issues(repo, state, paged, now=None):
     full re-read happens with no saved list, on scheduled or hand-started
     ticks, at least hourly, so anything `since` can miss (a deleted or
     transferred issue) is corrected within the hour, and when `KEEP` has
-    changed, so a saved list never lacks a field the passes read."""
+    changed, so a saved list never lacks a field the passes read. Attaching
+    a sub-issue doesn't bump `updated_at` either, so with `get` an
+    incremental read also re-reads each open issue saved without a parent
+    (a 304 when it hasn't changed)."""
     now = now or datetime.now(timezone.utc)
     saved = state.get("issues")
     full_at = state.get("issues_full_at", "")
@@ -350,6 +353,13 @@ def read_issues(repo, state, paged, now=None):
                         f"&since={state['issues_since']}")
     for i in fetched:
         issues[str(i["number"])] = {k: i.get(k) for k in KEEP}
+    if not full and get:
+        seen = {str(i["number"]) for i in fetched}
+        for n, i in list(issues.items()):
+            if n not in seen and i["state"] == "open" and not i.get("parent_issue_url") \
+                    and not i.get("pull_request") and not i["title"].startswith("Plan:"):
+                fresh = get(f"repos/{repo}/issues/{n}")
+                issues[n] = {k: fresh.get(k) for k in KEEP}
     stamps = [i["updated_at"] for i in issues.values() if i.get("updated_at")]
     state["issues"], state["issues_since"] = issues, max(stamps, default=state.get("issues_since", ""))
     return sorted(issues.values(), key=lambda i: i["number"])

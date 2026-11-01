@@ -109,6 +109,43 @@ class Test(unittest.TestCase):
         b.apply(snap(), a)
         self.assertEqual((calls, len(b.refused)), ([], 1))
 
+    def adopt(self, live, post_error=None):
+        """set_parent #3 -> plan #5 on a snapshot saying #3 has no parent,
+        with GitHub saying its parent is `live` ("-" for none)."""
+        calls = []
+
+        def run(args, project=False):
+            calls.append(args)
+            if args[:2] == ["api", "repos/o/r/issues/3"]:
+                return f"33 {live}\n"
+            if post_error:
+                raise RuntimeError(post_error)
+            return ""
+        b = GhBackend("o/r", run)
+        s = snap(issues=[{"number": 3, "state": "open", "labels": [], "parent": None}])
+        b.apply(s, Action("set_parent", "issue#3", {"parent": 5}, "orphan"))
+        return b, s, calls
+
+    def test_set_parent_posts_when_live_issue_has_none(self):
+        b, s, calls = self.adopt("-")
+        self.assertEqual(calls[1], ["api", "-X", "POST", "repos/o/r/issues/5/sub_issues",
+                                    "-F", "sub_issue_id=33"])
+        self.assertEqual((s.issues[0]["parent"], b.failed), (5, []))
+
+    def test_set_parent_already_done_live_is_mirrored_without_a_post(self):
+        # 2026-11-01: a stale snapshot re-adopted a ticket attached by hand; the 422 crashed nine ticks
+        b, s, calls = self.adopt("https://api.github.com/repos/o/r/issues/5")
+        self.assertEqual((len(calls), s.issues[0]["parent"], b.failed), (1, 5, []))
+
+    def test_set_parent_under_another_parent_fails_without_a_post(self):
+        b, s, calls = self.adopt("https://api.github.com/repos/o/r/issues/8")
+        self.assertEqual((len(calls), s.issues[0]["parent"]), (1, None))
+        self.assertEqual(b.failed[0][1], "already a sub-issue of #8")
+
+    def test_set_parent_422_is_a_failed_write_not_a_crash(self):
+        b, s, calls = self.adopt("-", post_error="gh api -X POST: ... (HTTP 422)")
+        self.assertEqual((s.issues[0]["parent"], len(b.failed)), (None, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

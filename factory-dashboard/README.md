@@ -58,9 +58,11 @@ out as you through `gh`:
 - **Spec question:** one `/decide X` button per option.
 - **Unapproved ticket:** *Approve* adds `factory`; *Close* closes it as not
   planned.
-- **PR waiting on review:** *Review the diff* opens the PR's files on
-  GitHub; *Ask @claude to review* comments asking Claude for a review;
-  *Close PR* closes it unmerged. Merging stays on GitHub.
+- **PR waiting on review:** *Approve & merge* approves it as you with no
+  comment, then merges it with a merge commit (for your own PR, which GitHub
+  won't let you approve, it just merges); *Review the diff* opens the PR's
+  files on GitHub; *Ask @claude to review* comments asking Claude for a
+  review; *Close PR* closes it unmerged.
 - **Comment** on any waiting issue.
 - **Alerts:** *Investigate locally* opens Terminal in your checkout and
   starts Claude with what the alert knows, told to investigate only and
@@ -90,7 +92,8 @@ confirmed. Restarting the server forgets them.
 
 The server listens on 127.0.0.1 only and checks the Host header. Writes
 need a token that changes every launch, and it only allows comments,
-closing issues and PRs, the `factory`, `local` and `hold` labels, re-running
+closing issues and PRs, approving and merging a PR listed as waiting on
+review, the `factory`, `local` and `hold` labels, re-running
 failed runs it listed, running or enabling the tick, clearing or restoring
 `FACTORY_RUNNER`, and opening a local Terminal. Don't expose
 the port or run it on a shared machine: anything that can reach the port

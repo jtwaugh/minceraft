@@ -5,13 +5,16 @@ import { textureCanvas, textureSize, interfaceScale } from './uipx.js';
 import { panelImage } from './panel.js';
 import { buttonCss } from './uistyle.js';
 import { randomSeed, withSeed, DEFAULT_SEED } from './seed.js';
+import { drawString } from './font.js';
 
 // Nine-slice panel pieces, 4x4 texels each, and the water tile the sea scrolls.
 export const PANEL = [['panel_tl', 'panel_t', 'panel_tr'], ['panel_l', 'panel_c', 'panel_r'], ['panel_bl', 'panel_b', 'panel_br']];
 export const SEA_TILE = 'water_0';
 export const WORDMARK = 'wordmark';
-/** Entry links: section headings and scene links. */
-export const BUTTON_SELECTOR = 'body.styled h2 a, body.styled li a';
+/** Buttons: section headings (links or the Test play toggle), scene links and Random. */
+export const BUTTON_SELECTOR = 'body.styled h2 a, body.styled h2 button, body.styled li a, body.styled .seed button';
+/** Elements whose text is drawn in the pixel font once the tileset loads. */
+export const LABEL_SELECTOR = '[data-label]';
 const SEA_TEXELS = 8;
 // Layout the pixel scale is chosen for, in texels.
 const BASE_W = 160, BASE_H = 120;
@@ -36,37 +39,63 @@ export function menuModel(alpha, debug) {
   }));
 }
 
+function label(doc, tag, text) {
+  const el = doc.createElement(tag);
+  el.textContent = text;
+  el.dataset.label = text;
+  return el;
+}
+
 function link(doc, href, text, title) {
-  const a = doc.createElement('a');
+  const a = label(doc, 'a', text);
   a.href = href;
   a.dataset.href = href;
-  a.textContent = text;
   if (title) a.title = title;
   return a;
 }
+
+/**
+ * An entry with scenes gets a heading button that shows or hides its picker
+ * (the seed row and the scene links); an entry without one is a plain link.
+ */
 
 export function renderMenu(doc, root, model) {
   for (const entry of model) {
     const section = doc.createElement('section');
     const h = doc.createElement('h2');
-    h.appendChild(link(doc, entry.href, entry.label));
-    if (entry.alpha) {
-      const tag = doc.createElement('span');
-      tag.className = 'alpha';
-      tag.textContent = 'alpha';
-      h.appendChild(tag);
-    }
     section.appendChild(h);
-    if (entry.scenes.length) {
-      const ul = doc.createElement('ul');
-      for (const s of entry.scenes) {
-        const li = doc.createElement('li');
-        li.appendChild(link(doc, s.href, s.name, s.description));
-        ul.appendChild(li);
-      }
-      section.appendChild(ul);
+    if (!entry.scenes.length) {
+      h.appendChild(link(doc, entry.href, entry.label));
+      root.appendChild(section);
+      continue;
     }
-    if (entry.seedBox) section.appendChild(seedBox(doc, section));
+    const toggle = doc.createElement('button');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.appendChild(label(doc, 'span', entry.label));
+    if (entry.alpha) {
+      const tag = label(doc, 'span', 'alpha');
+      tag.className = 'alpha';
+      toggle.appendChild(tag);
+    }
+    h.appendChild(toggle);
+    const picker = doc.createElement('div');
+    picker.className = 'picker';
+    picker.hidden = true;
+    toggle.addEventListener('click', () => {
+      picker.hidden = !picker.hidden;
+      toggle.setAttribute('aria-expanded', String(!picker.hidden));
+      if (!picker.hidden) picker.querySelector('input')?.focus();
+    });
+    if (entry.seedBox) picker.appendChild(seedBox(doc, section));
+    const ul = doc.createElement('ul');
+    for (const s of entry.scenes) {
+      const li = doc.createElement('li');
+      li.appendChild(link(doc, s.href, s.name, s.description));
+      ul.appendChild(li);
+    }
+    picker.appendChild(ul);
+    section.appendChild(picker);
     root.appendChild(section);
   }
 }
@@ -78,23 +107,29 @@ export function renderMenu(doc, root, model) {
 function seedBox(doc, section) {
   const row = doc.createElement('p');
   row.className = 'seed';
-  const label = doc.createElement('label');
-  label.textContent = 'Seed ';
+  const name = label(doc, 'label', 'Seed');
+  name.htmlFor = 'seed';
   const input = doc.createElement('input');
   input.id = 'seed';
   input.placeholder = DEFAULT_SEED;
   input.autocomplete = 'off';
   input.spellcheck = false;
-  label.appendChild(input);
-  const random = doc.createElement('button');
+  // The pixel-font copy of the box's text, drawn by styleMenu.
+  const field = doc.createElement('span');
+  field.className = 'seed-field';
+  const text = doc.createElement('span');
+  text.className = 'seed-text';
+  field.append(input, text);
+  const random = label(doc, 'button', 'Random');
   random.type = 'button';
-  random.textContent = 'Random';
   const sync = () => {
     for (const a of section.querySelectorAll('a[data-href]')) a.href = withSeed(a.dataset.href, input.value);
+    field.redraw?.();
   };
   input.addEventListener('input', sync);
+  input.addEventListener('scroll', () => field.redraw?.());
   random.addEventListener('click', () => { input.value = randomSeed(); sync(); });
-  row.append(label, random);
+  row.append(name, random, field);
   // A value the browser restores on Back still reaches the links.
   setTimeout(sync, 0);
   return row;
@@ -140,9 +175,35 @@ export function styleMenu(doc, win, set) {
     doc.head.appendChild(btn);
   }
   btn.textContent = `${buttonCss(BUTTON_SELECTOR, scale, raised, pressed)}\n${BUTTON_SELECTOR} { display: block; text-decoration: none; }`;
+  pixelLabels(doc, set, scale);
+  for (const field of doc.querySelectorAll('.seed-field')) pixelSeed(doc, set, scale, field);
   h1?.classList.toggle('wordmark', Boolean(mark));
   doc.body.classList.add('styled');
   return true;
+}
+
+/** Draws every labelled element's text in the pixel font; the text stays as its aria-label. */
+export function pixelLabels(doc, set, scale) {
+  for (const el of doc.querySelectorAll(LABEL_SELECTOR)) {
+    el.setAttribute('aria-label', el.dataset.label);
+    el.replaceChildren(drawString(set, el.dataset.label, scale, doc));
+  }
+}
+
+/**
+ * The seed box keeps its native input for typing and the caret; its own text
+ * is transparent and the pixel-font copy (the placeholder, dimmed, while
+ * blank) is drawn over it, following the input's horizontal scroll.
+ */
+function pixelSeed(doc, set, scale, field) {
+  const input = field.querySelector('input'), text = field.querySelector('.seed-text');
+  field.redraw = () => {
+    const c = drawString(set, input.value || input.placeholder, scale, doc);
+    c.style.marginLeft = `${-input.scrollLeft}px`;
+    text.classList.toggle('placeholder', !input.value);
+    text.replaceChildren(c);
+  };
+  field.redraw();
 }
 
 if (typeof document !== 'undefined') {

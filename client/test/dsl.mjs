@@ -61,7 +61,8 @@
 // regions waiting to be meshed, and the region under the eye), regions.max_per_frame, chunks.max_per_tick,
 // verts.max_per_frame (stream only: the most work any one frame has done since the case began: regions
 // meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
-// all mesh kinds), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
+// all mesh kinds), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
+// every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
 // console.lines (output lines so far), console.text (the box), cheated, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
@@ -88,6 +89,8 @@ import * as terrain from '../../viewer/pkg/terrain_web.js';
 import { B, VERTEX_BYTES, legendContext } from '../../viewer/mesh.js';
 import { meshRegionCpu } from '../regionmesh.js';
 import { overBudget } from '../workbudget.js';
+import { meshCracks } from '../meshcheck.js';
+import { REGION_SIZE } from '../stream.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
 import { heldDraw } from '../helditem.js';
@@ -106,15 +109,19 @@ function init() {
 let meshCtx; // no textures in the harness: every face on layer 0, which changes no vertex counts
 const STREAM_SEED = 12345n;
 
-/** Meshes this frame's new and remeshed regions as scene.js would (no upload); returns the work done. */
-function meshFrame(walk, r) {
+/**
+ * Meshes this frame's new and remeshed regions as scene.js would (no upload); returns the work done
+ * and the crack faults (client/meshcheck.js) in their `opaque` parts, after `damage` (tests only) edits each.
+ */
+function meshFrame(walk, r, damage) {
   meshCtx ??= legendContext(terrain.legend(), new Uint8Array(256 * 3 * 2));
-  let verts = 0;
+  let verts = 0, faults = 0;
   for (const region of [...r.mesh, ...r.remesh]) {
     const { mesh } = meshRegionCpu({ walk, terrain, ctx: meshCtx, seed: STREAM_SEED }, region);
     for (const k of ['opaque', 'cutout', 'water', 'ice']) verts += mesh[k].verts.byteLength / VERTEX_BYTES;
+    faults += meshCracks(damage ? damage(mesh.opaque) : mesh.opaque, REGION_SIZE).length;
   }
-  return { regions: r.mesh.length + r.remesh.length, chunks: r.chunks, verts };
+  return { work: { regions: r.mesh.length + r.remesh.length, chunks: r.chunks, verts }, faults };
 }
 
 /** Split a script into cases of `{ name, line, steps: [{ line, op, args }] }`. */
@@ -132,7 +139,7 @@ export function parse(src) {
   return cases;
 }
 
-function world({ mode = 'walk', raft = false, debug = raft, stream = false, budget = 1 }) {
+function world({ mode = 'walk', raft = false, debug = raft, stream = false, budget = 1, damage = null }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
   const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
@@ -156,12 +163,14 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, budg
   });
   const seen = [];
   const most = stream ? { regions: 0, chunks: 0, verts: 0 } : null; // running maxima of one frame's work
+  const render = stream ? { faults: 0 } : null; // crack faults over every region meshed so far
   const frame = controller.frame;
   controller.frame = (dt) => {
     const state = frame(dt);
     seen.push(...state.events);
     if (most) {
-      const work = meshFrame(walk, state.regions);
+      const { work, faults } = meshFrame(walk, state.regions, damage);
+      render.faults += faults;
       for (const [k, v] of Object.entries(work)) most[k] = Math.max(most[k], v);
       const over = overBudget(work);
       if (over.length) seen.push(`overbudget ${over.map((k) => `${k}=${work[k]}`).join(' ')}`);
@@ -170,7 +179,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, budg
   };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, text: '', output: [], layout: null };
+  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
@@ -215,6 +224,10 @@ function read(w, path) {
   if (work) {
     if (!w.most) throw new Error(`${path} needs \`start ... stream\``);
     return w.most[work];
+  }
+  if (path === 'render.faults') {
+    if (!w.render) throw new Error(`${path} needs \`start ... stream\``);
+    return w.render.faults;
   }
   if (path.startsWith('regions.')) {
     const r = s.regions;
@@ -502,10 +515,11 @@ function parseStart(args) {
  * `execStep` (a parsed `{ op, args }`) never throw: they return `{ ok: true }` or
  * `{ ok: false, error }`. `transcript()` is the session as a valid script: `case <name>`,
  * the `start` line, then every line that succeeded (errored ones are dropped).
- * Call `close()` when done. `streamBudget` (tests only) meshes that many regions per frame in a stream world.
+ * Call `close()` when done. `streamBudget` (tests only) meshes that many regions per frame in a stream world;
+ * `damage` (tests only) maps each meshed region's `opaque` part to the one `render.faults` checks.
  */
-export function createSession(startArgs = [], name = 'session', { streamBudget = 1 } = {}) {
-  const w = world({ ...parseStart(startArgs), budget: streamBudget });
+export function createSession(startArgs = [], name = 'session', { streamBudget = 1, damage = null } = {}) {
+  const w = world({ ...parseStart(startArgs), budget: streamBudget, damage });
   let open = true;
   const lines = [`case ${name}`, `start ${(startArgs.length ? startArgs : ['walk']).join(' ')}`];
   const execStep = ({ op, args }) => {
