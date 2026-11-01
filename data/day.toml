@@ -6,3 +6,10 @@
 
 length_seconds = 600
 start_fraction = 0.3
+
+# The sun's path. `sun_tilt_degrees` leans the orbit plane away from straight
+# overhead: 0 passes through the zenith at noon, and the noon height is
+# 90 - tilt degrees. It must be from 0 up to (not including) 90.
+# `sun_azimuth_degrees` turns the whole path about the vertical axis, in 0..360.
+sun_tilt_degrees = 25.0
+sun_azimuth_degrees = 0.0
