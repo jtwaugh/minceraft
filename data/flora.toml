@@ -14,7 +14,7 @@
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
 #   niche         optional layer name -> [lo, hi], lo <= hi; layers: height_above_sea |
-#                 soil_depth | light | slope | sun_facing | hollow. The response is 1
+#                 soil_depth | light | slope | sun_facing | hollow | edge. The response is 1
 #                 inside and falls to 0 over niche_margin_<layer> outside; the product
 #                 multiplies the biome chance. height_above_sea is ground y minus sea
 #                 level; soil_depth counts dirt and grass from the ground block down;
@@ -28,7 +28,11 @@
 #                 of 8 columns (the 4 axis and 4 diagonal directions) on each ring of
 #                 hollow_radii, all rings weighted equally: negative in a hollow,
 #                 positive on a ridge. Surface height is the top movement-blocking or
-#                 liquid block, ignoring leaves, logs and plants (undecorated terrain).
+#                 liquid block, ignoring leaves, logs and plants (undecorated terrain);
+#                 edge is the straight-line distance in columns to the nearest column
+#                 within edge_radius (circle) with a leaf block above the ground block:
+#                 0 where the column itself has one (not open), edge_radius where none
+#                 is within reach.
 
 [settings]
 patch_noise_salt = 7001
@@ -48,6 +52,9 @@ light_radius = 2
 # Ring radii, in blocks, of the `hollow` layer. The largest must stay inside the
 # decoration margin (a test checks it).
 hollow_radii = [4, 8, 16]
+# Search radius, and cap, of the `edge` layer. Must stay within READ_REACH and,
+# with a tree's reach, inside the decoration margin (a test checks it).
+edge_radius = 8
 # Soft margins of the niche response, in each layer's own units.
 niche_margin_height_above_sea = 2.0
 niche_margin_soil_depth = 1.0
@@ -55,6 +62,7 @@ niche_margin_light = 0.1
 niche_margin_slope = 0.25
 niche_margin_sun_facing = 0.2
 niche_margin_hollow = 1.0
+niche_margin_edge = 1.0
 
 [[flora]]
 name = "daisy"
