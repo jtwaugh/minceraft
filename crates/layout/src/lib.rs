@@ -340,8 +340,6 @@ pub use scoring_extra::{extra_islands, ExtraIslands};
 mod sea_flora;
 pub use sea_flora::{SeaFlora, SeaFloraEntry, SeaFloraShape};
 mod sea_flora_pass;
-#[cfg(feature = "toml-io")]
-mod sea_flora_rules;
 mod structure;
 #[cfg(test)]
 mod structure_dir;

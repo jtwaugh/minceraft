@@ -1,5 +1,5 @@
 //! Parsing and validation of `data/sea_flora.toml`, shared by `build.rs`
-//! (which bakes the shipped table into the crate) and `SeaFlora::from_toml`
+
 //! (feature `toml-io`). `build.rs` includes this file by path, so keep it free
 //! of crate-internal dependencies beyond `rule_check`.
 
