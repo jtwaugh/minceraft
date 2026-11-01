@@ -5,8 +5,8 @@ use crate::data::{Biome, Block};
 use crate::decorate::{generate_decorated_with, World};
 use crate::decorate::{MARGIN_CELLS, READ_REACH};
 use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
-use crate::flora::{FloraRequires, FLORA_LIGHT_RADIUS};
-use crate::niche::{light, NicheLayer};
+use crate::flora::{FloraRequires, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS};
+use crate::niche::{hollow, light, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -1196,6 +1196,78 @@ fn light_cone_and_tree_reach_stay_inside_the_decoration_margin() {
 fn light_niche_entry_is_independent_of_region() {
     let seed = 12345;
     let table = niche_entry!(&[(NicheLayer::Light, 0.0, 0.6)]);
+    let big = gen(seed, -64, -64, 192, 192, &table);
+    let all = gen(seed, -64, -64, 192, 192, &niche_entry!(&[]));
+    let n = count(&big, Block::Daisy);
+    assert!(n > 0 && n < count(&all, Block::Daisy), "{n}");
+    for (ox, oz, w, d) in [(-37, 11, 41, 29), (0, 0, 17, 63), (60, -50, 33, 33)] {
+        let small = gen(seed, ox, oz, w, d, &table);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&small, x, y, z), at(&big, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}
+
+/// Hand-built Plains grass at y 70 over 75 by 33 columns, with a pit down to
+/// y 66 around (16, 16) and a knoll up to y 74 around (58, 16), both of radius
+/// 2. Hollow at the pit, a flat column and the knoll, and which got a daisy.
+fn hollow_placed(table: &[Flora]) -> ([f64; 3], [bool; 3]) {
+    let (w, d) = (75, 33);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let biome = vec![Biome::Plains as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&biome);
+    let near = |x: i32, z: i32, cx: i32| (x - cx).pow(2) + (z - 16).pow(2) <= 4;
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            let g = match () {
+                _ if near(x, z, 16) => 66,
+                _ if near(x, z, 58) => 74,
+                _ => 70,
+            };
+            for y in 0..g {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+            world.set(x, g, z, Block::Grass as u8);
+        }
+    }
+    let xs = [16, 37, 58];
+    let h = xs.map(|x| hollow(&world, x, 16));
+    place(&mut world, 12345, (0, 0, w as i32, d as i32), table);
+    let top = [67, 71, 75];
+    let daisy = [0, 1, 2].map(|i| world.get(xs[i], top[i], 16) == Block::Daisy as u8);
+    (h, daisy)
+}
+
+#[test]
+fn a_pit_scores_lower_than_a_knoll_and_a_hollow_niche_places_by_it() {
+    let (h, _) = hollow_placed(&[]);
+    assert_eq!(h, [-4.0, 0.0, 4.0]);
+    let pit = niche_entry!(&[(NicheLayer::Hollow, -10.0, -2.0)]);
+    assert_eq!(hollow_placed(&pit).1, [true, false, false]);
+    let ridge = niche_entry!(&[(NicheLayer::Hollow, 2.0, 10.0)]);
+    assert_eq!(hollow_placed(&ridge).1, [false, false, true]);
+}
+
+#[test]
+fn hollow_rings_stay_inside_the_decoration_margin() {
+    const {
+        let mut i = 0;
+        while i < FLORA_HOLLOW_RADII.len() {
+            assert!(FLORA_HOLLOW_RADII[i] > 0);
+            assert!(FLORA_HOLLOW_RADII[i] <= MARGIN_CELLS * 16);
+            i += 1;
+        }
+    }
+}
+
+#[test]
+fn hollow_niche_entry_is_independent_of_region() {
+    let seed = 12345;
+    let table = niche_entry!(&[(NicheLayer::Hollow, -40.0, -0.5)]);
     let big = gen(seed, -64, -64, 192, 192, &table);
     let all = gen(seed, -64, -64, 192, 192, &niche_entry!(&[]));
     let n = count(&big, Block::Daisy);
