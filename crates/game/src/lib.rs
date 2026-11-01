@@ -48,3 +48,4 @@ pub mod targeting;
 pub mod till;
 pub mod walk;
 pub mod wind_config;
+pub mod wind_exposure;
