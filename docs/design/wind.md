@@ -67,7 +67,7 @@ The world's wind is currently a constant sine: plants and leaves sway with one f
 
 ## 2. Want
 
-- Want: **one wind function**, `wind(seed, x, z, tick) -> (dx, dz)` in blocks per second (or a unitless 0..1 strength plus a direction), in the game crate and exported to wasm. Same inputs give the same output on every platform.
+- Want: **one wind function**, `wind(seed, x, z, tick) -> (dx, dz)` in blocks per second (or a unitless 0..1 strength plus a direction), in the game crate and exported to wasm. Same inputs give the same output on every platform, to visual accuracy only: native and wasm may differ in the last bits, and the cross-platform test uses a tolerance of 1e-9. (Decided in #1731.)
 - Want: **fronts.** A very low-frequency 2D noise field `P` (think pressure), sampled at a position that drifts with time: `P(x − u·t, z − v·t)`, where the drift `(u, v)` is itself constant or very slowly turning. Wind runs along the contours of `P` (its gradient rotated 90°), with speed proportional to the gradient's size. Steep regions are stormy and flat ones are calm. Front size (hundreds of blocks to a few thousand), drift speed and the speed scale go in `data/wind.toml`. A front should take minutes of play to pass over, not seconds.
   - Options for the gradient:
     - A. Finite differences: sample `P` at ±ε. That is four samples, which is simple.
@@ -108,9 +108,6 @@ The author's suggested phases in section 3 are used as written; the header lists
 
 ## Open questions
 
-1. **How exact must cross-platform wind be?**
-   - A. Visual only: native and wasm may differ in the last bits (tolerance test, 1e-9).
-   - B. Bit-exact: restrict the maths to exactly specified operations (`+ - * /`, `floor`, `sqrt`) so gameplay can read wind later.
 2. **Where does the "pin wind" state live?**
    - A. In the sim, set by a console command through the command queue, so replays record it.
    - B. In the client only, a debug override of the uniforms; the sim wind is untouched.
