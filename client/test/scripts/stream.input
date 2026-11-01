@@ -39,6 +39,16 @@ expect eye.z < -1
 expect eye.y > 30
 expect moved.y > -10
 
+case flying across a region border meshes regions without cracks
+start fly stream
+click
+lock
+down KeyW
+until regions.z = -1
+frame 50 x10
+expect regions.loaded > 9
+expect render.faults = 0
+
 # The stream budget of 1 is the guard against a meshing stall: crossing
 # region borders never meshes more than one region in a frame.
 case sprinting and flying across region borders meshes at most one region per frame
