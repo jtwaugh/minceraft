@@ -228,8 +228,7 @@ fn main() {
              bottom: &{:?}, depth_min: {}, depth_max: {}, shore_distance_max: {}, \
              cluster_scale: {:?}, salt: {}, chance: {:?} }},",
             f.name,
-            f.column
-                .map(|c| (c.height_min, c.height_max, c.surface_gap_min)),
+            f.column,
             f.blocks,
             f.habitats,
             f.bottom,

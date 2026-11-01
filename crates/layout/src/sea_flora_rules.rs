@@ -1,7 +1,8 @@
 //! Parsing and validation of `data/sea_flora.toml`, run by `build.rs`, which
 //! includes this file by path, so keep it free of crate-internal dependencies
-//! beyond `rule_check`; its column type is named as in the crate so `Debug` output is a literal. Until `SeaFlora::from_toml` is switched over, the
-//! parser in `sea_flora.rs` must give the same errors.
+//! beyond `rule_check`. `SeaFloraColumn` is named as in the crate so its
+//! `Debug` output is a literal there. Until `SeaFlora::from_toml` is switched
+//! over, the parser in `sea_flora.rs` must give the same errors.
 
 use serde::Deserialize;
 
