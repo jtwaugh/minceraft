@@ -1,0 +1,14 @@
+# A dead-end cap that is a small landing over the water (docs/design/villages-and-villagers.md 2.1, 2.2).
+kind = "cap"
+size = [5, 2, 4]      # x, y, z
+origin_offset = [-2, 0, 0]
+palette = { P = "dock_planks", L = "dock_post", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPP", "PPPPP", "PPPPP", "LPPPL"],
+  # y = 1 (posts at the far corners; connector)
+  [".....", ".....", ".....", "L...L"],
+]
+connectors = [
+  { cell = [2, 1, 0], facing = "-z", pool = "boardwalks" },  # joins the boardwalk
+]
