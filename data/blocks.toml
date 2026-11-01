@@ -778,3 +778,23 @@ opaque_cube = false
 waterlogged = true
 selection_inset = 2
 color = "#c98f6b"
+
+# Villages (villages-and-villagers A, 2.4): dock and boardwalk surface and
+# the stilts under it. Full cubes; the generator never places them.
+[[block]]
+id = 81
+name = "dock_planks"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#9a7448"
+
+[[block]]
+id = 82
+name = "dock_post"
+fire = [0, 0]
+collision = "full"
+opacity = 255
+opaque_cube = true
+color = "#4f3a22"
