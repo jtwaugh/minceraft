@@ -209,6 +209,12 @@ impl<'a> World<'a> {
         }
     }
 
+    /// The same world with `biome` (one id per column) as its biome map.
+    #[cfg(test)]
+    pub(crate) fn with_biome(self, biome: &'a [u8]) -> World<'a> {
+        World { biome, ..self }
+    }
+
     #[inline]
     fn col(&self, x: i32, z: i32) -> Option<usize> {
         let (dx, dz) = (x.wrapping_sub(self.x0), z.wrapping_sub(self.z0));

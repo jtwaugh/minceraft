@@ -4,7 +4,7 @@
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Biome, Block};
 use crate::decorate::World;
-use crate::niche::NicheLayer;
+use crate::niche::{self, NicheLayer};
 use crate::noise::{hash_f64, mix64, OctavePerlin, Rng};
 use crate::{AIR, HEIGHT};
 use alloc::vec::Vec;
@@ -104,6 +104,7 @@ pub(crate) fn place(
             // Entries that could grow here, with their chance in this biome.
             let mut eligible: Vec<(usize, f64, i32)> = Vec::new();
             let mut under = None;
+            let mut layers = Vec::new();
             for (i, f) in table.iter().enumerate() {
                 let (top, ground) = if f.requires == Some(FloraRequires::Canopy) {
                     match *under.get_or_insert_with(|| under_canopy(world, x, z)) {
@@ -124,9 +125,16 @@ pub(crate) fn place(
                 {
                     continue;
                 }
-                if let Some(&(_, chance)) = f.biomes.iter().find(|(b, _)| *b == biome) {
-                    eligible.push((i, chance, top));
+                let Some(&(_, mut chance)) = f.biomes.iter().find(|(b, _)| *b == biome) else {
+                    continue;
+                };
+                if !f.niche.is_empty() {
+                    chance *= niche::fit(world, f, (x, top, z), &mut layers);
+                    if chance <= 0.0 {
+                        continue;
+                    }
                 }
+                eligible.push((i, chance, top));
             }
             // The colour noise picks one winner, weighted by chance, so
             // neighbouring columns favour the same entry.
