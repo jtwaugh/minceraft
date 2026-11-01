@@ -71,17 +71,12 @@ impl DayClock {
             .ok_or_else(|| invalid("`min_daylight` must be a number from 0 to 1"))?;
         let dawn_width = get("dawn_width")?
             .as_float()
-            .filter(|w| *w > 0.0 && *w <= 1.0)
-            .ok_or_else(|| invalid("`dawn_width` must be a number above 0, up to 1"))?;
+            .filter(|w| *w > 0.0 && *w <= 0.5)
+            .ok_or_else(|| invalid("`dawn_width` must be a number above 0, up to 0.5"))?;
         let dusk_width = get("dusk_width")?
             .as_float()
-            .filter(|w| *w > 0.0 && *w <= 1.0)
-            .ok_or_else(|| invalid("`dusk_width` must be a number above 0, up to 1"))?;
-        if dawn_width + dusk_width > 1.0 {
-            return Err(invalid(
-                "`dawn_width` and `dusk_width` overlap (sum above 1)",
-            ));
-        }
+            .filter(|w| *w > 0.0 && *w <= 0.5)
+            .ok_or_else(|| invalid("`dusk_width` must be a number above 0, up to 0.5"))?;
         Ok(DayClock {
             min_daylight,
             dawn_width,
@@ -118,7 +113,8 @@ impl DayClock {
     /// at both ends, so there is no visible kink where a ramp meets day or night.
     pub fn daylight(&self, t: f64) -> f64 {
         // Measure from the start of dawn so neither ramp wraps past the end
-        // of the day; the loader's width check keeps them apart.
+        // of the day; the loader's width limit (0.5) keeps them apart
+        // and makes noon full daylight.
         let dawn_start = 0.25 - self.dawn_width / 2.0;
         let dusk_start = 0.75 - self.dusk_width / 2.0 - dawn_start;
         let u = (t - dawn_start).rem_euclid(1.0);
@@ -304,15 +300,16 @@ mod tests {
     fn daylight_is_monotonic_bounded_and_smooth() {
         for (dawn, dusk) in [
             (0.1, 0.2),
-            (0.7, 0.3),
-            (0.3, 0.7),
-            (0.99, 1e-2),
+            (0.5, 0.1),
+            (0.1, 0.5),
+            (0.49, 1e-2),
             (0.5, 0.5f64),
         ] {
             let text = TEXT
                 .replace("dawn_width = 0.1", &format!("dawn_width = {dawn:?}"))
                 .replace("dusk_width = 0.2", &format!("dusk_width = {dusk:?}"));
             let c = DayClock::from_toml(&text).unwrap();
+            assert_eq!(c.daylight(0.5), 1.0, "noon {dawn} {dusk}");
             let n = 10_000;
             let mut prev = c.daylight(0.0);
             for i in 1..=n {
@@ -363,6 +360,8 @@ mod tests {
             ("0.2", "0.1", "-0.1"),
             ("0.2", "0.1", "nan"),
             ("0.2", "0.6", "0.5"),
+            ("0.2", "0.6", "0.1"),
+            ("0.2", "0.1", "0.6"),
         ] {
             let e = case(m, d, s).unwrap_err();
             assert!(matches!(e.kind, DataErrorKind::Invalid(_)), "{m} {d} {s}");
