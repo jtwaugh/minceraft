@@ -79,6 +79,7 @@ Hills then feel windy, hollows feel calm, and wind funnels through gaps. Notes o
 - Want: **shelter.** Look upwind along the wind's direction at a few distances `d_i` (in data, e.g. 8, 16, 32 blocks). The steepest upwind rise `max_i (H(p − ŵ·d_i) − y) / d_i` sets a shelter factor that falls from 1 toward a floor as the rise steepens. Behind a cliff or ridge the wind drops. On the windward face it doesn't.
   - `ŵ` is the unit wind direction, found with `sqrt`.
   - Which wind sets the upwind direction: the fronts alone, or fronts + breeze? Fronts + breeze preferred, so the breeze can be sheltered by a headland.
+    > **Reconciler:** Decided: fronts + breeze set the shelter direction. This needs the breeze, so it waits on #1750 Phase A; until the breeze is built, shelter uses the fronts only. (Decided in #1800.)
 - Want: **channelling.** In low ground (below the local mean), turn the wind part-way toward the contour direction of `H`: `∇H` rotated 90°, with the sign chosen to agree with the incoming wind. The turn is stronger the deeper the point sits and the steeper the valley sides. No trig: rotate by swapping components and blend vectors. Strength goes in data.
 - Want: **order of the layers.** (fronts + breeze) gives the incoming direction. Then channelling, shelter and exposure are applied, then gusts, then the existing speed floor and ceiling. Gusts that roll in a sheltered spot are weaker too.
 - Want: **client.** Under wind Phase B option A, one sample at the player's eye drives every swaying plant in view. Standing in a valley would calm the hilltop trees in the distance too. Options:
@@ -127,9 +128,6 @@ The author's suggested phases in section 3 are used as written; the header lists
 2. **Who builds the shared cell cache?**
    - A. Whichever of the two ideas (this one or #1750) is built first builds it, storing the heights and the land fraction together; the other adds its field to the same fill.
    - B. This idea builds its own cache and #1750 later merges into it (or the reverse), with a follow-up ticket.
-3. **Which wind sets the shelter direction?** The author prefers fronts + breeze.
-   - A. Fronts + breeze, as the author prefers. Needs the breeze, so it waits on #1750 Phase A (before then, fronts only).
-   - B. Fronts only.
-4. **Does shelter also reduce the gust amplitude?** The order puts gusts after shelter, and the author says gusts in a sheltered spot are weaker too.
+3. **Does shelter also reduce the gust amplitude?** The order puts gusts after shelter, and the author says gusts in a sheltered spot are weaker too.
    - A. Yes: the shelter factor multiplies the gust amplitude as well as the front speed.
    - B. No: gusts are added at full strength after the terrain factors, then the floor and ceiling apply.
