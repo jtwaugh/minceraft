@@ -89,7 +89,9 @@ fn neighbours_agree_on_shared_edge_and_margin() {
                 a.origin().1.min(b.origin().1),
             );
             let (w, d) = if a.rx != b.rx { (2 * S, S) } else { (S, 2 * S) };
-            let both = l.generate_region(x0, z0, w as u32, d as u32, decorate);
+            let both = l
+                .generate_layout_region(x0, z0, w as u32, d as u32, decorate)
+                .region;
             let edge_x = if a.rx != b.rx { b.origin().0 } else { i32::MIN };
             let edge_z = if a.rz != b.rz { b.origin().1 } else { i32::MIN };
             for r in [&ra, &rb] {
@@ -115,13 +117,15 @@ fn three_by_three_any_order_matches_one_large_region() {
     let l = layout(777);
     let decorate = true;
     let origin = RegionCoord::new(-2, -2);
-    let big = l.generate_region(
-        origin.origin().0,
-        origin.origin().1,
-        3 * REGION_SIZE,
-        3 * REGION_SIZE,
-        decorate,
-    );
+    let big = l
+        .generate_layout_region(
+            origin.origin().0,
+            origin.origin().1,
+            3 * REGION_SIZE,
+            3 * REGION_SIZE,
+            decorate,
+        )
+        .region;
     let coords: Vec<RegionCoord> = (0..3)
         .flat_map(|dz| (0..3).map(move |dx| RegionCoord::new(-2 + dx, -2 + dz)))
         .collect();
