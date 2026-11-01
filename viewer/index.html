@@ -183,7 +183,7 @@
 </main>
 <details id="dev"><summary>stats</summary><dl id="devgrid"></dl></details>
 <script type="module">
-import { FALLBACK, REQUIRED, NAMES as SHARED, TINTED, VARIANTS } from './tilelist.js';
+import { FALLBACK, REQUIRED, NAMES as SHARED, TINTED, VARIANTS, variantName } from './tilelist.js';
 import init, * as wasm from './pkg/terrain_web.js';
 import { B, VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, legendContext, faceLayers, variantTable, quadIndices, columnTints, meshBlocks } from './mesh.js';
 import { hydrate, VIEW, BIOME, SNOWY, SEA } from './flyover/plan.js';
@@ -895,7 +895,7 @@ async function loadTextures() {
   // Stand-ins for missing biome tiles: flat legend colours (cactus and
   // pumpkin get ribs so their faces read as blocks).
   const ribs = (c, every, k) => (x) => (x % every === 0 ? dark(c, k) : c);
-  make.ice = solid(col('ice'));
+  make.ice = make.floe_ice_0 = solid(col('ice'));
   make.snow = solid(col('snow_layer'));
   make.cactus_side = (x) => [...ribs(col('cactus'), 4, 0.75)(x), 255];
   make.cactus_top = (x, y) => [...((x === 0 || y === 0 || x === 15 || y === 15) ? dark(col('cactus'), 0.8) : col('cactus')), 255];
@@ -919,7 +919,7 @@ async function loadTextures() {
   const leaf = make.leaves;
   make.leaves_fast = (x, y) => { const p = leaf(x, y); return p[3] ? p : [96, 96, 96, 255, true]; };
   // Variants missing from an older textures.json draw as their base tile.
-  for (const [base, { count }] of Object.entries(VARIANTS)) for (let i = 1; i < count; i++) make[`${base}_${i}`] ??= make[base];
+  for (const [base, { count }] of Object.entries(VARIANTS)) for (let i = 1; i < count; i++) make[variantName(base, i)] ??= make[base];
   const layers = LAYER_NAMES.map((n) => make[n]);
   // Fish model faces: one layer each, drawn at native size in the top-left
   // corner. The rest of the layer repeats the edge pixels so mipmaps

@@ -54,6 +54,14 @@ batch7 = {
                      "55545554", "55545054", "55545554", "44444444"],
     "plate_rack": ["44444444", "4eeeeee4", "43333334", "4eeeeee4",
                    "43333334", "4eeeeee4", "43333334", "44444444"],
+    # Sea-ice floes: ice plates split by deep-water cracks (a, 0), with a
+    # light gray pressure ridge (3, e) and off-white broken edges.
+    "floe_ice_0": ["bbebba0b", "bbbba0bb", "aa0abbe3", "bbbbb3eb",
+                   "be3eabbb", "b3ebbabb", "bbbbba0a", "ebbbbabb"],
+    "floe_ice_1": ["bbbabbbb", "ebba0bbe", "3eb0abb3", "bb3eba3e",
+                   "bbbbab3b", "a0aabbbb", "bbbbbbeb", "bebbbbbb"],
+    "floe_ice_2": ["b0bbbbeb", "ba0bbe3b", "bbaa3ebb", "ebbbab0a",
+                   "3ebbbabb", "b3bbbb0b", "bbbeba0b", "bbebba0b"],
 }
 for i in range(4):
     batch7[f"water_flow_{i}"] = shift_down(water_flow, 2 * i)

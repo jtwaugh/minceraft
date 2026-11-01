@@ -104,7 +104,12 @@ off-white plates with light gray rims),
 water_flow_0, water_flow_1, water_flow_2, water_flow_3 (flowing water
 for the sides of falling water: vertical streaks of water and deep
 water with a few off-white flecks; each frame moves the pattern down by
-2 pixels so the four frames loop, and each frame tiles on all edges)
+2 pixels so the four frames loop, and each frame tiles on all edges),
+floe_ice_0, floe_ice_1, floe_ice_2 (broken pack ice for the sea-ice
+floe band: plates of ice blue and off-white split by deep water and
+near-black cracks, with broken edges and a light gray pressure ridge;
+each variant cracks differently so neighbouring blocks don't repeat
+visibly, and each tiles on all edges)
 
 BATCH 8: PARTICLES (8x8, transparent background, no outline required,
 small and centred; most should use only 1 to 3 colors)
