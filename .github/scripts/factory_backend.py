@@ -186,8 +186,21 @@ class GhBackend(Backend):
                 from urllib.parse import quote
                 self._gh("api", "-X", "DELETE", f"repos/{r}/issues/{n}/labels/{quote(p['label'], safe='')}")
         elif k == "set_parent":
-            self._gh("api", "-X", "POST", f"repos/{r}/issues/{p['parent']}/sub_issues",
-                     "-F", f"sub_issue_id={self._id(n)}")
+            # Read the parent live: attaching one doesn't bump updated_at, so
+            # the snapshot's can be stale, and a second POST is a 422.
+            node, live = self._gh("api", f"repos/{r}/issues/{n}", "--jq",
+                                  '"\\(.id) \\(.parent_issue_url // "-")"').split()
+            if live != "-":
+                if live.rsplit("/", 1)[1] == str(p["parent"]):
+                    return None  # already done: mirror it
+                self.failed.append((action, f"already a sub-issue of #{live.rsplit('/', 1)[1]}"))
+                return True
+            try:
+                self._gh("api", "-X", "POST", f"repos/{r}/issues/{p['parent']}/sub_issues",
+                         "-F", f"sub_issue_id={node}")
+            except RuntimeError as e:  # e.g. attached between the read and the POST
+                self.failed.append((action, str(e)))
+                return True
         elif k == "add_blocked_by":
             self._gh("api", "-X", "POST", f"repos/{r}/issues/{n}/dependencies/blocked_by",
                      "-F", f"issue_id={self._id(p['blocker'])}")

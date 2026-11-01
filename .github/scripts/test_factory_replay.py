@@ -126,7 +126,7 @@ class Live(unittest.TestCase):
 
         def run(args, project=False):
             calls.append(args)
-            return "123\n"
+            return "123 -\n" if "parent_issue_url" in args[-1] else "123\n"  # set_parent: no live parent
         return GhBackend("o/r", run), calls
 
     def test_untrusted_actor_is_refused_without_a_request(self):
