@@ -1,0 +1,16 @@
+# A chicken pen, scenery with no animals (docs/design/villages-and-villagers.md 2.3).
+kind = "building"
+size = [5, 3, 5]      # x, y, z
+origin_offset = [-2, 0, 0]
+palette = { P = "dock_planks", L = "dock_post", C = "crate", H = "thatch", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPP", "PPPPP", "PPPPP", "PPPPP", "PPPPP"],
+  # y = 1 (posts and crates around the pen, gap at the gate)
+  ["LCCCL", "C...C", "C...C", "C...C", "LC.CL"],
+  # y = 2 (a thatch shelter over the back corner)
+  ["HH...", "HH...", ".....", ".....", "....."],
+]
+connectors = [
+  { cell = [2, 1, 4], facing = "+z", pool = "boardwalks" },
+]
