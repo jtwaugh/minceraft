@@ -47,4 +47,5 @@ pub mod stream;
 pub mod targeting;
 pub mod till;
 pub mod walk;
+pub mod wind;
 pub mod wind_config;
