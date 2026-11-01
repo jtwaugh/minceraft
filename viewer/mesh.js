@@ -562,6 +562,8 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         const n = at(x + f.d[0], y + f.d[1], z + f.d[2]);
         let layer = layerOf(ctx, b, f.d[1], fast);
         if (b === B.grass && f.d[1] > 0) layer = pickLayer(ctx, layer, origin[0] + x, y, origin[1] + z);
+        // floe ice cracks vary by world (x, z) alone, the same on every face
+        if (b === B.floe_ice) layer = pickLayer(ctx, layer, origin[0] + x, 0, origin[1] + z);
         if (b === B.water) {
           // water: only next to air, plants or leaves (not water, ice or solids)
           if (isWater(n) || isIce(n) || SOLID_N[n]) continue;

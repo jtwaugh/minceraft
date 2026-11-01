@@ -1,7 +1,7 @@
 // Tile names shared by the viewer (index.html) and the client (client/tiles.js).
 // Each page appends what is its own (the viewer's sun_sky, the client's farm
 // and planter tiles) and builds its layer order from this list. Variant runs
-// are contiguous: a base tile is followed directly by its _1, _2 variants.
+// are contiguous: a base tile is followed directly by its variants (variantName).
 
 /** Tiles every textures.json must have for the viewer to use the tileset at all. */
 export const REQUIRED = ['stone', 'dirt', 'grass_top', 'grass_side', 'sand', 'gravel',
@@ -15,7 +15,7 @@ export const NAMES = [
   'water_flow_0', 'water_flow_1', 'water_flow_2', 'water_flow_3',
   'log_side', 'log_top', 'leaves',
   'birch_log_side', 'birch_log_top', 'spruce_log_side', 'spruce_log_top',
-  'ice', 'snow', 'cactus_side', 'cactus_top', 'pumpkin_side', 'pumpkin_top',
+  'ice', 'floe_ice_0', 'floe_ice_1', 'floe_ice_2', 'snow', 'cactus_side', 'cactus_top', 'pumpkin_side', 'pumpkin_top',
   'tall_grass', 'tall_grass_1', 'tall_grass_2', 'fern', 'fern_1', 'dead_bush',
   'dandelion', 'dandelion_1', 'rose', 'rose_1', 'sugar_cane',
   'brown_mushroom', 'red_mushroom',
@@ -25,8 +25,8 @@ export const NAMES = [
   // the leaves tile with its holes filled, for fast leaves
   'leaves_fast'];
 
-/** Blocks without a tile of their own yet -> the tile they borrow (floe art is a later ticket). */
-export const FALLBACK = { floe_ice: 'ice' };
+/** Blocks whose base tile has another name -> that tile. */
+export const FALLBACK = { floe_ice: 'floe_ice_0' };
 
 /** Tint palette characters (greyscale-and-tint pixels) per climate-tinted tile. */
 export const TINTED = { grass_top: '89', grass_top_1: '89', grass_top_2: '89', grass_side: '89',
@@ -37,11 +37,17 @@ export const TINTED = { grass_top: '89', grass_top_1: '89', grass_top_2: '89', g
   water_0: 'abe', water_1: 'abe', water_2: 'abe', water_3: 'abe',
   water_flow_0: 'abe', water_flow_1: 'abe', water_flow_2: 'abe', water_flow_3: 'abe' };
 
-/** Base tile name -> { count, weights }: weights sum to 1, base first; variant i is `${base}_${i}`. */
+/** Base tile name -> { count, weights }: weights sum to 1, base first; variant i is variantName(base, i). */
 export const VARIANTS = {
   grass_top: { count: 3, weights: [0.6, 0.2, 0.2] },
   tall_grass: { count: 3, weights: [0.6, 0.2, 0.2] },
   fern: { count: 2, weights: [0.7, 0.3] },
   dandelion: { count: 2, weights: [0.7, 0.3] },
   rose: { count: 2, weights: [0.7, 0.3] },
+  // floe ice: the meshers pick by world (x, z) alone (sea-ice-floes.md A)
+  floe_ice_0: { count: 3, weights: [1 / 3, 1 / 3, 1 / 3] },
 };
+
+/** Variant i of `base`: `${base}_${i}`, or the run's `_${i}` when the base ends in `_0`. */
+export const variantName = (base, i) =>
+  (i === 0 ? base : base.endsWith('_0') ? `${base.slice(0, -1)}${i}` : `${base}_${i}`);

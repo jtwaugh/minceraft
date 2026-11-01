@@ -243,6 +243,11 @@ pub fn mesh_blocks(
                             origin[1] + z as i32,
                         );
                     }
+                    // floe ice cracks vary by world (x, z) alone, the same on every face
+                    if b == FLOE_ICE {
+                        let (wx, wz) = (origin[0] + x as i32, origin[1] + z as i32);
+                        layer = pick_layer(variants, layer, wx, 0, wz);
+                    }
                     let quads = match b {
                         WATER => {
                             if is_water(n) || is_ice(n) || solid(n) {
