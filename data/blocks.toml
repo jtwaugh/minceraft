@@ -731,7 +731,7 @@ opaque_cube = false
 color = "#cfe2f5"
 
 # Kelp (sea-flora-and-shellfish B, 3): waterlogged crosses, kelp_0 a middle
-# segment and kelp_1 the top. The generator never places them yet.
+# segment and kelp_1 the top. Placed by the layout sea flora pass.
 [[block]]
 id = 77
 name = "kelp_0"
