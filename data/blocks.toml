@@ -729,3 +729,27 @@ collision = "full"
 opacity = 3
 opaque_cube = false
 color = "#cfe2f5"
+
+# Kelp (sea-flora-and-shellfish B, 3): waterlogged crosses, kelp_0 a middle
+# segment and kelp_1 the top. The generator never places them yet.
+[[block]]
+id = 77
+name = "kelp_0"
+fire = [0, 0]
+collision = "none"
+opacity = 3
+opaque_cube = false
+waterlogged = true
+selection_inset = 3
+color = "#4d6a2c"
+
+[[block]]
+id = 78
+name = "kelp_1"
+fire = [0, 0]
+collision = "none"
+opacity = 3
+opaque_cube = false
+waterlogged = true
+selection_inset = 3
+color = "#5f8236"

@@ -586,6 +586,37 @@ mod tests {
     }
 
     #[test]
+    fn kelp_draws_as_water_plus_a_plant() {
+        use crate::tables::b::{KELP_0, KELP_1};
+        // stone to 40, water 41..=44, kelp_0 at 42 and 43 and kelp_1 at 44 in a 3x3 pool
+        let pool = |kelp: bool| {
+            world(3, 0, move |x, z, y| match y {
+                0..=40 => STONE,
+                42 | 43 if kelp && x == 1 && z == 1 => KELP_0,
+                44 if kelp && x == 1 && z == 1 => KELP_1,
+                41..=44 => WATER,
+                _ => 0,
+            })
+        };
+        let (m, w) = (
+            plain(&pool(true), 3, 0, [0, 0]),
+            plain(&pool(false), 3, 0, [0, 0]),
+        );
+        // no faces between kelp and the water around it
+        assert_eq!(m.water.bytes(), w.water.bytes());
+        assert_eq!((m.cutout.faces(), w.cutout.faces()), (12, 0));
+        let mut ys: Vec<i16> = m
+            .cutout
+            .bytes()
+            .chunks(16)
+            .map(|v| i16::from_le_bytes([v[2], v[3]]).div_euclid(16))
+            .collect();
+        ys.sort();
+        ys.dedup();
+        assert_eq!(ys, [42, 43, 44, 45]);
+    }
+
+    #[test]
     fn waterlogged_cells_do_not_depend_on_the_area() {
         let f = |x: i32, z: i32, y: usize| match y {
             0..=40 => STONE,

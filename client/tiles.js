@@ -18,7 +18,9 @@ import { NAMES as SHARED, TINTED } from '../viewer/tilelist.js';
 const S = 16;
 /** Layer names in texture-array order. */
 export const NAMES = [...SHARED, 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
-  'planter_side', 'planter_top', 'planter_bottom', 'planter_farmland_top'];
+  'planter_side', 'planter_top', 'planter_bottom', 'planter_farmland_top',
+  // no art yet (sea-flora-and-shellfish open question 7): flat grey until drawn
+  'kelp_0', 'kelp_1'];
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
 /** Layers [ANIM_FIRST, ANIM_END) are the water runs; the shader offsets them by the frame. */
 export const ANIM_FIRST = L.water_0, ANIM_END = L.water_flow_3 + 1;

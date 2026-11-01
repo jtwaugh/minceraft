@@ -60,6 +60,27 @@ test('a waterlogged column meshes as plain water plus the plants', () => {
   for (const k of ['opaque', 'cutout', 'water', 'ice']) assert.deepEqual(quads(rs[k]), quads(m[k]), k);
 });
 
+test('kelp meshes as plain water plus the plants, in both meshers', () => {
+  // 3x3 pool: stone to 40, water 41..=44, kelp_0 at 42 and 43 and kelp_1 at 44 in the middle
+  const pool = (kelp) => {
+    const b = new Uint8Array(9 * H);
+    for (let c = 0; c < 9; c++) for (let y = 0; y <= 44; y++) {
+      const mid = kelp && c === 4;
+      b[c * H + y] = y <= 40 ? B.stone : mid && (y === 42 || y === 43) ? B.kelp_0 : mid && y === 44 ? B.kelp_1 : B.water;
+    }
+    return b;
+  };
+  const opts = { greedy: false };
+  const m = meshBlocks(ctx, pool(true), white(3), 3, 0, opts);
+  const w = meshBlocks(ctx, pool(false), white(3), 3, 0, opts);
+  // no faces between kelp and the water around it
+  assert.deepEqual(quads(m.water), quads(w.water));
+  assert.equal(m.cutout.faces, 12);
+  assert.equal(w.cutout.faces, 0);
+  const rs = meshBlocksWasm(wasm, ctx, pool(true), white(3), 3, 0, opts);
+  for (const k of ['opaque', 'cutout', 'water', 'ice']) assert.deepEqual(quads(rs[k]), quads(m[k]), k);
+});
+
 // Reproducible tints that differ per column and per corner (exact in f32).
 function randomTints(size, corners) {
   let a = 777;

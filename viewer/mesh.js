@@ -45,6 +45,7 @@ export const B = {
   test_waterlogged_plant: 68,
   thatch: 69, barrel: 70, plank_step: 71, drying_rack: 72, net: 73,
   counter: 74, plate_rack: 75, floe_ice: 76,
+  kelp_0: 77, kelp_1: 78,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -74,7 +75,7 @@ export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.ro
 const UPPER_HALF = flags([B.tall_grass_double_upper, B.dry_grass_tall_upper, B.fern_double_upper, B.cattail_upper, B.dune_grass_upper]);
 // Plants that are also water (`waterlogged` in data/blocks.toml), drawn as a
 // water cell plus a cross plant.
-export const WATERLOGGED = flags([B.test_waterlogged_plant]);
+export const WATERLOGGED = flags([B.test_waterlogged_plant, B.kelp_0, B.kelp_1]);
 // Water or a waterlogged block: water faces between them are hidden.
 const isWater = (b) => b === B.water || WATERLOGGED[b] === 1;
 
