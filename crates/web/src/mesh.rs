@@ -63,7 +63,8 @@ impl MeshOut {
 /// `tints` is the grass, leaf, water, dry and ground tints of each column
 /// (`size * size * 3` f32 each, in that order), then with the corners flag the
 /// same five per block corner (`(size + 1)^2 * 3` each). `colors` is the block
-/// colour table, 256 * 3 u8 (`ctx.COLORS`).
+/// colour table, 256 * 3 u8 (`ctx.COLORS`). `front_layer` is optional: 256
+/// layers, one per block, that replace the +Z face's layer (0xFF = none).
 #[wasm_bindgen]
 pub fn mesh_blocks(
     blocks: &[u8],
@@ -76,6 +77,7 @@ pub fn mesh_blocks(
     tints: &[f32],
     colors: &[u8],
     variants: &[f64],
+    front_layer: Option<Vec<u8>>,
 ) -> MeshOut {
     let tints = Tints {
         size: size as usize,
@@ -83,13 +85,16 @@ pub fn mesh_blocks(
         corners: flags & CORNERS != 0,
         colors,
     };
-    let m = mesh::mesh_blocks(
-        blocks,
-        size as usize,
-        pad as usize,
-        flags & FAST != 0,
-        flags & GREEDY != 0,
-        face_layer,
+    let m = mesh::mesh_blocks_front(
+        (
+            blocks,
+            size as usize,
+            pad as usize,
+            flags & FAST != 0,
+            flags & GREEDY != 0,
+            face_layer,
+        ),
+        front_layer.as_deref().unwrap_or(&[]),
         &tints,
         [origin_x, origin_z],
         &Variants(variants),
