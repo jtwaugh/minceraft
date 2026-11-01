@@ -6,9 +6,9 @@
 // Test play shows only with debug mode on.
 export const ALPHA = true;
 
-// `id` is the ?scene= value; the single-chunk scene has none (id: null).
+// `id` is the ?scene= value; the open-world scene has none (id: null).
 export const SCENES = [
-  { id: null, name: 'Single chunk', description: 'Generated terrain around the seed' },
+  { id: null, name: 'Open world', description: 'Generated terrain around the seed' },
   { id: 'raft', name: 'Raft', description: 'A raft rocking on a flat sea' },
 ];
 
