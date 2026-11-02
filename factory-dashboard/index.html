@@ -46,6 +46,7 @@ section > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em
 section > h2 .count { background: var(--chip); color: var(--ink); border-radius: 999px; padding: 0 8px;
   font-size: 12px; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
 section > h2 .hint { margin-left: auto; font-weight: 400; letter-spacing: 0; text-transform: none; }
+section > h2 .bulk { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 /* An empty section shrinks to its header line, so it doesn't weigh as much as a full one. */
 section.none > h2 { border-bottom: 0; }
 section.none > h2 .count { color: var(--muted); }
@@ -202,6 +203,17 @@ function confirmAct(a) {
     if (d.returnValue !== "ok") return;
     const steps = [];
     if (a.op) steps.push(a.op);
+    if (a.ops) {  // bulk: try every one, then say which failed
+      const bad = [];
+      for (const s of a.ops) {
+        const r = await post("/api/act", s);
+        if (!r.ok) bad.push(`#${s.number}: ${r.message}`);
+      }
+      toast(bad.length ? `${a.ops.length - bad.length} of ${a.ops.length} done. Failed ${bad.join("; ")}`
+        : `Done: ${a.ops.length} PR(s).`);
+      poll();
+      return;
+    }
     if (a.action === "comment") steps.push({action: "comment", number: a.number, body: body.value});
     if (a.action === "close") steps.push({action: "close", number: a.number, reason: a.reason, comment: a.body !== undefined ? body.value : ""});
     if (a.action === "label") steps.push({action: "label", number: a.number, label: a.label});
@@ -378,8 +390,8 @@ function render(p) {
   </div></section>`);
 
   // A section with a count; an empty one collapses to its header line.
-  const card = (title, items, none) => items.length
-    ? `<section><h2>${title} <span class="count">${items.length}</span></h2>${items.join("")}</section>`
+  const card = (title, items, none, extra = "") => items.length
+    ? `<section><h2>${title} <span class="count">${items.length}</span>${extra ? `<span class="hint bulk">${extra}</span>` : ""}</h2>${items.join("")}</section>`
     : `<section class="none"><h2>${title} <span class="count">0</span><span class="hint">${esc(none)}</span></h2></section>`;
   const left = [], right = [];
 
@@ -397,7 +409,20 @@ function render(p) {
     return `<span class="why">${esc(i.reason)}${i.ticket ? ` · ticket ${issue(i.ticket)}` : ""}</span>`;
   };
 
-  // Needs you.
+  // Needs you. Bulk buttons cover the same PRs the per-PR Approve and Merge buttons would show.
+  const nyPrs = ny.filter(i => i.type === "pr");
+  const toApprove = nyPrs.filter(i => !i.own && !i.approved);
+  const toMerge = nyPrs.filter(i => (i.own || i.approved) && (i.ci === "passed" || i.ci === "none"));
+  const nums = l => l.map(i => `#${i.number}`).join(", ");
+  const bulk = (toApprove.length ? btn(`Approve all PRs (${toApprove.length})`, {
+      ops: toApprove.map(i => ({action: "approve", number: i.number})), title: `Approve ${toApprove.length} PR(s)`,
+      text: `Approves the current head of ${nums(toApprove)} as you, with no comment. Did you review each diff?`,
+      ok: "Approve all"}) : "") +
+    (toMerge.length ? btn(`Merge all PRs (${toMerge.length})`, {
+      ops: toMerge.map(i => ({action: "merge", number: i.number})), title: `Merge ${toMerge.length} PR(s)`,
+      text: `Merges ${nums(toMerge)} one by one with merge commits: only the approved (or your own) ones with CI passed. ` +
+        "GitHub refuses any with a push since the last read, or that conflict once an earlier one lands.",
+      ok: "Merge all"}, "primary") : "");
   left.push(card("Waiting on you", ny.map(i => `
     <div class="item">
       <div class="row"><span class="num">${i.kind === "pr" ? pr(i.number) : issue(i.number)}</span>
@@ -407,7 +432,7 @@ function render(p) {
       ${i.options && i.options.length ? `<ul class="options">${i.options.map(([l, t]) =>
         `<li><b>${esc(l)}.</b> ${md(t)}</li>`).join("")}</ul>` : ""}
       <div class="actions">${needsYouActions(i)}</div>
-    </div>`), "Nothing waits on you."));
+    </div>`), "Nothing waits on you.", bulk));
   if (reports.length)
     left.push(`<section class="reports">${reports.map(r => `<div class="item"><div class="row">
       <span class="pill">report</span><span class="num">${issue(r.number)}</span><span class="title">${esc(r.title)}</span>

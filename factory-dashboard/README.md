@@ -72,6 +72,12 @@ out as you through `gh`:
   gets *Fix locally*, which opens Terminal in your checkout and starts
   Claude on the PR, told to check no fixer is already running, fix on the
   PR branch, ask before pushing, and never merge.
+- **Approve all PRs / Merge all PRs**, in the *Waiting on you* header: the
+  same per-PR approve and merge as above, for every PR that would show that
+  button. One dialog lists the PR numbers. Each one goes through the same
+  server checks, so Merge all still skips PRs that aren't approved or green.
+  It tries every PR and then says which ones failed. A later merge can fail
+  if an earlier one leaves it conflicting.
 - **Comment** on any waiting issue.
 - **Alerts:** *Investigate locally* opens Terminal in your checkout and
   starts Claude with what the alert knows, told to investigate only and
