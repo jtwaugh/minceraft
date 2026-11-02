@@ -11,7 +11,7 @@
 //   tint    R8:    greyscale of climate-tinted texels (0 otherwise)
 // The shader rebuilds (colour.rgb + tint.r * vtint) / colour.a.
 
-import { faceLayers } from '../viewer/mesh.js';
+import { faceLayers, NO_FRONT } from '../viewer/mesh.js';
 import { buildMips } from '../viewer/mips.js';
 import { FALLBACK, NAMES as SHARED, TINTED } from '../viewer/tilelist.js';
 
@@ -19,7 +19,7 @@ const S = 16;
 /** Layer names in texture-array order. */
 export const NAMES = [...SHARED, 'farmland_dry', 'farmland_wet', 'wheat_0', 'wheat_1', 'wheat_2', 'wheat_3',
   'planter_side', 'planter_top', 'planter_bottom', 'planter_farmland_top',
-  'counter_top', 'counter_side', 'plate_rack',
+  'counter_top', 'counter_side', 'plate_rack', 'chest_top', 'chest_side', 'chest_front',
   // no art yet (sea-flora-and-shellfish open question 7): flat grey until drawn
   'kelp_0', 'kelp_1', 'oyster', 'scallop'];
 const L = Object.fromEntries(NAMES.map((n, i) => [n, i]));
@@ -43,11 +43,19 @@ export function tileFor(B, names, b, dy, fast) {
     case B.planter_farmland_dry: case B.planter_farmland_wet:
       return dy > 0 ? L.planter_farmland_top : dy < 0 ? L.planter_bottom : L.planter_side;
     case B.counter: return dy > 0 ? L.counter_top : L.counter_side;
+    case B.chest: return dy ? L.chest_top : L.chest_side;
     // eight growth stages share the four wheat textures, two stages each
     case B.wheat_0: case B.wheat_1: case B.wheat_2: case B.wheat_3:
     case B.wheat_4: case B.wheat_5: case B.wheat_6: case B.wheat_7: return L[`wheat_${(b - B.wheat_0) >> 1}`];
     default: return L[names[b]] ?? L[FALLBACK[names[b]]] ?? L.stone; // stone, dirt, sand, gravel, ice, cross plants
   }
+}
+
+/** The +Z face table for legendContext(): `chest_front` on a chest, none elsewhere. */
+export function frontLayers(B) {
+  const t = new Uint8Array(256).fill(NO_FRONT);
+  t[B.chest] = L.chest_front;
+  return t;
 }
 
 /**

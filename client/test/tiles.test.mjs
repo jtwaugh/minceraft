@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLevels, tileFor, NAMES } from '../tiles.js';
+import { buildLevels, tileFor, frontLayers, NAMES } from '../tiles.js';
 import { B } from '../../viewer/mesh.js';
 
 const S = 16;
@@ -56,4 +56,17 @@ test('counter has its own top and side tiles; plate rack uses plate_rack on ever
   assert.equal(at(B.counter, -1), layer('counter_side'));
   for (const dy of [1, 0, -1]) assert.equal(at(B.plate_rack, dy), layer('plate_rack'));
   assert.equal(at(B.stone, 0), layer('stone'));
+});
+
+test('chest has top, side and bottom layers and chest_front on +Z only', () => {
+  const names = [];
+  names[B.stone] = 'stone'; names[B.chest] = 'chest';
+  const layer = (n) => { const i = NAMES.indexOf(n); assert.ok(i >= 0, n); return i; };
+  const at = (b, dy) => tileFor(B, names, b, dy, false);
+  assert.equal(at(B.chest, 1), layer('chest_top'));
+  assert.equal(at(B.chest, 0), layer('chest_side'));
+  assert.equal(at(B.chest, -1), layer('chest_top'));
+  const front = frontLayers(B);
+  assert.equal(front[B.chest], layer('chest_front'));
+  for (let b = 0; b < 256; b++) if (b !== B.chest) assert.equal(front[b], 0xFF, `block ${b}`);
 });

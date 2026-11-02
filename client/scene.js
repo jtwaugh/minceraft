@@ -27,7 +27,7 @@ import { raftBoxes, raftMatrix } from './raftmodel.js';
 import { itemBoxes, itemDraws } from './itemmodel.js';
 import { heldBoxes, heldDraw } from './helditem.js';
 import { SCENE_TEXTURES } from './scenetextures.js';
-import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
+import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
@@ -371,7 +371,7 @@ const names = [];
 const legendJson = terrain.legend();
 for (const b of JSON.parse(legendJson).blocks) names[b.id] = b.name;
 const faceLayer = await loadTiles(gl, B, names, '../viewer/textures.json');
-const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIANTS));
+const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIANTS), frontLayers(B));
 // Textured-model drawer (modelgl.js); nothing is drawn with it yet. Without the
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));

@@ -87,15 +87,16 @@ const isIce = (b) => b === B.ice || b === B.floe_ice;
  * Meshing context: names, colours and biomes from the legend() JSON, plus
  * `faceLayer`, the texture layer of every block face (see faceLayers). The
  * page owns the texture array, so it builds the table and hands it over.
- * `variants` (see variantTable) lets grass tops and cross plants pick one of
+ * `frontLayer` (optional, 256 layers, one per block) replaces the +Z face's layer
+ * where it isn't NO_FRONT. `variants` (see variantTable) lets grass tops and cross plants pick one of
  * several tiles per block; without it every block uses its base layer.
  */
-export function legendContext(json, faceLayer = null, variants = null) {
+export function legendContext(json, faceLayer = null, variants = null, frontLayer = null) {
   const legend = JSON.parse(json);
   const COLORS = [], NAMES = [], BIOMES = [];
   for (const b of legend.blocks) { COLORS[b.id] = b.color; NAMES[b.id] = b.name; }
   for (const b of legend.biomes) BIOMES[b.id] = b;
-  return { legend, COLORS, NAMES, BIOMES, faceLayer, variants };
+  return { legend, COLORS, NAMES, BIOMES, faceLayer, variants, frontLayer };
 }
 
 /**
@@ -126,6 +127,8 @@ export function variantTable(layerNames, variants) {
   }
   return out;
 }
+/** `ctx.frontLayer` entry for a block with no +Z face override. */
+export const NO_FRONT = 0xFF;
 const layerOf = (ctx, b, dy, fast = false) => ctx.faceLayer[(fast ? 768 : 0) + b * 3 + (dy > 0 ? 0 : dy < 0 ? 2 : 1)];
 
 /**
@@ -561,6 +564,7 @@ export function meshBlocks(ctx, blocks, tints, size, pad = 0, { fast = false, or
         if (y === y0 && f.d[1] < 0) continue;
         const n = at(x + f.d[0], y + f.d[1], z + f.d[2]);
         let layer = layerOf(ctx, b, f.d[1], fast);
+        if (f.d[2] > 0 && ctx.frontLayer && ctx.frontLayer[b] !== NO_FRONT) layer = ctx.frontLayer[b];
         if (b === B.grass && f.d[1] > 0) layer = pickLayer(ctx, layer, origin[0] + x, y, origin[1] + z);
         // floe ice cracks vary by world (x, z) alone, the same on every face
         if (b === B.floe_ice) layer = pickLayer(ctx, layer, origin[0] + x, 0, origin[1] + z);
