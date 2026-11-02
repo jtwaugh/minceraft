@@ -3,9 +3,14 @@ export function renderReport(findings, { runDate } = {}) {
   if (!Array.isArray(findings) || findings.length === 0) return null;
   const title = `Play critic findings, ${runDate}`;
   const lines = [`# Mince Raft: ${title}`, '', 'Status: idea', 'Scope: game', ''];
-  findings.forEach((f, i) => {
+  // Replayed findings first, then advisory ones (not replayed) under their own heading; numbering runs on.
+  const replayed = findings.filter((f) => f.advisory !== true);
+  const advisory = findings.filter((f) => f.advisory === true);
+  const ordered = [...replayed, ...advisory];
+  ordered.forEach((f, i) => {
+    if (advisory.length > 0 && i === replayed.length) lines.push('## Advisory (not replayed)', '');
     lines.push(
-      `## ${i + 1}. ${f.goal}`,
+      `${advisory.length > 0 && i >= replayed.length ? '###' : '##'} ${i + 1}. ${f.goal}`,
       '',
       `- Kind: ${f.kind}`,
       `- Severity: ${f.severity}`,
