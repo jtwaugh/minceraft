@@ -63,6 +63,10 @@ fn script() -> Vec<(TickInput, Vec<&'static str>)> {
         (idle, vec!["resume", "kitchen"]),
         (walk, vec![]),
         (walk, vec![]),
+        (idle, vec!["time set 0.75", "time freeze"]),
+        (walk, vec![]),
+        (idle, vec!["time resume"]),
+        (idle, vec![]),
     ]
 }
 
@@ -125,4 +129,25 @@ fn changing_a_command_or_tick_changes_the_hash() {
     let mut other_input = script();
     other_input[8].0.yaw = -1.0;
     assert_ne!(run_live(&other_input).1, live);
+}
+
+#[test]
+fn time_commands_replay_to_the_same_time_of_day() {
+    let mut live = fresh();
+    let mut rec = Recorder::new();
+    let idle = TickInput::default();
+    let lines = |l: &[&str]| l.iter().map(|c| c.to_string()).collect::<Vec<_>>();
+    rec.step(&mut live, &idle, &lines(&["time set 0.75", "time freeze"]));
+    rec.step(&mut live, &idle, &[]);
+    let held = live.time_of_day();
+    rec.step(&mut live, &idle, &lines(&["time resume"]));
+    rec.step(&mut live, &idle, &[]);
+    assert_ne!(live.time_of_day(), held);
+    let rec = rec.finish(&live);
+    let text = Recording::parse(&rec.to_text()).unwrap();
+    for r in [&rec, &text] {
+        let w = replayed(r);
+        assert_eq!(w.time_of_day(), live.time_of_day());
+        assert_eq!(w.world_hash(), live.world_hash());
+    }
 }
