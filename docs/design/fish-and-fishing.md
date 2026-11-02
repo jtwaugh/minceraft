@@ -141,7 +141,7 @@ Fish render as box models from the existing art (batch 11), using the textured b
 ### 4.3 Bite
 
 - While the bobber floats, a bite comes after a random delay (data, default 3 to 8 seconds). The species is drawn from the fish near the bobber, within a few blocks. If no fish is within a few blocks, there is no bite: the rod needs visible fish. A fish that is visibly swimming near the bobber is the one that bites, and it swims to the bobber first, with the `fishing_wake` particle trailing it. (Decided in #2078.)
-- On the bite, the bobber dips (and the `splash` particles play). The reel window is open for a set time (data, default 1 second).
+- On the bite, the bobber dips (and the `splash` particles play). The reel window is open for a set time (data, default 1 second). Phase D extends `client/particles.js` with sprite particles for `splash` and `fishing_wake`. (Decided in #2080.)
 - If the daily stock is empty when the bobber is cast, there are no bites until the next stock reset. (Decided in #2079.)
 
 ### 4.4 Reel
@@ -202,7 +202,4 @@ Add to the events of basic-gameplay section 11:
 
 ## Open questions
 
-2. **Particles for `splash` and `fishing_wake`.** The client has no particle system.
-   - A: Phase D ships without particles and a follow-up adds them (suggested).
-   - B: add a minimal sprite-particle path to the client in Phase D.
 4. **Squid body and swim data (note 1).** A: game-owned `data/fish_bodies.toml` entry like the fish (suggested). B: open a `research` question for the facts SPEC 14 lacks.
