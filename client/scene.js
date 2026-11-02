@@ -597,6 +597,11 @@ function render(now) {
     }
   }
 
+  if (pixel) { // quiet frames in a row: nothing queued or left to mesh (pixelpass.mjs waits on this)
+    const idle = regions && regions.loaded > 0 && !regions.pending && !regions.mesh.length && !regions.remesh.length;
+    window.pixelQuietFrames = idle ? (window.pixelQuietFrames ?? 0) + 1 : 0;
+  }
+
   const dpr = window.devicePixelRatio || 1;
   const w = pixel ? pixel.width : Math.round(canvas.clientWidth * dpr), h = pixel ? pixel.height : Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }

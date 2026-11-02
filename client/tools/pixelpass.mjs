@@ -18,9 +18,9 @@ import { MAX_CROPS, pixelCheck } from '../pixelcheck.js';
 import { PIXEL_UNIFORMS, parsePixelMode } from '../pixelmode.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
-/** Canvas is read every POLL_MS; the frame counts as settled once it is unchanged for STABLE_POLLS reads. */
+/** The page is asked every POLL_MS whether it has had QUIET_FRAMES frames with nothing left to mesh. */
 export const POLL_MS = 500;
-export const STABLE_POLLS = 4;
+export const QUIET_FRAMES = 4;
 export const SETTLE_TIMEOUT_MS = 120000;
 /** The sky pass's fixed base colour as bytes (pixel mode forces it); those pixels are not solid geometry. */
 export const SKY = PIXEL_UNIFORMS.fogColor.map((v) => Math.round(v * 255));
@@ -115,16 +115,10 @@ async function render(browser, url) {
     await page.evaluateOnNewDocument(fakePointerLock);
     await page.goto(url);
     await page.waitForFunction(() => window.frameStats && window.frameStats().frames > 0, { timeout: SETTLE_TIMEOUT_MS });
-    // Regions mesh over several frames and the page reports no "done"; settled means unchanged for a while.
-    const deadline = Date.now() + SETTLE_TIMEOUT_MS;
-    let last = null, same = 0, shot;
-    while (same < STABLE_POLLS) {
-      if (Date.now() > deadline) throw new Error('the frame never settled; regions may still be meshing');
-      await new Promise((r) => setTimeout(r, POLL_MS));
-      shot = await page.evaluate(readCanvas);
-      same = shot.b64 === last ? same + 1 : 0;
-      last = shot.b64;
-    }
+    // Foliage sways every frame, so the canvas never stops changing; settled is scene.js reporting
+    // QUIET_FRAMES frames with no region queued or left to mesh.
+    await page.waitForFunction((n) => window.pixelQuietFrames >= n, { timeout: SETTLE_TIMEOUT_MS, polling: POLL_MS }, QUIET_FRAMES);
+    const shot = await page.evaluate(readCanvas);
     return { width: shot.width, height: shot.height, data: Buffer.from(shot.b64, 'base64') };
   } finally {
     await page.close();
