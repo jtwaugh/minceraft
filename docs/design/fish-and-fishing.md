@@ -141,7 +141,7 @@ Fish render as box models from the existing art (batch 11), using the textured b
 ### 4.3 Bite
 
 - While the bobber floats, a bite comes after a random delay (data, default 3 to 8 seconds). The species is drawn from the fish near the bobber if any are within a few blocks, otherwise from `species_for` at the bobber's column. A fish that is visibly swimming near the bobber is the one that bites, and it swims to the bobber first, with the `fishing_wake` particle trailing it.
-- On the bite, the bobber dips (and the `splash` particles play). The reel window is open for a set time (data, default 1 second).
+- On the bite, the bobber dips (and the `splash` particles play). The reel window is open for a set time (data, default 1 second). Phase D extends `client/particles.js` with sprite particles for `splash` and `fishing_wake`. (Decided in #2080.)
 
 ### 4.4 Reel
 
@@ -201,9 +201,6 @@ Add to the events of basic-gameplay section 11:
 
 ## Open questions
 
-2. **Particles for `splash` and `fishing_wake`.** The client has no particle system.
-   - A: Phase D ships without particles and a follow-up adds them (suggested).
-   - B: add a minimal sprite-particle path to the client in Phase D.
 3. **A bite on a species with no fish nearby (section 4.3).**
    - A: the bite spawns a fish of the drawn species just out of view and swims it to the bobber, taking one from the stock (suggested; keeps rule 1 approximately true).
    - B: no bite if no fish is within a few blocks (the rod needs visible fish).
