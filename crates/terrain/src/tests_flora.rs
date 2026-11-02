@@ -1708,31 +1708,51 @@ fn meadow(name: &str, biome: Biome) -> Vec<Flora> {
     }]
 }
 
-/// Hand-built flat grass at y 70 with oak leaves over every column at
-/// x >= `leaves_from`. Whether column (20, 20) got the plant of `table`.
-fn meadow_placed(biome: Biome, leaves_from: Option<i32>, table: &[Flora]) -> bool {
+/// One hand-built column of [`meadow_placed`]: ground height, leaves over it,
+/// water instead of grass on top.
+#[derive(Clone, Copy)]
+struct Col {
+    ground: i32,
+    leaves: bool,
+    water: bool,
+}
+
+/// Hand-built grass over `col(x, z)`. Whether column (20, 20) got the plant
+/// of `table` on its ground block.
+fn meadow_cols(biome: Biome, table: &[Flora], col: impl Fn(i32, i32) -> Col) -> bool {
     let n = 41;
     let mut blocks = vec![0u8; n * n * HEIGHT];
     let biomes = vec![biome as u8; n * n];
     let mut world = World::for_test(&mut blocks, n as i32, n as i32).with_biome(&biomes);
     for z in 0..n as i32 {
         for x in 0..n as i32 {
-            for y in 0..=70 {
+            let c = col(x, z);
+            for y in 0..=c.ground {
                 let b = match y {
-                    70 => Block::Grass,
-                    67..=69 => Block::Dirt,
+                    _ if y == c.ground && c.water => Block::Water,
+                    _ if y == c.ground => Block::Grass,
+                    _ if y > c.ground - 3 => Block::Dirt,
                     _ => Block::Stone,
                 };
                 world.set(x, y, z, b as u8);
             }
-            if leaves_from.is_some_and(|f| x >= f) {
-                world.set(x, 76, z, Block::OakLeaves as u8);
+            if c.leaves {
+                world.set(x, c.ground + 6, z, Block::OakLeaves as u8);
             }
         }
     }
     let block = table[0].block as u8;
     place(&mut world, 12345, (0, 0, n as i32, n as i32), table);
-    world.get(20, 71, 20) == block
+    world.get(20, col(20, 20).ground + 1, 20) == block
+}
+
+/// Flat grass at y 70 with oak leaves over every column at x >= `leaves_from`.
+fn meadow_placed(biome: Biome, leaves_from: Option<i32>, table: &[Flora]) -> bool {
+    meadow_cols(biome, table, |x, _| Col {
+        ground: 70,
+        leaves: leaves_from.is_some_and(|f| x >= f),
+        water: false,
+    })
 }
 
 #[test]
@@ -1744,10 +1764,36 @@ fn smultron_grows_a_few_columns_from_trees_and_not_in_the_open_or_under_them() {
 }
 
 #[test]
-fn johannesort_grows_in_the_open_and_not_under_trees() {
+fn johannesort_grows_where_its_niche_holds_and_not_where_a_layer_fails() {
     let t = meadow("johannesort", Biome::Plains);
-    assert!(meadow_placed(Biome::Plains, None, &t));
-    assert!(!meadow_placed(Biome::Plains, Some(20), &t), "shaded");
+    let flat = |_: i32, _: i32| Col {
+        ground: 70,
+        leaves: false,
+        water: false,
+    };
+    assert!(meadow_cols(Biome::Plains, &t, flat), "open, dry, sunny");
+    // Light: column (20, 20) is open but the columns to its east are not.
+    let shaded = |x, z| Col {
+        leaves: x >= 21,
+        ..flat(x, z)
+    };
+    assert!(!meadow_cols(Biome::Plains, &t, shaded), "light");
+    // Wetness: open water beside the column.
+    let wet = |x, z| Col {
+        water: (21..=22).contains(&x) && z == 20,
+        ..flat(x, z)
+    };
+    assert!(!meadow_cols(Biome::Plains, &t, wet), "wetness");
+    // Sun-facing: a slope falling towards the sun (+z) holds, one falling
+    // away from it fails.
+    let slope = |sign: i32| {
+        move |x, z| Col {
+            ground: 70 + sign * (20 - z),
+            ..flat(x, z)
+        }
+    };
+    assert!(meadow_cols(Biome::Plains, &t, slope(1)), "faces the sun");
+    assert!(!meadow_cols(Biome::Plains, &t, slope(-1)), "faces away");
 }
 
 #[test]
