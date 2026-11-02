@@ -27,7 +27,7 @@ test('prompt states the clean-room rules', () => {
 });
 
 test('prompt gives the finding schema fields and layout sweep', () => {
-  for (const s of ['kind', 'severity', 'goal', 'observation', 'suggestion', 'repro', 'control-flow', 'layout', 'low', 'medium', 'high']) {
+  for (const s of ['kind', 'severity', 'goal', 'observation', 'suggestion', 'repro', 'control-flow', 'layout', 'perf', 'render', 'low', 'medium', 'high']) {
     assert.ok(has(s) || prompt.includes(`\`${s}\``), s);
   }
   for (const s of ['1366', '1920', 'ultrawide', 'portrait', 'advisory', 'by design']) {
@@ -38,4 +38,11 @@ test('prompt gives the finding schema fields and layout sweep', () => {
 test('prompt says a repro needs an expect line that holds', () => {
   assert.match(prompt, /at least one `expect` line/);
   assert.match(prompt, /without one is always dropped/);
+});
+
+test('prompt lists perf and render in the intro and kind line, and the streamed-world goal', () => {
+  assert.match(prompt, /control flow, layout, performance and rendering/);
+  assert.match(prompt, /- `kind`: `control-flow`, `layout`, `perf` or `render`/);
+  assert.match(prompt, /region borders in a streamed\s+world/);
+  assert.ok(prompt.includes('start walk stream'));
 });
