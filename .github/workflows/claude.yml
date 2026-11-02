@@ -44,8 +44,46 @@ env:
     You are the implementer for this repository. Follow CLAUDE.md exactly, above all its clean-room rules: Beta behaviour comes only from SPEC.md, never edit SPEC.md or design docs, and if the spec is ambiguous or incomplete, open an issue labelled spec-question with gh issue create, then comment on the ticket 'Blocked by #<that issue>' (exactly that phrase, so the ticket restarts by itself once the question is answered) and stop. Before starting, read the ticket with gh issue view and check every issue on its Depends on line is closed; if one isn't, say so in a comment and stop. Run every check in CLAUDE.md's 'Before opening a PR' list before you push. To bring a branch up to date, use git fetch and git merge origin/master (never rebase or force-push). On a pull request the Claude action replaces CLAUDE.md (and any .claude/ or .mcp.json) with master's copy and leaves that unstaged, so git merge origin/master refuses to run. Before merging, run git restore CLAUDE.md (and git restore .claude .mcp.json if git status lists them); master's copy comes back with the merge. Never commit or stash those files otherwise. When the work is done, first run python3 -B .github/scripts/tickets.py claimed <ticket> <your branch>: if it prints anything, someone else is already building this ticket, so don't open a pull request; comment on the ticket with what it printed and stop. Otherwise open a pull request with gh pr create whose body says 'Closes #<issue>', cites the spec or design-doc sections implemented, and states whether world output changes for a fixed seed. Commands: only the tools in your allowed list run, and nobody can approve others. Write commit messages and issue or PR bodies to a file with the Write tool, then pass the file (git commit -F <file>, gh pr create --body-file <file>); don't put heredocs or command substitution in a command. If a command is refused, use an allowed alternative, and if you still can't finish, say exactly what you couldn't do in your final message.
 
 jobs:
+  # Where implement runs: FACTORY_RUNNER while a runner with its labels is
+  # online, else ubuntu-latest (factory_runner.py), so a run an event starts
+  # doesn't queue behind an asleep warm worker. The tick makes the same
+  # choice for the jobs it dispatches. Same `if` as implement, so it only
+  # spends a run when implement will.
+  runner:
+    if: |
+      github.event.sender.login == 'jtwaugh' && (
+        (github.event_name == 'issues' && github.event.action == 'labeled' &&
+          github.event.label.name == 'factory' &&
+          !startsWith(github.event.issue.title, 'Plan:') &&
+          contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.issue.user.login)) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      runs-on: ${{ steps.pick.outputs.runs-on }}
+    steps:
+      # master's script, whatever the event.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - id: pick
+        env:
+          # Listing runners needs repo admin. Without it, ubuntu-latest.
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN || github.token }}
+          FACTORY_RUNNER: ${{ vars.FACTORY_RUNNER }}
+        run: |
+          echo "runs-on=$(python3 -B .github/scripts/factory_runner.py "$GITHUB_REPOSITORY")" >> "$GITHUB_OUTPUT"
+
   # A ticket was labelled "factory", or someone mentioned @claude.
   implement:
+    needs: runner
     # Plan issues are never built directly; label their tickets instead.
     # Public repo: only jtwaugh can start a run, and a labelled issue must also
     # have been written by jtwaugh or the planner (claude[bot]), so nobody
@@ -66,9 +104,9 @@ jobs:
       cancel-in-progress: false
     # Agent runs can move to a self-hosted runner: set the repo variable
     # FACTORY_RUNNER to a JSON label or list ("warm", ["self-hosted", "x"]).
-    # Unset, it's ubuntu-latest. test_factory_runner_policy.py keeps it off
-    # fork-reachable jobs.
-    runs-on: ${{ fromJSON(vars.FACTORY_RUNNER || '"ubuntu-latest"') }}
+    # The runner job applies it (ubuntu-latest when unset or offline).
+    # test_factory_runner_policy.py keeps it off fork-reachable jobs.
+    runs-on: ${{ fromJSON(needs.runner.outputs.runs-on || '"ubuntu-latest"') }}
     timeout-minutes: 60
     permissions:
       contents: write
