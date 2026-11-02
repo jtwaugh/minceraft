@@ -10,7 +10,7 @@ use terrain::ProtectedMask;
 
 const SEEDS: [u64; 3] = [9, 12345, 31];
 /// Area around the first anchorage: spawn water, raft, channel and open sea.
-const AREA: (i32, i32, u32, u32) = (-96, -96, 192, 192);
+const AREA: (i32, i32, u32, u32) = (-160, -160, 320, 320);
 
 fn route_layout(seed: u64) -> (Layout, Vec<Level>) {
     build_route_layout(&WorldConfig { seed }, &build_route(seed, 2))

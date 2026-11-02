@@ -149,3 +149,106 @@ fn overlapping_regions_agree_across_a_channel_and_an_anchorage() {
         }
     }
 }
+
+fn coast_term(layout: &Layout) -> Option<&DensityTerm> {
+    layout
+        .density
+        .iter()
+        .find(|t| matches!(t, DensityTerm::Coast { .. }))
+}
+
+#[test]
+fn one_coast_over_the_whole_route() {
+    let p = RouteParams::shipped();
+    let (route, layout, _) = build(9, 4);
+    let coasts: Vec<_> = layout
+        .density
+        .iter()
+        .filter(|t| matches!(t, DensityTerm::Coast { .. }))
+        .collect();
+    assert_eq!(coasts.len(), 1);
+    let DensityTerm::Coast {
+        points,
+        seed,
+        near,
+        ramp,
+        height,
+        width,
+        fade,
+        wobble_length,
+    } = coasts[0]
+    else {
+        unreachable!()
+    };
+    let expect: Vec<_> = route.points.iter().map(|p| (p[0], p[1])).collect();
+    assert_eq!(points, &expect);
+    assert_eq!(*seed, 9);
+    assert_eq!(*near, (p.coast_near_min, p.coast_near_max));
+    assert_eq!(*ramp, (p.coast_ramp_min, p.coast_ramp_max));
+    assert_eq!(*height, (p.coast_height_min, p.coast_height_max));
+    assert_eq!(
+        (*width, *fade, *wobble_length),
+        (p.coast_width, p.coast_fade, p.coast_wobble_length)
+    );
+}
+
+#[test]
+fn no_coast_for_a_single_point_route() {
+    assert!(coast_term(&build(1, 0).1).is_none());
+}
+
+#[test]
+fn land_on_the_right_and_not_the_left() {
+    let p = RouteParams::shipped();
+    let off = (p.coast_near_max + p.coast_ramp_max + 1.0) as i32;
+    for seed in [1, 2, 3] {
+        let (route, layout, _) = build(seed, 2);
+        let (a, b) = (route.points[0], route.points[1]);
+        let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+        let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+        let d = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+        let (cx, cz) = (mx.round() as i32, mz.round() as i32);
+        let reg = layout.generate_region(cx - 100, cz - 100, 200, 200, false);
+        let top = |x: i32, z: i32| {
+            let (ix, iz) = ((x - reg.x0) as u32, (z - reg.z0) as u32);
+            let i = reg.index(ix, 0, iz);
+            (0..terrain::HEIGHT)
+                .rev()
+                .find(|&y| reg.blocks[i + y] != 0)
+                .map_or(0, |y| y as i32 + 1)
+        };
+        let side = |s: f64| {
+            let (x, z) = (mx - s * d[1] * off as f64, mz + s * d[0] * off as f64);
+            top(x.round() as i32, z.round() as i32)
+        };
+        // Right of the heading is (-dz, dx).
+        assert!(side(1.0) > terrain::SEA_LEVEL, "seed {seed} right");
+        assert!(side(-1.0) <= terrain::SEA_LEVEL, "seed {seed} left");
+    }
+}
+
+#[test]
+fn overlapping_regions_agree_across_the_coast() {
+    let (route, layout, _) = build(11, 2);
+    let a = route.points[0];
+    let (ax, az) = (a[0].round() as i32, a[1].round() as i32);
+    for decorate in [false, true] {
+        let big = layout.generate_region(ax - 70, az - 70, 140, 140, decorate);
+        let small = layout.generate_region(ax - 30, az - 15, 50, 70, decorate);
+        for z in 0..small.depth {
+            for x in 0..small.width {
+                let i = small.index(x, 0, z);
+                let j = big.index(
+                    (small.x0 + x as i32 - big.x0) as u32,
+                    0,
+                    (small.z0 + z as i32 - big.z0) as u32,
+                );
+                assert_eq!(
+                    small.blocks[i..i + terrain::HEIGHT],
+                    big.blocks[j..j + terrain::HEIGHT],
+                    "decorate={decorate} at ({x},{z})"
+                );
+            }
+        }
+    }
+}

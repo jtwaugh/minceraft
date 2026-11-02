@@ -12,6 +12,10 @@
 //!   a hash of `(seed, week)`. That is beyond `half_width + falloff` of the
 //!   channel for the shipped parameters, even on the inside of a 30 degree
 //!   bend.
+//! - One `Coast` term covers the whole route polyline, so the mainland on
+//!   the right of the heading is continuous around bends and from the first
+//!   anchorage to the last (villages-and-villagers 3.0). It is absent for a
+//!   route of fewer than two points.
 
 use crate::builder::{V0_ISLAND_DIST_MAX, V0_ISLAND_DIST_MIN, V0_SPAWN_WATER_RADIUS};
 use crate::route::unit;
@@ -81,6 +85,18 @@ pub fn build_route_layout(world: &WorldConfig, route: &Route) -> (Layout, Vec<Le
             falloff: params.channel_falloff,
             depth_below_sea: params.channel_depth_below_sea,
             clear_above: params.channel_clear_above,
+        });
+    }
+    if points.len() >= 2 {
+        layout.density.push(DensityTerm::Coast {
+            points: points.iter().map(|p| (p[0], p[1])).collect(),
+            seed: world.seed,
+            near: (params.coast_near_min, params.coast_near_max),
+            ramp: (params.coast_ramp_min, params.coast_ramp_max),
+            height: (params.coast_height_min, params.coast_height_max),
+            width: params.coast_width,
+            fade: params.coast_fade,
+            wobble_length: params.coast_wobble_length,
         });
     }
     layout.climate.push(ClimateBias::AlongPath {
