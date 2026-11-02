@@ -24,8 +24,8 @@ const GRASS: u8 = 3;
 const CACTUS: u8 = 20;
 const SNOW_LAYER: u8 = 24;
 /// Full cubes that hide the faces next to them (`SOLID` in `viewer/mesh.js`).
-const SOLID: [u8; 18] = [
-    1, 2, 3, 4, 5, 8, 9, 10, 23, 25, 26, 27, 28, 29, 30, 39, 40, 41,
+const SOLID: [u8; 25] = [
+    1, 2, 3, 4, 5, 8, 9, 10, 23, 25, 26, 27, 28, 29, 30, 39, 40, 41, 69, 70, 74, 75, 81, 82, 83,
 ];
 /// `front_layer` entry for a block with no front-face override.
 pub const NO_FRONT: u8 = 0xFF;

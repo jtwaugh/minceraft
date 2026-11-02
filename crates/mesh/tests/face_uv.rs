@@ -128,7 +128,10 @@ fn ids(t: &[bool; 256]) -> Vec<usize> {
 fn flag_tables_list_the_js_ids() {
     assert_eq!(
         ids(&OPAQUE),
-        [1, 2, 3, 4, 5, 8, 9, 10, 23, 25, 26, 27, 28, 29, 30, 39, 40, 41]
+        [
+            1, 2, 3, 4, 5, 8, 9, 10, 23, 25, 26, 27, 28, 29, 30, 39, 40, 41, 69, 70, 74, 75, 81,
+            82, 83
+        ]
     );
     assert_eq!(ids(&LEAVES), [11, 12, 13]);
     let mut fast = ids(&OPAQUE);
