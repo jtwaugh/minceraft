@@ -27,6 +27,7 @@ import { meshBlocksWasm } from '../viewer/meshwasm.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
+import { bobberBoxes, lineBoxes, bobberDraw } from './bobbermodel.js';
 import { fishBoxes, fishDraw, createTailTracker } from './fishmodels.js';
 import { raftBoxes, raftMatrix } from './raftmodel.js';
 import { itemBoxes, itemDraws, readStations, stationDraws } from './itemmodel.js';
@@ -46,7 +47,7 @@ import { mountHint, hintScale } from './hintui.js';
 import { mountCue } from './cueui.js';
 import { waitingForClick } from './waitingcue.js';
 import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
-import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readFish, readItems } from './overlay.js';
+import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readFish, readItems, readBobber, readRodTip } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { createSpans } from './perfspans.js';
@@ -282,6 +283,16 @@ function drawFish(mvp, fish, timeSeconds, daylight) {
       part === 'tail' ? fishBoxes(species, height).slice(2) : fishBoxes(species, height).slice(0, 2));
     models.drawModel(mvp, model, m, tint, daylight);
   }
+}
+
+// The bobber cube and its line, drawn with the fish (nothing while no line is out).
+let bobberModels = null;
+function drawBobber(mvp, bobber, tip, daylight) {
+  const d = bobberDraw(bobber, tip);
+  if (!d) return;
+  bobberModels ??= { bobber: models.addModel(bobberBoxes()), line: models.addModel(lineBoxes()) };
+  models.drawModel(mvp, d.bobber, bobberModels.bobber, undefined, daylight);
+  if (d.line) models.drawModel(mvp, d.line, bobberModels.line, d.lineTint, daylight);
 }
 
 // Loose items as camera-facing icon slabs, one model per item name.
@@ -646,6 +657,7 @@ function render(now) {
     }
   }
   drawFish(mvp, readFish(walk), now / 1000, daylightFactor(day));
+  drawBobber(mvp, readBobber(walk), readRodTip(walk, flying ? 1 : alpha), daylightFactor(day));
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   // Water faces point out of the water, so from below the surface they are
