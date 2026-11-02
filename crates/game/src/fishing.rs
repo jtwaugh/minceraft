@@ -2,13 +2,13 @@
 //! See docs/design/fish-and-fishing.md sections 4.2 and 4.6.
 //!
 //! A floating bobber draws a bite delay; a fish near it is lured in and
-//! bites on arrival. Catching and the window closing are not built yet, so
-//! every reel still brings in an empty line.
+//! bites on arrival. A reel while the window is open catches the fish; an
+//! unpressed window lets it escape and a new delay starts.
 
 use crate::bobber::{Bobber, BobberState};
 use crate::collision::CollisionWorld;
 use crate::events::GameEvent;
-use crate::fish_world::FishWorld;
+use crate::fish_world::{Catch, FishWorld};
 use crate::fishing_config::FishingConfig;
 use crate::item_entities::ItemEntityConfig;
 use crate::rng::Rng;
@@ -81,13 +81,35 @@ impl Fishing {
         });
     }
 
+    /// A reel press: while the bite window is open the biting fish is
+    /// caught and returned; otherwise the line comes in empty.
+    pub fn reel_press(
+        &mut self,
+        fish: &mut FishWorld,
+        events: &mut Vec<GameEvent>,
+    ) -> Option<Catch> {
+        let caught = match (self.bite, self.lured) {
+            (Bite::Open(_), Some(id)) if self.bobber.is_some() => fish.catch(id),
+            _ => None,
+        };
+        if caught.is_some() {
+            self.lured = None;
+        }
+        self.bring_in(caught.is_some(), events);
+        caught
+    }
+
     /// Bring the line in with nothing on it.
     pub fn reel(&mut self, events: &mut Vec<GameEvent>) {
+        self.bring_in(false, events);
+    }
+
+    fn bring_in(&mut self, caught: bool, events: &mut Vec<GameEvent>) {
         if self.bobber.take().is_some() {
             self.bite = Bite::Idle;
             events.push(GameEvent::LineReeled {
                 player: "player".to_string(),
-                caught: false,
+                caught,
             });
         }
     }
@@ -154,7 +176,20 @@ impl Fishing {
                 }
                 Some(_) => Bite::Luring(id),
             },
-            Bite::Open(n) => Bite::Open(n.saturating_sub(1)),
+            Bite::Open(n) if n > 1 => Bite::Open(n - 1),
+            Bite::Open(_) => {
+                if let Some(id) = self.lured.take() {
+                    if let Some(f) = fish.store().get(id) {
+                        events.push(GameEvent::FishEscaped {
+                            player: "player".to_string(),
+                            species: f.species.clone(),
+                        });
+                    }
+                    fish.clear_lure(id);
+                }
+                b.set_dipping(false);
+                Bite::Idle
+            }
         };
     }
 }
@@ -276,7 +311,7 @@ mod tests {
                 settled = Some(t);
             }
             for e in ev.drain(..) {
-                if matches!(e, GameEvent::FishBite { .. }) {
+                if bites.is_empty() && matches!(e, GameEvent::FishBite { .. }) {
                     bites.push((t, e));
                 }
             }
@@ -407,5 +442,97 @@ mod tests {
         let window = f.config().reel_window_ticks;
         assert_eq!(f.bite, Bite::Open(window));
         assert!(f.bobber().unwrap().dipping());
+    }
+
+    /// Run a pen until the window is open; returns the fish id.
+    fn open_window(
+        f: &mut Fishing,
+        w: &MemoryWorld,
+        world: &mut FishWorld,
+        ev: &mut Vec<GameEvent>,
+    ) {
+        f.cast([0.5, 62.0, 0.5], [0.0, -1.0, 0.0], ev);
+        let far = Aabb::new([100.0, 100.0, 100.0], [101.0, 102.0, 101.0]);
+        for t in 0..400 {
+            f.tick(w, true, [0.5, 62.0, 0.5], ev);
+            world.tick(t, [0.0, 0.0], &far, w, |_, _| None);
+            f.tick_bite(w, world, ev);
+            if matches!(f.bite, Bite::Open(_)) {
+                break;
+            }
+        }
+        assert!(matches!(f.bite, Bite::Open(_)));
+        ev.clear();
+    }
+
+    #[test]
+    fn a_press_in_the_window_catches_the_fish() {
+        let w = pen();
+        let mut world = FishWorld::default_from_data(1, 1 << 28).unwrap();
+        world.spawn("mackerel", [0.5, 57.5, 0.5], 0.0).unwrap();
+        let mut f = fishing();
+        let mut ev = Vec::new();
+        open_window(&mut f, &w, &mut world, &mut ev);
+        let (stock, n) = (world.stock(), world.store().len());
+        let c = f.reel_press(&mut world, &mut ev).unwrap();
+        assert_eq!(c.species, "mackerel");
+        assert_eq!(world.store().len(), n - 1);
+        assert_eq!(world.stock(), stock);
+        assert!(!f.line_out());
+        assert_eq!(
+            ev,
+            vec![GameEvent::LineReeled {
+                player: "player".into(),
+                caught: true
+            }]
+        );
+    }
+
+    #[test]
+    fn a_press_outside_the_window_catches_nothing() {
+        let mut world = FishWorld::default_from_data(1, 1 << 28).unwrap();
+        let id = world.spawn("mackerel", [0.5, 57.5, 0.5], 0.0).unwrap();
+        let mut f = fishing();
+        let mut ev = Vec::new();
+        f.cast([0.5, 62.0, 0.5], [0.0, -1.0, 0.0], &mut ev);
+        ev.clear();
+        assert!(f.reel_press(&mut world, &mut ev).is_none());
+        assert!(world.store().get(id).is_some());
+        assert_eq!(
+            ev,
+            vec![GameEvent::LineReeled {
+                player: "player".into(),
+                caught: false
+            }]
+        );
+    }
+
+    #[test]
+    fn an_expired_window_lets_the_fish_escape_and_a_bite_can_come_again() {
+        let w = pen();
+        let mut world = FishWorld::default_from_data(1, 1 << 28).unwrap();
+        let id = world.spawn("mackerel", [0.5, 57.5, 0.5], 0.0).unwrap();
+        let mut f = fishing();
+        let mut ev = Vec::new();
+        open_window(&mut f, &w, &mut world, &mut ev);
+        for _ in 0..f.config().reel_window_ticks {
+            f.tick_bite(&w, &mut world, &mut ev);
+        }
+        assert_eq!(
+            ev,
+            vec![GameEvent::FishEscaped {
+                player: "player".into(),
+                species: "mackerel".into()
+            }]
+        );
+        assert!(f.line_out() && !f.bobber().unwrap().dipping());
+        assert!(world.store().get(id).unwrap().lure.is_none());
+        ev.clear();
+        let far = Aabb::new([100.0, 100.0, 100.0], [101.0, 102.0, 101.0]);
+        for t in 0..800 {
+            world.tick(t, [0.0, 0.0], &far, &w, |_, _| None);
+            f.tick_bite(&w, &mut world, &mut ev);
+        }
+        assert!(ev.iter().any(|e| matches!(e, GameEvent::FishBite { .. })));
     }
 }

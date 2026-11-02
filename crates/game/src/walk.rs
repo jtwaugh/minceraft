@@ -1255,7 +1255,15 @@ impl Walker {
                 .cast(eye, look_dir(input.yaw, input.pitch), &mut self.events);
         }
         if ran.contains(&ActionKind::Reel) {
-            self.fishing.reel(&mut self.events);
+            if let Some(c) = self.fishing.reel_press(&mut self.fish, &mut self.events) {
+                self.events.push(GameEvent::FishCaught {
+                    player: "player".to_string(),
+                    species: c.species,
+                    item: c.raw_item.clone(),
+                    method: "rod".to_string(),
+                });
+                self.state.hands = Some(ItemInstance { item: c.raw_item });
+            }
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
             let outcome = self.forager.forage(pos, self.sim_tick);

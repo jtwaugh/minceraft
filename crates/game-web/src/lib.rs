@@ -280,6 +280,9 @@ fn describe_event(e: &GameEvent) -> String {
         GameEvent::FishBite { player, species } => {
             format!("fish_bite player={player} species={species}")
         }
+        GameEvent::FishEscaped { player, species } => {
+            format!("fish_escaped player={player} species={species}")
+        }
         GameEvent::ItemDropped {
             item,
             position,
@@ -965,6 +968,23 @@ mod tests {
             describe_event(&e),
             "fish_bite player=player species=mackerel"
         );
+    }
+
+    #[test]
+    fn describes_fish_escaped_and_rod_catch() {
+        let e = GameEvent::FishEscaped {
+            player: "player".into(),
+            species: "mackerel".into(),
+        };
+        assert_eq!(
+            describe_event(&e),
+            "fish_escaped player=player species=mackerel"
+        );
+        let e = GameEvent::LineReeled {
+            player: "player".into(),
+            caught: true,
+        };
+        assert_eq!(describe_event(&e), "line_reeled player=player caught=true");
     }
 
     #[test]
