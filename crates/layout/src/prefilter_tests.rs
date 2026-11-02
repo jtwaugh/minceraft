@@ -11,6 +11,7 @@ fn level(anchorage: [i32; 2], island_center: [i32; 2]) -> Level {
         anchorage,
         island_center,
         spawn_water_radius: 8.0,
+        supplies: Vec::new(),
     }
 }
 

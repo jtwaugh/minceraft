@@ -87,6 +87,7 @@ fn island_scores_are_deterministic_for_a_seed() {
         anchorage: [0, 0],
         island_center: [28, 6],
         spawn_water_radius: 8.0,
+        supplies: Vec::new(),
     };
     let (x0, z0, w, d) = window(&l, &t());
     let region = layout.generate_region(x0, z0, w, d, false);

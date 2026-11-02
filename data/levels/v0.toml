@@ -8,3 +8,18 @@ week = 1
 anchorage = [0, 0]
 island_center = [22, 12]
 spawn_water_radius = 8.0
+
+[[level.supplies]]
+item = "rice_grains"
+count = 8
+chest = 0
+
+[[level.supplies]]
+item = "nori"
+count = 4
+chest = 1
+
+[[level.supplies]]
+item = "cucumber"
+count = 4
+chest = 1

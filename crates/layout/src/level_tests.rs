@@ -39,7 +39,8 @@ fn example_loads() {
             week: 2,
             anchorage: [162, 41],
             island_center: [180, 22],
-            spawn_water_radius: 8.0
+            spawn_water_radius: 8.0,
+            supplies: Vec::new(),
         }
     );
 }
@@ -157,4 +158,65 @@ fn mistyped_climate_field_is_named() {
         Err(LevelFileError::Parse(m)) => assert!(m.contains("temp_end"), "{m}"),
         other => panic!("{other:?}"),
     }
+}
+
+const SUPPLIES: &str = r#"
+[[level.supplies]]
+item = "rice_grains"
+count = 8
+chest = 0
+
+[[level.supplies]]
+item = "nori"
+count = 4
+chest = 1
+"#;
+
+fn with_supplies(extra: &str) -> String {
+    format!("{}{extra}", EXAMPLE.split("[route]").next().unwrap())
+}
+
+#[test]
+fn supplies_load_and_round_trip() {
+    // `[[level.supplies]]` attaches to the last `[[level]]`.
+    let f = LevelFile::from_toml(&with_supplies(SUPPLIES)).unwrap();
+    assert!(f.levels[0].supplies.is_empty());
+    assert_eq!(
+        f.levels[1].supplies[1],
+        Supply {
+            item: "nori".into(),
+            count: 4,
+            chest: 1
+        }
+    );
+    assert_eq!(LevelFile::from_toml(&f.to_toml().unwrap()).unwrap(), f);
+    assert!(!LevelFile::from_toml(EXAMPLE)
+        .unwrap()
+        .to_toml()
+        .unwrap()
+        .contains("supplies"));
+}
+
+#[test]
+fn bad_supplies_name_the_field() {
+    for (from, to, field) in [
+        ("count = 8", "count = 0", "count"),
+        ("chest = 1", "chest = 2", "chest"),
+    ] {
+        let e = LevelFile::from_toml(&with_supplies(&SUPPLIES.replace(from, to))).unwrap_err();
+        assert!(
+            matches!(e, LevelFileError::BadSupply { field: f, .. } if f == field),
+            "{e:?}"
+        );
+        assert!(e.to_string().contains(field), "{e}");
+    }
+}
+
+#[test]
+fn v0_level_file_has_supplies() {
+    let f = LevelFile::from_toml(include_str!("../../../data/levels/v0.toml")).unwrap();
+    assert_eq!(
+        f.levels[0].supplies.iter().map(|s| s.count).sum::<u32>(),
+        16
+    );
 }
