@@ -3,13 +3,14 @@
 // is plain data that Node tests check; the DOM renderer is a thin mirror.
 //
 //   hudModel({ belt, health, maxHealth, phase, secondsLeft }) ->
-//     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected }], selected, hands, ready, stowed, hearts: { full, half, empty } }
+//     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected, dim }], selected, hands, ready, stowed, hearts: { full, half, empty } }
 //
 //   slotView(set, name, selected) -> { frame, icon }   frame is `slot` or `slot_selected`; icon is the item's texture name or null
 //   mountHud(document, set, parent) draws frames and icons from the parsed tileset at an integer scale (interfaceScale).
 //
 // `ready` is the selected tool's name when the hands are empty, else null.
-// `stowed` is true while the hands are full, so the belt's tools are put away.
+// `stowed` is true while the hands are full, so the belt's tools are put away; every slot is then `dim`.
+// Dim slots draw their frame and icon at STOWED_ALPHA, so the selection frame reads as greyed too.
 // The ready tool is drawn in the hands frame at READY_ALPHA; a carried item is opaque.
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
@@ -19,6 +20,7 @@ import { drawPanel } from './panel.js';
 import { findTexture, textureCanvas, interfaceScale } from './uipx.js';
 
 const READY_ALPHA = 0.5;
+const STOWED_ALPHA = 0.4;
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
 export function slotView(set, name, selected) {
@@ -47,7 +49,7 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
   return {
     crosshair: true,
     timer: { phase, secondsLeft },
-    slots: belt.slots.map((name, i) => ({ name, selected: i === belt.selected })),
+    slots: belt.slots.map((name, i) => ({ name, selected: i === belt.selected, dim: belt.hands != null })),
     selected: belt.selected,
     hands: belt.hands,
     ready: !belt.hands && belt.held?.startsWith('tool:') ? belt.held.slice(5) : null,
@@ -143,10 +145,12 @@ export function mountHud(document, set, parent = document.body, view = globalThi
         el.className = slot.selected ? 'slot selected' : 'slot';
         place(el, r, rects.belt.x, rects.belt.y);
         const frame = icon(v.frame, { x: 0, y: 0, w: r.w, h: r.h }, 0, 0);
+        if (frame && slot.dim) frame.style.opacity = STOWED_ALPHA;
         if (frame) el.append(frame);
         const ir = rects.slotIcons[i];
         if (v.icon && ir) {
           const ic = icon(v.icon, ir, r.x, r.y);
+          if (ic && slot.dim) ic.style.opacity = STOWED_ALPHA;
           if (ic) el.append(ic);
         }
         const num = rects.slotNumbers[i];
