@@ -5,12 +5,13 @@ scope: generator
 source: "#1597"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
 ---
 
 ## Current state
 
+- **Phase A done (plan #1629).** `floe_ice` block and `is_sea_ice` (#1688), layout and mesh/viewer accept it (#1707, #1734), crack textures with client-side variants (#1786), `data/sea_ice.toml` and `Biases::hard_ice_edge` (#1673), and the floe rule with determinism, subset, clumping and no-snow tests in `crates/terrain/src/tests_ice.rs` (#1847). Phase B is still `todo`; the notes below describing the hard edge predate Phase A.
 - **Hard edge today.** `crates/terrain/src/lib.rs` (~line 902) sets `frozen = t < 0.5 && !open_water(wx, wz)`. The density fill puts `ICE` at `y = SEA_LEVEL - 1` when `frozen`, and `Generator::surface` does the same for a beach/stone-patch water top. `t` is the unquantised column temperature after the temperature biases.
 - **`open_water` hook exists.** `trait OpenWater` and `Biases::open_water` (`lib.rs`, ~lines 165-210); `Layout::with_biases` (`crates/layout/src/region.rs`) builds the `Biases`. `Biases` derives `Default` ("none").
 - **Ice is one block.** `ice` is block id 7 in `data/blocks.toml` (opacity 3, `collision = "full"`, not `opaque_cube`); `crates/terrain/src/lib.rs` has `const ICE`. Places that compare against it: the snow pass and `decorate.rs:704` (`below == ICE`), the column scan at `lib.rs:553-554`, `crates/layout/src/derived.rs:61` (`frozen[i] = surface == Block::Ice`), and `tests_veg.rs` (~line 110, ~284).
