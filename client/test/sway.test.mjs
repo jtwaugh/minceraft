@@ -50,42 +50,50 @@ test('trunk lean: at weight 1 never exceeds half a texel (0.03 blocks)', () => {
 
 // The vertex shader in scene.js, read as text (it needs WebGL to run).
 const scene = readFileSync(new URL('../scene.js', import.meta.url), 'utf8');
-const swayGlsl = new Function('SWAY_WAVE', 'FIXED_WIND', 'SWAY_FLOOR', `return ${scene.match(/const swayGlsl = (\(amplitude\) => `[^`]*`);/)[1]};`)(SWAY_WAVE, FIXED_WIND, SWAY_FLOOR);
+const swayGlsl = new Function('SWAY_WAVE', 'SWAY_FLOOR', `return ${scene.match(/const swayGlsl = (\(amplitude\) => `[^`]*`);/)[1]};`)(SWAY_WAVE, SWAY_FLOOR);
 
 /** Runs the GLSL of `swayGlsl(amplitude)` as JS for a vertex at world (x, z) with weight `top`: its [dx, dz]. */
-function runGlsl(amplitude, top, x, z, swayPhase) {
+function runGlsl(amplitude, top, x, z, swayPhase, wind) {
   const js = swayGlsl(amplitude).replace('float k', 'const k').replace('vec2 wd', 'const wd')
     .replace(/w\.xz \+= (.*) \* top \* sin\(swayPhase \+ dot\(w\.xz, wd\) \* k\) \* wd;$/,
       'const a = $1 * top * Math.sin(swayPhase + (w.x * wd[0] + w.z * wd[1]) * k); return [a * wd[0], a * wd[1]];');
-  return new Function('w', 'top', 'swayPhase', 'vec2', js)({ x, z }, top, swayPhase, (a, b) => [a, b]);
+  return new Function('w', 'top', 'swayPhase', 'windDir', 'windStrength', js)({ x, z }, top, swayPhase, wind.dir, wind.strength);
 }
 
-test('sway shader: cutout program emits the plant sway unchanged, opaque program the trunk lean', () => {
-  const scale = SWAY_FLOOR + (1 - SWAY_FLOOR) * FIXED_WIND.strength;
-  const line = (a) => `float k = ${SWAY_WAVE.toFixed(3)};\n      vec2 wd = vec2(${FIXED_WIND.dir[0].toFixed(6)}, ${FIXED_WIND.dir[1].toFixed(6)});\n      w.xz += ${(a * scale).toFixed(6)} * top * sin(swayPhase + dot(w.xz, wd) * k) * wd;`;
-  assert.equal(swayGlsl(SWAY_AMPLITUDE), line(SWAY_AMPLITUDE));
-  assert.equal(swayGlsl(TRUNK_SWAY_AMPLITUDE), line(TRUNK_SWAY_AMPLITUDE));
+const WINDS = [FIXED_WIND, { dir: [1, 0], strength: 0 }, { dir: [-0.6, 0.8], strength: 0.4 }, { dir: [0, 0], strength: 1 }];
+
+test('sway shader: cutout and opaque programs share one wave built from the sway.js constants', () => {
+  assert.match(swayGlsl(SWAY_AMPLITUDE), new RegExp(`float k = ${SWAY_WAVE.toFixed(3)};`));
+  assert.match(swayGlsl(SWAY_AMPLITUDE), new RegExp(`${SWAY_FLOOR.toFixed(3)} \\+ ${(1 - SWAY_FLOOR).toFixed(3)} \\* windStrength`));
+  assert.match(swayGlsl(SWAY_AMPLITUDE), /vec2 wd = windDir;/);
+  assert.equal(scene.match(/sin\(swayPhase/g).length, 1); // one wave, no second one
   assert.match(scene, /\$\{cut \? `[^`]*mirrors swayOffset in sway\.js[^`]*\$\{swayGlsl\(SWAY_AMPLITUDE\)\}` : `[^`]*mirrors trunkLean in sway\.js[^`]*\$\{swayGlsl\(TRUNK_SWAY_AMPLITUDE\)\}`\}/);
 });
 
 test('sway shader: emitted wave matches swayOffset (cutout) and trunkLean (opaque)', () => {
-  for (const [w, x, z, p] of [[1, 0, 0, 0], [0.5, 13.5, -7, 2], [0.25, -100, 55, 5], [0, 3, 4, 1]]) {
-    const cut = runGlsl(SWAY_AMPLITUDE, w, x, z, p), plant = swayOffset(w, x, z, p, FIXED_WIND);
-    const solid = runGlsl(TRUNK_SWAY_AMPLITUDE, w, x, z, p), lean = trunkLean(w, x, z, p, FIXED_WIND);
-    // SWAY_WAVE is written to 3 places in the shader
-    for (let i = 0; i < 2; i++) {
-      assert.ok(Math.abs(cut[i] - plant[i]) < 1e-3, `cutout ${cut} vs ${plant}`);
-      assert.ok(Math.abs(solid[i] - lean[i]) < 1e-3, `opaque ${solid} vs ${lean}`);
+  for (const wind of WINDS) {
+    for (const [w, x, z, p] of [[1, 0, 0, 0], [0.5, 13.5, -7, 2], [0.25, -100, 55, 5], [0, 3, 4, 1]]) {
+      const cut = runGlsl(SWAY_AMPLITUDE, w, x, z, p, wind), plant = swayOffset(w, x, z, p, wind);
+      const solid = runGlsl(TRUNK_SWAY_AMPLITUDE, w, x, z, p, wind), lean = trunkLean(w, x, z, p, wind);
+      for (let i = 0; i < 2; i++) {
+        assert.ok(Math.abs(cut[i] - plant[i]) < 1e-4, `cutout ${cut} vs ${plant}`);
+        assert.ok(Math.abs(solid[i] - lean[i]) < 1e-4, `opaque ${solid} vs ${lean}`);
+      }
     }
   }
 });
 
-test('sway shader: every program gets swayPhase each frame, 0 under reduced motion', () => {
+test('sway shader: every program gets the wind uniforms each frame; reduced motion zeroes dir and phase', () => {
   const bind = scene.match(/const bind = \(prog, a\) => \{[\s\S]*?\n {2}\};/)[0];
-  assert.match(bind, /\n {4}gl\.uniform1f\(prog\.u\('swayPhase'\), swayPhase\(now, reducedMotion\.matches\)\);/);
+  assert.match(bind, /uniform1f\(prog\.u\('swayPhase'\), wind\.phase\)/);
+  assert.match(bind, /uniform2fv\(prog\.u\('windDir'\), wind\.dir\)/);
+  assert.match(bind, /uniform1f\(prog\.u\('windStrength'\), wind\.strength\)/);
+  assert.match(scene, /const wind = windState\.frame\(eye\[0\], eye\[2\]/); // one query per frame, at the eye
+  assert.match(scene, /if \(reducedMotion\.matches\) wind\.dir = \[0, 0\];/);
   assert.match(scene, /bind\(solidProg, 1\); drawParts\(solidProg, meshes\.opaque\);/);
+  // zero dir and phase: no motion at any weight
+  assert.ok(runGlsl(SWAY_AMPLITUDE, 1, 7, 9, 0, { dir: [0, 0], strength: 1 }).every((d) => d === 0));
   assert.equal(swayPhase(5000, true), 0);
-  assert.ok(runGlsl(TRUNK_SWAY_AMPLITUDE, 1, 7, 9, swayPhase(5000, true)).every((d, i) => Math.abs(d - trunkLean(1, 7, 9, 0, FIXED_WIND)[i]) < 1e-3));
 });
 
 const wind = (dir, strength) => ({ dir, strength });

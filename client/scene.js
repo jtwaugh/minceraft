@@ -36,7 +36,8 @@ import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } fr
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
-import { FIXED_WIND, SWAY_FLOOR, SWAY_AMPLITUDE, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE, swayPhase } from './sway.js';
+import { SWAY_FLOOR, SWAY_AMPLITUDE, SWAY_SPEED, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE, swayPhase } from './sway.js';
+import { createWindState } from './windstate.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
@@ -66,7 +67,7 @@ import { OutputBuffer, createConsoleUI } from './consoleui.js';
 import { mountPanelStyle } from './uistyle.js';
 import { snowOnFoliage } from './particles.js';
 
-const { InputSampler, Walk, Scene, SimClock, FlyCamera, view_matrix } = game;
+const { InputSampler, Walk, Scene, SimClock, FlyCamera, Wind, view_matrix } = game;
 
 const CHUNK = 64;
 const qs = new URLSearchParams(location.search);
@@ -95,8 +96,8 @@ if (!gl) throw new Error('WebGL2 is not available');
 // above and under water.
 // GLSL for swayOffset in sway.js at `amplitude`: moves `w.xz` by weight `top` along the shared wave.
 const swayGlsl = (amplitude) => `float k = ${SWAY_WAVE.toFixed(3)};
-      vec2 wd = vec2(${FIXED_WIND.dir[0].toFixed(6)}, ${FIXED_WIND.dir[1].toFixed(6)});
-      w.xz += ${(amplitude * (SWAY_FLOOR + (1 - SWAY_FLOOR) * FIXED_WIND.strength)).toFixed(6)} * top * sin(swayPhase + dot(w.xz, wd) * k) * wd;`;
+      vec2 wd = windDir;
+      w.xz += ${amplitude.toFixed(6)} * (${SWAY_FLOOR.toFixed(3)} + ${(1 - SWAY_FLOOR).toFixed(3)} * windStrength) * top * sin(swayPhase + dot(w.xz, wd) * k) * wd;`;
 function program(cut) {
   const sh = (type, src) => {
     const s = gl.createShader(type);
@@ -120,7 +121,8 @@ function program(cut) {
     uniform vec3 offset;
     uniform vec3 eye; uniform vec2 plantFade; // start, range (blocks)
     uniform float waterFrame;
-    uniform float swayPhase; // swayPhase in sway.js
+    uniform float swayPhase; // phase from windstate.js
+    uniform vec2 windDir; uniform float windStrength; // dir and strength from windstate.js; dir is 0 when still
     out vec3 vuv; out float vshade; out float vdist; out vec3 vtint; out vec3 vdir; out float vdepth;
     void main() {
       vec3 w = pos * unpack.x + offset;
@@ -259,11 +261,11 @@ const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 
 // Animals as textured boxes (batch 15): red while hurt, tipped over while dying
 // (see animalPose). Unknown species draw grey.
 const animalModels = {};
-function drawAnimals(mvp, animals) {
+function drawAnimals(mvp, animals, daylight) {
   for (const a of animals) {
     const m = animalModels[a.species] ??= models.addModel(animalBoxes(a.species));
     const { model, tint } = animalPose(a);
-    models.drawModel(mvp, model, m, tint);
+    models.drawModel(mvp, model, m, tint, daylight);
   }
 }
 
@@ -272,20 +274,20 @@ function drawAnimals(mvp, animals) {
 // dorsal fin, one for the tail plate, which swings on its own (fishDraw).
 const fishModels = {};
 const tailTracker = createTailTracker();
-function drawFish(mvp, fish, timeSeconds) {
+function drawFish(mvp, fish, timeSeconds, daylight) {
   const swings = tailTracker.update(fish, timeSeconds);
   for (const { species, height, part, model, tint } of fishDraw(fish, swings)) {
     const m = fishModels[`${species}/${height}/${part}`] ??= models.addModel(
       part === 'tail' ? fishBoxes(species, height).slice(2) : fishBoxes(species, height).slice(0, 2));
-    models.drawModel(mvp, model, m, tint);
+    models.drawModel(mvp, model, m, tint, daylight);
   }
 }
 
 // Loose items as camera-facing icon slabs, one model per item name.
 const itemModels = {};
-function drawItems(mvp, items, timeSeconds, camera) {
+function drawItems(mvp, items, timeSeconds, camera, daylight) {
   for (const { key, model } of itemDraws(items, timeSeconds, camera)) {
-    models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)));
+    models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)), undefined, daylight);
   }
 }
 
@@ -550,6 +552,8 @@ function drawParts(prog, parts) {
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const windState = createWindState(new Wind(seed), Wind, SWAY_SPEED);
+let simTicks = 0; // sim ticks this session, the wind field's clock
 
 function render(now) {
   work = { meshed: 0, remeshed: 0, verts: 0, ticks: 0, chunks: 0 };
@@ -558,6 +562,9 @@ function render(now) {
   const snow = reducedMotion.matches ? null : { cells: snowCells, phase: swayPhase(now, false) };
   const { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = spans.span('tick', () => controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow));
   work.ticks = ticks;
+  simTicks += ticks;
+  const wind = windState.frame(eye[0], eye[2], simTicks, alpha, (now - (lastFrame ?? now)) / 1000, reducedMotion.matches);
+  if (reducedMotion.matches) wind.dir = [0, 0];
   if (regions) {
     work.chunks = regions.chunks;
     regions.free.forEach(freeRegion);
@@ -620,16 +627,18 @@ function render(now) {
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
-    gl.uniform1f(prog.u('swayPhase'), swayPhase(now, reducedMotion.matches));
+    gl.uniform1f(prog.u('swayPhase'), wind.phase);
+    gl.uniform2fv(prog.u('windDir'), wind.dir);
+    gl.uniform1f(prog.u('windStrength'), wind.strength);
     if (prog === cutProg) gl.uniform2f(prog.u('plantFade'), plantDistance, PLANT_FADE_RANGE);
   };
   bind(solidProg, 1); drawParts(solidProg, meshes.opaque);
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
-    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel);
+    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel, undefined, daylightFactor(day));
   }
-  drawFish(mvp, readFish(walk), now / 1000);
+  drawFish(mvp, readFish(walk), now / 1000, daylightFactor(day));
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   // Water faces point out of the water, so from below the surface they are
@@ -642,8 +651,8 @@ function render(now) {
   bind(solidProg, 0.72); drawParts(solidProg, meshes.ice);
   gl.depthMask(true);
   gl.bindVertexArray(null);
-  if (scene) drawAnimals(mvp, readAnimals(walk));
-  drawItems(mvp, readItems(walk), now / 1000, { yaw });
+  if (scene) drawAnimals(mvp, readAnimals(walk), daylightFactor(day));
+  drawItems(mvp, readItems(walk), now / 1000, { yaw }, daylightFactor(day));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
   for (const { pos, size, snow } of particles) drawBox(mvp, [...pos.map((v) => v - size), ...pos.map((v) => v + size)], snow ? 'flake' : true);
   if (!flying) drawHeld(proj);
