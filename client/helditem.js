@@ -5,7 +5,7 @@
 import { itemTextureName } from './itemmodel.js';
 import { CLEAR_EDGES } from './models.js';
 
-export const HELD_TEXTURES = ['sword', 'hoe'];
+export const HELD_TEXTURES = ['sword', 'hoe', 'fishing_rod'];
 
 /** The icon tile name for `held`, or null for empty or an unknown name. */
 export function heldTextureName(held) {

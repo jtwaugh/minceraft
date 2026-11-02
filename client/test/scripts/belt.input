@@ -26,6 +26,10 @@ expect held = tool:hoe
 press Digit4
 frame 50 x2
 expect belt.selected = 3
+expect held = tool:fishing_rod
+press Digit5
+frame 50 x2
+expect belt.selected = 4
 expect held = empty
 
 case the wheel steps through slots

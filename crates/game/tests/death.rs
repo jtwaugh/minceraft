@@ -206,7 +206,7 @@ fn a_death_with_a_carried_item_drops_it_and_replays_identically() {
         .position(|e| matches!(e, GameEvent::PlayerDied { .. }))
         .unwrap();
     let drops = dropped(&o.events);
-    assert_eq!(drops.len(), 3, "{:?}", o.events);
+    assert_eq!(drops.len(), 4, "{:?}", o.events);
     let GameEvent::ItemDropped { item, source, .. } = drops[0] else {
         unreachable!()
     };
@@ -221,7 +221,7 @@ fn a_death_with_a_carried_item_drops_it_and_replays_identically() {
         assert_eq!(w.drain_events(), o.events);
         // Respawning did not give it back; the item is still on the ground.
         assert!(w.hands().is_none());
-        assert_eq!(w.items().len(), 3);
+        assert_eq!(w.items().len(), 4);
     }
 }
 
@@ -240,12 +240,15 @@ fn drops(events: &[GameEvent]) -> Vec<(String, String)> {
 fn a_death_with_empty_hands_drops_only_the_belt_tools_and_empties_the_belt() {
     let o = session();
     let death = |t: &str| (t.to_string(), "death".to_string());
-    assert_eq!(drops(&o.events), vec![death("sword"), death("hoe")]);
+    assert_eq!(
+        drops(&o.events),
+        vec![death("sword"), death("hoe"), death("fishing_rod")]
+    );
     let mut w = fresh();
     replay(&o.rec, &mut w).unwrap();
     assert_eq!(w.world_hash(), o.hash);
     assert!(belt_tools(&w).iter().all(Option::is_none));
-    assert_eq!(w.items().len(), 2);
+    assert_eq!(w.items().len(), 3);
     assert_eq!(w.health(), w.max_health());
 }
 

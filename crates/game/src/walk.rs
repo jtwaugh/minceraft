@@ -4221,10 +4221,14 @@ mod tests {
         let pos = w.player().pos;
         assert_eq!(
             dropped,
-            vec![("sword", pos, "death"), ("hoe", pos, "death")]
+            vec![
+                ("sword", pos, "death"),
+                ("hoe", pos, "death"),
+                ("fishing_rod", pos, "death")
+            ]
         );
         assert!(w.player_state().tool_belt.iter().all(Option::is_none));
-        assert_eq!(w.items().len(), 2);
+        assert_eq!(w.items().len(), 3);
         assert_eq!(w.player_state().held_thing(), HeldThing::Empty);
         w.respawn().unwrap();
         assert!(w.player_state().tool_belt.iter().all(Option::is_none));
