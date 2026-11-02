@@ -33,6 +33,7 @@ use crate::raft::{Drive, Raft, RaftWorld, Swell};
 use crate::replay::Fnv;
 use crate::rng::Rng;
 use crate::scene::RaftScene;
+use crate::stations::{StationKinds, Stations};
 use crate::stream::{StreamConfig, Streamer};
 use crate::targeting::{cast_target, ray_vs_box, Target, TargetableEntity, TargetingConfig};
 use crate::till::{TillConfig, Tiller};
@@ -172,6 +173,8 @@ struct Floating {
     /// The player is at the helm and the move keys steer the raft.
     driving: bool,
     prev_heading: f64,
+    /// Block ids of the raft's rest-pose cells, so stations can be named.
+    blocks: HashMap<[i32; 3], u8>,
 }
 
 /// The player plus the eye positions of the last two ticks.
@@ -230,6 +233,8 @@ pub struct Walker {
     /// Ticks `step` has asked the client to run, until `take_steps`.
     step_request: u32,
     aliases: Aliases,
+    /// Items sitting on raft stations, keyed by raft-local cell.
+    stations: Stations,
 }
 
 impl Walker {
@@ -298,6 +303,7 @@ impl Walker {
             aliases: Aliases {
                 aliases: Vec::new(),
             },
+            stations: Stations::new(),
         })
     }
 
@@ -583,6 +589,18 @@ impl Walker {
             drive: Drive::default_from_data()?,
             driving: false,
             prev_heading: 0.0,
+            blocks: scene
+                .cells
+                .iter()
+                .map(|&[x, y, z]| {
+                    let i = scene.raft.index(
+                        (x - scene.raft.x0) as u32,
+                        y as u32,
+                        (z - scene.raft.z0) as u32,
+                    );
+                    ([x, y, z], scene.raft.blocks[i])
+                })
+                .collect(),
         });
         w.add_region(scene.sea);
         w.entities = scene.entities;
@@ -797,6 +815,7 @@ impl Walker {
                     input,
                 );
                 let events_before = self.events.len();
+                let aim = name_raft_target(f, aim);
                 self.take_aim(aim, input);
                 // An interact that did something else (picked up, planted,
                 // picked or harvested a crop or flower) does not also toggle.
@@ -1235,11 +1254,58 @@ impl Walker {
                 });
             }
         }
+        let on_raft = self.target_box.is_some_and(|b| b.1);
+        if let (true, Target::Block { pos, .. }) = (input.interact && on_raft, ctx.target) {
+            self.station_press(pos, &ctx);
+        }
         self.facts = ctx.facts;
         if input.secondary {
             self.pick_up();
         } else if input.drop {
             self.drop_carried(input);
+        }
+    }
+
+    /// An interact press on the raft block at world cell `pos`: put the
+    /// carried item down on a free surface station, or take the item on it.
+    fn station_press(&mut self, pos: [i32; 3], ctx: &ResolveCtx) {
+        let ctx = ResolveCtx {
+            button: Button::Interact,
+            ..ctx.clone()
+        };
+        let (Some(r), Some(name), Some(cell)) = (
+            resolve(&self.rules.rules, &ctx),
+            ctx.facts.block.as_deref(),
+            self.floating.as_ref().and_then(|f| f.raft.cell_at(pos)),
+        ) else {
+            return;
+        };
+        match r.action {
+            ActionKind::PutDown if StationKinds::shipped().holds_on_top(name) => {
+                let Some(item) = self.state.hands.take() else {
+                    return;
+                };
+                match self.stations.put_down(cell, item) {
+                    Ok(()) => {
+                        let item = self.stations.get(cell).expect("just stored").item.clone();
+                        self.events.push(GameEvent::ItemPutDown {
+                            item,
+                            target: name.to_string(),
+                        });
+                    }
+                    Err(item) => self.state.hands = Some(item),
+                }
+            }
+            ActionKind::Take => {
+                if let Some(item) = self.stations.take(cell) {
+                    self.events.push(GameEvent::ItemPickedUp {
+                        item: item.item.clone(),
+                        player: "player".to_string(),
+                    });
+                    self.state.hands = Some(item);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1435,6 +1501,18 @@ struct Aim {
     facts: TargetFacts,
     /// The box to outline and whether the raft owns it.
     boxed: Option<(Aabb, bool)>,
+}
+
+/// Rules see a raft block by its name: the base world has no block where the
+/// raft is.
+fn name_raft_target(f: &Floating, mut aim: Aim) -> Aim {
+    if let (Target::Block { pos, .. }, Some((_, true))) = (aim.target, aim.boxed) {
+        let id = f.raft.cell_at(pos).and_then(|c| f.blocks.get(&c));
+        if let Some(&id) = id {
+            aim.facts.block = Some(Block::from_u8(id).info().name.to_string());
+        }
+    }
+    aim
 }
 
 /// Unit look vector, the same as `Pose::forward` in camera.rs, in f64.

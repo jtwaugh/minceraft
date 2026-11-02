@@ -256,6 +256,15 @@ impl Raft {
         Aabb::new([lo(0), lo(1), lo(2)], [hi(0), hi(1), hi(2)])
     }
 
+    /// The rest-pose cell whose box now mostly occupies world cell `pos`
+    /// (the cell a selection box reports).
+    pub fn cell_at(&self, pos: [i32; 3]) -> Option<[i32; 3]> {
+        self.cells.iter().copied().find(|c| {
+            let b = self.cell_box(c);
+            [0, 1, 2].map(|i| ((b.min[i] + b.max[i]) / 2.0).floor() as i32) == pos
+        })
+    }
+
     /// The helm cell at the rest pose, if the raft has one.
     pub fn helm(&self) -> Option<[i32; 3]> {
         self.helm

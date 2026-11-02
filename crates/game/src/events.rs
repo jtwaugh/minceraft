@@ -45,6 +45,9 @@ pub enum GameEvent {
     /// The player moved a loose item into their hands. `player` is
     /// `"player"` (there is one player).
     ItemPickedUp { item: String, player: String },
+    /// The carried item went onto a station. `target` is the station's block
+    /// name.
+    ItemPutDown { item: String, target: String },
     /// The hoe tilled the block at `position`. `from` and `to` are block
     /// names before and after.
     BlockTilled {

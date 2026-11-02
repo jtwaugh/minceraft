@@ -4,6 +4,7 @@
 //! a raft-local mask cell now, a world position later.
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::items::ItemInstance;
@@ -78,6 +79,14 @@ impl StationKinds {
             });
         }
         Ok(StationKinds { kinds })
+    }
+
+    /// The table shipped in `data/stations.toml`, parsed once.
+    pub fn shipped() -> &'static StationKinds {
+        static KINDS: OnceLock<StationKinds> = OnceLock::new();
+        KINDS.get_or_init(|| {
+            StationKinds::default_from_data().expect("data/stations.toml must be valid")
+        })
     }
 
     /// Whether `name` is a station block.
