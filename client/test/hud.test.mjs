@@ -156,3 +156,29 @@ test('ready is the selected tool while the hands are empty', () => {
   assert.equal(ready({ selected: 2, held: 'tool:hoe' }), 'hoe');
   assert.equal(ready({ selected: 2, hands: 'seeds', held: 'item:seeds' }), null);
 });
+
+test('the hands frame draws the ready tool faded, a carried item opaque, and nothing else only the frame', async () => {
+  const { mountHud } = await import('../hud.js');
+  const { hudLayout } = await import('../hudlayout.js');
+  globalThis.ImageData = class { constructor(d, w, h) { Object.assign(this, { data: d, width: w, height: h }); } };
+  const grid = (w, h) => Array(h).fill('a'.repeat(w));
+  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), sun: grid(8, 8), crosshair: grid(7, 7), panel_c: grid(4, 4), sword: grid(8, 8), hoe: grid(6, 6), font_unknown: grid(5, 7), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
+  const draw = (b) => {
+    const doc = fakeDocument();
+    const m = hudModel({ belt: { ...belt, ...b }, health: 20, maxHealth: 20, secondsLeft: 42 });
+    mountHud(doc, set, doc.body, { innerWidth: 800, innerHeight: 450 }).update(m);
+    const [, , hands, , , , , slot] = doc.body.children[1].children;
+    return { hands, slot, hs: hudLayout(m, set, { w: 800, h: 450 }).rects.handsSlot };
+  };
+  const ready = draw({ selected: 2, held: 'tool:hoe' });
+  assert.equal(ready.slot.children.length, 2);
+  assert.equal(ready.slot.children[1].style.left, `${ready.hs.icon.x - ready.hs.x}px`);
+  assert.ok(Number(ready.slot.children[1].style.opacity) > 0 && Number(ready.slot.children[1].style.opacity) < 1);
+  assert.equal(ready.hands.children.length, 0);
+  const carried = draw({ hands: 'sword', held: 'item:sword' });
+  assert.equal(carried.slot.children.length, 2);
+  assert.ok(carried.slot.children[1].style.opacity === undefined || Number(carried.slot.children[1].style.opacity) === 1);
+  assert.equal(carried.hands.children.length, 1);
+  const none = draw({ selected: 0, held: 'empty' });
+  assert.equal(none.slot.children.length, 1);
+});
