@@ -730,6 +730,38 @@ fn with_default_commands(mut walker: Walker) -> Result<Walk, JsError> {
     Ok(Walk(walker))
 }
 
+/// The wind function (`game::wind_field::Wind`) for one world seed, with the
+/// shipped `WindConfig`.
+#[wasm_bindgen]
+pub struct Wind(game::wind_field::Wind);
+
+#[wasm_bindgen]
+impl Wind {
+    #[wasm_bindgen(constructor)]
+    pub fn new(seed: u64) -> Result<Wind, JsError> {
+        let cfg = game::wind_config::WindConfig::default_from_data()
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Wind(game::wind_field::Wind::new(seed, cfg)))
+    }
+
+    /// `[dx, dz]` in blocks per second; `ticks` is `tick + alpha`.
+    pub fn at(&self, x: f64, z: f64, ticks: f64) -> Vec<f64> {
+        let (dx, dz) = self.0.at(x, z, ticks);
+        vec![dx, dz]
+    }
+
+    /// `clamp(|wind| / speed_ceiling, 0, 1)` for a wind vector from `at`.
+    pub fn strength(&self, dx: f64, dz: f64) -> f64 {
+        self.0.strength(dx, dz)
+    }
+
+    /// Unit `[x, z]` direction of a wind vector, zero for zero wind.
+    pub fn direction(dx: f64, dz: f64) -> Vec<f64> {
+        let (x, z) = game::wind_field::direction(dx, dz);
+        vec![x, z]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
