@@ -1479,6 +1479,7 @@ impl Walker {
         let tool = self.item_table.has_tool(&e.item.item);
         if tool {
             if self.state.first_empty_belt_slot().is_none() {
+                self.refuse("pickup", Reason::HandsFull);
                 return;
             }
         } else if self.state.hands.is_some() {
@@ -2157,6 +2158,49 @@ mod tests {
             vec![("pickup".to_string(), Reason::HandsFull)]
         );
         assert!(w.items().get(id).is_some());
+    }
+
+    fn facing_loose_sword() -> (Walker, crate::targeting::EntityId) {
+        let mut w = settled();
+        let id = w.spawn_item(
+            ItemInstance {
+                item: "sword".into(),
+            },
+            [0.5, 5.62, -1.0],
+        );
+        w.tick(&look(0.0, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        (w, id)
+    }
+
+    #[test]
+    fn loose_tool_with_a_full_belt_is_refused_once_and_stays() {
+        let (mut w, id) = facing_loose_sword();
+        for slot in 1..crate::items::BELT_SLOTS {
+            w.state.tool_belt[slot] = Some(crate::items::ToolInstance { tool: "hoe".into() });
+        }
+        w.drain_events();
+        w.tick(&pick_up());
+        assert_eq!(
+            refusals(&mut w),
+            vec![("pickup".to_string(), Reason::HandsFull)]
+        );
+        assert!(w.items().get(id).is_some());
+        assert_eq!(w.hands(), None);
+    }
+
+    #[test]
+    fn loose_tool_with_a_free_belt_slot_is_stowed_without_refusal() {
+        let (mut w, id) = facing_loose_sword();
+        w.state.hands = Some(seeds());
+        for slot in 1..crate::items::BELT_SLOTS {
+            w.state.tool_belt[slot] = None;
+        }
+        w.drain_events();
+        w.tick(&pick_up());
+        assert!(refusals(&mut w).is_empty());
+        assert!(w.items().get(id).is_none());
+        assert_eq!(w.hands(), Some(&seeds()));
     }
 
     #[test]
