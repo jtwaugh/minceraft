@@ -38,6 +38,7 @@ import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
 import { SWAY_FLOOR, SWAY_AMPLITUDE, SWAY_SPEED, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE, swayPhase } from './sway.js';
 import { createWindState } from './windstate.js';
+import { formatWind } from './windreadout.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
@@ -677,6 +678,7 @@ function render(now) {
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 cheated: ${walk.cheated() ? 'yes' : 'no'}
 ${formatTime(walk.time_of_day(), walk.day_frozen())}
+${formatWind(wind.vec[0], wind.vec[1], wind.strength)}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;
