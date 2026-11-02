@@ -1,8 +1,8 @@
 //! `Layout` and the `generate_region` wrapper (design: world-layout 4.2).
 
 use crate::{
-    ChannelEval, ClimateBias, DensityTerm, Exclusion, Exclusions, HumidityTerms, Structure,
-    TemperatureTerms,
+    ChannelEval, ClimateBias, CoastEval, DensityTerm, Exclusion, Exclusions, HumidityTerms,
+    Structure, TemperatureTerms,
 };
 use terrain::{
     generate_region_with_biases, BaseHeightBias, Biases, Block, DensityClamp, HumidityBias,
@@ -61,7 +61,7 @@ fn polyline(points: &[(f64, f64)], reach: f64) -> Option<Bounds> {
 }
 
 impl DensityTerm {
-    fn bounds(&self) -> Option<Bounds> {
+    pub(crate) fn bounds(&self) -> Option<Bounds> {
         match self {
             DensityTerm::RadialBaseHeight {
                 center, r_outer, ..
@@ -72,6 +72,14 @@ impl DensityTerm {
                 falloff,
                 ..
             } => polyline(points, half_width + falloff),
+            DensityTerm::Coast {
+                points,
+                near,
+                ramp,
+                width,
+                fade,
+                ..
+            } => polyline(points, near + ramp + width + fade),
         }
     }
 }
@@ -265,12 +273,14 @@ impl Layout {
         );
         // Channels are compiled once so each segment keeps its bounding box.
         let channels: Vec<Option<ChannelEval>> = density.iter().map(ChannelEval::new).collect();
+        let coasts: Vec<Option<CoastEval>> = density.iter().map(CoastEval::new).collect();
         let base_height: Vec<&dyn BaseHeightBias> = density
             .iter()
-            .zip(&channels)
-            .map(|(t, c)| match c {
-                Some(c) => c as &dyn BaseHeightBias,
-                None => t as &dyn BaseHeightBias,
+            .zip(channels.iter().zip(&coasts))
+            .map(|(t, (ch, co))| match (ch, co) {
+                (Some(c), _) => c as &dyn BaseHeightBias,
+                (_, Some(c)) => c as &dyn BaseHeightBias,
+                _ => t as &dyn BaseHeightBias,
             })
             .collect();
         let clamp: Vec<&dyn DensityClamp> = channels
