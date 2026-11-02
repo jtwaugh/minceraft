@@ -1,5 +1,3 @@
-# DRAFT: copy this file to .github/workflows/claude-perfpass.yml (the agent app cannot write there).
-#
 # The scheduled perf pass (docs/design/play-critic-perf-render.md, Phase E, decided in #1975): real frame
 # timing in headless Chrome, run beside the critic workflow. The pixel pass stays local.
 #
