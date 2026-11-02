@@ -1530,7 +1530,7 @@ fn wetness_values() -> [f64; 4] {
         for x in 0..w as i32 {
             let g = match () {
                 _ if near(x, z, 16) => 66,
-                _ if near(x, z, 58) => 74,
+                _ if near(x, z, 58) => 90,
                 _ if x >= 35 => 70 + 2 * (x - 35).min(5),
                 _ => 70,
             };
@@ -1539,7 +1539,7 @@ fn wetness_values() -> [f64; 4] {
             }
         }
     }
-    [(16, 16), (58, 16), (4, 16), (37, 16)].map(|(x, z)| wetness(&world, x, z))
+    [(16, 16), (58, 16), (21, 16), (37, 16)].map(|(x, z)| wetness(&world, x, z))
 }
 
 #[test]
