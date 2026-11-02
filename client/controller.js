@@ -25,6 +25,7 @@
 // oldest first, as `name key=value ...` strings; each is delivered once.
 //
 // `particles` is the live particle list (particles.js: a burst per `forage_missed` event,
+// a splash on `fish_bite`, a wake behind each lured fish (readFish),
 // and flakes off snowy foliage when `frame` gets `snow` ({ cells, wind }: snowOnFoliage cells
 // and the windstate.js frame { dir, strength, phase }, null while motion is reduced)), `particleCount` its length; scene.js only draws it.
 //
@@ -45,7 +46,7 @@
 // client/test/scripts/*.input drive this through the DSL in client/test/dsl.mjs.
 
 import { stepWalk } from './walk.js';
-import { readAim, readBelt, readBobber } from './overlay.js';
+import { readAim, readBelt, readBobber, readFish } from './overlay.js';
 import { hudModel } from './hud.js';
 import { createStream, regionOf } from './stream.js';
 import { createParticles } from './particles.js';
@@ -121,6 +122,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const events = Array.from(walk.drain_events());
       particles.spawnMisses(events);
       particles.spawnSplash(events, readBobber(walk)?.pos);
+      particles.spawnWake(readFish(walk), dt);
       if (snow) particles.spawnSnow(snow.cells, eye, snow.wind, dt);
       particles.update(dt);
       Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, day: readDay(walk, alpha), events, particles: particles.list, particleCount: particles.count });
