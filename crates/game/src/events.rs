@@ -93,6 +93,9 @@ pub enum GameEvent {
     LineCast { player: String, position: [f64; 3] },
     /// The line came in; `caught` is whether a fish was on it.
     LineReeled { player: String, caught: bool },
+    /// A fish bit: it reached the bobber and the reel window opened.
+    /// `species` is its `data/fish.toml` key.
+    FishBite { player: String, species: String },
     /// An action the player tried was refused. `action` is `"swing"`,
     /// `"till"`, `"plant"`, `"pick"`, `"forage"` or `"pickup"`.
     ActionRefused { action: String, reason: Reason },

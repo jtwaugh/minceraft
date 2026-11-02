@@ -855,6 +855,8 @@ impl Walker {
                     &world,
                     |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
                 );
+                self.fishing
+                    .tick_bite(&world, &mut self.fish, &mut self.events);
                 let aim = aim(
                     &world,
                     &entities,
@@ -897,6 +899,8 @@ impl Walker {
                     &self.world,
                     |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
                 );
+                self.fishing
+                    .tick_bite(&self.world, &mut self.fish, &mut self.events);
                 let aim = aim(
                     &self.world,
                     &entities,

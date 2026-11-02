@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::clock::TICK_SECONDS;
 use crate::collision::{Aabb, CollisionWorld};
-use crate::fish_entities::{FishStore, SchoolId};
+use crate::fish_entities::{FishEntity, FishStore, SchoolId};
 use crate::fish_spawn_config::FishSpawnConfig;
 use crate::rng::Rng;
 use crate::targeting::EntityId;
@@ -115,6 +115,20 @@ impl FishSteer {
 
     pub fn config(&self) -> &FishSpawnConfig {
         &self.config
+    }
+
+    /// Where fish `f` can reach to meet a bobber at `bobber`: its x and z,
+    /// and as high as the clearance below the surface lets the fish swim.
+    pub fn lure_point<W: CollisionWorld + ?Sized>(
+        &self,
+        world: &W,
+        f: &FishEntity,
+        bobber: [f64; 3],
+    ) -> [f64; 3] {
+        let [_, hi] = allowed_y(world, f.pos, f.box_size, self.config.clearance)
+            .unwrap_or([f.pos[1], f.pos[1]]);
+        let bottom = (bobber[1] - f.box_size[1] / 2.0).min(hi);
+        [bobber[0], bottom + f.box_size[1] / 2.0, bobber[2]]
     }
 
     /// Advance every fish one tick. `swimmer` is the position of a player
