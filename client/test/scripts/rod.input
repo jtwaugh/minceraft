@@ -31,6 +31,67 @@ expect bobber = none
 expect hands != none
 expect fish = 0
 
+case a bite splashes and the particles are gone once the burst is over
+start walk stream at 6.5 15.5
+click
+lock
+frame 50 x40
+spawn fish salmon -1
+held tool:fishing_rod
+face fish
+button down right
+frame 50
+button up right
+frame 50
+until bobber = dipping
+expect event fish_bite
+expect particles > 0
+button down right
+frame 50
+button up right
+frame 50 x2
+expect event fish_caught method=rod
+frame 50 x40
+expect particles = 0
+
+case a lured fish leaves a wake before it bites
+start walk stream at 6.5 15.5
+click
+lock
+frame 50 x40
+spawn fish salmon -1
+held tool:fishing_rod
+face fish
+button down right
+frame 50
+button up right
+frame 50
+until bobber = floating
+expect particles = 0
+until particles > 0
+expect bobber = floating
+expect no event fish_bite
+
+case with the day's stock gone a floating bobber beside a fish never bites
+start walk stream at 6.5 15.5
+click
+lock
+frame 50 x40
+spawn fish salmon -1
+stock 0
+held tool:fishing_rod
+face fish
+button down right
+frame 50
+button up right
+frame 50
+until bobber = floating
+# 400 ticks, well past the longest bite delay (160, data/fishing.toml)
+frame 50 x400
+expect bobber = floating
+expect no event fish_bite
+expect fish = 1
+
 case a press outside the window catches nothing
 start walk stream at 6.5 15.5
 click
