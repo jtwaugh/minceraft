@@ -84,3 +84,19 @@ held = "empty"
 button = "interact"
 target = "block:station"
 action = "take"
+
+# Fishing (docs/design/fish-and-fishing.md 4.2, 4.4): one press, wherever the
+# crosshair is; the walker sets line_out while a bobber exists.
+[[rule]]
+held = "tool:fishing_rod"
+button = "secondary"
+target = "any"
+require_line_out = false
+action = "cast"
+
+[[rule]]
+held = "tool:fishing_rod"
+button = "secondary"
+target = "any"
+require_line_out = true
+action = "reel"
