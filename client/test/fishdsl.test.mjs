@@ -34,3 +34,13 @@ test('readBobber and readRodTip read the game-web rows', async () => {
   assert.equal(readBobber(rows([2, 0, 0, 0, 0])).state, 'resting');
   assert.deepEqual(readRodTip(rows([])), [1, 2, 3]);
 });
+
+test('readFish adds lured from the fish_lured rows', async () => {
+  const { readFish } = await import('../overlay.js');
+  const walk = {
+    fish: () => [1, 0, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 1, 1],
+    fish_species: () => ['salmon', 'salmon'],
+    fish_lured: () => [0, 1],
+  };
+  assert.deepEqual(readFish(walk).map((f) => f.lured), [false, true]);
+});

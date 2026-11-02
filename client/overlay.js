@@ -96,10 +96,10 @@ export function readAnimals(walk) {
 }
 
 export function readFish(walk) {
-  const rows = Array.from(walk.fish()), species = walk.fish_species();
+  const rows = Array.from(walk.fish()), species = walk.fish_species(), lured = Array.from(walk.fish_lured());
   return species.map((name, i) => {
     const [id, x, y, z, heading, w, h] = rows.slice(i * 7, i * 7 + 7);
-    return { id, species: name, pos: [x, y, z], heading, size: [w, h] };
+    return { id, species: name, pos: [x, y, z], heading, size: [w, h], lured: lured[i] === 1 };
   });
 }
 

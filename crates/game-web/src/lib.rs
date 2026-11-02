@@ -754,6 +754,16 @@ impl Walk {
         self.0.fish().iter().map(|f| f.species.clone()).collect()
     }
 
+    /// One number per fish in [`Walk::fish`], in the same order: 1 if the
+    /// fish is swimming to the bobber (it has a lure point), else 0.
+    pub fn fish_lured(&self) -> Vec<f64> {
+        self.0
+            .fish()
+            .iter()
+            .map(|f| f64::from(f.lure.is_some()))
+            .collect()
+    }
+
     /// The fishing bobber: empty with no line out, else five numbers,
     /// `state, dipping, x, y, z`. `state` is 0 flying, 1 floating, 2
     /// resting; `dipping` is 1 while a bite is on the line (a fish has
@@ -1112,6 +1122,20 @@ mod tests {
         }
         assert_eq!(rows[..5], [a as f64, 1.5, 6.0, 2.5, 90.0]);
         assert_eq!(rows[7], b as f64);
+    }
+
+    #[test]
+    fn fish_lured_is_one_only_for_a_fish_with_a_lure() {
+        let mut w = walk();
+        assert!(w.fish_lured().is_empty());
+        let species = w.0.fish().bodies().bodies[0].species.clone();
+        let a = w.spawn_fish(&species, 1.5, 6.0, 2.5, 0.0);
+        let b = w.spawn_fish(&species, -3.0, 7.0, 4.0, 0.0);
+        assert_eq!(w.fish_lured(), vec![0.0, 0.0]);
+        w.0.lure_fish(b as _, [0.0, 6.0, 0.0]);
+        assert_eq!(w.fish_lured(), vec![0.0, 1.0]);
+        w.0.lure_fish(a as _, [0.0, 6.0, 0.0]);
+        assert_eq!(w.fish_lured(), vec![1.0, 1.0]);
     }
 
     #[test]

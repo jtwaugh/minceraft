@@ -1160,6 +1160,11 @@ impl Walker {
         self.fish.spawn(species, pos, heading)
     }
 
+    /// Make fish `id` swim to `point`, as a bite does (for tests and tools).
+    pub fn lure_fish(&mut self, id: crate::targeting::EntityId, point: [f64; 3]) {
+        self.fish.set_lure(id, point);
+    }
+
     pub fn fish(&self) -> &FishStore {
         self.fish.store()
     }
