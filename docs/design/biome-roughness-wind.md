@@ -22,9 +22,12 @@ Checked against `master` (5a68a3b).
 - **Sea ice.** `docs/design/sea-ice-floes.md` (accepted) adds floes; the coarse heightmap reads the density lattice, so ice never changes `top_y` and frozen sea counts as water there.
 - **Plan #1860 (Phase A) built:** the `[roughness]` table and drag keys in `data/wind.toml` (#1861, `crates/game/src/wind_roughness_config.rs`, `wind_config.rs`), the pure speed multiplier with smoothstep height easing (#1862, `crates/game/src/wind_drag.rs`), and the seeded forest, plains and sea behaviour tests (#1863, #1912). The fill `RoughnessParams`/`fill_cell`/`roughness_at` is in `crates/game/src/wind_roughness.rs` (#1811).
 - **Plan #1931 (Phase A) built:** the bounded `R` cache (#1932, PR #1945, `crates/game/src/wind_roughness_cache.rs`) and the multiplier applied to the front wind in `Wind::at` (#1933, PR #1985, `crates/game/src/wind_field.rs`, `Wind::roughness_at`). It is a separate memo, not shared with the breeze.
-- **Not built:** the `R` and multiplier fields on the debug wind readout. World output is untouched by this idea.
+- **Plan #2142 (Phase A follow-up) built:** the wasm `Wind` exports for roughness and the ground multiplier (#2143, PR #2190) and the `R` and multiplier fields on the client wind readout line (#2144, PR #2212).
+- **Not built:** roughness is not yet ordered after terrain wind, because `wind_terrain.rs` is not called from `Wind::at`. World output is untouched by this idea.
 
 ## Reconciliation notes
+
+- **Phase A still incomplete (plan #2142).** The readout fields are built (PRs #2190, #2212). Still missing: ordering roughness after terrain wind (`wind_terrain.rs`). `Wind::at` in `crates/game/src/wind_field.rs` does not call it, and its wiring belongs to plan #1881. Re-plan this once that wiring has merged.
 
 - **Phase A still incomplete (plan #1931).** The cache and the wiring into `Wind::at` are built (PRs #1945, #1985). Still missing: the `R` and multiplier fields on the debug wind readout, which wait on wind Phase B (no wind command in `data/commands.toml` or `crates/game/src/commands.rs`); and re-ordering roughness after terrain wind (`wind_terrain.rs`) once that is wired into `Wind::at`.
 
