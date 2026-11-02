@@ -55,6 +55,9 @@ jobs:
     if: github.event_name != 'issue_comment' || contains(fromJSON('["jtwaugh", "claude[bot]"]'), github.event.comment.user.login)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Secrets can't appear in a step's `if`, so the App ID comes through env.
+      FACTORY_APP_ID: ${{ secrets.FACTORY_APP_ID }}
     steps:
       # Let a burst settle before reading. Checks on a PR finish together,
       # and each finish is a trigger; while this tick waits they queue in
@@ -86,6 +89,16 @@ jobs:
         run: |
           python3 -B -c 'import sys; sys.path.insert(0, ".github/scripts"); import factory_state_branch as b; b.fetch(sys.argv[1])' \
             "$RUNNER_TEMP/factory-state.db"
+      # A GitHub App token for the PRs the stalled-tickets pass opens, so
+      # their workflows aren't held for approval (FACTORY.md, "Maintainer step
+      # for the stray-branch PRs"). Skipped until the App's secrets exist.
+      - name: Mint the app token
+        id: app
+        if: env.FACTORY_APP_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.FACTORY_APP_ID }}
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
       - name: Tick
         env:
           FACTORY_HTTP_CACHE: .factory-cache/etags.json
@@ -99,6 +112,8 @@ jobs:
           # dispatches use the workflow token (WRITE_TOKEN).
           GH_TOKEN: ${{ secrets.PROJECT_TOKEN || github.token }}
           WRITE_TOKEN: ${{ github.token }}
+          # Only open_pr uses it; empty (so unused) when the step was skipped.
+          APP_TOKEN: ${{ steps.app.outputs.token }}
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
           PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
