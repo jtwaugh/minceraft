@@ -717,14 +717,32 @@ fn the_side_of_a_counter_changes_nothing() {
 }
 
 #[test]
-fn a_chest_or_plate_rack_takes_and_gives_nothing() {
-    for block in [Block::Chest, Block::PlateRack] {
-        let (mut s, cell) = at_station(block, true);
-        let press = press_at(&s, cell, false);
-        s.tick(&press);
-        assert_eq!(s.w.hands(), beef().as_ref(), "{block:?}");
-        assert_eq!(s.take(), vec![]);
-    }
+fn a_plate_rack_takes_and_gives_nothing() {
+    let (mut s, cell) = at_station(Block::PlateRack, true);
+    let press = press_at(&s, cell, false);
+    s.tick(&press);
+    assert_eq!(s.w.hands(), beef().as_ref());
+    assert_eq!(s.take(), vec![]);
+}
+
+#[test]
+fn storing_in_a_chest_empties_the_hands_and_emits_item_stored() {
+    let (mut s, cell) = at_station(Block::Chest, true);
+    let press = press_at(&s, cell, false);
+    s.tick(&press);
+    assert_eq!(s.w.hands(), None);
+    assert_eq!(
+        s.take(),
+        vec![GameEvent::ItemStored {
+            item: "raw_beef".into(),
+            chest: cell,
+            slot: 0
+        }]
+    );
+    // Empty hands take nothing out of it.
+    s.tick(&press);
+    assert_eq!(s.w.hands(), None);
+    assert_eq!(s.take(), vec![]);
 }
 
 #[test]
