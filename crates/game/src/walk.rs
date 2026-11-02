@@ -4565,4 +4565,126 @@ mod tests {
         assert_eq!(w.player().pos, pos);
         assert!(w.drain_events().is_empty());
     }
+
+    fn grass_region(x0: i32, z0: i32) -> Region {
+        let mut region = flat(x0, z0, 16, 3);
+        for z in 0..16 {
+            for x in 0..16 {
+                let i = region.index(x, 3, z);
+                region.blocks[i] = Block::Grass as u8;
+            }
+        }
+        region
+    }
+
+    /// A walker on grass built from `regions`, with a hoe in hand and seeds
+    /// lying 1.5 blocks ahead.
+    fn refusal_walker(regions: Vec<Region>) -> Walker {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        for r in regions {
+            w.add_region(r);
+        }
+        for _ in 0..40 {
+            w.tick(&TickInput::default());
+        }
+        w.set_commands(crate::commands::default_registry().unwrap());
+        w.set_held(HeldThing::Tool("hoe".into()));
+        w.spawn_item(seeds(), [2.0, 5.62, 0.5]);
+        w
+    }
+
+    fn east_pick_up() -> TickInput {
+        TickInput {
+            yaw: std::f32::consts::FRAC_PI_2,
+            pitch: -0.75,
+            ..pick_up()
+        }
+    }
+
+    /// One tick of a session: the input, a command line to submit first, and
+    /// whether the input is a press that gets refused.
+    fn refusal_session() -> Vec<(TickInput, Option<&'static str>, bool)> {
+        let sky = TickInput {
+            secondary: true,
+            ..look(0.6, false)
+        };
+        vec![
+            (look(0.0, false), None, false),
+            (sky, None, true),                    // nothing_here
+            (far_floor(true, false), None, true), // too_far
+            (look(0.0, false), Some("give item seeds"), false),
+            (click(), None, true), // tools_stowed
+            (
+                TickInput {
+                    yaw: std::f32::consts::FRAC_PI_2,
+                    ..look(-0.75, false)
+                },
+                None,
+                false,
+            ),
+            (east_pick_up(), None, true), // hands_full
+            (look(0.0, false), None, false),
+        ]
+    }
+
+    /// Run the session; with `presses` false the refused presses are
+    /// released instead, tick for tick.
+    fn run_refusal_session(w: &mut Walker, presses: bool) -> Recording {
+        let mut rec = Recorder::new();
+        for (mut input, cmd, refused) in refusal_session() {
+            if refused && !presses {
+                input.primary = false;
+                input.secondary = false;
+            }
+            let cmds: Vec<String> = cmd.iter().map(|c| c.to_string()).collect();
+            rec.step(w, &input, &cmds);
+        }
+        rec.finish(w)
+    }
+
+    fn reasons(events: Vec<GameEvent>) -> Vec<&'static str> {
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                GameEvent::ActionRefused { reason, .. } => Some(reason.name()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn refusals_leave_the_world_hash_alone_and_replay_the_same() {
+        let one = || refusal_walker(vec![grass_region(-8, -8)]);
+        let mut with = one();
+        let rec = run_refusal_session(&mut with, true);
+        let mut without = one();
+        run_refusal_session(&mut without, false);
+        assert_eq!(with.world_hash(), without.world_hash());
+        let events = with.drain_events();
+        let expected = ["nothing_here", "too_far", "tools_stowed", "hands_full"];
+        assert_eq!(reasons(events.clone()), expected);
+        assert!(reasons(without.drain_events()).is_empty());
+        let mut again = one();
+        replay(&Recording::parse(&rec.to_text()).unwrap(), &mut again).unwrap();
+        assert_eq!(again.world_hash(), with.world_hash());
+        assert_eq!(again.drain_events(), events);
+    }
+
+    #[test]
+    fn overlapping_regions_agree_on_refusals() {
+        let sets = [
+            vec![grass_region(-8, -8), grass_region(8, -8)],
+            vec![grass_region(0, -8), grass_region(-8, -8)],
+            vec![grass_region(-8, -8)],
+        ];
+        let mut seen = Vec::new();
+        for regions in sets {
+            let mut w = refusal_walker(regions);
+            run_refusal_session(&mut w, true);
+            seen.push((w.world_hash(), w.drain_events()));
+        }
+        assert_eq!(seen[0], seen[1]);
+        assert_eq!(seen[0], seen[2]);
+        assert_eq!(reasons(seen[0].1.clone()).len(), 4);
+    }
 }
