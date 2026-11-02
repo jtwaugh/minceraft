@@ -83,6 +83,7 @@ pub fn level_file(best: &Scored) -> LevelFile {
         climate: Some(LevelClimate {
             temp_start: params.temp_start,
             temp_end: params.temp_end,
+            sea_ice_band: true,
         }),
     }
 }
