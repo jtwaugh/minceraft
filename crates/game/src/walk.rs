@@ -1096,6 +1096,37 @@ impl Walker {
         if input.primary && !pressed.primary {
             self.refuse("swing", Reason::ToolsStowed);
         }
+        if let (Target::None, Some((far, facts))) = (aim.target, aim.far) {
+            for (button, action, silent) in [
+                (Button::Primary, "swing", true),
+                (Button::Secondary, "use", false),
+            ] {
+                let pressed = match button {
+                    Button::Primary => pressed.primary,
+                    _ => pressed.secondary,
+                };
+                let resolves = |target| {
+                    resolve(
+                        &self.rules.rules,
+                        &ResolveCtx {
+                            held: ctx.held.clone(),
+                            button,
+                            target,
+                            facts: facts.clone(),
+                        },
+                    )
+                    .is_some()
+                };
+                // A press that works on no target at all (a cast) is not refused.
+                let too_far = !matches!(far, Target::None) && resolves(far);
+                let works_bare = matches!(far, Target::None) && resolves(far);
+                if pressed && too_far {
+                    self.refuse(action, Reason::TooFar);
+                } else if pressed && !silent && !works_bare {
+                    self.refuse(action, Reason::NothingHere);
+                }
+            }
+        }
         if pressed.primary {
             self.events.push(GameEvent::Swing {
                 player: "player".to_string(),
@@ -1528,6 +1559,9 @@ struct Aim {
     facts: TargetFacts,
     /// The box to outline and whether the raft owns it.
     boxed: Option<(Aabb, bool)>,
+    /// Only when nothing is in reach and a button was pressed: what the
+    /// longer `refusal_reach` look finds instead.
+    far: Option<(Target, TargetFacts)>,
 }
 
 /// Rules see a raft block by its name: the base world has no block where the
@@ -1573,6 +1607,27 @@ fn aim(
     eye: [f64; 3],
     input: &TickInput,
 ) -> Aim {
+    let mut a = aim_within(world, entities, cfg, items, eye, input);
+    if a.target == Target::None && (input.primary || input.secondary) {
+        let long = TargetingConfig {
+            block_reach: cfg.refusal_reach,
+            entity_reach: cfg.refusal_reach,
+            ..*cfg
+        };
+        let f = aim_within(world, entities, &long, items, eye, input);
+        a.far = Some((f.target, f.facts));
+    }
+    a
+}
+
+fn aim_within(
+    world: &impl CollisionWorld,
+    entities: &[TargetableEntity],
+    cfg: &TargetingConfig,
+    items: &Items,
+    eye: [f64; 3],
+    input: &TickInput,
+) -> Aim {
     let dir = look_dir(input);
     let target = cast_target(world, entities, cfg, eye, dir);
     match target {
@@ -1609,6 +1664,7 @@ fn aim(
                     ..TargetFacts::default()
                 },
                 boxed,
+                far: None,
             }
         }
         Target::Entity { id } => {
@@ -1620,12 +1676,14 @@ fn aim(
                     ..TargetFacts::default()
                 },
                 boxed: e.map(|e| (e.aabb, false)),
+                far: None,
             }
         }
         Target::None => Aim {
             target,
             facts: TargetFacts::default(),
             boxed: None,
+            far: None,
         },
     }
 }
@@ -3665,6 +3723,67 @@ mod tests {
         assert_eq!((*position, crop.as_str()), ([0, 4, 0], "wheat"));
         assert_eq!(yields[0], "wheat");
         assert_eq!(seen, run(), "replays identically");
+    }
+
+    /// Looking down so the floor is 5.5 blocks along the ray: past `block`
+    /// reach (4.5), inside `refusal` reach.
+    fn far_floor(secondary: bool, primary: bool) -> TickInput {
+        TickInput {
+            pitch: -(1.62f32 / 5.5).asin(),
+            secondary,
+            primary,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn a_press_past_reach_refuses_too_far_when_the_rule_would_match() {
+        let mut w = grass_floor_walker(1);
+        w.tick(&far_floor(false, false));
+        assert_eq!(w.target(), Target::None);
+        assert!(refusals(&mut w).is_empty(), "no press, no refusal");
+        w.tick(&far_floor(true, false));
+        assert_eq!(refusals(&mut w), [("use".to_string(), Reason::TooFar)]);
+        assert!(!tilled(&w, 0));
+    }
+
+    #[test]
+    fn a_cast_at_open_sky_is_not_refused() {
+        let mut w = grass_floor_walker(1);
+        w.set_held(HeldThing::Tool("fishing_rod".into()));
+        w.tick(&look(0.0, false));
+        w.drain_events();
+        w.tick(&press_secondary());
+        assert!(refusals(&mut w).is_empty());
+    }
+
+    #[test]
+    fn a_secondary_press_at_nothing_refuses_nothing_here() {
+        let mut w = grass_floor_walker(1);
+        w.tick(&look(0.0, false));
+        w.drain_events();
+        w.tick(&press_secondary());
+        assert_eq!(refusals(&mut w), [("use".to_string(), Reason::NothingHere)]);
+        // The floor is beyond even the refusal reach.
+        let mut w = grass_floor_walker(1);
+        w.tick(&TickInput {
+            pitch: -(1.62f32 / 7.0).asin(),
+            secondary: true,
+            ..TickInput::default()
+        });
+        assert_eq!(refusals(&mut w), [("use".to_string(), Reason::NothingHere)]);
+    }
+
+    #[test]
+    fn a_primary_press_at_empty_air_refuses_nothing() {
+        let mut w = grass_floor_walker(1);
+        w.tick(&look(0.0, false));
+        w.drain_events();
+        w.tick(&TickInput {
+            primary: true,
+            ..TickInput::default()
+        });
+        assert!(refusals(&mut w).is_empty());
     }
 
     fn nothing_here(w: &mut Walker) -> Vec<String> {

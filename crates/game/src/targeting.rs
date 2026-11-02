@@ -210,6 +210,8 @@ pub fn cast_target(
 pub struct TargetingConfig {
     pub block_reach: f32,
     pub entity_reach: f32,
+    /// Reach of the too-far re-pick after a press that found nothing.
+    pub refusal_reach: f32,
     pub entity_box_expansion: f32,
 }
 
@@ -272,6 +274,7 @@ impl TargetingConfig {
         Ok(TargetingConfig {
             block_reach: get("reach", "block")?,
             entity_reach: get("reach", "entity")?,
+            refusal_reach: get("reach", "refusal")?,
             entity_box_expansion: get("entity", "box_expansion")?,
         })
     }
@@ -640,15 +643,20 @@ mod tests {
         let c = TargetingConfig::default_from_data().unwrap();
         assert_eq!(c.block_reach, 4.5);
         assert_eq!(c.entity_reach, 3.0);
+        assert_eq!(c.refusal_reach, 6.0);
+        assert!(c.refusal_reach > c.block_reach);
         assert!((c.entity_box_expansion - 0.1).abs() < 1e-6);
     }
 
     #[test]
     fn loader_rejects_bad_data() {
-        let err = TargetingConfig::parse("[reach]\nblock = 4.5\n").unwrap_err();
+        let err = TargetingConfig::parse(
+            "[reach]\nblock = 4.5\nentity = 3\n[entity]\nbox_expansion = 0.1\n",
+        )
+        .unwrap_err();
         assert!(matches!(err, TargetingError::Missing(_)));
         assert_err_contains::<(), _>(Err(err), "targeting.toml");
-        let bad = "[reach]\nblock = -1\nentity = 3\n[entity]\nbox_expansion = 0.1\n";
+        let bad = "[reach]\nblock = -1\nentity = 3\nrefusal = 6\n[entity]\nbox_expansion = 0.1\n";
         let err = TargetingConfig::parse(bad).unwrap_err();
         assert!(matches!(err, TargetingError::Invalid(_)));
         assert_err_contains::<(), _>(Err(err), "targeting.toml");
