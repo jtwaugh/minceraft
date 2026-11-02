@@ -1093,6 +1093,7 @@ impl Walker {
             match button {
                 Button::Primary => self.anim.start_swing(),
                 Button::Secondary => self.anim.start_use(),
+                Button::Interact => {}
             }
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
