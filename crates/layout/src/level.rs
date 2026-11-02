@@ -10,6 +10,7 @@ use std::path::Path;
 
 use terrain::SEA_LEVEL;
 
+#[cfg(feature = "toml-io")]
 use crate::structure::Structure;
 
 /// Per-level metadata for the game.
