@@ -29,10 +29,10 @@
 //   respawn                     the death screen's respawn button: controller.respawn() (nothing while alive)
 //   frame <ms> [xN]             run N frames of ms each (default 1)
 //   spawn animal <kind>         put a cow, pig or chicken on the raft scene's islet
-//   spawn fish <species>        put a fish (a name in data/fish_bodies.toml) in the water two blocks east of
-//                               the player and level with the feet; an error if that is not water or the species is unknown
+//   spawn fish <species> [dy]   put a fish (a name in data/fish_bodies.toml) in the water two blocks east of
+//                               the player and level with the feet (dy cells higher, negative for lower); an error if that is not water or the species is unknown
 //   spawn item <name>           drop a loose item a block east of the player (any scene)
-//   face animal                 turn to look at the first animal (a mousemove)
+//   face animal|fish            turn to look at the first animal or fish (a mousemove)
 //   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
 //   drop <n>                    teleport n blocks up, to fall back and take fall damage
@@ -429,7 +429,7 @@ function step(w, { op, args }) {
       }
       if (args[0] === 'fish' && args[1]) {
         const [x, y, z] = w.walk.feet();
-        const cell = [Math.floor(x) + 2, Math.floor(y + 0.5), Math.floor(z)];
+        const cell = [Math.floor(x) + 2, Math.floor(y + 0.5) + Number(args[2] ?? 0), Math.floor(z)];
         if (w.walk.block_at(...cell) !== B.water) {
           throw new Error(`spawn fish: no water at ${cell.join(' ')}`);
         }
@@ -441,8 +441,10 @@ function step(w, { op, args }) {
       return;
     }
     case 'face': {
-      if (args[0] !== 'animal') throw new Error('face animal');
-      const [dx, dy] = faceAnimal(w.walk, w.controller.state);
+      if (args[0] !== 'animal' && args[0] !== 'fish') throw new Error('face animal | face fish');
+      const target = args[0] === 'fish' ? readFish(w.walk)[0] : undefined;
+      if (args[0] === 'fish' && !target) throw new Error('no fish to face');
+      const [dx, dy] = faceAnimal(w.walk, w.controller.state, undefined, target);
       return fire(document, 'mousemove', { movementX: dx, movementY: dy });
     }
     case 'approach': { 
