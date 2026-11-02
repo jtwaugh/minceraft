@@ -63,7 +63,7 @@
 // meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
 // all mesh kinds), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
 // every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
-// console.lines (output lines so far), console.text (the box), cheated, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
+// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
@@ -254,6 +254,8 @@ function read(w, path) {
     const o = w.walk.raft_offset(s.alpha);
     return Math.hypot(o[0] - w.markRaft[0], o[2] - w.markRaft[2]);
   }
+  if (path === 'time') return w.walk.time_of_day();
+  if (path === 'time.frozen') return w.walk.day_frozen();
   if (path === 'driving') return w.walk.driving();
   if (path === 'raft.heading') return w.walk.raft_heading(s.alpha);
   if (/^raft\.[xz]$/.test(path)) return w.walk.raft_offset(s.alpha)[axis[path[5]]];

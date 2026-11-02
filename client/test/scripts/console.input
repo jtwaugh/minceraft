@@ -218,3 +218,21 @@ type step
 press Enter
 frame 50
 expect console.last = step needs the game paused
+
+case time set changes the exported time of day and time freeze holds it
+start walk raft
+click
+lock
+expect time ~ 0.3
+expect time.frozen = false
+press Backquote
+type time freeze
+press Enter
+frame 50 x2
+lock
+press Backquote
+type time set 0
+press Enter
+frame 50 x20
+expect time ~ 0
+expect time.frozen = true
