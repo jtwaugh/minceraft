@@ -41,6 +41,8 @@ import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
 import { mountHint, hintScale } from './hintui.js';
+import { mountCue } from './cueui.js';
+import { waitingForClick } from './waitingcue.js';
 import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
 import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readFish, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
@@ -49,7 +51,7 @@ import { createSpans } from './perfspans.js';
 import { meshRegionCpu } from './regionmesh.js';
 import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
-import { sampleSky, easeSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
+import { sampleSky, easeSky, blendSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { SNAP_GLSL, SNAP_SAMPLE_GLSL } from './texsnap.js';
 import { SKY_GLSL } from '../viewer/sky.js';
@@ -501,6 +503,7 @@ const controller = createController({ input, walk, fly, clock, document, flying,
   sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds } });
 const deathView = mountDeath(document, tileset, controller);
 const hint = mountHint(document, tileset);
+const cue = mountCue(document, tileset);
 // The debug readout folds into a top-left button: open by default only in debug mode, and the choice is remembered.
 let overlayOpen = debug;
 try { overlayOpen = JSON.parse(localStorage.getItem('overlayOpen') ?? String(debug)) === true; } catch { /* blocked storage: use the default */ }
@@ -573,7 +576,9 @@ function render(now) {
   const dtSky = lastFrame === null ? 0 : (now - lastFrame) / 1000;
   if (now - skySampleAt > 250) { skySampleAt = now; skyTarget = sampleSkyAt(eye); if (!skyReady) skyColor = skyTarget; skyReady = true; }
   skyColor = easeSky(skyColor, skyTarget, dtSky);
-  const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
+  const day = controller.state.day;
+  const base = underwater || !day ? skyColor : blendSky(skyColor, day.daylight, walk.daylight_at(0), Array.from(walk.night_sky()), Array.from(walk.dusk_sky()));
+  const view = look({ underwater, skyColor: base, fogFar, water: ctx.COLORS[B.water] });
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h, controller.state.day?.sunDir);
@@ -644,6 +649,7 @@ function render(now) {
   deathView.update(controller.state.dead);
   hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
   hint.update(input.locked);
+  cue.update(waitingForClick(input));
 
   if (lastFrame !== null) frames.push(now - lastFrame, work);
   lastFrame = now;

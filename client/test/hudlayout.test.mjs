@@ -206,6 +206,24 @@ test('the real tileset with an item in hands has no layout problems across the s
   }
 });
 
+const withHoe = { ...set, batches: { ui: { textures: { ...set.batches.ui.textures, hoe: grid(6, 8) } } } };
+
+test('the ready tool fills the hands frame when the hands are empty, without a label', () => {
+  const { rects } = hudLayout({ ...withTimer(7), ready: 'hoe' }, withHoe, { w: 1366, h: 768 });
+  const hs = rects.handsSlot, ic = hs.icon;
+  assert.equal(ic.w % (ic.h / 8), 0);
+  const k = ic.h / 8;
+  assert.deepEqual(ic, { x: hs.x + Math.floor((10 - 6) / 2) * k, y: hs.y + k, w: 6 * k, h: 8 * k });
+  assert.deepEqual([rects.hands.w, rects.hands.h, rects.hands.label], [0, 0, null]);
+});
+
+test('a carried item wins over the ready tool', () => {
+  const held = hudLayout(withTimer(7, 'sword'), set, { w: 1366, h: 768 }).rects.handsSlot.icon;
+  const both = hudLayout({ ...withTimer(7, 'sword'), ready: 'hoe' }, withHoe, { w: 1366, h: 768 }).rects.handsSlot.icon;
+  assert.deepEqual(both, held);
+  assert.equal(held.w, held.h);
+});
+
 test('the belt panel is centred within 1px at 1366x768 and 390x844 and the hearts stay on screen', () => {
   for (const [w, h] of [[1366, 768], [390, 844]]) {
     const { rects } = hudLayout(model, set, { w, h });

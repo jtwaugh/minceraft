@@ -38,6 +38,10 @@ test('fresh session: player data holds no debug path, debug data holds them', ()
   const p = playerObservation(s);
   assert.equal(p.mode, 'walk');
   assert.equal(p.locked, false);
+  assert.equal(p.prompt, 'Click to play');
+  assert.equal(p.hint, 'open');
+  assert.equal(PATHS.prompt, 'player');
+  assert.equal(PATHS.hint, 'player');
   assert.deepEqual(p.hud.hearts, { full: 10, half: 0, empty: 0 });
   assert.equal(p.hud.belt.slots.length, 5);
   assert.equal(p.hud.ready, 'none');
