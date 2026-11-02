@@ -140,7 +140,7 @@ Fish render as box models from the existing art (batch 11), using the textured b
 
 ### 4.3 Bite
 
-- While the bobber floats, a bite comes after a random delay (data, default 3 to 8 seconds). The species is drawn from the fish near the bobber if any are within a few blocks, otherwise from `species_for` at the bobber's column. A fish that is visibly swimming near the bobber is the one that bites, and it swims to the bobber first, with the `fishing_wake` particle trailing it.
+- While the bobber floats, a bite comes after a random delay (data, default 3 to 8 seconds). The species is drawn from the fish near the bobber, within a few blocks. If no fish is within a few blocks, there is no bite: the rod needs visible fish. A fish that is visibly swimming near the bobber is the one that bites, and it swims to the bobber first, with the `fishing_wake` particle trailing it. (Decided in #2078.)
 - On the bite, the bobber dips (and the `splash` particles play). The reel window is open for a set time (data, default 1 second).
 
 ### 4.4 Reel
@@ -150,7 +150,7 @@ Fish render as box models from the existing art (batch 11), using the textured b
 - Fishing cannot be done while carrying, so a catch never displaces a carried item.
 - The bite is a single timed press. There is no hold or reel minigame, for any species.
 
-> **Reconciler:** see notes 7, 10 and 13. The rod's "stows" when the hands fill matches basic-gameplay section 6. "Species drawn ... otherwise from `species_for` at the bobber's column" can pick a species with no fish entity in the water; the bite must then spawn or take a stock-limited fish. See open question 3.
+> **Reconciler:** see notes 7, 10 and 13. The rod's "stows" when the hands fill matches basic-gameplay section 6. The case of a bite with no fish near the bobber is settled in section 4.3.
 
 ### 4.5 Sword
 
@@ -204,8 +204,5 @@ Add to the events of basic-gameplay section 11:
 2. **Particles for `splash` and `fishing_wake`.** The client has no particle system.
    - A: Phase D ships without particles and a follow-up adds them (suggested).
    - B: add a minimal sprite-particle path to the client in Phase D.
-3. **A bite on a species with no fish nearby (section 4.3).**
-   - A: the bite spawns a fish of the drawn species just out of view and swims it to the bobber, taking one from the stock (suggested; keeps rule 1 approximately true).
-   - B: no bite if no fish is within a few blocks (the rod needs visible fish).
 4. **Squid body and swim data (note 1).** A: game-owned `data/fish_bodies.toml` entry like the fish (suggested). B: open a `research` question for the facts SPEC 14 lacks.
 5. **Stock when the stock is empty and the bobber is cast.** A: no bites until the next reset (suggested; matches rule 4). B: allow a slow trickle.
