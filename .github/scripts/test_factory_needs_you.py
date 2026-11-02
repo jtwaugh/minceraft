@@ -86,6 +86,14 @@ class Test(unittest.TestCase):
         s = snap([ticket(7), ticket(8)], [pr(9, 7, "ready"), pr(10, 8, None)])
         self.assertEqual(run(s), [])
 
+    def test_checks_waiting_on_approval(self):
+        runs = [{**r, "conclusion": "action_required"} for r in OK]
+        s = snap([ticket(7)], [pr(9, 7, None, runs=runs)])
+        run(s)
+        self.assertEqual(labelled(s), {"pr#9", "issue#7"})
+        queue = next(i for i in s.issues if i["title"] == QUEUE_TITLE)
+        self.assertIn("#9: Its checks wait on your approval", queue["body"])
+
     def test_ready_but_codeowners_path(self):
         p = pr(9, 7, "ready", files=[".github/x.py"], mergeable_state="blocked")
         s = snap([ticket(7)], [p])
