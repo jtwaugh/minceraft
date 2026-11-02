@@ -16,7 +16,8 @@
 //! belt, selection and hands; each item entity's id, item, position and
 //! velocity; each animal's id, species, health, position, velocity and
 //! facing; and, in a raft scene, the raft's offset, quarter turns and heading
-//! (the quarter turns plus the yaw not yet turned into one) and the `driving` flag.
+//! (the quarter turns plus the yaw not yet turned into one) and the `driving` flag;
+//! and the items on raft stations, each as its raft-local cell and item name.
 //! Floats are hashed by their bits.
 
 use crate::input::TickInput;

@@ -453,7 +453,22 @@ impl Walker {
             h.f64s(&[f.raft.heading()]);
             h.u64(u64::from(f.driving));
         }
+        for (cell, item) in self.stations.iter() {
+            for c in cell {
+                h.u64(i64::from(c) as u64);
+            }
+            h.str(&item.item);
+        }
         h.finish()
+    }
+
+    /// The items on raft stations as `(raft-local cell, item name)`, sorted
+    /// by cell.
+    pub fn station_items(&self) -> Vec<([i32; 3], String)> {
+        self.stations
+            .iter()
+            .map(|(c, i)| (c, i.item.clone()))
+            .collect()
     }
 
     /// Whether a cheat command has run this session.
@@ -2530,6 +2545,25 @@ mod tests {
         assert_eq!(w.time_of_day(), 0.5);
         w.tick(&TickInput::default());
         assert!((w.time_of_day() - 0.5 - 1.0 / clock.day_ticks() as f64).abs() < 1e-12);
+    }
+
+    #[test]
+    fn world_hash_covers_station_contents() {
+        let build = || {
+            let mut w = Walker::in_raft_scene(crate::scene::raft_scene()).unwrap();
+            w.tick(&TickInput::default());
+            w
+        };
+        let (mut a, b) = (build(), build());
+        assert_eq!(a.world_hash(), b.world_hash());
+        let cell = [0, 0, 0];
+        let item = ItemInstance {
+            item: "raw_beef".into(),
+        };
+        a.stations.put_down(cell, item).unwrap();
+        assert_ne!(a.world_hash(), b.world_hash());
+        a.stations.take(cell);
+        assert_eq!(a.world_hash(), b.world_hash());
     }
 
     #[test]

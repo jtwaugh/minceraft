@@ -722,6 +722,22 @@ impl Walk {
         self.0.items().iter().map(|e| e.item.item.clone()).collect()
     }
 
+    /// The occupied raft stations, three numbers each: the raft-local cell
+    /// `x, y, z`. Item names are in [`Walk::station_item_names`], in the same
+    /// order.
+    pub fn station_cells(&self) -> Vec<i32> {
+        self.0
+            .station_items()
+            .into_iter()
+            .flat_map(|(c, _)| c)
+            .collect()
+    }
+
+    /// The item on each station in [`Walk::station_cells`], in the same order.
+    pub fn station_item_names(&self) -> Vec<String> {
+        self.0.station_items().into_iter().map(|(_, i)| i).collect()
+    }
+
     /// How many loose items lie in the world.
     pub fn loose_items(&self) -> u32 {
         self.0.items().len() as u32
