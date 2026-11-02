@@ -44,7 +44,7 @@ function row(set, names, x, y, gap) {
 }
 
 /**
- * `{ scale, rects }` for a `hudModel` result: `rects.crosshair`, `rects.belt` (the slot row), `rects.beltPanel` (the strip around it), `rects.slotNumbers` (one glyph rect per slot),
+ * `{ scale, beltCentred, rects }` (`beltCentred` is false when the narrow-screen column fallback centred the belt and hands together) for a `hudModel` result: `rects.crosshair`, `rects.belt` (the slot row), `rects.beltPanel` (the strip around it), `rects.slotNumbers` (one glyph rect per slot),
  * `rects.slots` (one per slot), `rects.slotIcons` (the item's icon centred in each slot, or null) and `rects.hearts` (the whole row) plus `rects.heartIcons`,
  * `rects.timer` (box centred at the top, with `phase` and `digits` rects inside), `rects.handsPanel` (the strip
  * right of the belt's), `rects.handsSlot` (the frame on it, with the carried item's or else the ready tool's `icon` rect, or null) and
@@ -82,7 +82,8 @@ export function hudLayout(model, set, viewport) {
   // The belt panel is centred under the crosshair with the hands strip hanging off its right; if that
   // pushes the hands strip off the viewport, the whole column is centred instead.
   const beltCentred = Math.floor((vw - panelW) / 2);
-  const left = beltCentred + rowW > vw ? Math.floor((vw - colW) / 2) : beltCentred;
+  const fallback = beltCentred + rowW > vw;
+  const left = fallback ? Math.floor((vw - colW) / 2) : beltCentred;
   // Hearts keep the belt panel's left edge, but slide left just enough to stay inside the viewport when they are wider than the belt.
   const heartsX = Math.max(0, Math.min(left, vw - heartsW));
   const panelY = vh - BOTTOM_MARGIN - panelH;
@@ -145,6 +146,7 @@ export function hudLayout(model, set, viewport) {
 
   return {
     scale,
+    beltCentred: !fallback,
     rects: {
       crosshair,
       belt: rect(beltX, beltY, beltW, beltH),

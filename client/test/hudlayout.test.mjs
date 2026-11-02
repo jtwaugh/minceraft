@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { hudLayout, BOTTOM_MARGIN, SLOT_GAP, HEART_GAP, HEARTS_BELT_GAP, TOP_MARGIN, TIMER_PAD_X, TIMER_PAD_Y, LABEL_GAP, HANDS_GAP } from '../hudlayout.js';
 import { hudModel } from '../hud.js';
 import { readFileSync } from 'node:fs';
-import { layoutChecks } from '../hudcheck.js';
+import { layoutChecks, MAX_BELT_OFFCENTRE } from '../hudcheck.js';
 import { BELT_PAD, BELT_MAX_WIDTH_FRACTION } from '../uipx.js';
 
 const grid = (w, h) => Array(h).fill('a'.repeat(w));
@@ -234,4 +234,11 @@ test('the belt panel is centred within 1px at 1366x768 and 390x844 and the heart
   }
   const wide = hudLayout(model, set, { w: 1366, h: 768 }).rects;
   assert.equal(wide.hearts.x, wide.beltPanel.x);
+});
+
+test('the belt panel centre is within MAX_BELT_OFFCENTRE at 1366x768 and 390x844', () => {
+  for (const [w, h] of [[1366, 768], [390, 844]]) {
+    const p = hudLayout(model, set, { w, h }).rects.beltPanel;
+    assert.ok(Math.abs(p.x + p.w / 2 - w / 2) <= MAX_BELT_OFFCENTRE, `${w}x${h}`);
+  }
 });
