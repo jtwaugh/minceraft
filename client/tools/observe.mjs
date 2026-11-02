@@ -36,7 +36,7 @@ const CLASSES = {
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',
-    'animals', 'animals.dying', 'animals.hurt',
+    'animals', 'animals.dying', 'animals.hurt', 'fish', 'fish.near',
     'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
     'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],

@@ -7,7 +7,7 @@
 // One statement per line; `#` starts a comment. A file holds one or more cases.
 //
 //   case <name>                 a fresh world: fake canvas/document/window, new sim
-//   start fly|walk [raft] [debug] [stream [at <x> <z>]]  mode, and the raft test scene (default: walk, no terrain);
+//   start fly|walk [raft] [debug] [stream] [at <x> <z>]  mode, and the raft test scene (default: walk, no terrain);
 //                               the raft scene has three loose seeds on its islet and
 //                               implies debug; `debug` turns the console keys on elsewhere;
 //                               `stream` is a streamed world (seed 12345) starting over region 0 0,
@@ -83,7 +83,7 @@
 // events.foraged (`foraged` events seen since the case began), events.overbudget (stream only: frames whose work,
 // as counted for the work paths, went over a budget in client/workbudget.js; each is an event
 // `overbudget <field>=<value> ...` naming the fields over, e.g. `expect no event overbudget`),
-// events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing), fish (fish in the world), fish.near <x> <y> <z> <r> (fish whose position is within r blocks of that point; a path with arguments, as in `expect fish.near 10 64 3 5 = 1`).
+// events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing), fish (fish in the world), fish.near <x> <y> <z> <r> (fish within r blocks of that point; the path takes arguments: `expect fish.near 10 64 3 5 = 1`).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
@@ -282,8 +282,8 @@ function read(w, path) {
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
   if (path === 'items') return w.walk.loose_items();
   if (path === 'fish') return readFish(w.walk).length;
-  if (path.startsWith('fish.near ')) {
-    const [x, y, z, r] = path.slice(10).split(' ').map(Number);
+  if (path.startsWith('fish.near')) {
+    const [x, y, z, r] = path.slice(9).trim().split(/\s+/).map(Number);
     if (![x, y, z, r].every(Number.isFinite)) throw new Error('fish.near <x> <y> <z> <r>');
     return readFish(w.walk).filter((f) => Math.hypot(f.pos[0] - x, f.pos[1] - y, f.pos[2] - z) <= r).length;
   }
@@ -514,7 +514,7 @@ function step(w, { op, args }) {
   }
 }
 
-const START_USAGE = 'start fly|walk [raft] [debug] [stream [at <x> <z>]]';
+const START_USAGE = 'start fly|walk [raft] [debug] [stream] [at <x> <z>]';
 
 /** The world options for a `start` line's arguments; throws the usage message when they are bad. */
 function parseStart(args) {
