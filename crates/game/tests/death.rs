@@ -349,7 +349,13 @@ fn a_full_belt_leaves_the_loose_tool_in_place() {
     w.tick(&press_pick_up());
     assert!(w.items().get(id).is_some());
     assert_eq!(belt_tools(&w), belt);
-    assert!(w.drain_events().is_empty());
+    let events = w.drain_events();
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        &events[0],
+        GameEvent::ActionRefused { action, reason }
+            if action == "pickup" && reason.name() == "hands_full"
+    ));
 }
 
 #[test]
