@@ -2,8 +2,8 @@
 // belt with the selected slot, the carried item, and health hearts. The model
 // is plain data that Node tests check; the DOM renderer is a thin mirror.
 //
-//   hudModel({ belt, health, maxHealth, phase, secondsLeft, pulse }) ->
-//     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected, dim }], selected, hands, ready, stowed, pulse, hearts: { full, half, empty } }
+//   hudModel({ belt, health, maxHealth, phase, secondsLeft, pulse, message }) ->
+//     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected, dim }], selected, hands, ready, stowed, pulse, hearts: { full, half, empty }, message: { text, alpha } }
 //
 //   slotView(set, name, selected) -> { frame, icon }   frame is `slot` or `slot_selected`; icon is the item's texture name or null
 //   mountHud(document, set, parent) draws frames and icons from the parsed tileset at an integer scale (interfaceScale).
@@ -11,6 +11,7 @@
 // `ready` is the selected tool's name when the hands are empty, else null.
 // `stowed` is true while the hands are full, so the belt's tools are put away; every slot is then `dim`.
 // `pulse` is the hands-frame pulse strength, 0..1 (the controller's timer; 0 when idle).
+// `message` is the message line's view (message.js); text '' and alpha 0 when nothing shows.
 // Dim slots draw their frame and icon at STOWED_ALPHA, so the selection frame reads as greyed too.
 // The ready tool is drawn in the hands frame at READY_ALPHA; a carried item is opaque.
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
@@ -44,7 +45,7 @@ export function heartNames({ full, half, empty }) {
   return [...Array(full).fill('heart_full'), ...Array(half).fill('heart_half'), ...Array(empty).fill('heart_empty')];
 }
 
-export function hudModel({ belt, health, maxHealth, phase = 'gathering', secondsLeft = 0, pulse = 0 }) {
+export function hudModel({ belt, health, maxHealth, phase = 'gathering', secondsLeft = 0, pulse = 0, message = { text: '', alpha: 0 } }) {
   const hp = Math.max(0, Math.min(health, maxHealth));
   const full = Math.floor(hp / 2), half = hp % 2;
   return {
@@ -57,6 +58,7 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
     stowed: belt.hands != null,
     pulse,
     hearts: { full, half, empty: Math.ceil(maxHealth / 2) - full - half },
+    message,
   };
 }
 
