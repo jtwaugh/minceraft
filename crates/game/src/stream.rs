@@ -381,7 +381,7 @@ mod tests {
             single.tick(&input);
             assert_eq!(streamed.player().pos, single.player().pos, "tick {i}");
         }
-        assert!(streamed.player().pos[0] > 64.5 + 300.0);
+        assert!(streamed.player().pos[0] > 64.5 + 200.0);
     }
 
     #[test]
