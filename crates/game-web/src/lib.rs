@@ -277,6 +277,9 @@ fn describe_event(e: &GameEvent) -> String {
         } => {
             format!("fish_caught player={player} species={species} item={item} method={method}")
         }
+        GameEvent::FishBite { player, species } => {
+            format!("fish_bite player={player} species={species}")
+        }
         GameEvent::ItemDropped {
             item,
             position,
@@ -740,8 +743,8 @@ impl Walk {
 
     /// The fishing bobber: empty with no line out, else five numbers,
     /// `state, dipping, x, y, z`. `state` is 0 flying, 1 floating, 2
-    /// resting; `dipping` is 1 while a bite is on the line (always 0 until
-    /// bites exist); `(x, y, z)` is the centre of the bobber.
+    /// resting; `dipping` is 1 while a bite is on the line (a fish has
+    /// bitten); `(x, y, z)` is the centre of the bobber.
     pub fn bobber(&self) -> Vec<f64> {
         use game::bobber::BobberState;
         self.0.bobber().map_or_else(Vec::new, |b| {
@@ -751,7 +754,7 @@ impl Walk {
                 BobberState::Resting => 2.0,
             };
             let [x, y, z] = b.pos();
-            vec![state, 0.0, x, y, z]
+            vec![state, f64::from(u8::from(b.dipping())), x, y, z]
         })
     }
 
@@ -944,6 +947,18 @@ mod tests {
         assert_eq!(
             describe_event(&e),
             "action_refused action=till reason=nothing_here"
+        );
+    }
+
+    #[test]
+    fn describes_fish_bite() {
+        let e = GameEvent::FishBite {
+            player: "player".into(),
+            species: "mackerel".into(),
+        };
+        assert_eq!(
+            describe_event(&e),
+            "fish_bite player=player species=mackerel"
         );
     }
 

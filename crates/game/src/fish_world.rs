@@ -99,6 +99,20 @@ impl FishWorld {
         }
     }
 
+    /// Make fish `id` swim to the bobber at `bobber`, as near as the water
+    /// lets it get. No-op for an unknown id.
+    pub fn lure_to_bobber<W: CollisionWorld + ?Sized>(
+        &mut self,
+        id: EntityId,
+        bobber: [f64; 3],
+        world: &W,
+    ) {
+        if let Some(f) = self.store.get(id) {
+            let p = self.steer.lure_point(world, f, bobber);
+            self.set_lure(id, p);
+        }
+    }
+
     /// Let fish `id` wander again. No-op for an unknown id.
     pub fn clear_lure(&mut self, id: EntityId) {
         if let Some(f) = self.store.iter_mut().find(|f| f.id == id) {

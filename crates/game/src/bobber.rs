@@ -32,6 +32,8 @@ pub struct Bobber {
     /// Blocks per second.
     velocity: [f64; 3],
     state: BobberState,
+    /// A bite is on the line.
+    dipping: bool,
 }
 
 impl Bobber {
@@ -49,6 +51,7 @@ impl Bobber {
             pos: eye,
             velocity,
             state: BobberState::Flying,
+            dipping: false,
         }
     }
 
@@ -58,6 +61,14 @@ impl Bobber {
 
     pub fn state(&self) -> BobberState {
         self.state
+    }
+
+    pub fn dipping(&self) -> bool {
+        self.dipping
+    }
+
+    pub fn set_dipping(&mut self, dipping: bool) {
+        self.dipping = dipping;
     }
 
     fn aabb(&self) -> Aabb {
