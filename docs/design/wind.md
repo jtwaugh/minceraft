@@ -5,7 +5,7 @@ scope: game
 source: "#1725"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
 ---
 
@@ -20,7 +20,8 @@ Checked against `master` (f1c2f75).
 - **Noise:** `crates/terrain/src/noise.rs` has `Simplex` (`Simplex::new(&mut Rng)`, `noise(x, y)`), and the game crate already depends on `terrain`. The sim PRNG is `crates/game/src/rng.rs`. `fish_spawner.rs` (`spawn_rng(seed, tick)`) is an existing pattern for deriving a deterministic stream from seed and tick.
 - **Wasm exports** for the game are in `crates/game-web/src/lib.rs` (`wasm_bindgen`); the client reaches them through `client/controller.js`.
 - **Data:** `data/*.toml` has no `data/wind.toml`. Game data files are read by the game crate with `toml` (see `data/player.toml`, `data/input.toml`).
-- **Not built:** no wind function, no fronts or gusts, no wind readout or pin command, no day cycle or weather. Climate output does not depend on any of this.
+- **Phase A done (plan #1940):** the wind function with fronts, gusts and direction wobble (`crates/game/src/wind_front.rs`, `wind_gust.rs`, `wind_field.rs`), `data/wind.toml` and the `game-web` `Wind` export are built, with tests for determinism, replay, range, calm and storm samples and unchanged climate. Closing PRs: #1978, #1981, #2052 (earlier tickets of plan #1853 built the fronts, `Wind` type and export).
+- **Not built (as of the first reconcile; Phase A has since landed, see above):** no wind function, no fronts or gusts, no wind readout or pin command, no day cycle or weather. Climate output does not depend on any of this.
 - Related docs: `tree-trunk-sway.md` (#1609), `biome-flora.md` (Phase C.5 introduced the sway), `debug-console.md` (command and alias tables in `data/commands.toml`).
 
 ## Reconciliation notes
