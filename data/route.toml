@@ -36,3 +36,22 @@ climate_falloff = 64.0
 # T > warm_above (62/63).
 cold_below = 0.5
 warm_above = 0.9841269841269841
+
+# Mainland coast beside the channel (docs/design/villages-and-villagers.md
+# Phase B). Not read by the layout yet. Land starts rising coast_near blocks
+# from the channel centre line (never inside channel_half_width +
+# channel_falloff), climbs over coast_ramp blocks (short = cliff, long =
+# gentle) to coast_height blocks above sea level, continues for coast_width
+# blocks and fades out over coast_fade. Each varies between its min and max
+# over coast_wobble_length blocks of route arc length. The far edge
+# coast_near_max + coast_ramp_max + coast_width + coast_fade must stay below
+# 256, the distance from a route region to the corridor border.
+coast_near_min = 30.0
+coast_near_max = 40.0
+coast_ramp_min = 8.0
+coast_ramp_max = 24.0
+coast_height_min = 6.0
+coast_height_max = 14.0
+coast_width = 60.0
+coast_fade = 40.0
+coast_wobble_length = 200.0
