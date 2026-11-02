@@ -806,7 +806,9 @@ impl Wind {
     pub fn new(seed: u64) -> Result<Wind, JsError> {
         let cfg = game::wind_config::WindConfig::default_from_data()
             .map_err(|e| JsError::new(&e.to_string()))?;
-        Ok(Wind(game::wind_field::Wind::new(seed, cfg)))
+        let rough = game::wind_roughness_config::RoughnessConfig::default_from_data()
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Wind(game::wind_field::Wind::new(seed, cfg, &rough)))
     }
 
     /// `[dx, dz]` in blocks per second; `ticks` is `tick + alpha`.
