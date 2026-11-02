@@ -39,6 +39,21 @@ pub enum DensityTerm {
         depth_below_sea: f64,
         clear_above: i32,
     },
+    /// Mainland on the right of the heading of the polyline `points` (world
+    /// x, z); see `CoastEval` for how the side is found. With `d` the
+    /// distance to the polyline and
+    /// `w = smoothstep(near, near + ramp, d) *
+    /// (1 - smoothstep(near + ramp + width, near + ramp + width + fade, d))`
+    /// the base height moves toward `SEA_LEVEL + height` by `w`. Columns on
+    /// the left, or within `near`, get `w = 0`. No density clamp.
+    Coast {
+        points: Vec<(f64, f64)>,
+        near: f64,
+        ramp: f64,
+        height: f64,
+        width: f64,
+        fade: f64,
+    },
 }
 
 impl BaseHeightBias for DensityTerm {
@@ -57,6 +72,7 @@ impl BaseHeightBias for DensityTerm {
             DensityTerm::Channel { .. } => {
                 ChannelEval::new(self).map_or(0.0, |c| c.bias(x, z, base))
             }
+            DensityTerm::Coast { .. } => CoastEval::new(self).map_or(0.0, |c| c.bias(x, z, base)),
         }
     }
 }
@@ -270,7 +286,9 @@ pub use builder::{build_layout, default_v0_level};
 mod cache;
 pub use cache::{CacheChange, RegionCache};
 mod channel;
+mod coast;
 pub use channel::ChannelEval;
+pub use coast::CoastEval;
 mod corridor;
 pub use corridor::Corridor;
 mod derived;
@@ -368,6 +386,8 @@ mod cache_tests;
 mod channel_tests;
 #[cfg(test)]
 mod climate_tests;
+#[cfg(test)]
+mod coast_tests;
 #[cfg(test)]
 mod corridor_tests;
 #[cfg(test)]
