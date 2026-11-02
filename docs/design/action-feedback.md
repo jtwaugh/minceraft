@@ -5,13 +5,14 @@ scope: both
 source: "#1999"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
 ---
 
 ## Current state
 
+- **Phase A done** (plans #2022, #2028, #2145). `ActionRefused { action, reason }` and the four-value `Reason` enum are in `crates/game/src/events.rs`, emitted from `walk.rs`, exposed in `crates/game-web/src/lib.rs`, and covered by `client/test/scripts/refusals.input`. PRs #2032, #2041, #2081, #2122, #2129, #2140, #2194, #2201, #2217.
 - **Sim events exist.** `crates/game/src/events.rs` has `GameEvent` with `ItemPickedUp`, `BlockTilled`, `CropPlanted`, `CropHarvested`, `Foraged`, `ForageMissed`, `Swing` and the rest of basic-gameplay section 11. `Walker::drain_events` (`crates/game/src/walk.rs:1018`) returns them; `crates/game-web/src/lib.rs:416` turns them into strings; `client/controller.js` passes them out as `events` each frame.
 - **Events are not in the world hash.** `Walker::world_hash` (`crates/game/src/replay.rs` header) covers tick, player, belt, hands, items, animals and raft, not the event list. Events are derived from the same inputs, so a replay regenerates them.
 - **Only `forage_missed` is a refusal.** No other no-op (out of reach, hands full while carrying, wrong tool, nothing to till) emits anything. There is no refusal reason in `GameEvent`.
