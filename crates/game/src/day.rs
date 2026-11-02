@@ -88,6 +88,16 @@ impl DayClock {
         })
     }
 
+    /// Ticks in one day.
+    pub fn day_ticks(&self) -> u64 {
+        self.day_ticks
+    }
+
+    /// The tick within the day at which tick 0 starts (the start fraction).
+    pub fn start_offset_ticks(&self) -> u64 {
+        self.start_offset_ticks
+    }
+
     /// Time of day at `tick`, in 0..1 (never 1.0); 0 is midnight. Wrapped in
     /// integer ticks and divided last, so it stays exact at huge ticks.
     pub fn time_of_day(&self, tick: u64) -> f64 {
