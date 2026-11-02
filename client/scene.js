@@ -570,7 +570,8 @@ function drawParts(prog, parts) {
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const windState = createWindState(new Wind(seed), Wind, SWAY_SPEED);
+const windField = new Wind(seed);
+const windState = createWindState(windField, Wind, SWAY_SPEED);
 let lastWind = null; // windState.frame of the previous render
 let simTicks = 0; // sim ticks this session, the wind field's clock
 
@@ -705,7 +706,7 @@ function render(now) {
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 cheated: ${walk.cheated() ? 'yes' : 'no'}
 ${formatTime(walk.time_of_day(), walk.day_frozen())}
-${formatWind(wind.vec[0], wind.vec[1], wind.strength)}
+${formatWind(wind.vec[0], wind.vec[1], wind.strength, windField.roughness(eye[0], eye[2]), windField.ground_multiplier(eye[0], eye[2]))}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;
