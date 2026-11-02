@@ -576,7 +576,7 @@ function render(now) {
   const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h);
+  const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h, controller.state.day?.sunDir);
   if (sky) {
     gl.useProgram(skyProg);
     gl.uniform3fv(skyProg.u('camRight'), sky.right);
