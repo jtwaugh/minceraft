@@ -96,6 +96,8 @@ pub enum GameEvent {
     /// A fish bit: it reached the bobber and the reel window opened.
     /// `species` is its `data/fish.toml` key.
     FishBite { player: String, species: String },
+    /// The reel window closed unpressed and the fish swam off.
+    FishEscaped { player: String, species: String },
     /// An action the player tried was refused. `action` is `"swing"`,
     /// `"till"`, `"plant"`, `"pick"`, `"forage"` or `"pickup"`.
     ActionRefused { action: String, reason: Reason },
