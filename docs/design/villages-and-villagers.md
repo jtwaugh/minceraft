@@ -5,7 +5,7 @@ scope: both
 source: "#1528"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -28,6 +28,7 @@ Checked against the code on 2026-10-30. Nothing in this doc is built; there is n
 - **Phase clock.** `crates/game/src/phase.rs` is a gathering/service clock from tick 0. There is no day and night cycle.
 - **Rendering.** The textured box-model path from raft-scene-feedback Phase A is done (`client/models.js`, `client/modelgl.js`; animals drawn as models). `client/particles.js` exists (from picking-plants Phase C).
 - **Art.** `art/PROMPT.md` lists `villager` (head, nose, robe, arms, legs) and the `happy_villager` and `angry_villager` particles.
+- **Phase A done (plans #1551, #1772, #1915).** Template format, `landing` kind and all piece templates in `data/structures/villages/`: blocks #1583, #1846; shapes #1644; art #1591, #1839; parser #1584, #1938; rotation #1593; loader #1657; connector edge check #1840; templates #1859, #1870-#1874, #1877, #1947.
 - **Partial-height collision.** The game-side shape table (basic-gameplay 4.4, #88, #116) exists in `crates/game`.
 
 ## Reconciliation notes
