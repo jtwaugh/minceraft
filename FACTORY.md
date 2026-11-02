@@ -455,6 +455,22 @@ unset every store pass is skipped and the tick behaves as before.
    `fetch` from `factory_state_branch.py` before the tick, set
    `FACTORY_STORE` to the fetched file, and call `publish` after it.
 
+## Maintainer step for the stray-branch PRs
+
+The stalled-tickets pass opens a PR from a `claude/issue-<n>-` branch that has
+work and no PR. With the workflow token, `github-actions[bot]` authors it and
+GitHub holds its workflows (CI, PR size, Review gate, reviewer) for approval.
+To have them run as on the implementer's own PRs:
+
+1. Create a GitHub App with Contents read and Pull requests read/write
+   permissions, and install it on this repo only.
+2. Add its ID and private key as the secrets `FACTORY_APP_ID` and
+   `FACTORY_APP_PRIVATE_KEY`.
+
+`factory-tick.yml` mints a token from them and passes it as `APP_TOKEN`;
+`open_pr` uses it and every other write keeps its token. Until the secrets
+exist the step is skipped and `open_pr` uses the workflow token as before.
+
 ## Not built yet
 
 - **File leases in the store:** the ready pass still reads each ticket's
