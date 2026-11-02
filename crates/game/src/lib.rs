@@ -6,6 +6,7 @@ pub mod animal_entities;
 pub mod animal_steer;
 pub mod animals;
 pub mod bindings;
+pub mod bobber;
 pub mod camera;
 pub mod clock;
 pub mod collision;
