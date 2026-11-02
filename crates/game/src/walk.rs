@@ -209,6 +209,8 @@ pub struct Walker {
     spawn_rng: Rng,
     /// Yaw of the last ticked input, so commands can place things ahead.
     look_yaw: f32,
+    /// Pitch of the last ticked input.
+    look_pitch: f32,
     /// Events emitted since the last `drain_events`.
     events: Vec<GameEvent>,
     /// Ticks stepped so far, for cooldowns.
@@ -287,6 +289,7 @@ impl Walker {
             harvest_rng: Rng::new(HARVEST_SEED),
             spawn_rng: Rng::new(SPAWN_SEED),
             look_yaw: 0.0,
+            look_pitch: 0.0,
             events: Vec::new(),
             sim_tick: 0,
             phases: PhaseClock::default_phases()
@@ -696,6 +699,22 @@ impl Walker {
         self.look_yaw
     }
 
+    /// The bobber, if a line is out.
+    pub fn bobber(&self) -> Option<&crate::bobber::Bobber> {
+        self.fishing.bobber()
+    }
+
+    /// Where the rod tip is, `alpha` between the last two ticks: ahead of and
+    /// below the eye by the amounts in `data/fishing.toml`.
+    pub fn rod_tip(&self, alpha: f64) -> [f64; 3] {
+        let cfg = self.fishing.config();
+        let look = look_dir(self.look_yaw, self.look_pitch);
+        let eye = self.eye(alpha);
+        let mut tip = [0, 1, 2].map(|i| eye[i] + look[i] * cfg.rod_tip_reach);
+        tip[1] -= cfg.rod_tip_drop;
+        tip
+    }
+
     /// The sim RNG that `spawn` scatters with.
     pub fn spawn_rng_mut(&mut self) -> &mut Rng {
         &mut self.spawn_rng
@@ -767,6 +786,7 @@ impl Walker {
         };
         self.run_queued_commands();
         self.look_yaw = input.yaw;
+        self.look_pitch = input.pitch;
         self.sim_tick += 1;
         if self.day_frozen {
             let d = self.day.day_ticks();
@@ -1191,7 +1211,8 @@ impl Walker {
         }
         if ran.contains(&ActionKind::Cast) {
             let eye = self.cur_eye;
-            self.fishing.cast(eye, look_dir(input), &mut self.events);
+            self.fishing
+                .cast(eye, look_dir(input.yaw, input.pitch), &mut self.events);
         }
         if ran.contains(&ActionKind::Reel) {
             self.fishing.reel(&mut self.events);
@@ -1427,7 +1448,7 @@ impl Walker {
             return;
         };
         let speed = self.items.config().throw_speed;
-        let velocity = look_dir(input).map(|c| c * speed);
+        let velocity = look_dir(input.yaw, input.pitch).map(|c| c * speed);
         self.events.push(GameEvent::ItemDropped {
             item: carried.item.clone(),
             position: self.cur_eye,
@@ -1630,9 +1651,9 @@ fn name_raft_target(f: &Floating, mut aim: Aim) -> Aim {
 }
 
 /// Unit look vector, the same as `Pose::forward` in camera.rs, in f64.
-fn look_dir(input: &TickInput) -> [f64; 3] {
-    let (sy, cy) = (input.yaw as f64).sin_cos();
-    let (sp, cp) = (input.pitch as f64).sin_cos();
+fn look_dir(yaw: f32, pitch: f32) -> [f64; 3] {
+    let (sy, cy) = f64::from(yaw).sin_cos();
+    let (sp, cp) = f64::from(pitch).sin_cos();
     [sy * cp, sp, -cy * cp]
 }
 
@@ -1681,7 +1702,7 @@ fn aim_within(
     eye: [f64; 3],
     input: &TickInput,
 ) -> Aim {
-    let dir = look_dir(input);
+    let dir = look_dir(input.yaw, input.pitch);
     let target = cast_target(world, entities, cfg, eye, dir);
     match target {
         Target::Block { pos, .. } => {

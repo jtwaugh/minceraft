@@ -10,3 +10,5 @@ max_distance = 24          # the bobber is reeled in when the player is farther 
 bite_delay_ticks = [60, 160] # a bite comes after this many ticks, inclusive (3 to 8 seconds)
 reel_window_ticks = 20     # the reel window stays open this long after a bite (1 second)
 near_radius = 4            # fish this close to the bobber ("a few blocks") are drawn from first; tuned here
+rod_tip_reach = 0.8        # the rod tip is this far ahead of the eye along the look direction
+rod_tip_drop = 0.3         # and this far below the eye

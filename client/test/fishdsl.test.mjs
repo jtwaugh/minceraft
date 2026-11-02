@@ -19,3 +19,18 @@ test('fish.near counts only fish within the radius, and rejects bad arguments', 
   assert.throws(() => run(lake('spawn fish salmon\nexpect fish.near 90 65 40 3 = 1')), /fish\.near/);
   assert.throws(() => run(lake('expect fish.near 1 2 = 0')), /fish\.near <x> <y> <z> <r>/);
 });
+
+test('bobber.near rejects bad arguments and counts zero with no line out', () => {
+  assert.throws(() => run(lake('expect bobber.near 1 2 = 0')), /bobber\.near <x> <y> <z> <r>/);
+  run(lake('expect bobber = none\nexpect bobber.near 20 64 122 50 = 0'));
+});
+
+test('readBobber and readRodTip read the game-web rows', async () => {
+  const { readBobber, readRodTip } = await import('../overlay.js');
+  const rows = (b) => ({ bobber: () => b, rod_tip: () => [1, 2, 3] });
+  assert.equal(readBobber(rows([])), null);
+  assert.deepEqual(readBobber(rows([1, 0, 4, 5, 6])), { state: 'floating', dipping: false, pos: [4, 5, 6] });
+  assert.equal(readBobber(rows([0, 1, 0, 0, 0])).dipping, true);
+  assert.equal(readBobber(rows([2, 0, 0, 0, 0])).state, 'resting');
+  assert.deepEqual(readRodTip(rows([])), [1, 2, 3]);
+});

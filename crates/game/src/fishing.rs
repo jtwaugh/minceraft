@@ -30,6 +30,10 @@ impl Fishing {
         self.bobber.is_some()
     }
 
+    pub fn config(&self) -> &FishingConfig {
+        &self.cfg
+    }
+
     pub fn bobber(&self) -> Option<&Bobber> {
         self.bobber.as_ref()
     }

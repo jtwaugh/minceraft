@@ -19,15 +19,21 @@ pub struct FishingConfig {
     pub reel_window_ticks: u32,
     /// Blocks from the bobber within which swimming fish are considered.
     pub near_radius: f64,
+    /// Blocks ahead of the eye, along the look direction, of the rod tip.
+    pub rod_tip_reach: f64,
+    /// Blocks below the eye of the rod tip.
+    pub rod_tip_drop: f64,
 }
 
-const KEYS: [&str; 6] = [
+const KEYS: [&str; 8] = [
     "cast_speed",
     "cast_upward_kick",
     "max_distance",
     "bite_delay_ticks",
     "reel_window_ticks",
     "near_radius",
+    "rod_tip_reach",
+    "rod_tip_drop",
 ];
 
 fn err(kind: DataErrorKind) -> DataError {
@@ -87,6 +93,8 @@ impl FishingConfig {
             bite_delay_ticks,
             reel_window_ticks: whole(&root, "reel_window_ticks")?,
             near_radius: amount(&root, "near_radius")?,
+            rod_tip_reach: amount(&root, "rod_tip_reach")?,
+            rod_tip_drop: amount(&root, "rod_tip_drop")?,
         })
     }
 }
@@ -148,6 +156,8 @@ mod tests {
             ("reel_window_ticks = 20", "reel_window_ticks = 1.5"),
             ("near_radius = 4", "near_radius = 0"),
             ("near_radius = 4", "near_radius = -4"),
+            ("rod_tip_reach = 0.8", "rod_tip_reach = 0"),
+            ("rod_tip_drop = 0.3", "rod_tip_drop = -0.3"),
         ];
         for (from, to) in cases {
             assert!(DEFAULT_FISHING.contains(from), "{from}");

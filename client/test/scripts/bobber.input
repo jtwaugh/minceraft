@@ -1,0 +1,27 @@
+# The bobber in the client (docs/design/fish-and-fishing.md 4.2, Phase D): a
+# secondary press with the rod casts, the bobber lands on the water and floats,
+# and another secondary press reels it in. Same lake as fish.input.
+
+case a cast bobber floats on the water and a reel clears it
+start walk stream at 20.5 122.5
+click
+lock
+frame 50 x40
+held tool:fishing_rod
+# look down about 0.5 rad so the cast lands in the lake, not on the far shore
+mouse 0 200
+expect bobber = none
+button down right
+frame 50
+button up right
+frame 50
+expect event line_cast
+expect bobber = flying
+until bobber = floating
+expect bobber != none
+expect bobber.near 0 0 0 1 = 0
+button down right
+frame 50
+button up right
+frame 50 x2
+expect bobber = none
