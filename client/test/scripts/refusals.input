@@ -1,0 +1,73 @@
+# Refused presses report why (docs/design/action-feedback.md Phase A): one
+# case per reason. A refusal changes nothing else in the world.
+
+case a swing while carrying reports tools_stowed
+start walk raft
+click
+lock
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+lock
+stand field
+expect hands = seeds
+expect no event action_refused
+button down left
+frame 50 x2
+button up left
+frame 50 x2
+expect event action_refused action=swing reason=tools_stowed
+expect hands = seeds
+
+case a pick-up with full hands reports hands_full
+start walk raft
+click
+lock
+press Backquote
+type give item seeds
+press Enter
+frame 50 x2
+lock
+stand field
+spawn item seeds
+mouse 628 -250
+frame 50 x2
+expect target.kind = entity
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect event action_refused action=pickup reason=hands_full
+expect hands = seeds
+expect items = 4
+
+case a press at open sky reports nothing_here
+start walk raft
+click
+lock
+stand field
+mouse 0 -500
+frame 50 x2
+expect target.kind = none
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect event action_refused action=use reason=nothing_here
+
+case a swing at an animal past reach reports too_far
+start walk raft
+click
+lock
+spawn animal cow
+stand helm
+face animal
+held tool:sword
+frame 50 x2
+expect target.kind = none
+button down left
+frame 50 x2
+button up left
+frame 50 x2
+expect event action_refused action=swing reason=too_far
