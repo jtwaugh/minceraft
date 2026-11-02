@@ -6,16 +6,78 @@ const RAMP: f64 = 10.0;
 const WIDTH: f64 = 20.0;
 const FADE: f64 = 10.0;
 const HEIGHT: f64 = 12.0;
+const WOBBLE: f64 = 200.0;
 const CHANNEL_REACH: f64 = 12.0 + 6.0;
 
 fn coast(points: Vec<(f64, f64)>) -> DensityTerm {
     DensityTerm::Coast {
         points,
-        near: NEAR,
-        ramp: RAMP,
-        height: HEIGHT,
+        seed: 0,
+        near: (NEAR, NEAR),
+        ramp: (RAMP, RAMP),
+        height: (HEIGHT, HEIGHT),
         width: WIDTH,
         fade: FADE,
+        wobble_length: WOBBLE,
+    }
+}
+
+fn varying(seed: u64, points: Vec<(f64, f64)>) -> DensityTerm {
+    DensityTerm::Coast {
+        points,
+        seed,
+        near: (30.0, 40.0),
+        ramp: (8.0, 24.0),
+        height: (6.0, 14.0),
+        width: WIDTH,
+        fade: FADE,
+        wobble_length: WOBBLE,
+    }
+}
+
+#[test]
+fn parameters_vary_inside_their_bounds() {
+    let pts = vec![(0.0, 0.0), (3000.0, 0.0)];
+    let c = CoastEval::new(&varying(5, pts.clone())).unwrap();
+    let (mut lo, mut hi) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
+    for x in (0..3000).step_by(7) {
+        let (n, r, h) = c.params_at(x, 50).unwrap();
+        assert!((30.0..=40.0).contains(&n) && (8.0..=24.0).contains(&r));
+        assert!((6.0..=14.0).contains(&h));
+        lo = (n.min(lo.0), r.min(lo.1));
+        hi = (n.max(hi.0), r.max(hi.1));
+    }
+    assert!(hi.0 - lo.0 > 3.0 && hi.1 - lo.1 > 8.0, "{lo:?} {hi:?}");
+    let other = CoastEval::new(&varying(6, pts)).unwrap();
+    let w = |e: &CoastEval| {
+        (0..3000)
+            .step_by(50)
+            .map(|x| e.weight(x, 45))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(w(&c), w(&c));
+    assert_ne!(w(&c), w(&other));
+}
+
+#[test]
+fn varying_overlapping_regions_agree() {
+    let l = Layout {
+        seed: 9,
+        density: vec![varying(9, vec![(-100.0, 0.0), (0.0, 0.0), (300.0, 40.0)])],
+        ..Layout::default()
+    };
+    for decorate in [false, true] {
+        let a = l.generate_region(-40, -10, 96, 96, decorate);
+        let b = l.generate_region(0, 20, 64, 48, decorate);
+        for wz in 20..68 {
+            for wx in 0..56 {
+                for y in 0..terrain::HEIGHT as u32 {
+                    let ia = a.index((wx + 40) as u32, y, (wz + 10) as u32);
+                    let ib = b.index(wx as u32, y, (wz - 20) as u32);
+                    assert_eq!(a.blocks[ia], b.blocks[ib], "({wx},{y},{wz}) {decorate}");
+                }
+            }
+        }
     }
 }
 
