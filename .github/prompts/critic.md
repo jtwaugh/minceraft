@@ -74,7 +74,18 @@ Two more kinds of finding come from play in a streamed world:
 - `render`: a visible fault at block edges or along region borders, such
   as gaps, seams or flicker.
 
-Each needs an `expect` repro like any other finding.
+Each needs an `expect` repro like any other finding. In a streamed world
+(`start walk stream`) you can read these fields, and they are the ones to
+`expect` on for `perf` and `render` findings:
+
+- `regions.max_per_frame`
+- `chunks.max_per_tick`
+- `verts.max_per_frame`
+- `events.overbudget`
+- `render.faults`
+
+They exist only on streamed worlds. In any other world they are not there,
+so do not expect on them.
 
 ## Findings
 
