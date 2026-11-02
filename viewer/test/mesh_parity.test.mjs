@@ -83,3 +83,23 @@ for (const corners of [false, true]) {
     assert.deepEqual(quads(rs.water), quads(js.water));
   });
 }
+
+// The +Z face takes the front layer in both meshers (stone stands in for the chest, which
+// the Rust mesher doesn't list as solid yet).
+for (const greedy of [false, true]) {
+  test(`wasm mesher matches meshBlocks with a front layer${greedy ? ', greedy' : ''}`, () => {
+    const size = 4, blocks = new Uint8Array(size * size * H);
+    blocks[(1 * size + 1) * H + 5] = B.stone;
+    blocks[(1 * size + 2) * H + 5] = B.stone;
+    const frontLayer = new Uint8Array(256).fill(0xFF);
+    frontLayer[B.stone] = 200;
+    const c = { ...ctx, frontLayer };
+    const tints = randomTints(size, false);
+    const js = meshBlocks(c, blocks, tints, size, 0, { greedy });
+    const rs = meshBlocksWasm(wasm, c, blocks, tints, size, 0, { greedy });
+    assert.equal(rs.opaque.faces, js.opaque.faces);
+    assert.deepEqual(quads(rs.opaque), quads(js.opaque));
+    const layers = new Set(quads(js.opaque).map((q) => q.split(';')[0]));
+    assert.ok(layers.size > 1);
+  });
+}
