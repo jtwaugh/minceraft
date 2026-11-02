@@ -117,6 +117,7 @@ pub enum Reason {
     HandsFull,
     ToolsStowed,
     NothingHere,
+    ChestFull,
 }
 
 impl Reason {
@@ -127,6 +128,7 @@ impl Reason {
             Reason::HandsFull => "hands_full",
             Reason::ToolsStowed => "tools_stowed",
             Reason::NothingHere => "nothing_here",
+            Reason::ChestFull => "chest_full",
         }
     }
 }
@@ -142,6 +144,7 @@ mod tests {
             (Reason::HandsFull, "hands_full"),
             (Reason::ToolsStowed, "tools_stowed"),
             (Reason::NothingHere, "nothing_here"),
+            (Reason::ChestFull, "chest_full"),
         ];
         for (r, n) in all {
             assert_eq!(r.name(), n);
