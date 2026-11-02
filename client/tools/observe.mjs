@@ -7,10 +7,13 @@
 //   partial  visible only in part: target.id, target.face and box show as the outline,
 //            console.* only while the console is open, phase.left as digits
 //   debug    internal state a player can't see
+//   diagnostic  work and render counters of a streamed world; player mode may assert on them
+//            (expect/until) once the session was started with `stream`, but they are not in
+//            playerObservation
 //
-//   PATHS                       path -> 'player' | 'partial' | 'debug' (`eye.x|y|z`-style groups spelled out)
+//   PATHS                       path -> 'player' | 'partial' | 'debug' | 'diagnostic' (`eye.x|y|z`-style groups spelled out)
 //   playerObservation(session)  plain data of what a player perceives
-//   debugObservation(session)   every debug path that the session's world can serve
+//   debugObservation(session)   every debug and diagnostic path that the session's world can serve
 //
 // `session` is a createSession() result; only `session.read` is used.
 
@@ -29,7 +32,6 @@ const CLASSES = {
   partial: ['target.id', 'target.face', 'box', 'console.last', 'console.text', 'phase.left'],
   debug: [
     'regions.loaded', 'regions.freed', 'regions.pending', 'regions.x', 'regions.z',
-    'regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults',
     'console.lines', 'cheated', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
@@ -38,6 +40,7 @@ const CLASSES = {
     'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
     'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
+  diagnostic: ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults'],
 };
 
 export const PATHS = Object.freeze(
@@ -64,10 +67,10 @@ export function playerObservation(session) {
   };
 }
 
-/** Every debug-classified path the session can serve, by path. Paths this world lacks are left out. */
+/** Every debug- or diagnostic-classified path the session can serve, by path. Paths this world lacks are left out. */
 export function debugObservation(session) {
   const out = {};
-  for (const path of CLASSES.debug) {
+  for (const path of [...CLASSES.debug, ...CLASSES.diagnostic]) {
     try { out[path] = session.read(path); } catch { /* needs a scene or a streamed world */ }
   }
   return out;

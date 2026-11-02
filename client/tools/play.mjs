@@ -5,7 +5,10 @@
 //   {"start": ["walk", "raft"]}   create the session (once); the words after `start` in a script.
 //                                 Add "debug": true for verify mode (replaying repros, never playing):
 //                                 debug paths and {"observe": "debug"} work. The default, player mode,
-//                                 refuses them; the mode is fixed for the session.
+//                                 refuses them; the mode is fixed for the session. Player mode does
+//                                 allow expect/until on the diagnostic paths (regions.max_per_frame,
+//                                 chunks.max_per_tick, verts.max_per_frame, events.overbudget,
+//                                 render.faults) when the start words include "stream".
 //   {"exec": "press KeyW"}        run one DSL line; the response carries the player observation
 //   {"observe": "player"}         the player observation, without doing anything
 //   {"transcript": true}          the session so far as a valid `.input` script
@@ -23,17 +26,21 @@ import { PATHS, playerObservation, debugObservation } from './observe.mjs';
 
 const fail = (error) => ({ ok: false, error });
 
-/** The debug-classified path a DSL line reads (`expect`, `until`, `mark`, `expect event`), or null. */
-function debugRead(line) {
+/** The path a DSL line reads (`expect`, `until`, `mark`, `expect event`) that player mode refuses, or null.
+ *  Diagnostic paths are refused too unless the session is streamed. */
+function debugRead(line, streamed) {
   const [op, ...args] = line.replace(/#.*/, '').trim().split(/\s+/);
   if (op === 'mark') return 'mark';
   if (op === 'expect' && (args[0] === 'event' || (args[0] === 'no' && args[1] === 'event'))) return 'event';
-  if (op === 'expect' || op === 'until') return PATHS[args[0]] === 'debug' ? args[0] : null;
+  if (op === 'expect' || op === 'until') {
+    const kind = PATHS[args[0]];
+    return kind === 'debug' || (kind === 'diagnostic' && !streamed) ? args[0] : null;
+  }
   return null;
 }
 
 /** The state `handle` works on: holds the session once `start` has made it. */
-export const newState = () => ({ session: null, debug: false });
+export const newState = () => ({ session: null, debug: false, streamed: false });
 
 /** Answer one parsed request. Never throws. `state` is a `newState()` object. */
 export function handle(state, request) {
@@ -50,6 +57,7 @@ export function handle(state, request) {
       if ('debug' in request && typeof request.debug !== 'boolean') return fail('debug takes true or false');
       state.session = createSession(args);
       state.debug = request.debug === true;
+      state.streamed = args.includes('stream');
       return { ok: true, observation: playerObservation(state.session) };
     }
     const known = ['exec', 'observe', 'transcript'].find((k) => k in request);
@@ -61,7 +69,10 @@ export function handle(state, request) {
       if (!state.debug) {
         // session.exec does not split on newlines, so check the whole string as it will be run, and each line.
         for (const line of [request.exec, ...request.exec.split('\n')]) {
-          const path = debugRead(line);
+          const path = debugRead(line, state.streamed);
+          if (path && PATHS[path] === 'diagnostic') {
+            return fail(`${path} is a diagnostic path; it needs a session started with stream`);
+          }
           if (path) return fail(`${path} is a debug path; it is not available in player mode`);
         }
       }
