@@ -533,7 +533,7 @@ if (scene) {
   fly.teleport(x, y + 24, z);
 }
 const controller = createController({ input, walk, fly, clock, document, flying, stream: scene ? null : { budget: 1 },
-  sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds } });
+  sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds }, messages: game.message_templates() });
 const deathView = mountDeath(document, tileset, controller);
 const hint = mountHint(document, tileset);
 const cue = mountCue(document, tileset);
