@@ -5,6 +5,7 @@
 //
 //   hintLayout(cell, text, viewportW, viewportH) -> { scale, lines, cols, w, h, x, y }
 //   mountHint(document, set, parent, view) -> { update(locked), toggle(), open }
+//   createHintState() -> { update(locked), toggle(), open }   (the open/fold rule, no DOM)
 
 import { drawPanel, PANEL_TILE } from './panel.js';
 import { drawString } from './font.js';
@@ -76,22 +77,32 @@ export function hintLayout(cell, text, viewportW, viewportH) {
   }
 }
 
+/** The hint's open/fold rule: starts open, folds on the first transition to locked, `toggle()` flips it. */
+export function createHintState() {
+  let open = true, wasLocked = false;
+  return {
+    get open() { return open; },
+    toggle() { open = !open; },
+    update(locked) {
+      if (locked && !wasLocked) open = false;
+      wasLocked = locked;
+    },
+  };
+}
+
 export function mountHint(document, set, parent = document.body, view = globalThis) {
   const root = document.createElement('div');
   root.id = 'hint';
   root.style.cssText = 'position: fixed; pointer-events: none; image-rendering: pixelated;';
   parent.append(root);
   const cell = textureSize(set, 'font_unknown') ?? { w: 4, h: 6 };
-  let last = '', open = true, wasLocked = false;
-  const show = () => { root.hidden = !open; };
+  let last = '';
+  const state = createHintState();
+  const show = () => { root.hidden = !state.open; };
   const api = {
-    get open() { return open; },
-    toggle() { open = !open; show(); },
-    update(locked) {
-      if (locked && !wasLocked) open = false;
-      wasLocked = locked;
-      show();
-    },
+    get open() { return state.open; },
+    toggle() { state.toggle(); show(); },
+    update(locked) { state.update(locked); show(); },
   };
   const button = mountCornerButton(document, set, { id: 'hint-button', label: HINT_BUTTON, onClick: () => api.toggle() });
   const layout = () => {
