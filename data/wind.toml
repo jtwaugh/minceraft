@@ -36,6 +36,7 @@ height_cell = 64          # edge of one cached height cell
 height_step = 8           # spacing of heightmap samples and cell nodes
 height_radius = 16        # smoothing half-width for H
 height_radius_wide = 48   # smoothing half-width for H_wide
+surface_offset = 1.0      # blocks above H for callers that pass no height (finite, may be negative)
 
 # Exposure: speed factor from height above H_wide. gain, floor, ceiling above
 # zero, floor <= ceiling; ease_len zero or above.
