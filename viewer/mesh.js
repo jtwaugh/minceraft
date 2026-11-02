@@ -28,6 +28,8 @@ export const VERTEX_BYTES = 16;
 export const POS_SCALE = 1 / 16, UV_SCALE = 1 / 16, SHADE_SCALE = 1 / 128;
 // Shade multiplier per AO level (vertex byte 13).
 export const AO_SHADE = [1.0, 0.82, 0.68, 0.55];
+// Shade multiplier per face direction (top, bottom, +x, -x, +z, -z); FACES below uses it.
+export const FACE_SHADE = [1.0, 0.5, 0.8, 0.65, 0.9, 0.6];
 
 // Block ids (data/blocks.toml); names and colours come from legend().
 export const B = {
@@ -284,12 +286,12 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
 
 // Faces: [normal, 4 corner offsets, shade]
 const FACES = [
-  { d: [0, 1, 0], c: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], s: 1.0 },   // top
-  { d: [0, -1, 0], c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s: 0.5 },  // bottom
-  { d: [1, 0, 0], c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], s: 0.8 },   // +x
-  { d: [-1, 0, 0], c: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s: 0.65 }, // -x
-  { d: [0, 0, 1], c: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s: 0.9 },   // +z
-  { d: [0, 0, -1], c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], s: 0.6 },  // -z
+  { d: [0, 1, 0], c: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], s: FACE_SHADE[0] },   // top
+  { d: [0, -1, 0], c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s: FACE_SHADE[1] },  // bottom
+  { d: [1, 0, 0], c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], s: FACE_SHADE[2] },   // +x
+  { d: [-1, 0, 0], c: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s: FACE_SHADE[3] }, // -x
+  { d: [0, 0, 1], c: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s: FACE_SHADE[4] },   // +z
+  { d: [0, 0, -1], c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], s: FACE_SHADE[5] },  // -z
 ];
 
 // Texture coords for a face corner: top/bottom map x,z; sides map the
