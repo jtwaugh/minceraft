@@ -17,6 +17,14 @@ use layout::{Fish, FishColumn, Habitats};
 /// Mixed into the seed for the swim RNG, so it is not the spawner's stream.
 const SWIM_SEED: u64 = 0x5F1D_33A7_0C6E_9B21;
 
+/// A fish taken out of the water.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Catch {
+    pub species: String,
+    /// The item it becomes, from `data/fish_bodies.toml`.
+    pub raw_item: String,
+}
+
 pub struct FishWorld {
     store: FishStore,
     spawner: FishSpawner,
@@ -55,6 +63,31 @@ impl FishWorld {
         self.store.spawn(species, pos, heading, 0)
     }
 
+    /// Hit fish `id` for `damage` half-hearts. When that kills it, the fish
+    /// is removed and its species and raw item are returned. A removed fish
+    /// does not go back to the stock. `None` if the fish survives or the id
+    /// is unknown.
+    pub fn hit(&mut self, id: EntityId, damage: u32) -> Option<Catch> {
+        let species = self.store.get(id)?.species.clone();
+        let (_, died) = self.store.hit(id, damage)?;
+        if !died {
+            return None;
+        }
+        let raw_item = self.store.bodies().get(&species)?.raw_item.clone();
+        Some(Catch { species, raw_item })
+    }
+
+    /// Remove fish `id` whole (a hooked fish reeled in) and return what it
+    /// becomes. `None` for an unknown id.
+    pub fn catch(&mut self, id: EntityId) -> Option<Catch> {
+        let fish = self.store.remove(id)?;
+        let raw_item = self.store.bodies().get(&fish.species)?.raw_item.clone();
+        Some(Catch {
+            species: fish.species,
+            raw_item,
+        })
+    }
+
     /// Fish left in today's stock.
     pub fn stock(&self) -> u32 {
         self.spawner.stock()
@@ -84,5 +117,71 @@ impl FishWorld {
         });
         self.steer
             .tick(&mut self.store, world, swimmer, &mut self.rng);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::collision::MemoryWorld;
+
+    fn open_sea(x: i32, z: i32) -> Option<FishColumn> {
+        let habitats = Habitats::shipped();
+        let h = (x.wrapping_mul(73) ^ z.wrapping_mul(151)).rem_euclid(97) as u32;
+        let names = ["warm_shallows", "deep_water", "cold_open", "temperate_open"];
+        Some(FishColumn {
+            habitat: habitats.id_of(names[(h % 4) as usize]).unwrap(),
+            temperature: f64::from(h % 10) / 10.0,
+            depth: 2 + h % 40,
+        })
+    }
+
+    #[test]
+    fn hit_and_catch_remove_without_refilling() {
+        let mut w = FishWorld::default_from_data(3, 5000).unwrap();
+        let a = w.spawn("mackerel", [0.0, 40.0, 0.0], 0.0).unwrap();
+        let b = w.spawn("tuna", [3.0, 40.0, 0.0], 0.0).unwrap();
+        let c = w.spawn("salmon", [6.0, 40.0, 0.0], 0.0).unwrap();
+        let stock = w.stock();
+        let sword = crate::items::Items::default_items().damage(Some("sword"));
+        let got = w.hit(a, sword).unwrap();
+        assert_eq!(
+            (got.species.as_str(), got.raw_item.as_str()),
+            ("mackerel", "raw_mackerel")
+        );
+        assert_eq!(w.hit(a, sword), None);
+        assert_eq!(w.hit(9, sword), None);
+        assert_eq!(
+            w.hit(b, 1),
+            None,
+            "a wounded tuna survives or dies by health"
+        );
+        let tuna = w.catch(b);
+        assert_eq!(tuna.map(|t| t.raw_item), Some("raw_tuna".to_string()));
+        assert_eq!(w.catch(b), None);
+        assert_eq!(w.catch(c).unwrap().species, "salmon");
+        assert_eq!((w.stock(), w.store().len()), (stock, 0));
+    }
+
+    #[test]
+    fn stock_plus_fish_stays_within_the_daily_total() {
+        let daily = FishSpawnConfig::default_from_data().unwrap().daily_stock;
+        let mut w = FishWorld::default_from_data(11, 1).unwrap();
+        let player = Aabb::new([0.0, 40.0, 0.0], [0.6, 41.8, 0.6]);
+        let mut caught = 0;
+        for tick in 0..9600 {
+            w.tick(tick, [0.0, 0.5], &player, &MemoryWorld::new(), open_sea);
+            if w.is_phase_change(tick) && tick < 4800 {
+                let first = w.store().iter().next().map(|f| f.id);
+                if let Some(id) = first {
+                    assert!(w.catch(id).is_some());
+                    caught += 1;
+                }
+            }
+            if tick < 4800 {
+                assert!(w.stock() + w.store().len() as u32 <= daily, "{tick}");
+            }
+        }
+        assert!(caught >= 1);
     }
 }
