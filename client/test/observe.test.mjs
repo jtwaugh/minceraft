@@ -40,6 +40,7 @@ test('fresh session: player data holds no debug path, debug data holds them', ()
   assert.equal(p.locked, false);
   assert.deepEqual(p.hud.hearts, { full: 10, half: 0, empty: 0 });
   assert.equal(p.hud.belt.slots.length, 5);
+  assert.equal(p.hud.ready, 'none');
   assert.equal(p.console, null);
   const keys = JSON.stringify(p);
   for (const [path, kind] of Object.entries(PATHS)) {
