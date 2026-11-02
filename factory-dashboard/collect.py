@@ -230,6 +230,31 @@ def main():
         return sorted(rows, key=lambda p: p["number"])
     section("open_prs", open_prs)
 
+    # -- open PRs with a conflict or failed CI wait on you too: tag @claude, or solve it locally
+    def broken_prs():
+        if out.get("needs_you") is None or out.get("open_prs") is None:
+            return
+        fixer = {b["number"]: b for b in out.get("blocked") or []}
+        listed = {i["number"]: i for i in out["needs_you"] if i["kind"] == "pr"}
+        for p in out["open_prs"]:
+            problems = (["conflict"] if p["mergeable"] == "dirty" else []) + \
+                       ([f"CI failed: {', '.join(p['failed'])}"] if p["failed"] else [])
+            if not problems:
+                continue
+            b = fixer.get(p["number"])
+            if p["number"] in listed:  # already waiting on your review: flag it there
+                listed[p["number"]].update(problems=problems, fixer=b and b["what"])
+                continue
+            out["needs_you"].append({
+                "kind": "pr", "number": p["number"], "title": p["title"], "type": "broken",
+                "reason": b["what"] if b else "Nothing is fixing it yet.", "fixer": b and b["what"],
+                "fixing": bool(b) and b["state"] in ("fixing", "queued"),
+                "problems": problems, "blocks": 0, "created_at": p.get("created_at") or "",
+                "labels": p["labels"], "ticket": b and b.get("ticket"), "options": [], "question": "",
+            })
+    section("broken_prs", broken_prs)
+    out.pop("broken_prs", None)
+
     # -- recent agent runs, with the error for the newest failures
     def agent_runs():
         rows = []

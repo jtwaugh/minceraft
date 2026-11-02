@@ -36,7 +36,7 @@ Needs Python 3.9+ and the GitHub CLI, with nothing to install.
 - **Overview:** last tick, items waiting on you, active and failed agent
   runs, open and blocked PRs, ticks in the last 48 h.
 - **Waiting on you:** the needs-you queue, by the needs-you pass's own rules,
-  most-blocking first. The tick's own tracker issues (`Factory: stalled work`) show
+  most-blocking first, plus every open PR with a merge conflict or failed CI. The tick's own tracker issues (`Factory: stalled work`) show
   apart as reports and don't count as waiting.
 - **Started, no PR yet:** each started ticket's state and its start count
   (n of 3).
@@ -60,7 +60,10 @@ out as you through `gh`:
   *decided*, waiting on the spec editor's PR. A question with a `/decide`
   comment on GitHub, from the page or not, stays out of the queue.
 - **Unapproved ticket:** *Approve* adds `factory`; *Close* closes it as not
-  planned.
+  planned. With two or more waiting, *Approve (label factory) all N tickets*
+  labels every one in a single dialog. An approved ticket leaves the queue
+  and shows apart with a `factory` pill until the tick starts it, it's
+  closed or unlabelled, or 24 hours pass (or the server restarts).
 - **PR waiting on review:** two steps. *Approve* approves its current head
   as you, with no comment. The button then becomes *Merge*, which stays
   disabled until every check on that head has passed, and merges with a
@@ -72,6 +75,13 @@ out as you through `gh`:
   gets *Fix locally*, which opens Terminal in your checkout and starts
   Claude on the PR, told to check no fixer is already running, fix on the
   PR branch, ask before pushing, and never merge.
+- **PR with a conflict or failed CI:** *Tag @claude* posts an editable
+  `@claude Fix this PR: ...` comment naming the conflict and failing checks
+  (the dialog warns if the factory's fixer is already on it). *Solve locally*
+  opens Terminal in your checkout and starts Claude on the PR, told to check
+  no fixer is already running, merge master (no rebase) or fix the failing
+  CI on the PR branch, ask before pushing, and never merge. A PR already
+  waiting on your review gets the same two buttons when it breaks.
 - **Comment** on any waiting issue.
 - **Alerts:** *Investigate locally* opens Terminal in your checkout and
   starts Claude with what the alert knows, told to investigate only and
