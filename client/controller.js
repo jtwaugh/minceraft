@@ -20,6 +20,8 @@
 // degrees per `sprintFov.seconds` of frame time (SPEC Sprinting, Camera). Flying never widens it.
 //
 // `hud` is hudModel (hud.js) for the walking player, filled from the belt and health.
+// A belt selection change while carrying starts the hands-frame pulse: `hud.pulse` is 1
+// on that frame and falls linearly to 0 over PULSE_SECONDS of frame time.
 //
 // `events` is the sim's events since the previous frame (every tick of this one),
 // oldest first, as `name key=value ...` strings; each is delivered once.
@@ -52,6 +54,8 @@ import { createStream, regionOf } from './stream.js';
 import { createParticles } from './particles.js';
 import { readDay } from './daylook.js';
 
+const PULSE_SECONDS = 0.4;
+
 export function createController({ input, walk, fly, clock, document, flying = false, stream = null, sprintFov = { base: 70, extra: 0, seconds: 1 } }) {
   const regions = stream && createStream(stream);
   let followed = null;
@@ -73,6 +77,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
 
   let respawning = false; // respawn queued, the sim has not yet run it
   let freed = 0;
+  let pulseLeft = 0; // seconds of hands-frame pulse left
   const streamRegions = (eye) => {
     const centre = regionOf(eye[0], eye[2]);
     if (state.flying && (followed?.rx !== centre.rx || followed?.rz !== centre.rz)) {
@@ -118,7 +123,10 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const fov = state.fov < goal ? Math.min(goal, state.fov + step) : Math.max(goal, state.fov - step);
       const underwater = walk.liquid_at(eye[0], eye[1], eye[2]);
       const belt = readBelt(walk);
-      const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
+      if (state.belt && belt.selected !== state.belt.selected && belt.hands != null) pulseLeft = PULSE_SECONDS;
+      else pulseLeft = Math.max(0, pulseLeft - dt);
+      const pulse = pulseLeft / PULSE_SECONDS;
+      const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left(), pulse });
       const events = Array.from(walk.drain_events());
       particles.spawnMisses(events);
       particles.spawnSplash(events, readBobber(walk)?.pos);
