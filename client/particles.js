@@ -9,6 +9,9 @@
 //                          burst at `bobberPos` ([x, y, z], or null with no bobber out) for each `fish_bite`
 //                          event (fish-and-fishing.md 4.3); the event carries no position. Splash
 //                          particles have sprite 'splash' and a frame 0..3 (splash_0..splash_3) running with age
+//   p.spawnWake(fish, dt)  for each fish (readFish's rows) with `lured`, wake particles at its position at a
+//                          steady rate, as it swims to the bobber (fish-and-fishing.md 4.3). Wake particles
+//                          have sprite 'fishing_wake', a short life and no drift; unlured fish leave none
 //   p.spawnSnow(cells, eye, wind, dt)
 //                          flakes off the snow layers at world `cells` ([x, y, z] of each, from
 //                          snowOnFoliage) near `eye`: more as `wind.strength` (0..1) rises, in bursts
@@ -32,6 +35,10 @@ const SPLASH_FRAMES = 4;
 const SPLASH_RISE = 0.6; // blocks per second
 const SPLASH_SPREAD = 0.15; // blocks, around the bobber
 const SPLASH_SIZE = 0.08;
+
+const WAKE_RATE = 12; // particles per second behind one lured fish
+const WAKE_LIFE = 0.4; // seconds
+const WAKE_SIZE = 0.07;
 
 const SNOW_RADIUS = 24; // blocks from the eye; farther snow drops nothing
 const SNOW_RATE = 0.5; // flakes per second from one cell at the peak of a full-strength gust
@@ -60,6 +67,7 @@ export function snowOnFoliage(blocks, size, pad, origin) {
 export function createParticles() {
   const list = [];
   let seed = 0x9e3779b9, flakes = 0;
+  let wakes = new Map(); // lured fish id -> particles owed, carried between frames
   const rand = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 0x100000000;
@@ -91,6 +99,16 @@ export function createParticles() {
           list.push({ pos, vel: [0, SPLASH_RISE, 0], age: 0, life: SPLASH_LIFE, size: SPLASH_SIZE, sprite: 'splash', frame: 0 });
         }
       }
+    },
+    spawnWake(fish, dt) {
+      const owed = new Map();
+      for (const f of fish) {
+        if (!f.lured) continue;
+        let n = (wakes.get(f.id) ?? 0) + WAKE_RATE * dt;
+        for (; n >= 1; n--) list.push({ pos: [...f.pos], vel: [0, 0, 0], age: 0, life: WAKE_LIFE, size: WAKE_SIZE, sprite: 'fishing_wake' });
+        owed.set(f.id, n);
+      }
+      wakes = owed;
     },
     spawnSnow(cells, eye, wind, dt) {
       const [ux, uz] = wind.dir;

@@ -103,3 +103,45 @@ test('splash particles run frames 0 to 3 and expire after their life', () => {
   assert.deepEqual([...seen], [0, 1, 2, 3]);
   assert.equal(p.count, 0);
 });
+
+test('a lured fish leaves fishing_wake particles at its position over frames; an unlured one leaves none', () => {
+  const p = createParticles();
+  const fish = [{ id: 1, pos: [3, 62.8, 5], lured: true }, { id: 2, pos: [-8, 62.8, 1], lured: false }];
+  let spawned = 0;
+  for (let i = 0; i < 30; i++) {
+    fish[0].pos = [3 + i * 0.05, 62.8, 5];
+    const before = p.count;
+    p.spawnWake(fish, 1 / 60);
+    spawned += p.count - before;
+    p.update(1 / 60);
+  }
+  assert.ok(spawned >= 4, `spawned ${spawned}`);
+  const xs = new Set();
+  for (const w of p.list) {
+    assert.equal(w.sprite, 'fishing_wake');
+    assert.deepEqual(w.vel, [0, 0, 0]);
+    assert.ok(Math.abs(w.pos[0] - 3.75) < 1 && w.pos[2] === 5, 'trails the lured fish, not the other');
+    xs.add(w.pos[0]);
+  }
+  assert.ok(xs.size > 1, 'left along its path');
+  const q = createParticles();
+  for (let i = 0; i < 60; i++) q.spawnWake([fish[1]], 1 / 60);
+  assert.equal(q.count, 0);
+});
+
+test('wake particles expire and the live count stays bounded', () => {
+  const p = createParticles(), fish = [{ id: 1, pos: [0, 63, 0], lured: true }, { id: 4, pos: [2, 63, 0], lured: true }];
+  let most = 0;
+  for (let i = 0; i < 600; i++) {
+    p.spawnWake(fish, 1 / 60);
+    p.update(1 / 60);
+    most = Math.max(most, p.count);
+  }
+  assert.ok(most > 0 && most <= 20, `most ${most}`);
+  const calm = fish.map((f) => Object.assign({}, f, { lured: false }));
+  for (let i = 0; i < 60; i++) {
+    p.spawnWake(calm, 1 / 60);
+    p.update(1 / 60);
+  }
+  assert.equal(p.count, 0, 'all expire once no fish is lured');
+});
