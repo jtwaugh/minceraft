@@ -55,13 +55,13 @@ export function look({ underwater, skyColor, fogFar, water }) {
  * Inputs of the sky pass and of the fog's sky colour: `base` is the colour to
  * pass as `skyColor`'s base (the fog colour), or null when the sky pass is
  * skipped and fog stays flat (under water). `right`, `up` and `fwd` are the
- * camera basis and `scale` is [tan(fovY / 2) * aspect, tan(fovY / 2)].
+ * camera basis, `sunDir` is the supplied sun direction (default `SUN_DIR`) and `scale` is [tan(fovY / 2) * aspect, tan(fovY / 2)].
  */
-export function skyInputs(v, yaw, pitch, fovY, aspect) {
+export function skyInputs(v, yaw, pitch, fovY, aspect, sunDir = SUN_DIR) {
   if (!v.sky) return null;
   const { r, u, f } = basis(yaw, pitch);
   const t = Math.tan(fovY / 2);
-  return { base: v.fogColor, sunDir: SUN_DIR, right: r, up: u, fwd: f, scale: [t * aspect, t] };
+  return { base: v.fogColor, sunDir, right: r, up: u, fwd: f, scale: [t * aspect, t] };
 }
 
 /** Fog amount 0..1 at eye distance `dist`: mirrors the fragment shader. */

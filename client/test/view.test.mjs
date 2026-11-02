@@ -93,5 +93,8 @@ test('the sky pass runs above water with the biome colour, and not under water',
   assert.ok(Math.abs(Math.hypot(...SUN_DIR) - 1) < 1e-12);
   assert.ok(Math.abs(up.scale[0] / up.scale[1] - 16 / 9) < 1e-12);
   assert.deepEqual(up.fwd, basis(0.3, 0.1).f);
+  const noon = [0, 1, 0];
+  assert.deepEqual(skyInputs(look({ ...base, underwater: false }), 0.3, 0.1, FOV, 16 / 9, noon).sunDir, noon);
+  assert.deepEqual(skyInputs(look({ ...base, underwater: false }), 0.3, 0.1, FOV, 16 / 9, undefined).sunDir, SUN_DIR);
   assert.equal(skyInputs(look({ ...base, underwater: true }), 0.3, 0.1, FOV, 16 / 9), null);
 });
