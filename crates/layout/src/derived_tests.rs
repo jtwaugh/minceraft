@@ -50,12 +50,12 @@ fn hand_built_columns() {
 }
 
 #[test]
-fn floe_ice_column_reads_like_ice() {
+fn floe_ice_column_is_floe_not_frozen() {
     let mut r = hand_built();
     r.blocks[2 * HEIGHT + SURFACE] = Block::FloeIce as u8;
     let m = DerivedMaps::from_region(&r);
-    assert_eq!(m, DerivedMaps::from_region(&hand_built()));
-    assert!(m.frozen[2]);
+    assert!(!m.frozen[2] && m.floe[2]);
+    assert_eq!(m.floe, [false, false, true, false]);
     assert_eq!(m.water_depth[2], 4);
 }
 
@@ -82,7 +82,8 @@ fn real_seed_matches_column_scan() {
             let ice = top == Block::Ice || top == Block::FloeIce;
             let wet = top == Block::Water || ice;
             assert_eq!(m.water_depth[i] > 0, wet);
-            assert_eq!(m.frozen[i], ice);
+            assert_eq!(m.frozen[i], top == Block::Ice);
+            assert_eq!(m.floe[i], top == Block::FloeIce);
             if wet {
                 water += 1;
                 let d = m.water_depth[i] as u32;
@@ -165,6 +166,7 @@ fn overlapping_regions_agree() {
                 assert_eq!(a.water_depth[i], b.water_depth[j], "({x},{z})");
                 assert_eq!(a.bottom_block[i], b.bottom_block[j], "({x},{z})");
                 assert_eq!(a.frozen[i], b.frozen[j], "({x},{z})");
+                assert_eq!(a.floe[i], b.floe[j], "({x},{z})");
                 shared += 1;
             }
         }

@@ -15,9 +15,11 @@ pub struct DerivedMaps {
     /// The block under the water run. Land columns, and a run that reaches
     /// y = 0, hold [`NO_BOTTOM`].
     pub bottom_block: Vec<u8>,
-    /// True where the block at `SEA_LEVEL - 1` is ice or floe ice (sea ice,
-    /// SPEC 13).
+    /// True where the block at `SEA_LEVEL - 1` is solid pack `ice`
+    /// (docs/design/sea-ice-floes.md B).
     pub frozen: Vec<bool>,
+    /// True where the block at `SEA_LEVEL - 1` is `floe_ice`.
+    pub floe: Vec<bool>,
     /// Euclidean distance between column centres to the nearest land column
     /// (`water_depth == 0`), rounded to the nearest integer and capped at
     /// [`SHORE_DISTANCE_CAP`]. Land is 0 (design: world-layout Phase C, #91).
@@ -57,6 +59,7 @@ impl DerivedMaps {
             water_depth: vec![0; n],
             bottom_block: vec![NO_BOTTOM; n],
             frozen: vec![false; n],
+            floe: vec![false; n],
             shore_distance: Vec::new(),
         };
         let surface = (SEA_LEVEL - 1) as usize;
@@ -64,7 +67,8 @@ impl DerivedMaps {
             if !is_water(col[surface]) {
                 continue;
             }
-            maps.frozen[i] = is_sea_ice(col[surface]);
+            maps.frozen[i] = col[surface] == Block::Ice as u8;
+            maps.floe[i] = col[surface] == Block::FloeIce as u8;
             let run = col[..=surface]
                 .iter()
                 .rev()
@@ -105,6 +109,7 @@ impl DerivedMaps {
             water_depth: Vec::with_capacity(w as usize * d as usize),
             bottom_block: Vec::with_capacity(w as usize * d as usize),
             frozen: Vec::with_capacity(w as usize * d as usize),
+            floe: Vec::with_capacity(w as usize * d as usize),
             shore_distance: Vec::with_capacity(w as usize * d as usize),
         };
         for z in 0..d as usize {
@@ -115,6 +120,7 @@ impl DerivedMaps {
             out.bottom_block
                 .extend_from_slice(&big.bottom_block[r.clone()]);
             out.frozen.extend_from_slice(&big.frozen[r.clone()]);
+            out.floe.extend_from_slice(&big.floe[r.clone()]);
             out.shore_distance.extend_from_slice(&big.shore_distance[r]);
         }
         out
