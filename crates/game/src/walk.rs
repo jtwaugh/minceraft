@@ -11,6 +11,8 @@ use crate::crops::Crops;
 use crate::day::DayClock;
 use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
+use crate::fish_entities::FishStore;
+use crate::fish_world::FishWorld;
 use crate::forage::{Forage, ForageConfig, Forager};
 use crate::growth::grow_crops;
 use crate::hands::{Hands, HandsConfig};
@@ -150,6 +152,10 @@ const FIRST_ITEM_ID: crate::targeting::EntityId = 1 << 20;
 const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
 /// Fixed seed for animal wandering until the world seed reaches the walker.
 const ANIMAL_SEED: u64 = 0;
+/// Fish entity ids start here, above the animal ids.
+const FIRST_FISH_ID: crate::targeting::EntityId = 1 << 28;
+/// Fixed seed for the fish until the world seed reaches the walker.
+const FISH_SEED: u64 = 0;
 const FORAGE_SEED: u64 = 1;
 const TILL_SEED: u64 = 2;
 const HARVEST_SEED: u64 = 3;
@@ -188,6 +194,7 @@ pub struct Walker {
     anim: Hands,
     items: ItemStore,
     animals: AnimalStore,
+    fish: FishWorld,
     forager: Forager,
     tiller: Tiller,
     crops: Crops,
@@ -259,6 +266,8 @@ impl Walker {
                 FIRST_ANIMAL_ID,
                 ANIMAL_SEED,
             ),
+            fish: FishWorld::default_from_data(FISH_SEED, FIRST_FISH_ID)
+                .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
             tiller: Tiller::new(TillConfig::default_from_data(), TILL_SEED),
             crops: Crops::default_crops(),
@@ -420,6 +429,12 @@ impl Walker {
             h.f64s(&a.pos);
             h.f64s(&a.velocity);
             h.f64s(&[a.facing]);
+        }
+        for f in self.fish.store().iter() {
+            h.u64(u64::from(f.id));
+            h.str(&f.species);
+            h.f64s(&f.pos);
+            h.f64s(&[f.heading]);
         }
         if let Some(f) = &self.floating {
             h.f64s(&f.raft.offset());
@@ -761,6 +776,13 @@ impl Walker {
                 self.items.tick(&world);
                 let dropped = self.animals.tick(&world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
+                self.fish.tick(
+                    self.sim_tick,
+                    f.raft.centre(),
+                    &self.player.aabb(&self.physics),
+                    &world,
+                    |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
+                );
                 let aim = aim(
                     &world,
                     &entities,
@@ -789,6 +811,14 @@ impl Walker {
                 self.items.tick(&self.world);
                 let dropped = self.animals.tick(&self.world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
+                let pos = self.player.pos;
+                self.fish.tick(
+                    self.sim_tick,
+                    [pos[0], pos[2]],
+                    &self.player.aabb(&self.physics),
+                    &self.world,
+                    |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
+                );
                 let aim = aim(
                     &self.world,
                     &entities,
@@ -913,6 +943,21 @@ impl Walker {
         facing: f64,
     ) -> Option<crate::targeting::EntityId> {
         self.animals.spawn(species, pos, facing)
+    }
+
+    /// Put a fish of `species` in the world, returning its entity id, or
+    /// `None` for an unknown species.
+    pub fn spawn_fish(
+        &mut self,
+        species: &str,
+        pos: [f64; 3],
+        heading: f64,
+    ) -> Option<crate::targeting::EntityId> {
+        self.fish.spawn(species, pos, heading)
+    }
+
+    pub fn fish(&self) -> &FishStore {
+        self.fish.store()
     }
 
     pub fn animals(&self) -> &AnimalStore {
