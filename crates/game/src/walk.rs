@@ -9,7 +9,7 @@ use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWor
 use crate::commands::{run_line, GameState, Registry};
 use crate::crops::Crops;
 use crate::day::DayClock;
-use crate::events::GameEvent;
+use crate::events::{GameEvent, Reason};
 use crate::farm::{FarmTile, FarmWorld};
 use crate::fish_entities::FishStore;
 use crate::fish_world::FishWorld;
@@ -800,7 +800,10 @@ impl Walker {
                 self.take_aim(aim, input);
                 // An interact that did something else (picked up, planted,
                 // picked or harvested a crop or flower) does not also toggle.
-                let acted = self.events.len() != events_before
+                // A refusal is not an action.
+                let acted = self.events[events_before..]
+                    .iter()
+                    .any(|e| !matches!(e, GameEvent::ActionRefused { .. }))
                     || hands_were_empty != self.state.hands.is_none();
                 if input.interact && !acted {
                     if let Some(f) = &mut self.floating {
@@ -1055,6 +1058,9 @@ impl Walker {
         // Tools are stowed while carrying: primary does nothing.
         let mut pressed = *input;
         pressed.primary &= self.state.hands.is_none();
+        if input.primary && !pressed.primary {
+            self.refuse("swing", Reason::ToolsStowed);
+        }
         if pressed.primary {
             self.events.push(GameEvent::Swing {
                 player: "player".to_string(),
@@ -1252,6 +1258,13 @@ impl Walker {
         self.items.spawn(carried, self.cur_eye, velocity);
     }
 
+    fn refuse(&mut self, action: &str, reason: Reason) {
+        self.events.push(GameEvent::ActionRefused {
+            action: action.to_string(),
+            reason,
+        });
+    }
+
     /// Secondary (right-click) picks up the targeted loose item if the hands
     /// are empty. With full hands it does nothing: put-down arrives with
     /// stations and counters (decided in #215); only Drop releases the item.
@@ -1270,6 +1283,7 @@ impl Walker {
                 return;
             }
         } else if self.state.hands.is_some() {
+            self.refuse("pickup", Reason::HandsFull);
             return;
         }
         let Some(e) = self.items.remove(id) else {
@@ -1793,6 +1807,66 @@ mod tests {
         w.tick(&pick_up());
         assert_eq!(w.hands().map(|h| h.item.clone()), Some(name));
         assert_eq!(w.items().len(), ids.len() - 1);
+    }
+
+    fn refusals(w: &mut Walker) -> Vec<(String, Reason)> {
+        w.drain_events()
+            .into_iter()
+            .filter_map(|e| match e {
+                GameEvent::ActionRefused { action, reason } => Some((action, reason)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn primary_while_carrying_is_refused_without_a_swing() {
+        let mut w = settled();
+        w.state.hands = Some(seeds());
+        w.drain_events();
+        w.tick(&click());
+        let events = w.drain_events();
+        assert!(!events.iter().any(|e| matches!(e, GameEvent::Swing { .. })));
+        let n = events
+            .iter()
+            .filter(|e| {
+                matches!(e, GameEvent::ActionRefused { action, reason }
+                if action == "swing" && *reason == Reason::ToolsStowed)
+            })
+            .count();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn pick_up_with_full_hands_is_refused_and_the_item_stays() {
+        let (mut w, id) = facing_seeds();
+        w.state.hands = Some(ItemInstance {
+            item: "other".into(),
+        });
+        w.drain_events();
+        w.tick(&pick_up());
+        assert_eq!(
+            refusals(&mut w),
+            vec![("pickup".to_string(), Reason::HandsFull)]
+        );
+        assert!(w.items().get(id).is_some());
+    }
+
+    #[test]
+    fn a_refusal_does_not_stop_the_helm_toggle() {
+        let mut w = at_the_helm();
+        w.state.hands = Some(seeds());
+        w.drain_events();
+        w.tick(&TickInput {
+            interact: true,
+            primary: true,
+            ..look(0.0, false)
+        });
+        assert!(w.driving());
+        assert_eq!(
+            refusals(&mut w),
+            vec![("swing".to_string(), Reason::ToolsStowed)]
+        );
     }
 
     #[test]
@@ -3520,7 +3594,11 @@ mod tests {
         let (mut w, _) = facing_seeds();
         w.state.hands = Some(seeds());
         w.tick(&pick_up());
-        assert!(w.drain_events().is_empty(), "full hands");
+        assert_eq!(
+            refusals(&mut w),
+            vec![("pickup".to_string(), Reason::HandsFull)],
+            "full hands"
+        );
         w.state.hands = None;
         w.tick(&pick_up());
         assert_eq!(
