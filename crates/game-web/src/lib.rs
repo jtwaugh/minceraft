@@ -863,6 +863,11 @@ impl Walk {
         self.0.player().pos.to_vec()
     }
 
+    /// The pinned wind vector `[dx, dz]`, empty when the wind is not pinned.
+    pub fn wind_pin(&self) -> Vec<f64> {
+        self.0.wind_pin().map(|v| v.to_vec()).unwrap_or_default()
+    }
+
     pub fn teleport(&mut self, x: f64, y: f64, z: f64) {
         self.0.teleport([x, y, z]);
     }
@@ -1055,6 +1060,16 @@ mod tests {
             .sum::<f64>()
             .sqrt();
         assert!(d > 0.1 && d < 2.0, "{d}");
+    }
+
+    #[test]
+    fn wind_pin_is_empty_until_pinned() {
+        let mut w = walk();
+        assert!(w.wind_pin().is_empty());
+        w.0.set_wind_pin(Some([1.5, -2.0]));
+        assert_eq!(w.wind_pin(), vec![1.5, -2.0]);
+        w.0.set_wind_pin(None);
+        assert!(w.wind_pin().is_empty());
     }
 
     #[test]
