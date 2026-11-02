@@ -107,3 +107,22 @@ press Tab
 expect mode = inventory
 press Tab
 expect mode = fly
+
+case Tab, Tab relocks the pointer; Tab, Escape leaves it unlocked
+start walk
+click
+expect locked = true
+press Tab
+expect locked = false
+press Tab
+expect locked = true
+press Tab
+press Escape
+expect locked = false
+
+case blur drops the lock
+start walk
+click
+expect locked = true
+blur
+expect locked = false

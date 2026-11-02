@@ -13,8 +13,8 @@
 //                               `stream` is a streamed world (seed 12345) starting over region 0 0,
 //                               meshing one region per frame (`at <x> <z>` starts elsewhere, 72 up); every frame's new and remeshed regions
 //                               are meshed on the CPU as scene.js does (client/regionmesh.js, no upload)
-//   click                       click the canvas (requests pointer lock)
-//   lock | unlock | blur        pointer lock gained / lost; window loses focus
+//   click                       click the canvas (requests pointer lock, which is granted at once)
+//   lock | unlock | blur        pointer lock gained / lost; window loses focus (and the lock)
 //   down <code> | up <code>     KeyboardEvent.code, e.g. KeyW, Space, ShiftLeft
 //   repeat <code>               an auto-repeat keydown
 //   press <code>                down then up
@@ -144,7 +144,14 @@ export function parse(src) {
 function world({ mode = 'walk', raft = false, debug = raft, stream = false, at = [50.5, 40.5], budget = 1, damage = null }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
-  const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
+  const canvas = target({
+    lockRequests: 0,
+    requestPointerLock() { // as a browser grants it
+      this.lockRequests++;
+      document.pointerLockElement = canvas;
+      document.dispatchEvent(new Event('pointerlockchange'));
+    },
+  });
   const document = target({
     pointerLockElement: null,
     exitPointerLock() {
@@ -355,7 +362,10 @@ function step(w, { op, args }) {
     case 'lock': document.pointerLockElement = canvas; return fire(document, 'pointerlockchange');
     case 'unlock': document.pointerLockElement = null; return fire(document, 'pointerlockchange');
     case 'respawn': return w.controller.respawn();
-    case 'blur': return fire(window, 'blur');
+    case 'blur': // the browser drops the lock on focus loss
+      document.pointerLockElement = null;
+      fire(document, 'pointerlockchange');
+      return fire(window, 'blur');
     case 'down': return key('keydown', args[0]);
     case 'up': return key('keyup', args[0]);
     case 'repeat': return key('keydown', args[0], true);
