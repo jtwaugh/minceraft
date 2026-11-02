@@ -38,7 +38,7 @@ Checked against `master` (f1c2f75).
 - **Snow.** `spawnSnow` currently uses the squared sway at a cell. Suggest it take a gust-strength value from the same wind query (Phase B). `client/test/particles.test.mjs` already covers it.
 - **Trunk sway (#1609).** `trunkLean` and `TRUNK_SWAY_AMPLITUDE` exist. Phase B must drive them from the same wind (same uniforms), so no second wave remains.
 - **Reduced motion.** Already handled by `swayPhase`; Phase B must keep a zero result for it, and the wind readout may still show the real wind.
-- **Debug console.** A readout and a pin command are commands in `data/commands.toml` / `crates/game/src/commands.rs` (see `debug-console.md`). A pin is state the sim reads, so it must live in the sim (settable only through the command queue) so replays record it; see open question 2.
+- **Debug console.** A readout and a pin command are commands in `data/commands.toml` / `crates/game/src/commands.rs` (see `debug-console.md`). A pin is state the sim reads, so it must live in the sim (settable only through the command queue) so replays record it. The pin is built. (Decided in #2095.)
 - **Cost.** Four front samples (finite differences) plus the centre, and a gust sample or two per query: a handful of simplex calls. `[manual check]`, proposed measurable form: median frame time on a fixed flyover seed within 3% of before.
 - **Fronts "take minutes of play to pass".** `[manual check]`. Measurable form: a unit test that the pressure field sampled at a fixed point changes by less than 10% of its range over 10 s, and has moved by a full feature wavelength after `front_size / drift_speed` seconds, from the `data/wind.toml` values.
 - **"Gusts roll across a field in the wind direction".** `[manual check]`. Measurable form: the gust field's value at `p + w·dt` at time `t + dt` equals its value at `p` at `t` (advection test).
@@ -105,11 +105,8 @@ The author's suggested phases in section 3 are used as written; the header lists
 
 **Phase A.** The pure wind function. Covers: `data/wind.toml` (front size, drift, speed scale, gust scale and speed, floor and ceiling, wobble) read by the game crate; a `wind` module in `crates/game` with the wind-specific seed derivation, fronts (finite-difference gradient rotated 90°) and gusts advected by the local wind; a `game-web` export. Done when unit tests show: identical output for repeated queries and for a replayed run; the front field moves as the data says; gusts advect with the wind; speeds stay within the floor and ceiling, with both calm and stormy samples present for a fixed seed; climate output for a fixed seed is unchanged; and `./build.sh` succeeds with the `game-web` wasm size reported before and after.
 
-**Phase B.** Visible effects. Covers: a client mirror and per-frame query at the player (`tick + alpha`); the direction, strength and gust-phase uniforms replacing the fixed sway direction for plants, leaves and trunks in `client/sway.js` and `client/scene.js`, with a continuous phase accumulator; snow shake-off driven by gust strength in `client/particles.js`; reduced motion still zero; the console readout (and pin command, if open question 2 is decided for it). Done when the sway and particle tests pass, the client mirror matches the wasm values, and an input script checks the readout and, if pinned, that sway follows the pinned direction. Waits on Phase A and on open question 2 for the pin.
+**Phase B.** Visible effects. Covers: a client mirror and per-frame query at the player (`tick + alpha`); the direction, strength and gust-phase uniforms replacing the fixed sway direction for plants, leaves and trunks in `client/sway.js` and `client/scene.js`, with a continuous phase accumulator; snow shake-off driven by gust strength in `client/particles.js`; reduced motion still zero; the console readout and the pin command (the pin state lives in the sim, set through the command queue). Done when the sway and particle tests pass, the client mirror matches the wasm values, and an input script checks the readout and that, when pinned, sway follows the pinned direction. Waits on Phase A. (Decided in #2095.)
 
 ## Open questions
 
-2. **Where does the "pin wind" state live?**
-   - A. In the sim, set by a console command through the command queue, so replays record it.
-   - B. In the client only, a debug override of the uniforms; the sim wind is untouched.
-   - C. Skip the pin; keep only the readout.
+None open.
