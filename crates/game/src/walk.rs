@@ -1090,19 +1090,24 @@ impl Walker {
                     Button::Primary => pressed.primary,
                     _ => pressed.secondary,
                 };
-                let would = resolve(
-                    &self.rules.rules,
-                    &ResolveCtx {
-                        held: ctx.held.clone(),
-                        button,
-                        target: far,
-                        facts: facts.clone(),
-                    },
-                )
-                .is_some();
-                if pressed && would {
+                let resolves = |target| {
+                    resolve(
+                        &self.rules.rules,
+                        &ResolveCtx {
+                            held: ctx.held.clone(),
+                            button,
+                            target,
+                            facts: facts.clone(),
+                        },
+                    )
+                    .is_some()
+                };
+                // A press that works on no target at all (a cast) is not refused.
+                let too_far = !matches!(far, Target::None) && resolves(far);
+                let works_bare = matches!(far, Target::None) && resolves(far);
+                if pressed && too_far {
                     self.refuse(action, Reason::TooFar);
-                } else if pressed && !silent {
+                } else if pressed && !silent && !works_bare {
                     self.refuse(action, Reason::NothingHere);
                 }
             }
@@ -3706,6 +3711,16 @@ mod tests {
         w.tick(&far_floor(true, false));
         assert_eq!(refusals(&mut w), [("use".to_string(), Reason::TooFar)]);
         assert!(!tilled(&w, 0));
+    }
+
+    #[test]
+    fn a_cast_at_open_sky_is_not_refused() {
+        let mut w = grass_floor_walker(1);
+        w.set_held(HeldThing::Tool("fishing_rod".into()));
+        w.tick(&look(0.0, false));
+        w.drain_events();
+        w.tick(&press_secondary());
+        assert!(refusals(&mut w).is_empty());
     }
 
     #[test]
