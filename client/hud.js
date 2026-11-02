@@ -9,12 +9,15 @@
 //   mountHud(document, set, parent) draws frames and icons from the parsed tileset at an integer scale (interfaceScale).
 //
 // `ready` is the selected tool's name when the hands are empty, else null.
+// The ready tool is drawn in the hands frame at READY_ALPHA; a carried item is opaque.
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
 import { hudLayout, PHASE_ICONS } from './hudlayout.js';
 import { drawString } from './font.js';
 import { drawPanel } from './panel.js';
 import { findTexture, textureCanvas, interfaceScale } from './uipx.js';
+
+const READY_ALPHA = 0.5;
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
 export function slotView(set, name, selected) {
@@ -119,10 +122,9 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       place(handsPanel, hp);
       handsPanel.replaceChildren(drawPanel(set, hp.w / scale, hp.h / scale, scale, document));
       place(handsSlot, hs);
-      handsSlot.replaceChildren(...[
-        icon('slot', { ...hs, x: 0, y: 0 }, 0, 0),
-        hs.icon && icon(m.hands, hs.icon, hs.x, hs.y),
-      ].filter(Boolean));
+      const handsIcon = hs.icon && icon(m.hands || m.ready, hs.icon, hs.x, hs.y);
+      if (handsIcon && !m.hands) handsIcon.style.opacity = READY_ALPHA;
+      handsSlot.replaceChildren(...[icon('slot', { ...hs, x: 0, y: 0 }, 0, 0), handsIcon].filter(Boolean));
 
       place(hearts, rects.hearts);
       hearts.replaceChildren(...heartNames(m.hearts).map((n, i) => icon(n, rects.heartIcons[i], rects.hearts.x, rects.hearts.y)).filter(Boolean));
