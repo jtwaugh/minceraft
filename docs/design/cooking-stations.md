@@ -6,7 +6,7 @@ source: "#1525"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
   E: todo
@@ -28,6 +28,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Inventory view.** `client/inventory.js` and `client/inventoryui.js` show only the belt and hands (`ui-art-and-inventory.md` Phase C, done). The multi-slot inventory was deferred to a separate design (#731); no multi-slot view exists.
 - **Particles.** `client/particles.js` exists; no `puff` particle is wired (no `puff` in `client/`).
 - **Phase A, done (plan #1825, earlier plan #1538).** `counter` (74), `plate_rack` (75) and `chest` (83) are in `data/blocks.toml`; `data/structures/raft_start.toml` is a 5 by 5 deck with two chests, two counters, a plate rack, a butcher block and a griddle, and no `crate`. Art, mesher and client: PRs #1599, #1578, #1765, #1843, #1838, #1850, #1886, #1934, #1948.
+- **Phase B, done (plan #1990).** Station state (`crates/game/src/stations.rs`, `data/stations.toml`) is PR #2033; the `any_item` held value, `interact` button and `block:station` target are PR #2057; put down and take on raft stations are PR #2116; station contents in the world hash and the swell test (`crates/game/tests/stations.rs`) are PR #2128; DSL station commands and `client/test/scripts/stations.input` are PR #2149; the client drawing items resting on stations is PR #2139.
 - **Nothing else in this doc is built yet.**
 
 ## Reconciliation notes
