@@ -50,7 +50,7 @@ import { createController } from './controller.js';
 import { createSpans } from './perfspans.js';
 import { meshRegionCpu } from './regionmesh.js';
 import { REGION_SIZE } from './stream.js';
-import { NEAR, farPlane, look, skyInputs } from './view.js';
+import { NEAR, farPlane, look, skyInputs, daylightFactor } from './view.js';
 import { sampleSky, easeSky, blendSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { SNAP_GLSL, SNAP_SAMPLE_GLSL } from './texsnap.js';
@@ -145,7 +145,7 @@ function program(cut) {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir; in float vdepth;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir; uniform float daylight;
     uniform float waterFresnel; // 1 while drawing water from above the surface
     out vec4 o;
     ${FOG_GLSL}
@@ -169,7 +169,7 @@ function program(cut) {
       float f = fogFar > 0.0 ? fogAmount(vdist, fogFar) : clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
       // above water fog fades toward the sky in the view direction; under water it is flat
       vec3 fc = fogFar > 0.0 ? skyColor(fogColor, vd, sunDir) : fogColor;
-      o = vec4(mix(c, fc, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'min(alpha * waterAlphaScale(wd), 1.0)'});
+      o = vec4(mix(c, fc, f) * daylight, ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'min(alpha * waterAlphaScale(wd), 1.0)'});
     }`));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
@@ -616,6 +616,7 @@ function render(now) {
     gl.uniform1f(prog.u('fogFar'), view.fogFar);
     gl.uniform3fv(prog.u('eye'), eye);
     gl.uniform3fv(prog.u('tint'), view.tint);
+    gl.uniform1f(prog.u('daylight'), daylightFactor(day));
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
