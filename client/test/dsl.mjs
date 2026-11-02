@@ -21,7 +21,7 @@
 //   button down|up left|right   mouse buttons
 //   mouse <dx> <dy>             pointer-locked mouse movement
 //   wheel <dy>
-//   type <text>                 printable keys (letters, digits, space, - _) into the console's
+//   type <text>                 printable keys (letters, digits, space, - _ .) into the console's
 //                               text box while it is open; elsewhere plain key presses.
 //                               With the console open, `press Enter` submits the box, Backspace
 //                               deletes a character, Escape closes it without submitting
@@ -65,7 +65,7 @@
 // meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
 // all mesh kinds), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
 // every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
-// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
+// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, sun.x|y|z (unit vector toward the sun this frame, time of day plus alpha), daylight (scene brightness this frame), locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
@@ -184,7 +184,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
 }
 
-const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus' };
+const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus', '.': 'Period' };
 
 function keyCode(ch) {
   if (/^[a-z]$/i.test(ch)) return `Key${ch.toUpperCase()}`;
@@ -257,6 +257,8 @@ function read(w, path) {
     return Math.hypot(o[0] - w.markRaft[0], o[2] - w.markRaft[2]);
   }
   if (path === 'time') return w.walk.time_of_day();
+  if (/^sun\.[xyz]$/.test(path)) return s.day.sunDir[axis[path[4]]];
+  if (path === 'daylight') return s.day.daylight;
   if (path === 'time.frozen') return w.walk.day_frozen();
   if (path === 'driving') return w.walk.driving();
   if (path === 'raft.heading') return w.walk.raft_heading(s.alpha);
