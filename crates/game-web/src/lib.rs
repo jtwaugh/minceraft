@@ -305,6 +305,12 @@ fn describe_event(e: &GameEvent) -> String {
                 position.map(|c| c.to_string()).join(",")
             )
         }
+        GameEvent::LineCast { player, position } => {
+            format!("line_cast player={player} position={}", pos(position))
+        }
+        GameEvent::LineReeled { player, caught } => {
+            format!("line_reeled player={player} caught={caught}")
+        }
         GameEvent::ActionRefused { action, reason } => {
             format!("action_refused action={action} reason={}", reason.name())
         }

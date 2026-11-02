@@ -23,6 +23,7 @@ pub mod fish_spawn_config;
 pub mod fish_spawner;
 pub mod fish_steer;
 pub mod fish_world;
+pub mod fishing;
 pub mod fishing_config;
 pub mod forage;
 pub mod growth;

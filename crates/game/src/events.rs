@@ -89,6 +89,10 @@ pub enum GameEvent {
     /// A dead player came back at `position` (the start spawn) with full
     /// health.
     PlayerRespawned { position: [f64; 3] },
+    /// A bobber was cast from `position` (the eye).
+    LineCast { player: String, position: [f64; 3] },
+    /// The line came in; `caught` is whether a fish was on it.
+    LineReeled { player: String, caught: bool },
     /// An action the player tried was refused. `action` is `"swing"`,
     /// `"till"`, `"plant"`, `"pick"`, `"forage"` or `"pickup"`.
     ActionRefused { action: String, reason: Reason },
