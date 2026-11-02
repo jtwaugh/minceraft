@@ -32,6 +32,7 @@
 //   spawn fish <species> [dy]   put a fish (a name in data/fish_bodies.toml) in the water two blocks east of
 //                               the player and level with the feet (dy cells higher, negative for lower); an error if that is not water or the species is unknown
 //   spawn item <name>           drop a loose item a block east of the player (any scene)
+//   stock <n>                   set what is left of today's fish stock (0: no fish will bite until the daily reset)
 //   face animal|fish            turn to look at the first animal or fish (a mousemove)
 //   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
@@ -458,6 +459,11 @@ function step(w, { op, args }) {
       }
       if (args[0] !== 'animal' || !args[1]) throw new Error('spawn animal <kind> | spawn fish <species> | spawn item <name>');
       spawnTestAnimals(w.walk, [args[1]]);
+      return;
+    }
+    case 'stock': {
+      if (!/^\d+$/.test(args[0] ?? '')) throw new Error('stock <n>');
+      w.walk.set_fish_stock(+args[0]);
       return;
     }
     case 'face': {

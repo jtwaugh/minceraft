@@ -1165,6 +1165,11 @@ impl Walker {
         self.fish.set_lure(id, point);
     }
 
+    /// Set what is left of today's fish stock (for tests and tools).
+    pub fn set_fish_stock(&mut self, stock: u32) {
+        self.fish.set_stock(stock);
+    }
+
     pub fn fish(&self) -> &FishStore {
         self.fish.store()
     }

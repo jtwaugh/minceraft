@@ -69,7 +69,6 @@ impl FishSpawner {
         self.stock
     }
 
-    #[cfg(test)]
     pub(crate) fn set_stock(&mut self, stock: u32) {
         self.stock = stock;
     }

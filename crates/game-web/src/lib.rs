@@ -728,6 +728,11 @@ impl Walk {
             .map_or(-1, |id| id as i32)
     }
 
+    /// Set what is left of today's fish stock (for tests and tools).
+    pub fn set_fish_stock(&mut self, stock: u32) {
+        self.0.set_fish_stock(stock);
+    }
+
     /// The fish in id order, seven numbers each: `id, x, y, z, heading, w,
     /// h`. `(x, y, z)` is the centre of the bottom face, `heading` is in
     /// degrees, and `w` and `h` are the box width and height. Species names
