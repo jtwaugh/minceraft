@@ -51,3 +51,26 @@ test('perf and render findings render like the other kinds', () => {
   assert.match(r.body, /## 2\. goal 2\n\n- Kind: render\n- Severity: medium\n- Goal: goal 2\n/);
   assert.match(r.body, /\*\*Repro:\*\*\n\n```input\nstart walk stream\nframe 60\n```\n/);
 });
+
+const advisory = (n) => ({ ...finding(n), advisory: true });
+
+test('advisory findings render last under their own heading, numbering unique', () => {
+  const r = renderReport([advisory(1), finding(2), advisory(3), finding(4)], { runDate: 'd' });
+  const heading = r.body.indexOf('## Advisory (not replayed)');
+  assert.ok(heading > r.body.indexOf('goal 4'));
+  assert.ok(heading < r.body.indexOf('goal 1'));
+  assert.deepEqual([...r.body.matchAll(/^#{2,3} (\d+)\. goal (\d+)$/gm)].map((m) => [m[1], m[2]]), [['1', '2'], ['2', '4'], ['3', '1'], ['4', '3']]);
+  assert.equal(r.body.match(/^## Advisory/gm).length, 1);
+});
+
+test('only advisory findings still render a report', () => {
+  const r = renderReport([advisory(1)], { runDate: 'd' });
+  assert.match(r.body, /^## Advisory \(not replayed\)$/m);
+  assert.match(r.body, /^### 1\. goal 1$/m);
+});
+
+test('without advisory findings there is no advisory heading', () => {
+  const r = renderReport([finding(1), { ...finding(2), advisory: false }], { runDate: 'd' });
+  assert.doesNotMatch(r.body, /Advisory/);
+  assert.match(r.body, /^## 2\. goal 2$/m);
+});
