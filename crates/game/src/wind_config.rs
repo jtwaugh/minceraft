@@ -2,9 +2,11 @@
 //! See docs/design/wind.md Phase A.
 
 use crate::data_error::{DataError, DataErrorKind, DataFile};
+use crate::wind_channel::ChannelParams;
 use crate::wind_exposure::ExposureParams;
 use crate::wind_height::WindHeightParams;
 use crate::wind_roughness_config::ROUGHNESS_KEYS;
+use crate::wind_shelter::ShelterParams;
 
 const DEFAULT_WIND: &str = include_str!("../../../data/wind.toml");
 
@@ -33,9 +35,13 @@ pub struct WindConfig {
     pub surface_offset: f64,
     /// Speed factor from height above the wide mean.
     pub exposure: ExposureParams,
+    /// Upwind shelter.
+    pub shelter: ShelterParams,
+    /// Turning toward valley contours.
+    pub channel: ChannelParams,
 }
 
-const KEYS: [&str; 18] = [
+const KEYS: [&str; 27] = [
     "front_size",
     "front_drift",
     "speed_scale",
@@ -54,6 +60,15 @@ const KEYS: [&str; 18] = [
     "exposure_floor",
     "exposure_ceiling",
     "exposure_ease_len",
+    "shelter_distances",
+    "shelter_floor",
+    "shelter_rise_min",
+    "shelter_rise_max",
+    "shelter_epsilon",
+    "channel_strength",
+    "channel_depth_ramp",
+    "channel_grad_ramp",
+    "channel_delta",
 ];
 
 fn err(kind: DataErrorKind) -> DataError {
@@ -144,6 +159,46 @@ fn exposure_params(root: &toml::value::Table) -> Result<ExposureParams, DataErro
     Ok(p)
 }
 
+fn shelter_params(root: &toml::value::Table) -> Result<ShelterParams, DataError> {
+    let distances = get(root, "shelter_distances")?
+        .as_array()
+        .filter(|a| !a.is_empty())
+        .and_then(|a| a.iter().map(|v| finite(v).filter(|n| *n > 0.0)).collect())
+        .ok_or_else(|| {
+            invalid(
+                "`shelter_distances` must be a non-empty list of finite numbers above zero".into(),
+            )
+        })?;
+    let floor = non_negative(root, "shelter_floor")?;
+    if floor > 1.0 {
+        return Err(invalid("`shelter_floor` must be in [0, 1]".into()));
+    }
+    let p = ShelterParams {
+        distances,
+        floor,
+        rise_min: non_negative(root, "shelter_rise_min")?,
+        rise_max: positive(root, "shelter_rise_max")?,
+        epsilon: positive(root, "shelter_epsilon")?,
+    };
+    if p.rise_max <= p.rise_min {
+        return Err(invalid("need shelter_rise_min < shelter_rise_max".into()));
+    }
+    Ok(p)
+}
+
+fn channel_params(root: &toml::value::Table) -> Result<ChannelParams, DataError> {
+    let strength = non_negative(root, "channel_strength")?;
+    if strength > 1.0 {
+        return Err(invalid("`channel_strength` must be in [0, 1]".into()));
+    }
+    Ok(ChannelParams {
+        strength,
+        depth_ramp: positive(root, "channel_depth_ramp")?,
+        grad_ramp: positive(root, "channel_grad_ramp")?,
+        delta: positive(root, "channel_delta")?,
+    })
+}
+
 impl WindConfig {
     /// The shipped `data/wind.toml`.
     pub fn default_from_data() -> Result<WindConfig, DataError> {
@@ -178,6 +233,8 @@ impl WindConfig {
             surface_offset: finite(get(&root, "surface_offset")?)
                 .ok_or_else(|| invalid("`surface_offset` must be a finite number".into()))?,
             exposure: exposure_params(&root)?,
+            shelter: shelter_params(&root)?,
+            channel: channel_params(&root)?,
         };
         if config.speed_floor > config.speed_ceiling {
             return Err(invalid("need speed_floor <= speed_ceiling".into()));
@@ -360,6 +417,109 @@ mod tests {
                 "exposure_ease_len = 4.0",
                 "exposure_ease_len = inf",
                 "`exposure_ease_len` must be",
+            ),
+        ];
+        for (from, to, msg) in cases {
+            assert!(DEFAULT_WIND.contains(from), "{from}");
+            assert_err_contains(parse(&DEFAULT_WIND.replace(from, to)), msg);
+        }
+    }
+
+    #[test]
+    fn shipped_shelter_and_channel_keys_build_params() {
+        let c = WindConfig::default_from_data().unwrap();
+        assert_eq!(c.shelter.distances, vec![8.0, 16.0, 32.0]);
+        assert_eq!(c.shelter.floor, 0.3);
+        assert_eq!((c.shelter.rise_min, c.shelter.rise_max), (0.0, 0.5));
+        assert_eq!(c.shelter.epsilon, 0.5);
+        assert_eq!(c.channel.strength, 0.8);
+        assert_eq!(c.channel.depth_ramp, 6.0);
+        assert_eq!(c.channel.grad_ramp, 0.2);
+        assert_eq!(c.channel.delta, 2.0);
+    }
+
+    #[test]
+    fn rejects_bad_shelter_and_channel_values() {
+        let cases = [
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = []",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = [8.0, 0]",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = [8.0, -4]",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = 8.0",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_floor = 0.3",
+                "shelter_floor = 1.5",
+                "`shelter_floor` must be in [0, 1]",
+            ),
+            (
+                "shelter_floor = 0.3",
+                "shelter_floor = -0.1",
+                "`shelter_floor` must be",
+            ),
+            (
+                "shelter_rise_max = 0.5",
+                "shelter_rise_max = 0.0",
+                "`shelter_rise_max` must be",
+            ),
+            (
+                "shelter_rise_min = 0.0",
+                "shelter_rise_min = 0.5",
+                "need shelter_rise_min < shelter_rise_max",
+            ),
+            (
+                "shelter_rise_max = 0.5",
+                "shelter_rise_max = inf",
+                "`shelter_rise_max` must be",
+            ),
+            (
+                "shelter_epsilon = 0.5",
+                "shelter_epsilon = 0",
+                "`shelter_epsilon` must be",
+            ),
+            (
+                "shelter_epsilon = 0.5",
+                "shelter_epsilon = -1",
+                "`shelter_epsilon` must be",
+            ),
+            (
+                "channel_strength = 0.8",
+                "channel_strength = 1.1",
+                "`channel_strength` must be in [0, 1]",
+            ),
+            (
+                "channel_strength = 0.8",
+                "channel_strength = -0.1",
+                "`channel_strength` must be",
+            ),
+            (
+                "channel_depth_ramp = 6.0",
+                "channel_depth_ramp = 0",
+                "`channel_depth_ramp` must be",
+            ),
+            (
+                "channel_grad_ramp = 0.2",
+                "channel_grad_ramp = nan",
+                "`channel_grad_ramp` must be",
+            ),
+            (
+                "channel_delta = 2.0",
+                "channel_delta = -2",
+                "`channel_delta` must be",
             ),
         ];
         for (from, to, msg) in cases {

@@ -101,6 +101,9 @@ counter_top (smooth light tan worktop with a few scattered grain
 pixels), counter_side (a light lip and a dark shadow line over brown
 cabinet boards), plate_rack (a dark wooden frame holding a stack of
 off-white plates with light gray rims),
+chest_top (tan boards framed by a 1-pixel dark brown rim), chest_side
+(plain brown boards under a tan lid edge and a dark seam),
+chest_front (the same boards with the lid seam and a light gray latch),
 water_flow_0, water_flow_1, water_flow_2, water_flow_3 (flowing water
 for the sides of falling water: vertical streaks of water and deep
 water with a few off-white flecks; each frame moves the pattern down by
@@ -329,6 +332,12 @@ darker knots, tiling on all edges), barrel_top (a round-looking lid of
 tan planks with dark seams inside a dark gray hoop rim), barrel_side
 (tan staves with dark brown seams and two dark gray hoops with a light
 gray glint)
+dock_planks (weathered boards, rougher than raft_planks: two boards of
+three rows each, split by full-width dark brown gap rows, with stone gray weathering patches among the tan and
+brown), dock_post_top (end grain of a dark salt-worn post: concentric
+dark brown and brown rings inside a dark gray rim), dock_post_side
+(dark, vertical grain in dark brown and dark gray with brown streaks and
+a few sand salt flecks, darker than oak_log)
 
 BATCH 33: WORDMARK (drawn by art/tools/draw_wordmark.py, file batches_33.json)
 wordmark (74×12, transparent background): "Mince Raft" in the pixel font's
