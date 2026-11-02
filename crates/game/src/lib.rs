@@ -51,6 +51,7 @@ pub mod walk;
 pub mod wind;
 pub mod wind_channel;
 pub mod wind_config;
+pub mod wind_drag;
 pub mod wind_exposure;
 pub mod wind_height;
 pub mod wind_roughness;
