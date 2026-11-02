@@ -453,7 +453,22 @@ impl Walker {
             h.f64s(&[f.raft.heading()]);
             h.u64(u64::from(f.driving));
         }
+        for (cell, item) in self.stations.iter() {
+            for c in cell {
+                h.u64(i64::from(c) as u64);
+            }
+            h.str(&item.item);
+        }
         h.finish()
+    }
+
+    /// The items on raft stations as `(raft-local cell, item name)`, sorted
+    /// by cell.
+    pub fn station_items(&self) -> Vec<([i32; 3], String)> {
+        self.stations
+            .iter()
+            .map(|(c, i)| (c, i.item.clone()))
+            .collect()
     }
 
     /// Whether a cheat command has run this session.
