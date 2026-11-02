@@ -638,6 +638,41 @@ impl Walk {
         self.0.animals().iter().map(|e| e.species.clone()).collect()
     }
 
+    /// Put a fish of `species` at `(x, y, z)` heading `heading` degrees;
+    /// returns its entity id, or -1 for an unknown species.
+    pub fn spawn_fish(&mut self, species: &str, x: f64, y: f64, z: f64, heading: f64) -> i32 {
+        self.0
+            .spawn_fish(species, [x, y, z], heading)
+            .map_or(-1, |id| id as i32)
+    }
+
+    /// The fish in id order, seven numbers each: `id, x, y, z, heading, w,
+    /// h`. `(x, y, z)` is the centre of the bottom face, `heading` is in
+    /// degrees, and `w` and `h` are the box width and height. Species names
+    /// are in [`Walk::fish_species`], in the same order.
+    pub fn fish(&self) -> Vec<f64> {
+        self.0
+            .fish()
+            .iter()
+            .flat_map(|f| {
+                [
+                    f.id as f64,
+                    f.pos[0],
+                    f.pos[1],
+                    f.pos[2],
+                    f.heading,
+                    f.box_size[0],
+                    f.box_size[1],
+                ]
+            })
+            .collect()
+    }
+
+    /// The species of each fish in [`Walk::fish`], in the same order.
+    pub fn fish_species(&self) -> Vec<String> {
+        self.0.fish().iter().map(|f| f.species.clone()).collect()
+    }
+
     /// The loose items, five numbers each: `id, x, y, z, box_size`.
     /// `(x, y, z)` is the centre of the item's box and `box_size` is its
     /// edge length. Item names are in [`Walk::item_names`], in the same
@@ -804,6 +839,29 @@ mod tests {
         );
         assert_eq!(w.item_names(), vec!["stick", "wheat"]);
         assert_eq!(w.loose_items(), 2);
+    }
+
+    #[test]
+    fn fish_rows_match_the_walker_and_unknown_species_is_refused() {
+        let mut w = walk();
+        assert!(w.fish().is_empty() && w.fish_species().is_empty());
+        assert_eq!(w.spawn_fish("no_such_fish", 0.0, 0.0, 0.0, 0.0), -1);
+        let species = w.0.fish().bodies().bodies[0].species.clone();
+        let a = w.spawn_fish(&species, 1.5, 6.0, 2.5, 90.0);
+        let b = w.spawn_fish(&species, -3.0, 7.0, 4.0, 10.0);
+        assert!(a >= 0 && b > a);
+        let rows = w.fish();
+        assert_eq!(rows.len(), 14);
+        assert_eq!(w.fish_species(), vec![species.clone(), species]);
+        for (row, f) in rows.chunks(7).zip(w.0.fish().iter()) {
+            let [bw, bh] = f.box_size;
+            assert_eq!(
+                row,
+                [f.id as f64, f.pos[0], f.pos[1], f.pos[2], f.heading, bw, bh]
+            );
+        }
+        assert_eq!(rows[..5], [a as f64, 1.5, 6.0, 2.5, 90.0]);
+        assert_eq!(rows[7], b as f64);
     }
 
     #[test]
