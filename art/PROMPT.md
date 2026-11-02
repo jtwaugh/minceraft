@@ -101,6 +101,9 @@ counter_top (smooth light tan worktop with a few scattered grain
 pixels), counter_side (a light lip and a dark shadow line over brown
 cabinet boards), plate_rack (a dark wooden frame holding a stack of
 off-white plates with light gray rims),
+chest_top (tan boards framed by a 1-pixel dark brown rim), chest_side
+(plain brown boards under a tan lid edge and a dark seam),
+chest_front (the same boards with the lid seam and a light gray latch),
 water_flow_0, water_flow_1, water_flow_2, water_flow_3 (flowing water
 for the sides of falling water: vertical streaks of water and deep
 water with a few off-white flecks; each frame moves the pattern down by
