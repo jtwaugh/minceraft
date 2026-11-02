@@ -93,7 +93,7 @@ Sea ice ends on a hard line. The sea surface at `y = SEA_LEVEL - 1` freezes exac
 1. **Cold side only.** Today's ice edge (T = 0.5) is the outer limit: nothing freezes that doesn't freeze now. The band is `[t_ice, 0.5)`; colder than `t_ice` is solid ice, inside the band the ice breaks up into floes and gaps.
 2. **Real floes, with a texture.** Not salt-and-pepper blocks. Inside the band the ice forms floes (clumped shapes with gaps of open water between them, e.g. option C's noise), and the floe ice uses its own textures: visible cracks, broken edges, pressure ridges, so it reads as broken pack ice up close and from above. This needs new art in `art/` (listed in `art/PROMPT.md`, drawn with the batch tools, project-own palette) and probably a new block (e.g. `floe_ice`) or texture variants of `ice` chosen per column; the reconciler should propose which. Cracks may vary per block (a few variants picked by a per-column hash) so the pattern doesn't tile visibly.
 3. **New `broken_ice` habitat** for water columns inside the band (open gaps and under floes), separate from `frozen`.
-4. **Levels can turn it off.** A key in the level file's `[climate]` table disables the band (hard edge at 0.5, as today). Default to be proposed by the reconciler. With the switch off there is no band and so no `broken_ice` habitat: every water column classifies as it does today. (Decided in #2111.)
+4. **Levels can turn it off.** A key in the level file's `[climate]` table disables the band (hard edge at 0.5, as today). The key is `sea_ice_band` (bool), default `true` when absent, so level files without it keep working. With the switch off there is no band and so no `broken_ice` habitat: every water column classifies as it does today. (Decided in #2111 and #2112.)
 5. **On everywhere by default.** The terrain crate's default (`Biases::default()`, no level) uses the band too; it is not opt-in from the game. The hard-edge sea-ice asserts in `crates/terrain/src/tests_veg.rs` change in Phase A to allow the band. A level can still turn it off (answer 4).
 
 These change the phases: Phase A also covers the floe block/texture art, and Phase B adds the `broken_ice` habitat and the level switch.
@@ -114,6 +114,3 @@ These change the phases: Phase A also covers the floe block/texture art, and Pha
 2. **Where the texture variant is chosen.**
    - A. Client-side, from a world-position hash (proposed): one block id, no terrain cost.
    - B. Terrain places `floe_ice_0..2` as separate blocks: the variant is world data, but it triples ids and every `== ICE` site.
-4. **Level key name and default.**
-   - A. `sea_ice_band` (bool), default `true` when absent (proposed).
-   - B. `hard_ice_edge`, default `false`; same meaning, inverted.
