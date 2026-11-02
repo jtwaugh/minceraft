@@ -132,9 +132,9 @@ impl Fishing {
                 }
                 None => Bite::Idle,
             },
-            Bite::Luring(id) => match fish.store().get(id).map(|f| f.species.clone()) {
-                None => Bite::Idle,
-                Some(species) if fish.lure_arrived(id) => {
+            Bite::Luring(id) => match fish.store().get(id).map(|f| (f.species.clone(), f.lure)) {
+                None | Some((_, None)) => Bite::Idle,
+                Some((species, _)) if fish.lure_arrived(id) => {
                     b.set_dipping(true);
                     events.push(GameEvent::FishBite {
                         player: "player".to_string(),
@@ -311,6 +311,27 @@ mod tests {
         for id in [far, out] {
             assert!(world.store().get(id).unwrap().lure.is_none());
         }
+    }
+
+    #[test]
+    fn a_scatter_during_luring_goes_back_to_idle() {
+        let w = pool(12, 50);
+        let mut world = FishWorld::default_from_data(1, 1 << 28).unwrap();
+        let id = world.spawn("mackerel", [3.0, 57.5, 0.5], 0.0).unwrap();
+        let mut f = fishing();
+        let mut ev = Vec::new();
+        f.cast([0.5, 62.0, 0.5], [0.0, -1.0, 0.0], &mut ev);
+        for _ in 0..80 {
+            f.tick(&w, true, [0.5, 62.0, 0.5], &mut ev);
+        }
+        f.bite = Bite::Waiting(1);
+        f.tick_bite(&w, &mut world, &mut ev);
+        assert_eq!(f.bite, Bite::Luring(id));
+        world.clear_lure(id);
+        f.tick_bite(&w, &mut world, &mut ev);
+        assert_eq!(f.bite, Bite::Idle);
+        f.tick_bite(&w, &mut world, &mut ev);
+        assert!(matches!(f.bite, Bite::Waiting(_)));
     }
 
     #[test]
