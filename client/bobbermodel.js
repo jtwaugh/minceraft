@@ -3,8 +3,6 @@
 // open; the line is a thin box stretched from the rod tip to the bobber, so it
 // draws through the same model drawer as everything else.
 
-import { CLEAR_EDGES } from './models.js';
-
 export const BOBBER_TEXTURES = ['bobber'];
 
 export const BOBBER_SIZE = 0.25; // edge of the bobber's cube, in blocks
@@ -12,11 +10,11 @@ export const DIP_DEPTH = 0.12; // how far a dipping bobber sits lower, in blocks
 export const LINE_THICKNESS = 0.02; // edge of the line's square section, in blocks
 export const LINE_TINT = [0.9, 0.9, 0.9];
 
-/** The bobber cube centred on the origin; only its four sides show the tile. */
+/** The bobber cube centred on the origin; every side shows the tile, so it reads from any camera angle. */
 export function bobberBoxes() {
   const h = BOBBER_SIZE / 2;
   const side = 'bobber';
-  return [{ lo: [-h, -h, -h], size: [BOBBER_SIZE, BOBBER_SIZE, BOBBER_SIZE], faces: { front: side, back: side, ...CLEAR_EDGES } }];
+  return [{ lo: [-h, -h, -h], size: [BOBBER_SIZE, BOBBER_SIZE, BOBBER_SIZE], faces: { front: side, back: side, left: side, right: side, top: side, bottom: side } }];
 }
 
 /** The line's unit box: 1 long along +z from the origin, centred on x and y (scaled by lineMatrix). */

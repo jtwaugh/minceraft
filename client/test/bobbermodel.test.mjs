@@ -20,7 +20,7 @@ test('a dipping bobber sits lower than a floating one, by DIP_DEPTH', () => {
 test('the bobber is moved to its centre and uses the bobber tile', () => {
   const d = bobberDraw({ state: 'flying', dipping: false, pos: [3, 70, 4] }, [0, 0, 0]);
   near(at(d.bobber, [0, 0, 0]), [3, 70, 4]);
-  assert.equal(bobberBoxes()[0].faces.front, 'bobber');
+  for (const f of ['front', 'back', 'left', 'right', 'top', 'bottom']) assert.equal(bobberBoxes()[0].faces[f], 'bobber');
 });
 
 test('the line runs from the rod tip to the drawn bobber centre', () => {
