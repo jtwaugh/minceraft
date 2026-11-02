@@ -13,6 +13,8 @@ use crate::events::{GameEvent, Reason};
 use crate::farm::{FarmTile, FarmWorld};
 use crate::fish_entities::FishStore;
 use crate::fish_world::FishWorld;
+use crate::fishing::Fishing;
+use crate::fishing_config::FishingConfig;
 use crate::forage::{Forage, ForageConfig, Forager};
 use crate::growth::grow_crops;
 use crate::hands::{Hands, HandsConfig};
@@ -198,6 +200,7 @@ pub struct Walker {
     items: ItemStore,
     animals: AnimalStore,
     fish: FishWorld,
+    fishing: Fishing,
     forager: Forager,
     tiller: Tiller,
     crops: Crops,
@@ -273,6 +276,11 @@ impl Walker {
             ),
             fish: FishWorld::default_from_data(FISH_SEED, FIRST_FISH_ID)
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+            fishing: Fishing::new(
+                FishingConfig::default_from_data()
+                    .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+                ItemEntityConfig::default_from_data(),
+            ),
             forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
             tiller: Tiller::new(TillConfig::default_from_data(), TILL_SEED),
             crops: Crops::default_crops(),
@@ -446,6 +454,9 @@ impl Walker {
             h.str(&f.species);
             h.f64s(&f.pos);
             h.f64s(&[f.heading]);
+        }
+        if let Some(b) = self.fishing.bobber() {
+            h.f64s(&b.pos());
         }
         if let Some(f) = &self.floating {
             h.f64s(&f.raft.offset());
@@ -772,6 +783,7 @@ impl Walker {
             self.state.select(slot);
         }
         let hands_were_empty = self.state.hands.is_none();
+        let rod_in_hand = self.held() == HeldThing::Tool("fishing_rod".into());
         match &mut self.floating {
             Some(f) => {
                 // The raft moves (carrying the player), then the player's own
@@ -812,6 +824,8 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&world);
+                self.fishing
+                    .tick(&world, rod_in_hand, self.player.pos, &mut self.events);
                 let dropped = self.animals.tick(&world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 self.fish.tick(
@@ -851,6 +865,8 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&self.world);
+                self.fishing
+                    .tick(&self.world, rod_in_hand, self.player.pos, &mut self.events);
                 let dropped = self.animals.tick(&self.world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let pos = self.player.pos;
@@ -1081,7 +1097,12 @@ impl Walker {
     }
 
     /// Record this tick's aim and run the presses in `input` against it.
-    fn take_aim(&mut self, aim: Aim, input: &TickInput) {
+    fn take_aim(&mut self, mut aim: Aim, input: &TickInput) {
+        let line_out = self.fishing.line_out();
+        aim.facts.line_out = line_out;
+        if let Some((_, facts)) = &mut aim.far {
+            facts.line_out = line_out;
+        }
         self.target = aim.target;
         self.target_box = aim.boxed;
         let ctx = ResolveCtx {
@@ -1167,6 +1188,13 @@ impl Walker {
                 Button::Secondary => self.anim.start_use(),
                 Button::Interact => {}
             }
+        }
+        if ran.contains(&ActionKind::Cast) {
+            let eye = self.cur_eye;
+            self.fishing.cast(eye, look_dir(input), &mut self.events);
+        }
+        if ran.contains(&ActionKind::Reel) {
+            self.fishing.reel(&mut self.events);
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
             let outcome = self.forager.forage(pos, self.sim_tick);
