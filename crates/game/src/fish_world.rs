@@ -65,12 +65,15 @@ impl FishWorld {
 
     /// Hit fish `id` for `damage` half-hearts. When that kills it, the fish
     /// is removed and its species and raw item are returned. A removed fish
-    /// does not go back to the stock. `None` if the fish survives or the id
-    /// is unknown.
-    pub fn hit(&mut self, id: EntityId, damage: u32) -> Option<Catch> {
+    /// does not go back to the stock. A survivor and its school scatter from
+    /// `attacker` for `hit_scatter_ticks`. `None` if the fish survives or the
+    /// id is unknown.
+    pub fn hit(&mut self, id: EntityId, damage: u32, attacker: [f64; 3]) -> Option<Catch> {
         let species = self.store.get(id)?.species.clone();
         let (_, died) = self.store.hit(id, damage)?;
         if !died {
+            let ticks = self.steer.config().hit_scatter_ticks;
+            self.store.scatter_school(id, attacker, ticks);
             return None;
         }
         let raw_item = self.store.bodies().get(&species)?.raw_item.clone();
@@ -124,6 +127,7 @@ impl FishWorld {
 mod tests {
     use super::*;
     use crate::collision::MemoryWorld;
+    use terrain::Block;
 
     fn open_sea(x: i32, z: i32) -> Option<FishColumn> {
         let habitats = Habitats::shipped();
@@ -144,15 +148,15 @@ mod tests {
         let c = w.spawn("salmon", [6.0, 40.0, 0.0], 0.0).unwrap();
         let stock = w.stock();
         let sword = crate::items::Items::default_items().damage(Some("sword"));
-        let got = w.hit(a, sword).unwrap();
+        let got = w.hit(a, sword, [0.0; 3]).unwrap();
         assert_eq!(
             (got.species.as_str(), got.raw_item.as_str()),
             ("mackerel", "raw_mackerel")
         );
-        assert_eq!(w.hit(a, sword), None);
-        assert_eq!(w.hit(9, sword), None);
+        assert_eq!(w.hit(a, sword, [0.0; 3]), None);
+        assert_eq!(w.hit(9, sword, [0.0; 3]), None);
         assert_eq!(
-            w.hit(b, 1),
+            w.hit(b, 1, [0.0; 3]),
             None,
             "a wounded tuna survives or dies by health"
         );
@@ -161,6 +165,68 @@ mod tests {
         assert_eq!(w.catch(b), None);
         assert_eq!(w.catch(c).unwrap().species, "salmon");
         assert_eq!((w.stock(), w.store().len()), (stock, 0));
+    }
+
+    fn pool() -> MemoryWorld {
+        let mut w = MemoryWorld::new();
+        for x in -13..=12 {
+            for z in -13..=12 {
+                let wall = !(-12..12).contains(&x) || !(-12..12).contains(&z);
+                for y in 50..=58 {
+                    let stone = y == 50 || wall;
+                    w.set(x, y, z, if stone { Block::Stone } else { Block::Water });
+                }
+            }
+        }
+        w
+    }
+
+    /// Hit a tuna from the west at tick 10, then tick 200 times; the
+    /// distance from the attacker and the fish positions at each tick.
+    fn replay() -> Vec<Vec<[f64; 3]>> {
+        let world = pool();
+        let mut w = FishWorld::default_from_data(3, 1).unwrap();
+        let id = w.spawn("tuna", [0.5, 54.0, 0.5], 90.0).unwrap();
+        assert!(w.store().get(id).unwrap().health > 1);
+        let far = Aabb::new([100.0, 80.0, 100.0], [100.6, 81.8, 100.6]);
+        let mut out = Vec::new();
+        for tick in 0..200 {
+            if tick == 10 {
+                assert_eq!(w.hit(id, 1, [-1.5, 54.0, 0.5]), None);
+            }
+            w.tick(tick, [0.0, 0.0], &far, &world, |_, _| None);
+            out.push(w.store().iter().map(|f| f.pos).collect());
+        }
+        out
+    }
+
+    #[test]
+    fn a_surviving_hit_scatters_for_the_configured_ticks_then_wanders() {
+        let run = replay();
+        let ticks = FishSpawnConfig::default_from_data()
+            .unwrap()
+            .hit_scatter_ticks as usize;
+        let speed = |t: usize| {
+            let (a, b) = (run[t - 1][0], run[t][0]);
+            (b[0] - a[0]).hypot(b[2] - a[2])
+        };
+        let first = speed(10);
+        let wander = speed(9);
+        assert!(first > wander * 1.5, "{first} vs {wander}");
+        // It ends well clear of the attacker at x = -1.5.
+        assert!(run[10 + ticks][0][0] > 0.5 + 2.0, "{:?}", run[10 + ticks]);
+        // After the timer it moves at wander speed again.
+        let tuna = FishBodies::default_from_data()
+            .unwrap()
+            .get("tuna")
+            .unwrap()
+            .swim_speed;
+        assert!(speed(10 + ticks + 5) <= tuna * crate::clock::TICK_SECONDS + 1e-9);
+    }
+
+    #[test]
+    fn the_same_hit_replays_to_the_same_positions() {
+        assert_eq!(replay(), replay());
     }
 
     #[test]
