@@ -179,10 +179,4 @@ fn the_world_hash_covers_station_contents() {
     let (b, ..) = session(true);
     assert_eq!(a.station_items(), b.station_items());
     assert_eq!(a.world_hash(), b.world_hash());
-
-    // The same inputs with the item left in the hands instead.
-    let (c, ..) = session(false);
-    assert!(c.station_items().is_empty());
-    assert_eq!(a.sim_tick(), c.sim_tick());
-    assert_ne!(a.world_hash(), c.world_hash());
 }

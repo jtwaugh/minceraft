@@ -2548,6 +2548,25 @@ mod tests {
     }
 
     #[test]
+    fn world_hash_covers_station_contents() {
+        let build = || {
+            let mut w = Walker::in_raft_scene(crate::scene::raft_scene()).unwrap();
+            w.tick(&TickInput::default());
+            w
+        };
+        let (mut a, b) = (build(), build());
+        assert_eq!(a.world_hash(), b.world_hash());
+        let cell = [0, 0, 0];
+        let item = ItemInstance {
+            item: "raw_beef".into(),
+        };
+        a.stations.put_down(cell, item).unwrap();
+        assert_ne!(a.world_hash(), b.world_hash());
+        a.stations.take(cell);
+        assert_eq!(a.world_hash(), b.world_hash());
+    }
+
+    #[test]
     fn world_hash_covers_the_day_state() {
         let run = |set: bool, freeze: bool| {
             let mut w = with_cmds();
