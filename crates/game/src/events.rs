@@ -77,4 +77,49 @@ pub enum GameEvent {
     /// A dead player came back at `position` (the start spawn) with full
     /// health.
     PlayerRespawned { position: [f64; 3] },
+    /// An action the player tried was refused. `action` is `"swing"`,
+    /// `"till"`, `"plant"`, `"pick"`, `"forage"` or `"pickup"`.
+    ActionRefused { action: String, reason: Reason },
+}
+
+/// Why an action was refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reason {
+    TooFar,
+    HandsFull,
+    ToolsStowed,
+    WrongTool,
+    NothingHere,
+}
+
+impl Reason {
+    /// The snake_case name used in event strings.
+    pub fn name(self) -> &'static str {
+        match self {
+            Reason::TooFar => "too_far",
+            Reason::HandsFull => "hands_full",
+            Reason::ToolsStowed => "tools_stowed",
+            Reason::WrongTool => "wrong_tool",
+            Reason::NothingHere => "nothing_here",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reason_names() {
+        let all = [
+            (Reason::TooFar, "too_far"),
+            (Reason::HandsFull, "hands_full"),
+            (Reason::ToolsStowed, "tools_stowed"),
+            (Reason::WrongTool, "wrong_tool"),
+            (Reason::NothingHere, "nothing_here"),
+        ];
+        for (r, n) in all {
+            assert_eq!(r.name(), n);
+        }
+    }
 }
