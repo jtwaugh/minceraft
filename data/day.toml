@@ -21,3 +21,9 @@ sun_azimuth_degrees = 0.0
 min_daylight = 0.15
 dawn_width = 0.1
 dusk_width = 0.1
+
+# Sky base colours the client blends toward, as [r, g, b] with each channel in
+# 0..255. `night_sky` is the base at full night, `dusk_sky` at the dawn and
+# dusk ramps. See docs/design/day-night-cycle.md Phase B.
+night_sky = [10, 14, 38]
+dusk_sky = [214, 118, 84]
