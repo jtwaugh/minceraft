@@ -29,12 +29,11 @@ import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendCont
 import { meshBlocksWasm } from '../viewer/meshwasm.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
-import { animalBoxes, animalPose } from './models.js';
+import { animalBoxes, animalPose, CLEAR_EDGES } from './models.js';
 import { bobberBoxes, lineBoxes, bobberDraw } from './bobbermodel.js';
 import { fishBoxes, fishDraw, createTailTracker } from './fishmodels.js';
 import { raftBoxes, raftMatrix } from './raftmodel.js';
 import { itemBoxes, itemDraws, itemPose, readStations, stationDraws } from './itemmodel.js';
-import { CLEAR_EDGES } from './models.js';
 import { heldBoxes, heldDraw } from './helditem.js';
 import { SCENE_TEXTURES } from './scenetextures.js';
 import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
