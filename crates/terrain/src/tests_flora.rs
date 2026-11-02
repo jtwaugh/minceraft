@@ -9,7 +9,7 @@ use crate::flora::{
     FloraRequires, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
     FLORA_LIGHT_RADIUS, FLORA_TREE_KIND_RADIUS, FLORA_WIND,
 };
-use crate::niche::{conifer, edge, exposure, hollow, light, NicheLayer};
+use crate::niche::{conifer, edge, exposure, hollow, light, wetness, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -1516,4 +1516,50 @@ fn conifer_search_and_tree_reach_stay_inside_the_decoration_margin() {
 #[test]
 fn conifer_niche_entry_is_independent_of_region() {
     region_independent(&niche_entry!(&[(NicheLayer::Conifer, 0.0, 0.5)]));
+}
+
+/// Wetness at the pit, the knoll top, a flat column and a steep ramp column of
+/// a hand-built grass world: flat at y 70 with a pit around (16, 16), a knoll
+/// around (58, 16), and a ramp rising 2 per block from x 35.
+fn wetness_values() -> [f64; 4] {
+    let (w, d) = (75, 33);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32);
+    let near = |x: i32, z: i32, cx: i32| (x - cx).pow(2) + (z - 16).pow(2) <= 4;
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            let g = match () {
+                _ if near(x, z, 16) => 66,
+                _ if near(x, z, 58) => 90,
+                _ if x >= 35 => 70 + 2 * (x - 35).min(5),
+                _ => 70,
+            };
+            for y in 0..=g {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+        }
+    }
+    [(16, 16), (58, 16), (21, 16), (37, 16)].map(|(x, z)| wetness(&world, x, z))
+}
+
+#[test]
+fn a_flat_hollow_is_wetter_than_a_ridge_or_a_steep_slope() {
+    let [pit, knoll, flat, ramp] = wetness_values();
+    assert!(
+        pit > knoll && pit > flat && pit > ramp,
+        "{pit} {knoll} {flat} {ramp}"
+    );
+    assert!(flat > ramp, "{flat} {ramp}");
+    assert!((0.0..=1.0).contains(&pit) && (0.0..=1.0).contains(&ramp));
+}
+
+#[test]
+fn a_wetness_niche_places_in_the_hollow_and_not_on_the_ridge() {
+    let wet = niche_entry!(&[(NicheLayer::Wetness, 0.9, 1.0)]);
+    assert_eq!(hollow_placed(&wet).1, [true, false, false]);
+}
+
+#[test]
+fn wetness_niche_entry_is_independent_of_region() {
+    region_independent(&niche_entry!(&[(NicheLayer::Wetness, 0.6, 1.0)]));
 }

@@ -14,7 +14,7 @@
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
 #   niche         optional layer name -> [lo, hi], lo <= hi; layers: height_above_sea |
-#                 soil_depth | light | slope | sun_facing | hollow | edge | exposure | conifer. The response is 1
+#                 soil_depth | light | slope | sun_facing | hollow | edge | exposure | conifer | wetness. The response is 1
 #                 inside and falls to 0 over niche_margin_<layer> outside; the product
 #                 multiplies the biome chance. height_above_sea is ground y minus sea
 #                 level; soil_depth counts dirt and grass from the ground block down;
@@ -44,7 +44,13 @@
 #                 ground block) within tree_kind_radius (circle) of the column, whose
 #                 topmost leaf is spruce leaves: 1 all spruce (acidic ground), 0 all
 #                 oak or birch (richer ground). conifer_none, a neutral value, where
-#                 no leaf column is in reach.
+#                 no leaf column is in reach;
+#                 wetness is a 0 to 1 index of how likely water lies about: it is
+#                 wetness_slope_weight * (1 - slope / wetness_slope_ref) plus
+#                 wetness_hollow_weight * (-hollow / wetness_hollow_ref), each term
+#                 clamped to 0..1, the sum clamped to 0..1. Flat ground and hollows
+#                 score high, steep slopes and ridges low. Uses the slope and hollow
+#                 layers' reads only.
 
 [settings]
 patch_noise_salt = 7001
@@ -77,6 +83,12 @@ edge_radius = 8
 tree_kind_radius = 8
 # Value of the `conifer` layer where no leaf column lies within tree_kind_radius.
 conifer_none = 0.5
+# The `wetness` layer: slope (rise per block) and hollow (blocks) at which each
+# term reaches 0 and 1, and the weights of the two terms (not negative).
+wetness_slope_ref = 0.5
+wetness_hollow_ref = 4.0
+wetness_slope_weight = 0.4
+wetness_hollow_weight = 0.6
 # Soft margins of the niche response, in each layer's own units.
 niche_margin_height_above_sea = 2.0
 niche_margin_soil_depth = 1.0
@@ -87,6 +99,7 @@ niche_margin_hollow = 1.0
 niche_margin_edge = 1.0
 niche_margin_exposure = 0.2
 niche_margin_conifer = 0.25
+niche_margin_wetness = 0.2
 
 [[flora]]
 name = "daisy"

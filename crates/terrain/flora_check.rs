@@ -24,7 +24,7 @@ const SHAPES: [&str; 5] = ["cross", "tall_cross", "ground_cover", "pad", "bush"]
 pub const REQUIRES: [&str; 3] = ["near_water", "canopy", "coast"];
 const TINTS: [&str; 4] = ["none", "grass", "leaf", "dry"];
 /// Layers an entry may name in `niche`, in `NicheLayer` order.
-pub const NICHE_LAYERS: [&str; 9] = [
+pub const NICHE_LAYERS: [&str; 10] = [
     "height_above_sea",
     "soil_depth",
     "light",
@@ -34,6 +34,7 @@ pub const NICHE_LAYERS: [&str; 9] = [
     "edge",
     "exposure",
     "conifer",
+    "wetness",
 ];
 
 /// Returns the first problem in `entries` as a readable message.

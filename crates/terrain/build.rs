@@ -187,6 +187,22 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     );
     let n = radii.len();
     writeln!(out, "pub const FLORA_HOLLOW_RADII: [i32; {n}] = {radii:?};").unwrap();
+    for (k, name) in [
+        ("wetness_slope_ref", "FLORA_WETNESS_SLOPE_REF"),
+        ("wetness_hollow_ref", "FLORA_WETNESS_HOLLOW_REF"),
+        ("wetness_slope_weight", "FLORA_WETNESS_SLOPE_WEIGHT"),
+        ("wetness_hollow_weight", "FLORA_WETNESS_HOLLOW_WEIGHT"),
+    ] {
+        let v = num(doc["settings"]
+            .get(k)
+            .unwrap_or_else(|| panic!("missing {k}")));
+        if k.ends_with("_ref") {
+            assert!(v > 0.0, "flora.toml: {k} must be positive");
+        } else {
+            assert!(v >= 0.0, "flora.toml: {k} must not be negative");
+        }
+        writeln!(out, "pub const {name}: f64 = {v:?};").unwrap();
+    }
     for layer in flora_check::NICHE_LAYERS {
         let k = format!("niche_margin_{layer}");
         let m = num(doc["settings"]
