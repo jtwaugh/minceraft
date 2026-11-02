@@ -49,7 +49,7 @@ import { createSpans } from './perfspans.js';
 import { meshRegionCpu } from './regionmesh.js';
 import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
-import { sampleSky, easeSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
+import { sampleSky, easeSky, blendSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { SNAP_GLSL, SNAP_SAMPLE_GLSL } from './texsnap.js';
 import { SKY_GLSL } from '../viewer/sky.js';
@@ -573,7 +573,9 @@ function render(now) {
   const dtSky = lastFrame === null ? 0 : (now - lastFrame) / 1000;
   if (now - skySampleAt > 250) { skySampleAt = now; skyTarget = sampleSkyAt(eye); if (!skyReady) skyColor = skyTarget; skyReady = true; }
   skyColor = easeSky(skyColor, skyTarget, dtSky);
-  const view = look({ underwater, skyColor, fogFar, water: ctx.COLORS[B.water] });
+  const day = controller.state.day;
+  const base = underwater || !day ? skyColor : blendSky(skyColor, day.daylight, walk.daylight_at(0), Array.from(walk.night_sky()), Array.from(walk.dusk_sky()));
+  const view = look({ underwater, skyColor: base, fogFar, water: ctx.COLORS[B.water] });
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h, controller.state.day?.sunDir);

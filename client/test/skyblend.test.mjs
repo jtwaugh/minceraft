@@ -34,3 +34,19 @@ test('a window straddling a border averages between the two biomes', () => {
   assert.ok(c[0] > 100 / 255 && c[0] < 200 / 255);
   assert.deepEqual(sampleSky([1, 1], [0, 0], biomes, ramp), [200 / 255, 50 / 255, 100 / 255]);
 });
+
+test('blendSky is the base by day, night at the minimum, and smooth between', async () => {
+  const { blendSky } = await import('../skyblend.js');
+  const base = [0.4, 0.6, 0.9], night = [10, 14, 38], dusk = [214, 118, 84], min = 0.15;
+  assert.deepEqual(blendSky(base, 1, min, night, dusk), base);
+  const end = blendSky(base, min, min, night, dusk);
+  night.forEach((v, k) => assert.ok(Math.abs(end[k] - v / 255) < 1e-12));
+  const mid = blendSky(base, (1 + min) / 2, min, night, dusk);
+  dusk.forEach((v, k) => assert.ok(Math.abs(mid[k] - v / 255) < 1e-12));
+  let prev = blendSky(base, 1, min, night, dusk);
+  for (let i = 1; i <= 1000; i++) {
+    const c = blendSky(base, 1 - (i / 1000) * (1 - min), min, night, dusk);
+    c.forEach((v, k) => assert.ok(Math.abs(v - prev[k]) < 0.01, `jump at ${i}`));
+    prev = c;
+  }
+});
