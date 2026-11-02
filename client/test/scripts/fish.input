@@ -1,0 +1,30 @@
+# Fish in the client (docs/design/fish-and-fishing.md Phase C). The streamed
+# start 20.5 122.5 over region 0 0 was chosen by scanning the surface of seed
+# 12345 for the first large lake: the sea fills the south-west corner of the
+# region (z 112-127, x 0-40), so the player lands in open water. A frame of
+# 50 ms is one sim tick; the first phase change is at tick 2400 (120 s).
+
+case a spawned fish is counted and found near its position
+start walk stream at 20.5 122.5
+frame 50 x40
+expect fish = 0
+spawn fish salmon
+expect fish = 1
+# the fish is two blocks east of the player, so it is within a block of this point
+expect fish.near 22.5 65 122.5 3 = 1
+expect fish.near 90 65 40 3 = 0
+
+case fish appear at the phase change and none stay beyond the despawn radius
+start walk stream at 20.5 122.5
+frame 50 x40
+expect fish = 0
+frame 50 x2400
+expect fish > 0
+expect fish.near 20.5 64 122.5 26 > 0
+# every fish is inside the despawn radius (40) of the player
+expect fish = 12
+expect fish.near 20.5 64 122.5 40 = 12
+# the next phase change tops up the same anchorage; none are left beyond the radius
+frame 50 x2400
+expect fish.near 20.5 64 122.5 40 = 12
+expect fish = 12

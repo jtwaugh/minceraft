@@ -1,0 +1,14 @@
+# Kelp drying racks on a small deck (docs/design/villages-and-villagers.md 2.3).
+kind = "building"
+size = [5, 2, 4]      # x, y, z
+origin_offset = [-2, 0, 0]
+palette = { P = "dock_planks", R = "drying_rack", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPP", "PPPPP", "PPPPP", "PPPPP"],
+  # y = 1 (racks along the back)
+  ["R.R.R", ".....", ".....", "....."],
+]
+connectors = [
+  { cell = [2, 1, 3], facing = "+z", pool = "boardwalks" },
+]

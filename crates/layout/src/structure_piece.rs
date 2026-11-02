@@ -8,6 +8,7 @@ pub enum PieceKind {
     Plaza,
     Dock,
     Boardwalk,
+    Landing,
     Building,
     Cap,
     Decor,

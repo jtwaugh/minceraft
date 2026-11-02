@@ -7,11 +7,11 @@
 // One statement per line; `#` starts a comment. A file holds one or more cases.
 //
 //   case <name>                 a fresh world: fake canvas/document/window, new sim
-//   start fly|walk [raft] [debug] [stream]  mode, and the raft test scene (default: walk, no terrain);
+//   start fly|walk [raft] [debug] [stream] [at <x> <z>]  mode, and the raft test scene (default: walk, no terrain);
 //                               the raft scene has three loose seeds on its islet and
 //                               implies debug; `debug` turns the console keys on elsewhere;
 //                               `stream` is a streamed world (seed 12345) starting over region 0 0,
-//                               meshing one region per frame; every frame's new and remeshed regions
+//                               meshing one region per frame (`at <x> <z>` starts elsewhere, 72 up); every frame's new and remeshed regions
 //                               are meshed on the CPU as scene.js does (client/regionmesh.js, no upload)
 //   click                       click the canvas (requests pointer lock)
 //   lock | unlock | blur        pointer lock gained / lost; window loses focus
@@ -29,6 +29,8 @@
 //   respawn                     the death screen's respawn button: controller.respawn() (nothing while alive)
 //   frame <ms> [xN]             run N frames of ms each (default 1)
 //   spawn animal <kind>         put a cow, pig or chicken on the raft scene's islet
+//   spawn fish <species>        put a fish (a name in data/fish_bodies.toml) in the water two blocks east of
+//                               the player and level with the feet; an error if that is not water or the species is unknown
 //   spawn item <name>           drop a loose item a block east of the player (any scene)
 //   face animal                 turn to look at the first animal (a mousemove)
 //   approach animal             teleport next to the first animal (it flees; reach is short)
@@ -63,7 +65,7 @@
 // meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
 // all mesh kinds), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
 // every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
-// console.lines (output lines so far), console.text (the box), cheated, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
+// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, locked, ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
@@ -81,7 +83,7 @@
 // events.foraged (`foraged` events seen since the case began), events.overbudget (stream only: frames whose work,
 // as counted for the work paths, went over a budget in client/workbudget.js; each is an event
 // `overbudget <field>=<value> ...` naming the fields over, e.g. `expect no event overbudget`),
-// events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing).
+// events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing), fish (fish in the world), fish.near <x> <y> <z> <r> (fish within r blocks of that point; the path takes arguments: `expect fish.near 10 64 3 5 = 1`).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
@@ -96,7 +98,7 @@ import { createController } from '../controller.js';
 import { heldDraw } from '../helditem.js';
 import { hudLayout } from '../hudlayout.js';
 import { layoutChecks } from '../hudcheck.js';
-import { spawnTestItems, readAnimals, faceAnimal, spawnTestAnimals } from '../overlay.js';
+import { spawnTestItems, readAnimals, readFish, faceAnimal, spawnTestAnimals } from '../overlay.js';
 
 let ready = false;
 function init() {
@@ -139,7 +141,7 @@ export function parse(src) {
   return cases;
 }
 
-function world({ mode = 'walk', raft = false, debug = raft, stream = false, budget = 1, damage = null }) {
+function world({ mode = 'walk', raft = false, debug = raft, stream = false, at = [50.5, 40.5], budget = 1, damage = null }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
   const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
@@ -154,9 +156,9 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, budg
   const sampler = new InputSampler();
   const input = attachInput({ sampler, canvas, document, window, debug });
   const scene = raft ? new Scene() : null;
-  const walk = raft ? Walk.in_scene(scene) : stream ? Walk.streamed(STREAM_SEED, 50.5, 72, 40.5) : new Walk(32, 70.5, 32);
+  const walk = raft ? Walk.in_scene(scene) : stream ? Walk.streamed(STREAM_SEED, at[0], 72, at[1]) : new Walk(32, 70.5, 32);
   if (raft) spawnTestItems(walk);
-  const fly = stream ? new FlyCamera(50.5, 110, 40.5) : new FlyCamera(32, 94, 32);
+  const fly = stream ? new FlyCamera(at[0], 110, at[1]) : new FlyCamera(32, 94, 32);
   const controller = createController({
     input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly', stream: stream ? { budget } : null,
     sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds },
@@ -254,6 +256,8 @@ function read(w, path) {
     const o = w.walk.raft_offset(s.alpha);
     return Math.hypot(o[0] - w.markRaft[0], o[2] - w.markRaft[2]);
   }
+  if (path === 'time') return w.walk.time_of_day();
+  if (path === 'time.frozen') return w.walk.day_frozen();
   if (path === 'driving') return w.walk.driving();
   if (path === 'raft.heading') return w.walk.raft_heading(s.alpha);
   if (/^raft\.[xz]$/.test(path)) return w.walk.raft_offset(s.alpha)[axis[path[5]]];
@@ -277,6 +281,12 @@ function read(w, path) {
   if (path === 'hud.selected') return s.hud.selected;
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
   if (path === 'items') return w.walk.loose_items();
+  if (path === 'fish') return readFish(w.walk).length;
+  if (path.startsWith('fish.near')) {
+    const [x, y, z, r] = path.slice(9).trim().split(/\s+/).map(Number);
+    if (![x, y, z, r].every(Number.isFinite)) throw new Error('fish.near <x> <y> <z> <r>');
+    return readFish(w.walk).filter((f) => Math.hypot(f.pos[0] - x, f.pos[1] - y, f.pos[2] - z) <= r).length;
+  }
   if (path === 'animals') return readAnimals(w.walk).length;
   if (path === 'animals.dying') return readAnimals(w.walk).filter((a) => a.dying).length;
   if (path === 'animals.hurt') return readAnimals(w.walk).filter((a) => a.hurt).length;
@@ -366,7 +376,16 @@ function step(w, { op, args }) {
         w.walk.spawn_item(args[1], x + 1, y + 0.2, z);
         return;
       }
-      if (args[0] !== 'animal' || !args[1]) throw new Error('spawn animal <kind> | spawn item <name>');
+      if (args[0] === 'fish' && args[1]) {
+        const [x, y, z] = w.walk.feet();
+        const cell = [Math.floor(x) + 2, Math.floor(y + 0.5), Math.floor(z)];
+        if (w.walk.block_at(...cell) !== B.water) {
+          throw new Error(`spawn fish: no water at ${cell.join(' ')}`);
+        }
+        if (w.walk.spawn_fish(args[1], cell[0] + 0.5, cell[1], cell[2] + 0.5, 0) < 0) throw new Error(`spawn fish: unknown species '${args[1]}'`);
+        return;
+      }
+      if (args[0] !== 'animal' || !args[1]) throw new Error('spawn animal <kind> | spawn fish <species> | spawn item <name>');
       spawnTestAnimals(w.walk, [args[1]]);
       return;
     }
@@ -483,8 +502,8 @@ function step(w, { op, args }) {
         if (hit === negated) throw new Error(`${negated ? 'unexpected' : 'no'} event ${name}; seen: ${w.events.join(' | ') || 'none'}`);
         return;
       }
-      const [path, cmp, ...rest] = args;
-      const raw = rest.join(' ');
+      const at = Math.max(1, args.findIndex((a) => OPS[a]));
+      const path = args.slice(0, at).join(' '), cmp = args[at], raw = args.slice(at + 1).join(' ');
       if (!OPS[cmp]) throw new Error(`unknown operator '${cmp}'`);
       const got = read(w, path);
       const want = typeof got === 'number' ? +raw : typeof got === 'boolean' ? raw === 'true' : raw;
@@ -495,17 +514,22 @@ function step(w, { op, args }) {
   }
 }
 
-const START_USAGE = 'start fly|walk [raft] [debug] [stream]';
+const START_USAGE = 'start fly|walk [raft] [debug] [stream] [at <x> <z>]';
 
 /** The world options for a `start` line's arguments; throws the usage message when they are bad. */
 function parseStart(args) {
   if (!args.length) return {};
-  const [mode, ...flags] = args;
+  const [mode, ...rest] = args;
+  const i = rest.indexOf('at');
+  const flags = i < 0 ? rest : rest.slice(0, i);
+  const at = i < 0 ? null : rest.slice(i + 1).map(Number);
+  if (at && (at.length !== 2 || !at.every(Number.isFinite) || !flags.includes('stream'))) throw new Error(START_USAGE);
   if (!['fly', 'walk'].includes(mode) || flags.some((f) => !['raft', 'debug', 'stream'].includes(f))) {
     throw new Error(START_USAGE);
   }
   const opts = { mode, raft: flags.includes('raft'), stream: flags.includes('stream') };
   if (flags.includes('debug')) opts.debug = true;
+  if (at) opts.at = at;
   return opts;
 }
 

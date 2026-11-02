@@ -5,8 +5,11 @@ use crate::data::{Biome, Block};
 use crate::decorate::{generate_decorated_with, World};
 use crate::decorate::{MARGIN_CELLS, READ_REACH};
 use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
-use crate::flora::{FloraRequires, FLORA_EDGE_RADIUS, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS};
-use crate::niche::{edge, hollow, light, NicheLayer};
+use crate::flora::{
+    FloraRequires, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
+    FLORA_LIGHT_RADIUS, FLORA_TREE_KIND_RADIUS, FLORA_WETNESS_WATER_RADIUS, FLORA_WIND,
+};
+use crate::niche::{conifer, edge, exposure, hollow, light, wetness, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
 
 /// Two entries with high chances in different biomes, so tests see plenty.
@@ -1406,4 +1409,202 @@ fn edge_search_and_tree_reach_stay_inside_the_decoration_margin() {
 #[test]
 fn edge_niche_entry_is_independent_of_region() {
     region_independent(&niche_entry!(&[(NicheLayer::Edge, 1.0, 6.0)]));
+}
+
+/// Hand-built grass at y 70 over 80 by 7 columns, with water (surface at y 63)
+/// from x 40 on, except a land spit at x 66..70 across rows z 0..3. With the
+/// wind from +x the ray runs towards larger x: x 39 at z 5 faces open water,
+/// x 39 at z 1 has the spit across its ray (a cove), x 10 is inland.
+fn exposure_world(blocks: &mut [u8]) -> World<'_> {
+    let (w, d) = (80, 7);
+    let mut world = World::for_test(blocks, w, d);
+    for z in 0..d {
+        for x in 0..w {
+            let wet = x >= 40 && !((66..70).contains(&x) && z < 3);
+            let g = if wet { 62 } else { 70 };
+            for y in 0..g {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+            if wet {
+                world.set(x, 63, z, Block::Water as u8);
+            } else {
+                world.set(x, g, z, Block::Grass as u8);
+            }
+        }
+    }
+    world
+}
+
+#[test]
+fn exposure_scores_a_shore_facing_water_above_a_cove_or_inland() {
+    assert_eq!(FLORA_WIND, (1.0, 0.0), "the layout assumes wind from +x");
+    assert_eq!(FLORA_EXPOSURE_CAP, 48);
+    let mut blocks = vec![0u8; 80 * 7 * HEIGHT];
+    let world = exposure_world(&mut blocks);
+    let shore = exposure(&world, 39, 5);
+    let cove = exposure(&world, 39, 1);
+    let inland = exposure(&world, 10, 5);
+    assert_eq!(shore, 40.0 / 48.0);
+    assert_eq!(cove, 26.0 / 48.0);
+    assert_eq!(inland, 0.0);
+    assert!(shore > cove && cove > inland);
+}
+
+#[test]
+fn exposure_is_capped_and_in_unit_range() {
+    let mut blocks = vec![0u8; 80 * 7 * HEIGHT];
+    let world = exposure_world(&mut blocks);
+    assert_eq!(exposure(&world, 0, 5), 0.0);
+    assert!(exposure(&world, 39, 5) <= 1.0);
+}
+
+#[test]
+fn exposure_ray_stays_inside_the_decoration_margin() {
+    const {
+        assert!(FLORA_EXPOSURE_CAP > 0);
+        assert!(FLORA_EXPOSURE_CAP <= MARGIN_CELLS * 16);
+    }
+}
+
+#[test]
+fn exposure_niche_is_accepted_and_independent_of_region() {
+    region_independent(&niche_entry!(&[(NicheLayer::Exposure, 0.2, 1.0)]));
+}
+
+/// Hand-built grass at y 70 over 20 by 5 columns, with a leaf roof at y 76 of
+/// `leaves` over x 0..4 (none if `None`). Conifer at x 2 and x 19 of the middle row.
+fn conifer_at(leaves: &[Block]) -> [f64; 2] {
+    let (w, d) = (20, 5);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32);
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            world.set(x, 70, z, Block::Grass as u8);
+            if !leaves.is_empty() && x < 4 {
+                // Alternate kinds along z so a mix gives the share.
+                world.set(x, 76, z, leaves[z as usize % leaves.len()] as u8);
+            }
+        }
+    }
+    [conifer(&world, 2, 70, 2), conifer(&world, 19, 70, 2)]
+}
+
+#[test]
+fn conifer_is_the_spruce_share_of_nearby_leaf_columns() {
+    assert_eq!(FLORA_CONIFER_NONE, 0.5, "the none case assumes 0.5");
+    assert_eq!(
+        conifer_at(&[Block::SpruceLeaves]),
+        [1.0, FLORA_CONIFER_NONE]
+    );
+    assert_eq!(conifer_at(&[Block::OakLeaves])[0], 0.0);
+    assert_eq!(conifer_at(&[Block::BirchLeaves])[0], 0.0);
+    // Rows z 0..5 alternate spruce, oak: 3 of 5 are spruce.
+    assert_eq!(conifer_at(&[Block::SpruceLeaves, Block::OakLeaves])[0], 0.6);
+    assert_eq!(conifer_at(&[]), [FLORA_CONIFER_NONE; 2]);
+}
+
+#[test]
+fn conifer_search_and_tree_reach_stay_inside_the_decoration_margin() {
+    const TREE_REACH: i32 = 7;
+    const {
+        assert!(FLORA_TREE_KIND_RADIUS > 0);
+        assert!(FLORA_TREE_KIND_RADIUS + TREE_REACH <= MARGIN_CELLS * 16);
+        assert!(FLORA_TREE_KIND_RADIUS <= READ_REACH);
+    }
+}
+
+#[test]
+fn conifer_niche_entry_is_independent_of_region() {
+    region_independent(&niche_entry!(&[(NicheLayer::Conifer, 0.0, 0.5)]));
+}
+
+/// Wetness at the pit, the knoll top, a flat column and a steep ramp column of
+/// a hand-built grass world: flat at y 70 with a pit around (16, 16), a knoll
+/// around (58, 16), and a ramp rising 2 per block from x 35.
+fn wetness_values() -> [f64; 4] {
+    let (w, d) = (75, 33);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let biome = vec![Biome::Plains as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&biome);
+    let near = |x: i32, z: i32, cx: i32| (x - cx).pow(2) + (z - 16).pow(2) <= 4;
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            let g = match () {
+                _ if near(x, z, 16) => 66,
+                _ if near(x, z, 58) => 90,
+                _ if x >= 35 => 70 + 2 * (x - 35).min(5),
+                _ => 70,
+            };
+            for y in 0..=g {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+        }
+    }
+    [(16, 16), (58, 16), (21, 16), (37, 16)].map(|(x, z)| wetness(&world, x, z))
+}
+
+#[test]
+fn a_flat_hollow_is_wetter_than_a_ridge_or_a_steep_slope() {
+    let [pit, knoll, flat, ramp] = wetness_values();
+    assert!(
+        pit > knoll && pit > flat && pit > ramp,
+        "{pit} {knoll} {flat} {ramp}"
+    );
+    assert!(flat > ramp, "{flat} {ramp}");
+    assert!((0.0..=1.0).contains(&pit) && (0.0..=1.0).contains(&ramp));
+}
+
+#[test]
+fn a_wetness_niche_places_in_the_hollow_and_not_on_the_ridge() {
+    let wet = niche_entry!(&[(NicheLayer::Wetness, 0.9, 1.0)]);
+    assert_eq!(hollow_placed(&wet).1, [true, false, false]);
+}
+
+#[test]
+fn wetness_niche_entry_is_independent_of_region() {
+    region_independent(&niche_entry!(&[(NicheLayer::Wetness, 0.6, 1.0)]));
+}
+
+/// Wetness at the middle of a flat 41 by 41 grass world whose every column is
+/// `biome`, with (if `lake`) a water column at 3 columns east.
+fn flat_wetness(biome: Biome, lake: bool) -> f64 {
+    let (w, d) = (41, 41);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let ids = vec![biome as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&ids);
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            for y in 0..=70 {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+            if lake && x == 23 {
+                world.set(x, 70, z, Block::Water as u8);
+            }
+        }
+    }
+    wetness(&world, 20, 20)
+}
+
+#[test]
+fn a_wetter_biome_scores_higher_wetness_on_the_same_terrain() {
+    let wet = flat_wetness(Biome::Swampland, false);
+    let dry = flat_wetness(Biome::Desert, false);
+    assert!(wet > dry && (0.0..=1.0).contains(&wet), "{wet} {dry}");
+}
+
+#[test]
+fn a_column_beside_water_is_wetter_than_one_far_from_it() {
+    let near = flat_wetness(Biome::Plains, true);
+    let far = flat_wetness(Biome::Plains, false);
+    assert!(near > far, "{near} {far}");
+}
+
+#[test]
+fn wetness_water_search_and_tree_reach_stay_inside_the_decoration_margin() {
+    const TREE_REACH: i32 = 7;
+    const {
+        assert!(FLORA_WETNESS_WATER_RADIUS > 0);
+        assert!(FLORA_WETNESS_WATER_RADIUS + TREE_REACH <= MARGIN_CELLS * 16);
+        assert!(FLORA_WETNESS_WATER_RADIUS <= READ_REACH);
+    }
 }

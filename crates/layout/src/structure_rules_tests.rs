@@ -59,6 +59,7 @@ fn every_kind_parses() {
         ("plaza", PieceKind::Plaza),
         ("dock", PieceKind::Dock),
         ("boardwalk", PieceKind::Boardwalk),
+        ("landing", PieceKind::Landing),
         ("building", PieceKind::Building),
         ("cap", PieceKind::Cap),
         ("decor", PieceKind::Decor),
@@ -194,6 +195,20 @@ fn village_error_display_is_readable() {
             },
             vec!["spawns", "[1, 2, -1]", "outside"],
         ),
+        (
+            StructureError::NotAtFloorHeight {
+                field: "connectors",
+                cell: [0, 0, 1],
+            },
+            vec!["connectors", "[0, 0, 1]", "y = 1"],
+        ),
+        (
+            StructureError::ConnectorOffEdge {
+                cell: [1, 1, 1],
+                facing: "+x",
+            },
+            vec!["[1, 1, 1]", "edge", "+x"],
+        ),
     ];
     for (e, keys) in cases {
         let text = e.to_string();
@@ -201,4 +216,51 @@ fn village_error_display_is_readable() {
             assert!(text.contains(k), "{text:?} lacks {k:?}");
         }
     }
+}
+
+fn conn(cell: &str, facing: &str) -> String {
+    format!("connectors = [{{ cell = {cell}, facing = \"{facing}\", pool = \"decor\" }}]\n")
+}
+
+#[test]
+fn connectors_must_sit_on_the_facing_edge() {
+    let good = [
+        ("[2, 1, 1]", "+x"),
+        ("[0, 1, 1]", "-x"),
+        ("[1, 1, 2]", "+z"),
+        ("[1, 1, 0]", "-z"),
+    ];
+    for (cell, facing) in good {
+        assert!(parse(&conn(cell, facing)).is_ok(), "{cell} {facing}");
+    }
+    let bad = [
+        ("[1, 1, 1]", "+x", "+x"),
+        ("[2, 1, 1]", "-x", "-x"),
+        ("[1, 1, 1]", "+z", "+z"),
+        ("[1, 1, 2]", "-z", "-z"),
+    ];
+    for (cell, facing, name) in bad {
+        let StructureError::ConnectorOffEdge { facing: f, .. } = err(&conn(cell, facing)) else {
+            panic!("{cell} {facing} accepted");
+        };
+        assert_eq!(f, name);
+    }
+}
+
+#[test]
+fn connectors_and_spawns_must_be_at_floor_height() {
+    assert_eq!(
+        err(&conn("[0, 0, 1]", "-x")),
+        StructureError::NotAtFloorHeight {
+            field: "connectors",
+            cell: [0, 0, 1]
+        }
+    );
+    assert_eq!(
+        err("spawns = [{ cell = [1, 0, 1], kind = \"villager\" }]\n"),
+        StructureError::NotAtFloorHeight {
+            field: "spawns",
+            cell: [1, 0, 1]
+        }
+    );
 }

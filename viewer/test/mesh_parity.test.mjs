@@ -19,7 +19,7 @@ const ctx = { COLORS: [], faceLayer, variants: { 249: { count: 3, cum: [0.6, 0.8
 ctx.COLORS[B.birch_leaves] = [150, 190, 90];
 ctx.COLORS[B.spruce_leaves] = [60, 110, 70];
 
-const KEEP = new Set([B.air, B.dirt, B.grass, B.stone, B.sand, B.gravel, B.water, B.ice, B.oak_log, B.birch_log, B.spruce_log,
+const KEEP = new Set([B.air, B.dirt, B.grass, B.stone, B.sand, B.gravel, B.water, B.ice, B.oak_log, B.birch_log, B.spruce_log, B.chest,
   B.oak_leaves, B.birch_leaves, B.spruce_leaves, B.cactus, B.berry_bush, B.bush, B.jungle_bush, B.snow_layer,
   B.leaf_litter, B.lily_pad]);
 const restrict = (blocks) => blocks.map((b) => (KEEP.has(b) || CROSS[b] ? b : B.air));
@@ -81,5 +81,24 @@ for (const corners of [false, true]) {
     assert.equal(rs.water.faces, js.water.faces);
     assert.ok(js.water.faces < size * size / 4, `${js.water.faces} water quads`);
     assert.deepEqual(quads(rs.water), quads(js.water));
+  });
+}
+
+// The +Z face of a chest takes the front layer in both meshers.
+for (const greedy of [false, true]) {
+  test(`wasm mesher matches meshBlocks with a front layer${greedy ? ', greedy' : ''}`, () => {
+    const size = 4, blocks = new Uint8Array(size * size * H);
+    blocks[(1 * size + 1) * H + 5] = B.chest;
+    blocks[(1 * size + 2) * H + 5] = B.chest;
+    const frontLayer = new Uint8Array(256).fill(0xFF);
+    frontLayer[B.chest] = 200;
+    const c = { ...ctx, frontLayer };
+    const tints = randomTints(size, false);
+    const js = meshBlocks(c, blocks, tints, size, 0, { greedy });
+    const rs = meshBlocksWasm(wasm, c, blocks, tints, size, 0, { greedy });
+    assert.equal(rs.opaque.faces, js.opaque.faces);
+    assert.deepEqual(quads(rs.opaque), quads(js.opaque));
+    const layers = new Set(quads(js.opaque).map((q) => q.split(';')[0]));
+    assert.ok(layers.size > 1);
   });
 }

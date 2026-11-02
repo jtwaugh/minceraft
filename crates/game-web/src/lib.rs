@@ -427,6 +427,41 @@ impl Walk {
         self.0.phase().1
     }
 
+    /// Time of day now, in 0..1 (0 is midnight), with any offset or freeze.
+    pub fn time_of_day(&self) -> f64 {
+        self.0.time_of_day()
+    }
+
+    /// Whether the clock is frozen (`time freeze`).
+    pub fn day_frozen(&self) -> bool {
+        self.0.day_frozen()
+    }
+
+    /// Scene brightness now, in 0..1.
+    pub fn daylight(&self) -> f64 {
+        self.0.daylight()
+    }
+
+    /// Unit vector toward the sun now, `[x, y, z]`.
+    pub fn sun_dir(&self) -> Vec<f64> {
+        self.0.sun_dir().to_vec()
+    }
+
+    /// Ticks in one day.
+    pub fn day_ticks(&self) -> f64 {
+        self.0.day().day_ticks() as f64
+    }
+
+    /// Unit vector toward the sun at time of day `t`, wrapped into 0..1.
+    pub fn sun_dir_at(&self, t: f64) -> Vec<f64> {
+        self.0.day().sun_dir(t.rem_euclid(1.0)).to_vec()
+    }
+
+    /// Scene brightness at time of day `t`, wrapped into 0..1.
+    pub fn daylight_at(&self, t: f64) -> f64 {
+        self.0.day().daylight(t.rem_euclid(1.0))
+    }
+
     /// Whether the player is sprinting.
     pub fn sprinting(&self) -> bool {
         self.0.sprinting()
@@ -618,6 +653,41 @@ impl Walk {
         self.0.animals().iter().map(|e| e.species.clone()).collect()
     }
 
+    /// Put a fish of `species` at `(x, y, z)` heading `heading` degrees;
+    /// returns its entity id, or -1 for an unknown species.
+    pub fn spawn_fish(&mut self, species: &str, x: f64, y: f64, z: f64, heading: f64) -> i32 {
+        self.0
+            .spawn_fish(species, [x, y, z], heading)
+            .map_or(-1, |id| id as i32)
+    }
+
+    /// The fish in id order, seven numbers each: `id, x, y, z, heading, w,
+    /// h`. `(x, y, z)` is the centre of the bottom face, `heading` is in
+    /// degrees, and `w` and `h` are the box width and height. Species names
+    /// are in [`Walk::fish_species`], in the same order.
+    pub fn fish(&self) -> Vec<f64> {
+        self.0
+            .fish()
+            .iter()
+            .flat_map(|f| {
+                [
+                    f.id as f64,
+                    f.pos[0],
+                    f.pos[1],
+                    f.pos[2],
+                    f.heading,
+                    f.box_size[0],
+                    f.box_size[1],
+                ]
+            })
+            .collect()
+    }
+
+    /// The species of each fish in [`Walk::fish`], in the same order.
+    pub fn fish_species(&self) -> Vec<String> {
+        self.0.fish().iter().map(|f| f.species.clone()).collect()
+    }
+
     /// The loose items, five numbers each: `id, x, y, z, box_size`.
     /// `(x, y, z)` is the centre of the item's box and `box_size` is its
     /// edge length. Item names are in [`Walk::item_names`], in the same
@@ -715,6 +785,38 @@ fn with_default_commands(mut walker: Walker) -> Result<Walk, JsError> {
     Ok(Walk(walker))
 }
 
+/// The wind function (`game::wind_field::Wind`) for one world seed, with the
+/// shipped `WindConfig`.
+#[wasm_bindgen]
+pub struct Wind(game::wind_field::Wind);
+
+#[wasm_bindgen]
+impl Wind {
+    #[wasm_bindgen(constructor)]
+    pub fn new(seed: u64) -> Result<Wind, JsError> {
+        let cfg = game::wind_config::WindConfig::default_from_data()
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Wind(game::wind_field::Wind::new(seed, cfg)))
+    }
+
+    /// `[dx, dz]` in blocks per second; `ticks` is `tick + alpha`.
+    pub fn at(&self, x: f64, z: f64, ticks: f64) -> Vec<f64> {
+        let (dx, dz) = self.0.at(x, z, ticks);
+        vec![dx, dz]
+    }
+
+    /// `clamp(|wind| / speed_ceiling, 0, 1)` for a wind vector from `at`.
+    pub fn strength(&self, dx: f64, dz: f64) -> f64 {
+        self.0.strength(dx, dz)
+    }
+
+    /// Unit `[x, z]` direction of a wind vector, zero for zero wind.
+    pub fn direction(dx: f64, dz: f64) -> Vec<f64> {
+        let (x, z) = game::wind_field::direction(dx, dz);
+        vec![x, z]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -752,6 +854,63 @@ mod tests {
         );
         assert_eq!(w.item_names(), vec!["stick", "wheat"]);
         assert_eq!(w.loose_items(), 2);
+    }
+
+    #[test]
+    fn fish_rows_match_the_walker_and_unknown_species_is_refused() {
+        let mut w = walk();
+        assert!(w.fish().is_empty() && w.fish_species().is_empty());
+        assert_eq!(w.spawn_fish("no_such_fish", 0.0, 0.0, 0.0, 0.0), -1);
+        let species = w.0.fish().bodies().bodies[0].species.clone();
+        let a = w.spawn_fish(&species, 1.5, 6.0, 2.5, 90.0);
+        let b = w.spawn_fish(&species, -3.0, 7.0, 4.0, 10.0);
+        assert!(a >= 0 && b > a);
+        let rows = w.fish();
+        assert_eq!(rows.len(), 14);
+        assert_eq!(w.fish_species(), vec![species.clone(), species]);
+        for (row, f) in rows.chunks(7).zip(w.0.fish().iter()) {
+            let [bw, bh] = f.box_size;
+            assert_eq!(
+                row,
+                [f.id as f64, f.pos[0], f.pos[1], f.pos[2], f.heading, bw, bh]
+            );
+        }
+        assert_eq!(rows[..5], [a as f64, 1.5, 6.0, 2.5, 90.0]);
+        assert_eq!(rows[7], b as f64);
+    }
+
+    #[test]
+    fn day_exports_match_the_walker_after_a_time_set() {
+        let mut w = walk();
+        for f in [0.0, 0.3, 0.75] {
+            w.0.set_time_of_day(f);
+            assert_eq!(w.time_of_day(), w.0.time_of_day());
+            assert!((w.time_of_day() - f).abs() < 1e-3);
+            assert_eq!(w.daylight(), w.0.daylight());
+            assert!((0.0..=1.0).contains(&w.daylight()));
+            assert_eq!(w.sun_dir(), w.0.sun_dir().to_vec());
+            let len: f64 = w.sun_dir().iter().map(|c| c * c).sum::<f64>().sqrt();
+            assert!((len - 1.0).abs() < 1e-9);
+        }
+        w.0.set_day_frozen(true);
+        let held = w.time_of_day();
+        w.0.tick(&TickInput::default());
+        assert_eq!(w.time_of_day(), held);
+    }
+
+    #[test]
+    fn day_at_exports_match_the_clock_and_wrap() {
+        let mut w = walk();
+        assert_eq!(w.day_ticks(), w.0.day().day_ticks() as f64);
+        for f in [0.0, 0.3, 0.75] {
+            w.0.set_time_of_day(f);
+            assert_eq!(w.sun_dir_at(w.time_of_day()), w.sun_dir());
+            assert_eq!(w.daylight_at(w.time_of_day()), w.daylight());
+        }
+        for (t, wrapped) in [(-0.75, 0.25), (1.5, 0.5), (2.0, 0.0)] {
+            assert_eq!(w.daylight_at(t), w.daylight_at(wrapped));
+            assert_eq!(w.sun_dir_at(t), w.sun_dir_at(wrapped));
+        }
     }
 
     #[test]

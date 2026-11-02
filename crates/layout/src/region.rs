@@ -1,8 +1,8 @@
 //! `Layout` and the `generate_region` wrapper (design: world-layout 4.2).
 
 use crate::{
-    ChannelEval, ClimateBias, DensityTerm, Exclusion, Exclusions, HumidityTerms, Structure,
-    TemperatureTerms,
+    ChannelEval, ClimateBias, CoastEval, DensityTerm, Exclusion, Exclusions, HumidityTerms,
+    Structure, TemperatureTerms,
 };
 use terrain::{
     generate_region_with_biases, BaseHeightBias, Biases, Block, DensityClamp, HumidityBias,
@@ -22,6 +22,8 @@ pub struct Layout {
     pub climate: Vec<ClimateBias>,
     pub exclusions: Vec<Exclusion>,
     pub structures: Vec<StructurePlacement>,
+    /// Zones the sea flora pass leaves empty (each level's spawn water).
+    pub flora_free: Vec<Exclusion>,
 }
 
 /// A structure template placed in the world (design: world-layout 4.2).
@@ -59,7 +61,7 @@ fn polyline(points: &[(f64, f64)], reach: f64) -> Option<Bounds> {
 }
 
 impl DensityTerm {
-    fn bounds(&self) -> Option<Bounds> {
+    pub(crate) fn bounds(&self) -> Option<Bounds> {
         match self {
             DensityTerm::RadialBaseHeight {
                 center, r_outer, ..
@@ -70,6 +72,14 @@ impl DensityTerm {
                 falloff,
                 ..
             } => polyline(points, half_width + falloff),
+            DensityTerm::Coast {
+                points,
+                near,
+                ramp,
+                width,
+                fade,
+                ..
+            } => polyline(points, near + ramp + width + fade),
         }
     }
 }
@@ -153,7 +163,8 @@ impl Layout {
         self.generate(x0, z0, w, d, decorate, |_| true)
     }
 
-    /// Like [`Layout::generate_region`], also returning the raft mask.
+    /// Like [`Layout::generate_region`], also returning the raft mask. The sea
+    /// flora pass runs on the blocks.
     pub fn generate_layout_region(
         &self,
         x0: i32,
@@ -162,8 +173,9 @@ impl Layout {
         d: u32,
         decorate: bool,
     ) -> LayoutRegion {
+        let region = self.generate_with_sea_flora(x0, z0, w, d, decorate);
         LayoutRegion {
-            region: self.generate_region(x0, z0, w, d, decorate),
+            region,
             raft_cells: self.raft_cells(x0, z0, w, d),
         }
     }
@@ -261,12 +273,14 @@ impl Layout {
         );
         // Channels are compiled once so each segment keeps its bounding box.
         let channels: Vec<Option<ChannelEval>> = density.iter().map(ChannelEval::new).collect();
+        let coasts: Vec<Option<CoastEval>> = density.iter().map(CoastEval::new).collect();
         let base_height: Vec<&dyn BaseHeightBias> = density
             .iter()
-            .zip(&channels)
-            .map(|(t, c)| match c {
-                Some(c) => c as &dyn BaseHeightBias,
-                None => t as &dyn BaseHeightBias,
+            .zip(channels.iter().zip(&coasts))
+            .map(|(t, (ch, co))| match (ch, co) {
+                (Some(c), _) => c as &dyn BaseHeightBias,
+                (_, Some(c)) => c as &dyn BaseHeightBias,
+                _ => t as &dyn BaseHeightBias,
             })
             .collect();
         let clamp: Vec<&dyn DensityClamp> = channels

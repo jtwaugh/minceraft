@@ -1,6 +1,6 @@
 # Wind from drifting fronts and gusts (docs/design/wind.md Phase A), read by
 # crates/game/src/wind_config.rs. Numbers are this game's own; Beta has no
-# wind. Every key is required and must be finite. Sizes and time scales must
+# wind. Every key is required and must be finite. Sizes and speed_scale must
 # be above zero, the other numbers zero or above, and speed_floor <=
 # speed_ceiling. Distances are in blocks, times in seconds.
 
@@ -8,8 +8,70 @@ front_size = 1500         # feature size of the pressure field P
 front_drift = [4.0, 1.5]  # (u, v) P drifts at, blocks per second; a front takes ~6 min to pass
 speed_scale = 6.0         # blocks per second per unit gradient of P (P sampled at x / front_size)
 gust_size = 48            # feature size of the gust noise
-gust_time_scale = 3.0     # seconds for the gust noise to change by one feature
 gust_strength = 0.5       # g in speed * (1 + g * gust), clamped at zero
 direction_wobble = 0.2    # largest sideways push from gusts, as a fraction of the speed
 speed_floor = 0.0         # wind speed is clamped to [speed_floor, speed_ceiling] ...
 speed_ceiling = 12.0      # ... in blocks per second
+
+# Biome roughness (docs/design/biome-roughness-wind.md Phase A), read by
+# crates/game/src/wind_roughness_config.rs. Values are 0..1, one per biome in
+# data/biomes.toml (every biome needs one), plus `water` for sea-level-or-below
+# samples. blend_height is in blocks; the cell, step and radius are in blocks
+# and must satisfy the RoughnessParams multiple rules.
+roughness_drag = 0.5      # how much full roughness slows the wind, 0..1
+roughness_floor = 0.3     # least speed multiplier, 0..1
+blend_height = 12         # blocks over which roughness fades out with height
+gust_damping = 0.0        # extra gust damping by roughness, 0..1 (0 in Phase A)
+roughness_cell_size = 64  # side of one cached roughness cell
+roughness_step = 8        # spacing of heightmap samples
+roughness_radius = 32     # smoothing half-width
+
+# Terrain height (docs/design/terrain-wind-shelter.md Phase A). cell and the
+# radii are in blocks; cell is a multiple of height_step, the radii are
+# multiples of height_step, height_radius_wide >= height_radius, and
+# height_step is a multiple of 4. height_cell and height_step are whole
+# numbers.
+height_cell = 64          # edge of one cached height cell
+height_step = 8           # spacing of heightmap samples and cell nodes
+height_radius = 16        # smoothing half-width for H
+height_radius_wide = 48   # smoothing half-width for H_wide
+surface_offset = 1.0      # blocks above H for callers that pass no height (finite, may be negative)
+
+# Exposure: speed factor from height above H_wide. gain, floor, ceiling above
+# zero, floor <= ceiling; ease_len zero or above.
+exposure_gain = 0.02      # factor change per block above the mean
+exposure_floor = 0.6      # lowest factor (hollows)
+exposure_ceiling = 1.5    # highest factor (hilltops)
+exposure_ease_len = 4.0   # blocks over which the effect eases in
+
+# Shelter (docs/design/terrain-wind-shelter.md Phase A): the steepest rise of
+# the ground upwind of a point slows the wind. Distances are blocks, positive.
+# floor is the factor at full shelter, 0..1. rise is blocks per block;
+# rise_max > rise_min. epsilon (above zero) is the wind speed below which the
+# upwind samples contract onto the point.
+shelter_distances = [8.0, 16.0, 32.0]  # upwind sample distances
+shelter_floor = 0.3       # factor at full shelter
+shelter_rise_min = 0.0    # rise at and below which there is no shelter
+shelter_rise_max = 0.5    # rise at and above which the factor is the floor
+shelter_epsilon = 0.5     # calm-wind speed, blocks per second
+
+# Channelling: in low ground the wind turns toward the contour of H.
+# strength is 0..1; the ramps and delta are above zero.
+channel_strength = 0.8    # largest blend weight toward the contour
+channel_depth_ramp = 6.0  # blocks below H_wide at which the depth ramp reaches 1
+channel_grad_ramp = 0.2   # |grad H| at which the slope ramp reaches 1
+channel_delta = 2.0       # half-width of the finite difference for grad H, blocks
+
+[roughness]
+"Rainforest" = 0.9
+"Forest" = 0.8
+"Seasonal Forest" = 0.7
+"Taiga" = 0.65
+"Swampland" = 0.6
+"Shrubland" = 0.45
+"Savanna" = 0.4
+"Plains" = 0.2
+"Tundra" = 0.15
+"Desert" = 0.08
+"Ice Desert" = 0.06
+water = 0.02

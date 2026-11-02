@@ -2,10 +2,10 @@
 size = [5, 2, 5]      # x, y, z
 origin_offset = [-2, 0, -2]
 raft = true           # every non-air cell joins the raft mask
-palette = { P = "raft_planks", B = "butcher_block", G = "griddle", C = "crate", "." = "air" }
+palette = { P = "raft_planks", B = "butcher_block", G = "griddle", C = "chest", N = "counter", R = "plate_rack", "." = "air" }
 layers = [
   # y = 0 (deck)
   ["PPPPP", "PPPPP", "PPPPP", "PPPPP", "PPPPP"],
   # y = 1 (stations on deck)
-  [".....", ".B.G.", ".....", "..C..", "....."],
+  [".C.C.", ".....", "B...G", ".....", "NR..N"],
 ]

@@ -189,3 +189,9 @@ fn chance_and_scale_are_checked() {
 fn unknown_field_is_rejected() {
     assert!(load(&kelp_with("salt = 1", "salt = 1\nsalty = 2")).is_err());
 }
+
+#[test]
+fn shipped_equals_bundled_file() {
+    let text = include_str!("../../../data/sea_flora.toml");
+    assert_eq!(SeaFlora::shipped(), load(text).unwrap());
+}

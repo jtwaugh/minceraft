@@ -6,14 +6,21 @@
 //! columns in a small cone around the column with no leaves above the ground),
 //! slope and sun-facing (from the surface height of the four neighbours),
 //! hollow (surface height minus the mean of rings around the column) and
-//! forest edge (distance from an open column to the nearest leaf column).
+//! forest edge (distance from an open column to the nearest leaf column) and
+//! exposure (open water upwind of the column) and conifer (share of spruce
+//! among the leaf columns near the column) and wetness (low slope plus
+//! hollowness, weighted).
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
-    Flora, FLORA_EDGE_RADIUS, FLORA_HOLLOW_RADII, FLORA_LIGHT_RADIUS, FLORA_SUN,
-    FLORA_SUN_FACING_FLAT, NICHE_MARGIN_EDGE, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW,
-    NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING,
+    Flora, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
+    FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT, FLORA_TREE_KIND_RADIUS,
+    FLORA_WETNESS_BIAS, FLORA_WETNESS_HOLLOW_REF, FLORA_WETNESS_HOLLOW_WEIGHT,
+    FLORA_WETNESS_SLOPE_REF, FLORA_WETNESS_SLOPE_WEIGHT, FLORA_WETNESS_WATER_RADIUS,
+    FLORA_WETNESS_WATER_WEIGHT, FLORA_WIND, NICHE_MARGIN_CONIFER, NICHE_MARGIN_EDGE,
+    NICHE_MARGIN_EXPOSURE, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT,
+    NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING, NICHE_MARGIN_WETNESS,
 };
 use crate::trees::libm_sqrt;
 use crate::{HEIGHT, SEA_LEVEL};
@@ -29,6 +36,9 @@ pub enum NicheLayer {
     SunFacing,
     Hollow,
     Edge,
+    Exposure,
+    Conifer,
+    Wetness,
 }
 
 impl NicheLayer {
@@ -42,6 +52,9 @@ impl NicheLayer {
             NicheLayer::SunFacing => NICHE_MARGIN_SUN_FACING,
             NicheLayer::Hollow => NICHE_MARGIN_HOLLOW,
             NicheLayer::Edge => NICHE_MARGIN_EDGE,
+            NicheLayer::Exposure => NICHE_MARGIN_EXPOSURE,
+            NicheLayer::Conifer => NICHE_MARGIN_CONIFER,
+            NicheLayer::Wetness => NICHE_MARGIN_WETNESS,
         }
     }
 }
@@ -77,6 +90,9 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
         NicheLayer::Light => Some(light(world, x, y, z)),
         NicheLayer::Hollow => Some(hollow(world, x, z)),
         NicheLayer::Edge => Some(edge(world, x, y, z)),
+        NicheLayer::Exposure => Some(exposure(world, x, z)),
+        NicheLayer::Conifer => Some(conifer(world, x, y, z)),
+        NicheLayer::Wetness => Some(wetness(world, x, z)),
     }
 }
 
@@ -87,6 +103,49 @@ fn gradient(world: &World, x: i32, z: i32) -> (f64, f64) {
         (h(x + 1, z) - h(x - 1, z)) * 0.5,
         (h(x, z + 1) - h(x, z - 1)) * 0.5,
     )
+}
+
+/// 0 to 1 wetness index: `FLORA_WETNESS_SLOPE_WEIGHT` times how far the slope
+/// is below `FLORA_WETNESS_SLOPE_REF`, plus `FLORA_WETNESS_HOLLOW_WEIGHT`
+/// times how far [`hollow`] is below zero, as a share of
+/// `FLORA_WETNESS_HOLLOW_REF`; each term is clamped to 0..1 and so is the sum.
+pub(crate) fn wetness(world: &World, x: i32, z: i32) -> f64 {
+    let (gx, gz) = gradient(world, x, z);
+    let flat = 1.0 - libm_sqrt(gx * gx + gz * gz) / FLORA_WETNESS_SLOPE_REF;
+    let low = -hollow(world, x, z) / FLORA_WETNESS_HOLLOW_REF;
+    let biome = world.biome(x, z);
+    let bias = FLORA_WETNESS_BIAS
+        .iter()
+        .find(|b| b.0 == biome)
+        .map_or(0.0, |b| b.1);
+    let near = water_distance(world, x, z).map_or(0.0, |d| {
+        FLORA_WETNESS_WATER_WEIGHT * (1.0 - d / FLORA_WETNESS_WATER_RADIUS as f64)
+    });
+    (FLORA_WETNESS_SLOPE_WEIGHT * flat.clamp(0.0, 1.0)
+        + FLORA_WETNESS_HOLLOW_WEIGHT * low.clamp(0.0, 1.0)
+        + bias
+        + near)
+        .clamp(0.0, 1.0)
+}
+
+/// Straight-line distance to the nearest water column within
+/// `FLORA_WETNESS_WATER_RADIUS` of `(x, z)` (a circle); a column is water
+/// where its [`surface_height`] block is liquid.
+fn water_distance(world: &World, x: i32, z: i32) -> Option<f64> {
+    let r = FLORA_WETNESS_WATER_RADIUS;
+    let mut best = r * r + 1;
+    for dz in -r..=r {
+        for dx in -r..=r {
+            let d = dx * dx + dz * dz;
+            if d < best {
+                let h = surface_height(world, x + dx, z + dz);
+                if h >= 0 && is_liquid(world.get(x + dx, h, z + dz)) {
+                    best = d;
+                }
+            }
+        }
+    }
+    (best <= r * r).then(|| libm_sqrt(best as f64))
 }
 
 /// [`surface_height`] at `(x, z)` minus its mean over 8 columns (axis and
@@ -169,6 +228,57 @@ pub(crate) fn edge(world: &World, x: i32, y: i32, z: i32) -> f64 {
         }
     }
     libm_sqrt(best as f64)
+}
+
+/// Share of `FLORA_EXPOSURE_CAP` taken by water columns met walking from
+/// `(x, z)` towards `FLORA_WIND`, one rounded step at a time, before the first
+/// land column. A column is water where its [`surface_height`] block is liquid.
+pub(crate) fn exposure(world: &World, x: i32, z: i32) -> f64 {
+    // Round to nearest; the offset keeps the truncation a floor.
+    let round = |v: f64| (v + 1024.5) as i32 - 1024;
+    let mut water = 0;
+    for i in 1..=FLORA_EXPOSURE_CAP {
+        let (wx, wz) = (
+            round(i as f64 * FLORA_WIND.0),
+            round(i as f64 * FLORA_WIND.1),
+        );
+        let (px, pz) = (x + wx, z + wz);
+        let h = surface_height(world, px, pz);
+        if h < 0 || !is_liquid(world.get(px, h, pz)) {
+            break;
+        }
+        water += 1;
+    }
+    water as f64 / FLORA_EXPOSURE_CAP as f64
+}
+
+/// Share of spruce among the leaf columns within `FLORA_TREE_KIND_RADIUS` of
+/// `(x, z)` (a circle): columns with a leaf block above `y`, spruce where the
+/// topmost leaf is spruce leaves. `FLORA_CONIFER_NONE` if there is none.
+pub(crate) fn conifer(world: &World, x: i32, y: i32, z: i32) -> f64 {
+    let r = FLORA_TREE_KIND_RADIUS;
+    let (mut spruce, mut all) = (0u32, 0u32);
+    for dz in -r..=r {
+        for dx in -r..=r {
+            if dx * dx + dz * dz > r * r {
+                continue;
+            }
+            let (px, pz) = (x + dx, z + dz);
+            let top = (y + 1..HEIGHT as i32)
+                .rev()
+                .map(|y| world.get(px, y, pz))
+                .find(|&b| is_leaves(b));
+            if let Some(b) = top {
+                all += 1;
+                spruce += (b == Block::SpruceLeaves as u8) as u32;
+            }
+        }
+    }
+    if all == 0 {
+        FLORA_CONIFER_NONE
+    } else {
+        spruce as f64 / all as f64
+    }
 }
 
 /// Product of `f`'s niche responses at the column whose air cell is `top`.

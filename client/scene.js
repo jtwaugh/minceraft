@@ -15,6 +15,10 @@
 // window.frameStats() returns { frames, p50, p99, max, hitches, records } at any time:
 // max is the slowest frame in the window, hitches the frames over HITCH_MS, records
 // the work done in the last hitch frames ({ ms, meshed, remeshed, verts, ticks, chunks }).
+//
+// window.perfSpans() returns { tick, mesh, upload }, each { count, total, max } in ms
+// since the last call (then resets). The spans are performance.mark/measure pairs
+// (perfspans.js); mesh includes the uploads made inside it.
 
 import initTerrain, * as terrain from '../viewer/pkg/terrain_web.js';
 import initGame, * as game from './pkg/game_web.js';
@@ -27,7 +31,7 @@ import { raftBoxes, raftMatrix } from './raftmodel.js';
 import { itemBoxes, itemDraws } from './itemmodel.js';
 import { heldBoxes, heldDraw } from './helditem.js';
 import { SCENE_TEXTURES } from './scenetextures.js';
-import { loadTiles, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
+import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
@@ -37,9 +41,10 @@ import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
 import { mountHint, hintScale } from './hintui.js';
 import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
-import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
+import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
+import { createSpans } from './perfspans.js';
 import { meshRegionCpu } from './regionmesh.js';
 import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs } from './view.js';
@@ -319,7 +324,10 @@ function quadIndexBuffer(quads) {
 
 // Work done this frame, kept with the frame time when the frame is a hitch.
 let work = { meshed: 0, remeshed: 0, verts: 0, ticks: 0, chunks: 0 };
-function upload({ verts, faces }, offset) {
+const spans = createSpans();
+window.perfSpans = spans.take;
+const upload = (buf, offset) => spans.span('upload', () => uploadBuffers(buf, offset));
+function uploadBuffers({ verts, faces }, offset) {
   if (!faces) return null;
   work.verts += verts.byteLength / VERTEX_BYTES;
   const ib = quadIndexBuffer(faces);
@@ -371,7 +379,7 @@ const names = [];
 const legendJson = terrain.legend();
 for (const b of JSON.parse(legendJson).blocks) names[b.id] = b.name;
 const faceLayer = await loadTiles(gl, B, names, '../viewer/textures.json');
-const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIANTS));
+const ctx = legendContext(legendJson, faceLayer, variantTable(LAYER_NAMES, VARIANTS), frontLayers(B));
 // Textured-model drawer (modelgl.js); nothing is drawn with it yet. Without the
 // export it still builds, with every face grey.
 const tileset = await fetch('../viewer/textures.json').then((r) => r.json()).catch(() => ({ palette: {}, batches: {} }));
@@ -411,7 +419,8 @@ const setSnow = (key, cells) => {
   snowCells = [...regionSnow.values()].flat();
 };
 const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); };
-function meshRegion({ rx, rz }, remesh = false) {
+const meshRegion = (r, remesh) => spans.span('mesh', () => meshRegionNow(r, remesh));
+function meshRegionNow({ rx, rz }, remesh = false) {
   work[remesh ? 'remeshed' : 'meshed']++;
   const { mesh: m, blocks, tints, origin: [x, z] } = meshRegionCpu({ walk, terrain, ctx, seed, blendRadius }, { rx, rz });
   if (rx === 0 && rz === 0 && !skyReady) skyColor = skyTarget = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
@@ -528,7 +537,7 @@ function render(now) {
   remeshFarm();
 
   const snow = reducedMotion.matches ? null : { cells: snowCells, phase: swayPhase(now, false) };
-  const { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow);
+  const { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = spans.span('tick', () => controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow));
   work.ticks = ticks;
   if (regions) {
     work.chunks = regions.chunks;
@@ -634,6 +643,7 @@ function render(now) {
       (hitch ? `${hitch}\n` : '') +
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 cheated: ${walk.cheated() ? 'yes' : 'no'}
+${formatTime(walk.time_of_day(), walk.day_frozen())}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;

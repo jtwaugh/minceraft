@@ -34,6 +34,19 @@ pub struct RouteParams {
     /// Cold is `T < cold_below`, warm is `T > warm_above` (decided in #844).
     pub cold_below: f64,
     pub warm_above: f64,
+    /// Mainland coast (villages-and-villagers Phase B): distance from the
+    /// channel centre line to where land rises, the rise length, the land
+    /// height above sea level, the land width beyond the ramp, the fade-out
+    /// length and the arc length over which these vary.
+    pub coast_near_min: f64,
+    pub coast_near_max: f64,
+    pub coast_ramp_min: f64,
+    pub coast_ramp_max: f64,
+    pub coast_height_min: f64,
+    pub coast_height_max: f64,
+    pub coast_width: f64,
+    pub coast_fade: f64,
+    pub coast_wobble_length: f64,
 }
 
 include!(concat!(env!("OUT_DIR"), "/route.rs"));

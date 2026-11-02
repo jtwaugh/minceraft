@@ -393,6 +393,7 @@ fn game_blocks_have_dense_ids_and_are_never_generated() {
         (Block::Net, 73, Collision::None, false),
         (Block::Counter, 74, Collision::Full, true),
         (Block::PlateRack, 75, Collision::Full, true),
+        (Block::Chest, 83, Collision::Full, true),
     ];
     for (b, id, collision, opaque) in game {
         assert_eq!(b as u8, id);
@@ -608,4 +609,37 @@ fn legend_exposes_blend_radius() {
 #[test]
 fn legend_exposes_blend_shade_keys() {
     assert!(LEGEND_JSON.contains(",\"shade_mix\":0.25,\"shade_radius\":1}"));
+}
+
+#[test]
+fn dock_blocks_load_by_name_as_full_opaque_cubes() {
+    for (name, id) in [("dock_planks", 81), ("dock_post", 82)] {
+        assert_eq!(block_id(name), Some(id));
+        let info = &BLOCK_INFO[id as usize];
+        assert_eq!(info.collision, Collision::Full);
+        assert_eq!(info.opacity, 255);
+        assert!(info.opaque_cube && !info.liquid && !info.waterlogged);
+    }
+}
+
+#[test]
+fn existing_block_ids_are_unchanged() {
+    for (name, id) in [
+        ("air", 0),
+        ("stone", 1),
+        ("thatch", 69),
+        ("barrel", 70),
+        ("plank_step", 71),
+        ("floe_ice", 76),
+        ("kelp_0", 77),
+        ("oyster", 79),
+        ("scallop", 80),
+    ] {
+        assert_eq!(block_id(name), Some(id), "{name}");
+    }
+    let mut names: Vec<_> = BLOCK_INFO.iter().map(|b| b.name).collect();
+    assert_eq!(names.len(), 84);
+    names.sort();
+    names.dedup();
+    assert_eq!(names.len(), 84);
 }

@@ -20,6 +20,7 @@ pub enum DataFile {
     FishBodies,
     FishSpawn,
     Wind,
+    Day,
 }
 
 impl DataFile {
@@ -38,6 +39,7 @@ impl DataFile {
             DataFile::FishBodies => "fish_bodies.toml",
             DataFile::FishSpawn => "fish_spawn.toml",
             DataFile::Wind => "wind.toml",
+            DataFile::Day => "day.toml",
         }
     }
 }

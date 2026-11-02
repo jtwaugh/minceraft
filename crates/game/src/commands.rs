@@ -407,7 +407,70 @@ pub fn default_registry() -> Result<Registry<Walker>, RegistryError> {
         resume_command(),
         step_command(),
         respawn_command(),
+        time_command(),
     ])
+}
+
+/// `time`, `time set <fraction>`, `time freeze`, `time resume`
+/// (docs/design/day-night-cycle.md Phase A). Not a cheat, like `pause`: the
+/// clock gives no advantage, and the cheat flag is per command so it could not
+/// tell `time` (a read) from `time set`.
+pub fn time_command() -> Command<Walker> {
+    Command {
+        name: "time",
+        aliases: &[],
+        args: &[
+            ArgSpec {
+                name: "action",
+                kind: ArgKind::Word,
+                optional: true,
+            },
+            ArgSpec {
+                name: "fraction",
+                kind: ArgKind::Word,
+                optional: true,
+            },
+        ],
+        help: "show the time of day; time set <0..1>, time freeze, time resume",
+        states: ALL_STATES,
+        cheat: false,
+        handler: time,
+    }
+}
+
+fn time(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    let word = |i: usize| match args.get(i) {
+        Some(Arg::Word(w)) => Some(w.as_str()),
+        _ => None,
+    };
+    match (word(0), word(1)) {
+        (None, _) => {
+            let frozen = if ctx.world.day_frozen() {
+                " (frozen)"
+            } else {
+                ""
+            };
+            Ok(vec![format!("time {:.3}{frozen}", ctx.world.time_of_day())])
+        }
+        (Some("set"), Some(v)) => {
+            let f: f64 = v.parse().map_err(|_| format!("{v} is not a number"))?;
+            if !(0.0..=1.0).contains(&f) {
+                return Err(format!("{v} is outside 0 to 1"));
+            }
+            ctx.world.set_time_of_day(f);
+            Ok(vec![format!("time set to {:.3}", ctx.world.time_of_day())])
+        }
+        (Some("set"), None) => Err("usage: time set <fraction>".into()),
+        (Some("freeze"), None) => {
+            ctx.world.set_day_frozen(true);
+            Ok(vec!["time frozen".into()])
+        }
+        (Some("resume"), None) => {
+            ctx.world.set_day_frozen(false);
+            Ok(vec!["time running".into()])
+        }
+        _ => Err("usage: time [set <fraction> | freeze | resume]".into()),
+    }
 }
 
 /// `respawn`: after dying, return to the start spawn with full health
@@ -969,12 +1032,15 @@ mod default_registry_tests {
     use super::*;
 
     #[test]
-    fn default_registry_has_exactly_the_nine_commands() {
+    fn default_registry_has_exactly_the_ten_commands() {
         let reg = default_registry().unwrap();
         let names: Vec<&str> = reg.iter().map(|c| c.name).collect();
         assert_eq!(
             names,
-            vec!["help", "give", "spawn", "clear", "tp", "pause", "resume", "step", "respawn"]
+            vec![
+                "help", "give", "spawn", "clear", "tp", "pause", "resume", "step", "respawn",
+                "time"
+            ]
         );
         assert!(!reg.get("help").unwrap().cheat);
     }
@@ -1408,5 +1474,77 @@ mod respawn_tests {
             .iter()
             .any(|e| matches!(e, GameEvent::PlayerRespawned { .. })));
         assert!(!w.cheated());
+    }
+}
+
+#[cfg(test)]
+mod time_tests {
+    use super::*;
+    use crate::input::TickInput;
+
+    fn walker() -> Walker {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(default_registry().unwrap());
+        w
+    }
+
+    fn run(w: &mut Walker, line: &str) -> Vec<String> {
+        w.submit_command(line);
+        w.tick(&TickInput::default());
+        w.drain_command_output()
+    }
+
+    #[test]
+    fn show_and_set() {
+        let mut w = walker();
+        assert_eq!(run(&mut w, "time set 0.5"), vec!["time set to 0.500"]);
+        assert_eq!(run(&mut w, "time")[0], "time 0.500");
+        assert!(!w.cheated());
+    }
+
+    #[test]
+    fn bad_arguments_change_nothing() {
+        let mut w = walker();
+        run(&mut w, "time set 0.25");
+        run(&mut w, "time freeze");
+        for line in [
+            "time set 1.5",
+            "time set -0.1",
+            "time set abc",
+            "time set",
+            "time nope",
+        ] {
+            let out = run(&mut w, line);
+            assert_eq!(out.len(), 1, "{line}");
+            assert!(!out[0].starts_with("time "), "{line}: {out:?}");
+        }
+        assert!((w.time_of_day() - 0.25).abs() < 1e-3);
+        assert!(w.day_frozen());
+    }
+
+    #[test]
+    fn freeze_holds_and_resume_runs() {
+        let mut w = walker();
+        run(&mut w, "time set 0.5");
+        assert_eq!(run(&mut w, "time freeze"), vec!["time frozen"]);
+        assert_eq!(run(&mut w, "time freeze"), vec!["time frozen"]);
+        let held = w.time_of_day();
+        for _ in 0..20 {
+            w.tick(&TickInput::default());
+        }
+        assert_eq!(w.time_of_day(), held);
+        assert!(run(&mut w, "time")[0].ends_with("(frozen)"));
+        assert_eq!(run(&mut w, "time resume"), vec!["time running"]);
+        assert_eq!(run(&mut w, "time resume"), vec!["time running"]);
+        for _ in 0..20 {
+            w.tick(&TickInput::default());
+        }
+        assert_ne!(w.time_of_day(), held);
+    }
+
+    #[test]
+    fn help_lists_time() {
+        let mut w = walker();
+        assert!(run(&mut w, "help").iter().any(|l| l.contains("time")));
     }
 }

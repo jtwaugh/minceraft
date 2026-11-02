@@ -409,7 +409,7 @@ mod tests {
         e.requires = Some("near_water".into());
         assert!(check(&[e]).is_ok());
         let mut e = entry();
-        e.niche = vec![("wetness".into(), vec![Some(0.0), Some(1.0)])];
+        e.niche = vec![("dampness".into(), vec![Some(0.0), Some(1.0)])];
         assert!(check(&[e]).unwrap_err().contains("unknown niche layer"));
         let mut e = entry();
         e.niche = vec![("light".into(), vec![Some(0.9), Some(0.5)])];
@@ -419,7 +419,7 @@ mod tests {
             e.niche = vec![("slope".into(), bad)];
             assert!(check(&[e]).unwrap_err().contains("two numbers"));
         }
-        for layer in ["light", "edge"] {
+        for layer in ["light", "edge", "exposure"] {
             let mut e = entry();
             e.niche = vec![(layer.into(), vec![Some(0.5), Some(0.5)])];
             assert!(check(&[e]).is_ok());

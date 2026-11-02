@@ -1,0 +1,23 @@
+# The day and night cycle. See docs/design/day-night-cycle.md Phase A.
+# The day has its own length, independent of phases.toml.
+# `length_seconds` is a positive integer (20 ticks per second).
+# `start_fraction` is the time of day at tick 0, in 0..1, where 0 is midnight
+# and 0.5 is noon.
+
+length_seconds = 600
+start_fraction = 0.3
+
+# The sun's path. `sun_tilt_degrees` leans the orbit plane away from straight
+# overhead: 0 passes through the zenith at noon, and the noon height is
+# 90 - tilt degrees. It must be from 0 up to (not including) 90.
+# `sun_azimuth_degrees` turns the whole path about the vertical axis, in 0..360.
+sun_tilt_degrees = 25.0
+sun_azimuth_degrees = 0.0
+
+# Scene brightness, 0..1. `min_daylight` is the brightness at night (dark but
+# playable). `dawn_width` and `dusk_width` are fractions of the day: dawn is a
+# smooth ramp centred on sunrise (0.25) and dusk one centred on sunset (0.75).
+# Each is above 0 and up to 0.5, so dawn is over and dusk not begun at noon.
+min_daylight = 0.15
+dawn_width = 0.1
+dusk_width = 0.1

@@ -2,6 +2,11 @@
 //! See docs/design/wind.md Phase A.
 
 use crate::data_error::{DataError, DataErrorKind, DataFile};
+use crate::wind_channel::ChannelParams;
+use crate::wind_exposure::ExposureParams;
+use crate::wind_height::WindHeightParams;
+use crate::wind_roughness_config::ROUGHNESS_KEYS;
+use crate::wind_shelter::ShelterParams;
 
 const DEFAULT_WIND: &str = include_str!("../../../data/wind.toml");
 
@@ -15,8 +20,6 @@ pub struct WindConfig {
     pub speed_scale: f64,
     /// Feature size of the gust noise, blocks.
     pub gust_size: f64,
-    /// Seconds for the gust noise to change by one feature.
-    pub gust_time_scale: f64,
     /// `g` in `speed · (1 + g·gust)`.
     pub gust_strength: f64,
     /// Largest sideways push from gusts, as a fraction of the speed.
@@ -24,18 +27,45 @@ pub struct WindConfig {
     /// Wind speed limits, blocks per second.
     pub speed_floor: f64,
     pub speed_ceiling: f64,
+    /// Smoothed ground height lattice.
+    pub height: WindHeightParams,
+    /// Blocks added to `H` for the surface height of a caller without one.
+    pub surface_offset: f64,
+    /// Speed factor from height above the wide mean.
+    pub exposure: ExposureParams,
+    /// Upwind shelter.
+    pub shelter: ShelterParams,
+    /// Turning toward valley contours.
+    pub channel: ChannelParams,
 }
 
-const KEYS: [&str; 9] = [
+const KEYS: [&str; 26] = [
     "front_size",
     "front_drift",
     "speed_scale",
     "gust_size",
-    "gust_time_scale",
     "gust_strength",
     "direction_wobble",
     "speed_floor",
     "speed_ceiling",
+    "height_cell",
+    "height_step",
+    "height_radius",
+    "height_radius_wide",
+    "surface_offset",
+    "exposure_gain",
+    "exposure_floor",
+    "exposure_ceiling",
+    "exposure_ease_len",
+    "shelter_distances",
+    "shelter_floor",
+    "shelter_rise_min",
+    "shelter_rise_max",
+    "shelter_epsilon",
+    "channel_strength",
+    "channel_depth_ramp",
+    "channel_grad_ramp",
+    "channel_delta",
 ];
 
 fn err(kind: DataErrorKind) -> DataError {
@@ -69,6 +99,103 @@ fn non_negative(root: &toml::value::Table, key: &str) -> Result<f64, DataError> 
         .ok_or_else(|| invalid(format!("`{key}` must be a finite number, zero or above")))
 }
 
+/// A whole number of blocks that fits in `i32`, zero or above.
+fn blocks(root: &toml::value::Table, key: &str) -> Result<i32, DataError> {
+    get(root, key)?
+        .as_integer()
+        .and_then(|n| i32::try_from(n).ok())
+        .filter(|n| *n >= 0)
+        .ok_or_else(|| {
+            invalid(format!(
+                "`{key}` must be a whole number of blocks, zero or above"
+            ))
+        })
+}
+
+fn height_params(root: &toml::value::Table) -> Result<WindHeightParams, DataError> {
+    let p = WindHeightParams {
+        cell: blocks(root, "height_cell")?,
+        step: blocks(root, "height_step")?,
+        radius: blocks(root, "height_radius")?,
+        radius_wide: blocks(root, "height_radius_wide")?,
+    };
+    if p.step == 0 || p.step % 4 != 0 {
+        return Err(invalid("`height_step` must be a multiple of 4".into()));
+    }
+    if p.cell == 0 || p.cell % p.step != 0 {
+        return Err(invalid(
+            "`height_cell` must be a multiple of `height_step`".into(),
+        ));
+    }
+    if p.radius % p.step != 0 {
+        return Err(invalid(
+            "`height_radius` must be a multiple of `height_step`".into(),
+        ));
+    }
+    if p.radius_wide % p.step != 0 {
+        return Err(invalid(
+            "`height_radius_wide` must be a multiple of `height_step`".into(),
+        ));
+    }
+    if p.radius_wide < p.radius {
+        return Err(invalid("need height_radius <= height_radius_wide".into()));
+    }
+    Ok(p)
+}
+
+fn exposure_params(root: &toml::value::Table) -> Result<ExposureParams, DataError> {
+    let p = ExposureParams {
+        gain: positive(root, "exposure_gain")?,
+        floor: positive(root, "exposure_floor")?,
+        ceiling: positive(root, "exposure_ceiling")?,
+        ease_len: non_negative(root, "exposure_ease_len")?,
+    };
+    if p.floor > p.ceiling {
+        return Err(invalid("need exposure_floor <= exposure_ceiling".into()));
+    }
+    Ok(p)
+}
+
+fn shelter_params(root: &toml::value::Table) -> Result<ShelterParams, DataError> {
+    let distances = get(root, "shelter_distances")?
+        .as_array()
+        .filter(|a| !a.is_empty())
+        .and_then(|a| a.iter().map(|v| finite(v).filter(|n| *n > 0.0)).collect())
+        .ok_or_else(|| {
+            invalid(
+                "`shelter_distances` must be a non-empty list of finite numbers above zero".into(),
+            )
+        })?;
+    let floor = non_negative(root, "shelter_floor")?;
+    if floor > 1.0 {
+        return Err(invalid("`shelter_floor` must be in [0, 1]".into()));
+    }
+    let p = ShelterParams {
+        distances,
+        floor,
+        rise_min: non_negative(root, "shelter_rise_min")?,
+        rise_max: positive(root, "shelter_rise_max")?,
+        epsilon: positive(root, "shelter_epsilon")?,
+    };
+    if p.rise_max <= p.rise_min {
+        return Err(invalid("need shelter_rise_min < shelter_rise_max".into()));
+    }
+    Ok(p)
+}
+
+fn channel_params(root: &toml::value::Table) -> Result<ChannelParams, DataError> {
+    let strength = non_negative(root, "channel_strength")?;
+    if strength > 1.0 {
+        return Err(invalid("`channel_strength` must be in [0, 1]".into()));
+    }
+    Ok(ChannelParams {
+        strength,
+        depth_ramp: positive(root, "channel_depth_ramp")?,
+        grad_ramp: positive(root, "channel_grad_ramp")?,
+        delta: positive(root, "channel_delta")?,
+    })
+}
+
 impl WindConfig {
     /// The shipped `data/wind.toml`.
     pub fn default_from_data() -> Result<WindConfig, DataError> {
@@ -78,7 +205,10 @@ impl WindConfig {
     pub fn parse(text: &str) -> Result<WindConfig, DataError> {
         let root: toml::value::Table = toml::from_str(text)
             .map_err(|e: toml::de::Error| err(DataErrorKind::Parse(e.to_string())))?;
-        if let Some(key) = root.keys().find(|k| !KEYS.contains(&k.as_str())) {
+        if let Some(key) = root
+            .keys()
+            .find(|k| !KEYS.contains(&k.as_str()) && !ROUGHNESS_KEYS.contains(&k.as_str()))
+        {
             return Err(invalid(format!("unknown key `{key}`")));
         }
         let front_drift = get(&root, "front_drift")?
@@ -91,11 +221,16 @@ impl WindConfig {
             front_drift,
             speed_scale: positive(&root, "speed_scale")?,
             gust_size: positive(&root, "gust_size")?,
-            gust_time_scale: positive(&root, "gust_time_scale")?,
             gust_strength: non_negative(&root, "gust_strength")?,
             direction_wobble: non_negative(&root, "direction_wobble")?,
             speed_floor: non_negative(&root, "speed_floor")?,
             speed_ceiling: positive(&root, "speed_ceiling")?,
+            height: height_params(&root)?,
+            surface_offset: finite(get(&root, "surface_offset")?)
+                .ok_or_else(|| invalid("`surface_offset` must be a finite number".into()))?,
+            exposure: exposure_params(&root)?,
+            shelter: shelter_params(&root)?,
+            channel: channel_params(&root)?,
         };
         if config.speed_floor > config.speed_ceiling {
             return Err(invalid("need speed_floor <= speed_ceiling".into()));
@@ -125,7 +260,7 @@ mod tests {
             "front passes in under a minute"
         );
         assert!(c.gust_size < c.front_size);
-        assert!(c.speed_scale > 0.0 && c.gust_time_scale > 0.0);
+        assert!(c.speed_scale > 0.0);
         assert!(c.gust_strength >= 0.0 && c.direction_wobble >= 0.0);
         assert!(c.speed_floor <= c.speed_ceiling);
     }
@@ -156,7 +291,6 @@ mod tests {
             ("front_drift = [4.0, 1.5]", "front_drift = 4.0"),
             ("speed_scale = 6.0", "speed_scale = 0.0"),
             ("gust_size = 48", "gust_size = -48"),
-            ("gust_time_scale = 3.0", "gust_time_scale = 0"),
             ("gust_strength = 0.5", "gust_strength = -0.5"),
             ("gust_strength = 0.5", "gust_strength = inf"),
             ("direction_wobble = 0.2", "direction_wobble = -0.2"),
@@ -172,6 +306,220 @@ mod tests {
             assert_eq!(e.file, DataFile::Wind);
             assert!(e.to_string().starts_with("wind.toml: "), "{e}");
             assert_err_contains(Err::<(), _>(e), &format!("`{key}` must be"));
+        }
+    }
+
+    #[test]
+    fn shipped_terrain_keys_build_params() {
+        let c = WindConfig::default_from_data().unwrap();
+        assert_eq!(
+            c.height,
+            WindHeightParams {
+                cell: 64,
+                step: 8,
+                radius: 16,
+                radius_wide: 48
+            }
+        );
+        assert_eq!(c.exposure.gain, 0.02);
+        assert!(c.exposure.floor < 1.0 && 1.0 < c.exposure.ceiling);
+    }
+
+    #[test]
+    fn rejects_bad_terrain_values() {
+        let cases = [
+            (
+                "height_cell = 64",
+                "height_cell = 60",
+                "`height_cell` must be a multiple",
+            ),
+            (
+                "height_cell = 64",
+                "height_cell = 0",
+                "`height_cell` must be a multiple",
+            ),
+            (
+                "height_cell = 64",
+                "height_cell = 64.0",
+                "`height_cell` must be a whole",
+            ),
+            (
+                "height_cell = 64",
+                "height_cell = -64",
+                "`height_cell` must be a whole",
+            ),
+            (
+                "height_step = 8",
+                "height_step = 6",
+                "`height_step` must be a multiple of 4",
+            ),
+            (
+                "height_step = 8",
+                "height_step = 0",
+                "`height_step` must be a multiple of 4",
+            ),
+            (
+                "height_radius = 16",
+                "height_radius = 12",
+                "`height_radius` must be a multiple",
+            ),
+            (
+                "height_radius_wide = 48",
+                "height_radius_wide = 44",
+                "`height_radius_wide` must be a multiple",
+            ),
+            (
+                "height_radius_wide = 48",
+                "height_radius_wide = 8",
+                "need height_radius <= height_radius_wide",
+            ),
+            (
+                "surface_offset = 1.0",
+                "surface_offset = \"up\"",
+                "`surface_offset` must be a finite",
+            ),
+            (
+                "exposure_gain = 0.02",
+                "exposure_gain = 0",
+                "`exposure_gain` must be",
+            ),
+            (
+                "exposure_gain = 0.02",
+                "exposure_gain = inf",
+                "`exposure_gain` must be",
+            ),
+            (
+                "exposure_floor = 0.6",
+                "exposure_floor = nan",
+                "`exposure_floor` must be",
+            ),
+            (
+                "exposure_ceiling = 1.5",
+                "exposure_ceiling = -1",
+                "`exposure_ceiling` must be",
+            ),
+            (
+                "exposure_ceiling = 1.5",
+                "exposure_ceiling = 0.5",
+                "need exposure_floor <= exposure_ceiling",
+            ),
+            (
+                "exposure_ease_len = 4.0",
+                "exposure_ease_len = -1",
+                "`exposure_ease_len` must be",
+            ),
+            (
+                "exposure_ease_len = 4.0",
+                "exposure_ease_len = inf",
+                "`exposure_ease_len` must be",
+            ),
+        ];
+        for (from, to, msg) in cases {
+            assert!(DEFAULT_WIND.contains(from), "{from}");
+            assert_err_contains(parse(&DEFAULT_WIND.replace(from, to)), msg);
+        }
+    }
+
+    #[test]
+    fn shipped_shelter_and_channel_keys_build_params() {
+        let c = WindConfig::default_from_data().unwrap();
+        assert_eq!(c.shelter.distances, vec![8.0, 16.0, 32.0]);
+        assert_eq!(c.shelter.floor, 0.3);
+        assert_eq!((c.shelter.rise_min, c.shelter.rise_max), (0.0, 0.5));
+        assert_eq!(c.shelter.epsilon, 0.5);
+        assert_eq!(c.channel.strength, 0.8);
+        assert_eq!(c.channel.depth_ramp, 6.0);
+        assert_eq!(c.channel.grad_ramp, 0.2);
+        assert_eq!(c.channel.delta, 2.0);
+    }
+
+    #[test]
+    fn rejects_bad_shelter_and_channel_values() {
+        let cases = [
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = []",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = [8.0, 0]",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = [8.0, -4]",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_distances = [8.0, 16.0, 32.0]",
+                "shelter_distances = 8.0",
+                "`shelter_distances` must be",
+            ),
+            (
+                "shelter_floor = 0.3",
+                "shelter_floor = 1.5",
+                "`shelter_floor` must be in [0, 1]",
+            ),
+            (
+                "shelter_floor = 0.3",
+                "shelter_floor = -0.1",
+                "`shelter_floor` must be",
+            ),
+            (
+                "shelter_rise_max = 0.5",
+                "shelter_rise_max = 0.0",
+                "`shelter_rise_max` must be",
+            ),
+            (
+                "shelter_rise_min = 0.0",
+                "shelter_rise_min = 0.5",
+                "need shelter_rise_min < shelter_rise_max",
+            ),
+            (
+                "shelter_rise_max = 0.5",
+                "shelter_rise_max = inf",
+                "`shelter_rise_max` must be",
+            ),
+            (
+                "shelter_epsilon = 0.5",
+                "shelter_epsilon = 0",
+                "`shelter_epsilon` must be",
+            ),
+            (
+                "shelter_epsilon = 0.5",
+                "shelter_epsilon = -1",
+                "`shelter_epsilon` must be",
+            ),
+            (
+                "channel_strength = 0.8",
+                "channel_strength = 1.1",
+                "`channel_strength` must be in [0, 1]",
+            ),
+            (
+                "channel_strength = 0.8",
+                "channel_strength = -0.1",
+                "`channel_strength` must be",
+            ),
+            (
+                "channel_depth_ramp = 6.0",
+                "channel_depth_ramp = 0",
+                "`channel_depth_ramp` must be",
+            ),
+            (
+                "channel_grad_ramp = 0.2",
+                "channel_grad_ramp = nan",
+                "`channel_grad_ramp` must be",
+            ),
+            (
+                "channel_delta = 2.0",
+                "channel_delta = -2",
+                "`channel_delta` must be",
+            ),
+        ];
+        for (from, to, msg) in cases {
+            assert!(DEFAULT_WIND.contains(from), "{from}");
+            assert_err_contains(parse(&DEFAULT_WIND.replace(from, to)), msg);
         }
     }
 
@@ -192,7 +540,7 @@ mod tests {
     #[test]
     fn rejects_bad_shape() {
         assert_parse_error(parse("front_size =").unwrap_err(), DataFile::Wind);
-        let text = format!("{DEFAULT_WIND}colour = 3\n");
+        let text = format!("colour = 3\n{DEFAULT_WIND}");
         assert_err_contains(parse(&text), "unknown key `colour`");
     }
 }

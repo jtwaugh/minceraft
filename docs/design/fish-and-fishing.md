@@ -6,7 +6,7 @@ source: "#1523"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
   E: todo
@@ -14,7 +14,7 @@ phases:
 
 ## Current state
 
-- **Phase B partly built (plan #1601).** `crates/game` has `fish_spawn_config.rs`, `fish_columns.rs`, `fish_entities.rs`, `fish_spawner.rs`, `fish_steer.rs` and `fish_world.rs`, tested headless by `crates/game/tests/fish_days.rs`. See the Phase B reconciliation note for what is missing.
+- **Phase B done (plan #1833).** `crates/game` has `fish_spawn_config.rs`, `fish_columns.rs`, `fish_entities.rs`, `fish_spawner.rs`, `fish_steer.rs` and `fish_world.rs`, tested headless by `crates/game/tests/fish_days.rs` (plan #1601: #1663, #1665, #1666, #1668, #1675, #1677; stock reset on entering gathering: #1841). `FishWorld` is still called only from tests, not the game tick; Phases C and D wire it when a consumer exists.
 - **Phase A done (plan #1534).** `data/fish.toml` ships mackerel, salmon and tuna (#1586), the four raw fish items are in `data/items.toml` and can be given and carried (#1576), and `data/fish_bodies.toml` holds the game-side body data, read by `crates/game/src/fish_bodies.rs` (#1594). The bullets below that say `data/fish.toml` has no species or `data/items.toml` has no fish items predate this.
 - **Spawn query exists, no species.** `species_for(&FishColumn)` and the `data/fish.toml` loader are in `crates/layout/src/fish.rs` (`Fish::shipped`, `Fish::species_for`); `data/fish.toml` is schema comments only (decided in #93). `FishColumn` carries habitat, temperature and depth; `Layout::habitat_map` (`crates/layout/src/habitat_map.rs`) produces them per region. Habitat ids in `data/habitats.toml`: `frozen`, `warm_shallows`, `deep_water`, `rocky_shore`, `cold_open`, `temperate_open`.
 - **Nothing in `crates/game` uses fish or habitats.** `crates/game` depends on `layout` with `default-features = false` and has no habitat or `species_for` call.
@@ -30,7 +30,7 @@ phases:
 
 ## Reconciliation notes
 
-**Phase B still incomplete (plan #1601).** Plan #1601 is closed: the data and loader (#1663), the habitat column accessor (#1665), the entity store (#1666), swimming, schooling and scatter (#1668), the spawner with stock and despawn (#1675) and `FishWorld` with the multi-day headless test (`crates/game/tests/fish_days.rs`, #1677) are merged. Missing: the stock reset on the tick the clock enters gathering, which section 3.1 and Phase B's done-when ("the stock resets each morning") require. `FishSpawner` only returns despawned fish to the stock (`crates/game/src/fish_spawner.rs`); nothing refills it at the start of a day, and `fish_days.rs` does not check a reset (plan #1601's ticket 1607 left it out). Also, `FishWorld` is only called from that test, not from the game tick.
+**Phase B was incomplete after plan #1601; resolved by plan #1833.** The missing stock reset on the tick the clock enters gathering was added in #1841 (`FishSpawner::enters_gathering` in `crates/game/src/fish_spawner.rs`). `FishWorld` is not yet called from the game tick; Phase C/D tickets need to do that.
 
 1. **Squid rules.** Section 2.1 says squid "behave as SPEC 14's water spawn describes". SPEC 14 gives only a weight (10) and a population cap (5); it says nothing about swimming, depth or where squid spawn. Suggest: Phase E uses the cap and weight from SPEC 14 and takes squid movement and body data from this game's own data file, like fish; any further Beta fact is a `research` `spec-question`, not filled in by the implementer.
 2. **No day counter.** Sections 3.1 and 6 say stock resets "at the start of each day". `PhaseClock` only knows gathering and service. Suggest: a day is one gathering plus one service, and the reset happens on the tick the clock enters gathering (Phase B derives it from `PhaseClock::at`). See section 3.1.

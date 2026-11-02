@@ -20,9 +20,14 @@
 //     size    [width, height] of the box
 //   readItems(walk) -> [{ id, name, pos, size }]
 //     pos     centre of the item's box; size the box's edge length
+//   readFish(walk) -> [{ id, species, pos, heading, size }]
+//     pos     centre of the bottom face; heading in degrees; size [width, height] of the box
 //   spawnTestAnimals(walk, kinds) puts animals on the raft scene's islet
 //   faceAnimal(walk, look) -> [dx, dy] mouse movement that turns `look` ({ yaw, pitch })
 //     to the first animal's middle
+
+//   formatTime(fraction, frozen) -> "HH:MM (0.xxx)", plus " frozen" when the clock is held
+//     fraction 0..1 with 0 midnight; the clock never prints 24:00
 
 export const FACES = ['bottom', 'top', 'north', 'south', 'west', 'east'];
 const KINDS = ['none', 'block', 'entity'];
@@ -88,6 +93,14 @@ export function readAnimals(walk) {
   });
 }
 
+export function readFish(walk) {
+  const rows = Array.from(walk.fish()), species = walk.fish_species();
+  return species.map((name, i) => {
+    const [id, x, y, z, heading, w, h] = rows.slice(i * 7, i * 7 + 7);
+    return { id, species: name, pos: [x, y, z], heading, size: [w, h] };
+  });
+}
+
 export function readItems(walk) {
   const rows = Array.from(walk.items()), names = walk.item_names();
   return names.map((name, i) => {
@@ -114,4 +127,11 @@ export function faceAnimal(walk, { yaw, pitch }, sensitivity = 0.0025) {
   let dyaw = want[0] - yaw;
   dyaw -= 2 * Math.PI * Math.round(dyaw / (2 * Math.PI));
   return [Math.round(dyaw / sensitivity), Math.round(-(want[1] - pitch) / sensitivity)];
+}
+
+export function formatTime(fraction, frozen) {
+  const minutes = Math.min(1439, Math.floor(fraction * 1440));
+  const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  return `time ${hh}:${mm} (${fraction.toFixed(3)})${frozen ? ' frozen' : ''}`;
 }

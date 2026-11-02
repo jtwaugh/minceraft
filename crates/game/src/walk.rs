@@ -8,8 +8,11 @@ use crate::animals::Animals;
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::commands::{run_line, GameState, Registry};
 use crate::crops::Crops;
+use crate::day::DayClock;
 use crate::events::GameEvent;
 use crate::farm::{FarmTile, FarmWorld};
+use crate::fish_entities::FishStore;
+use crate::fish_world::FishWorld;
 use crate::forage::{Forage, ForageConfig, Forager};
 use crate::growth::grow_crops;
 use crate::hands::{Hands, HandsConfig};
@@ -149,6 +152,10 @@ const FIRST_ITEM_ID: crate::targeting::EntityId = 1 << 20;
 const FIRST_ANIMAL_ID: crate::targeting::EntityId = 1 << 24;
 /// Fixed seed for animal wandering until the world seed reaches the walker.
 const ANIMAL_SEED: u64 = 0;
+/// Fish entity ids start here, above the animal ids.
+const FIRST_FISH_ID: crate::targeting::EntityId = 1 << 28;
+/// Fixed seed for the fish until the world seed reaches the walker.
+const FISH_SEED: u64 = 0;
 const FORAGE_SEED: u64 = 1;
 const TILL_SEED: u64 = 2;
 const HARVEST_SEED: u64 = 3;
@@ -187,6 +194,7 @@ pub struct Walker {
     anim: Hands,
     items: ItemStore,
     animals: AnimalStore,
+    fish: FishWorld,
     forager: Forager,
     tiller: Tiller,
     crops: Crops,
@@ -200,6 +208,11 @@ pub struct Walker {
     /// Ticks stepped so far, for cooldowns.
     sim_tick: u64,
     phases: PhaseClock,
+    day: DayClock,
+    /// Ticks added to `sim_tick` for the time of day, kept below the day length.
+    day_offset: u64,
+    /// While set, the offset backs off one tick per tick so the time holds.
+    day_frozen: bool,
     item_table: Items,
     state: PlayerState,
     /// Test override of the derived held thing.
@@ -253,6 +266,8 @@ impl Walker {
                 FIRST_ANIMAL_ID,
                 ANIMAL_SEED,
             ),
+            fish: FishWorld::default_from_data(FISH_SEED, FIRST_FISH_ID)
+                .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
             tiller: Tiller::new(TillConfig::default_from_data(), TILL_SEED),
             crops: Crops::default_crops(),
@@ -263,6 +278,9 @@ impl Walker {
             sim_tick: 0,
             phases: PhaseClock::default_phases()
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+            day: DayClock::default_day().map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+            day_offset: 0,
+            day_frozen: false,
             item_table: Items::default_items(),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
@@ -333,11 +351,52 @@ impl Walker {
         self.phases.at(self.sim_tick)
     }
 
+    /// The day clock, for time of day at an arbitrary fraction.
+    pub fn day(&self) -> &DayClock {
+        &self.day
+    }
+
+    /// Time of day now, in 0..1 (0 is midnight).
+    pub fn time_of_day(&self) -> f64 {
+        let d = self.day.day_ticks();
+        self.day
+            .time_of_day((self.sim_tick % d + self.day_offset) % d)
+    }
+
+    /// Scene brightness now.
+    pub fn daylight(&self) -> f64 {
+        self.day.daylight(self.time_of_day())
+    }
+
+    /// Unit vector toward the sun now.
+    pub fn sun_dir(&self) -> [f64; 3] {
+        self.day.sun_dir(self.time_of_day())
+    }
+
+    /// Jump to time of day `fraction` (wrapped into 0..1), to tick resolution.
+    pub fn set_time_of_day(&mut self, fraction: f64) {
+        let d = self.day.day_ticks();
+        let target = (fraction.rem_euclid(1.0) * d as f64).round() as u64 % d;
+        let at_zero = (target + d - self.day.start_offset_ticks()) % d;
+        self.day_offset = (at_zero + d - self.sim_tick % d) % d;
+    }
+
+    /// Hold the time of day (or let it run again from the held value).
+    pub fn set_day_frozen(&mut self, frozen: bool) {
+        self.day_frozen = frozen;
+    }
+
+    pub fn day_frozen(&self) -> bool {
+        self.day_frozen
+    }
+
     /// FNV-1a 64 of the replay-relevant state; the set is listed in the
     /// `replay` module docs.
     pub fn world_hash(&self) -> u64 {
         let mut h = Fnv::new();
         h.u64(self.sim_tick);
+        h.u64(self.day_offset);
+        h.u64(u64::from(self.day_frozen));
         h.u64(u64::from(self.cheated));
         let p = &self.player;
         h.f64s(&p.pos);
@@ -375,6 +434,12 @@ impl Walker {
             h.f64s(&a.pos);
             h.f64s(&a.velocity);
             h.f64s(&[a.facing]);
+        }
+        for f in self.fish.store().iter() {
+            h.u64(u64::from(f.id));
+            h.str(&f.species);
+            h.f64s(&f.pos);
+            h.f64s(&[f.heading]);
         }
         if let Some(f) = &self.floating {
             h.f64s(&f.raft.offset());
@@ -659,6 +724,10 @@ impl Walker {
         self.run_queued_commands();
         self.look_yaw = input.yaw;
         self.sim_tick += 1;
+        if self.day_frozen {
+            let d = self.day.day_ticks();
+            self.day_offset = (self.day_offset + d - 1) % d;
+        }
         self.anim.advance();
         if self.player.dead {
             self.anim.clear();
@@ -712,6 +781,13 @@ impl Walker {
                 self.items.tick(&world);
                 let dropped = self.animals.tick(&world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
+                self.fish.tick(
+                    self.sim_tick,
+                    f.raft.centre(),
+                    &self.player.aabb(&self.physics),
+                    &world,
+                    |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
+                );
                 let aim = aim(
                     &world,
                     &entities,
@@ -740,6 +816,14 @@ impl Walker {
                 self.items.tick(&self.world);
                 let dropped = self.animals.tick(&self.world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
+                let pos = self.player.pos;
+                self.fish.tick(
+                    self.sim_tick,
+                    [pos[0], pos[2]],
+                    &self.player.aabb(&self.physics),
+                    &self.world,
+                    |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
+                );
                 let aim = aim(
                     &self.world,
                     &entities,
@@ -864,6 +948,21 @@ impl Walker {
         facing: f64,
     ) -> Option<crate::targeting::EntityId> {
         self.animals.spawn(species, pos, facing)
+    }
+
+    /// Put a fish of `species` in the world, returning its entity id, or
+    /// `None` for an unknown species.
+    pub fn spawn_fish(
+        &mut self,
+        species: &str,
+        pos: [f64; 3],
+        heading: f64,
+    ) -> Option<crate::targeting::EntityId> {
+        self.fish.spawn(species, pos, heading)
+    }
+
+    pub fn fish(&self) -> &FishStore {
+        self.fish.store()
     }
 
     pub fn animals(&self) -> &AnimalStore {
@@ -2211,6 +2310,65 @@ mod tests {
         assert!(replay(&rec, &mut late).is_err());
         rec.cheated = false;
         assert!(replay(&rec, &mut with_cmds()).is_err());
+    }
+
+    #[test]
+    fn day_follows_the_tick_until_set_and_frozen() {
+        let clock = DayClock::default_day().unwrap();
+        let mut w = with_cmds();
+        assert_eq!(w.time_of_day(), clock.time_of_day(w.sim_tick()));
+        w.tick(&TickInput::default());
+        assert_eq!(w.time_of_day(), clock.time_of_day(w.sim_tick()));
+        assert_eq!(w.daylight(), clock.daylight(w.time_of_day()));
+        assert_eq!(w.sun_dir(), clock.sun_dir(w.time_of_day()));
+
+        let step = 1.0 / clock.day_ticks() as f64;
+        w.set_time_of_day(0.75);
+        assert_eq!(w.time_of_day(), 0.75);
+        w.tick(&TickInput::default());
+        assert!((w.time_of_day() - 0.75 - step).abs() < 1e-12);
+        w.set_time_of_day(1.0 - step);
+        w.tick(&TickInput::default());
+        assert_eq!(w.time_of_day(), 0.0);
+
+        w.set_time_of_day(0.3);
+        let held = w.time_of_day();
+        w.set_day_frozen(true);
+        for _ in 0..5 {
+            w.tick(&TickInput::default());
+            assert_eq!(w.time_of_day(), held);
+        }
+        w.set_day_frozen(false);
+        w.tick(&TickInput::default());
+        assert!((w.time_of_day() - held - step).abs() < 1e-12);
+    }
+
+    #[test]
+    fn day_is_exact_at_huge_ticks() {
+        let clock = DayClock::default_day().unwrap();
+        let mut w = with_cmds();
+        w.sim_tick = u64::MAX / 2;
+        assert_eq!(w.time_of_day(), clock.time_of_day(u64::MAX / 2));
+        w.set_time_of_day(0.5);
+        assert_eq!(w.time_of_day(), 0.5);
+        w.tick(&TickInput::default());
+        assert!((w.time_of_day() - 0.5 - 1.0 / clock.day_ticks() as f64).abs() < 1e-12);
+    }
+
+    #[test]
+    fn world_hash_covers_the_day_state() {
+        let run = |set: bool, freeze: bool| {
+            let mut w = with_cmds();
+            if set {
+                w.set_time_of_day(0.6);
+            }
+            w.set_day_frozen(freeze);
+            w.tick(&TickInput::default());
+            w.world_hash()
+        };
+        assert_eq!(run(true, true), run(true, true));
+        assert_ne!(run(false, false), run(true, false));
+        assert_ne!(run(true, false), run(true, true));
     }
 
     #[test]

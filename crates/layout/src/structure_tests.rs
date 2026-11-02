@@ -27,13 +27,22 @@ fn raft_start_cells() {
     assert_eq!(count(Block::RaftPlanks), 25);
     assert_eq!(count(Block::ButcherBlock), 1);
     assert_eq!(count(Block::Griddle), 1);
-    assert_eq!(count(Block::Crate), 1);
-    assert_eq!(count(Block::Air), 22);
-    assert_eq!(s.solid_cells(ORIGIN, 0).len(), 28);
-    // Stations: B at (1,1), G at (3,1), C at (2,3), offset by (-2, 0, -2).
-    assert!(cells.contains(&(99, 64, -41, Block::ButcherBlock as u8)));
-    assert!(cells.contains(&(101, 64, -41, Block::Griddle as u8)));
-    assert!(cells.contains(&(100, 64, -39, Block::Crate as u8)));
+    assert_eq!(count(Block::Crate), 0);
+    assert_eq!(count(Block::Chest), 2);
+    assert_eq!(count(Block::Counter), 2);
+    assert_eq!(count(Block::PlateRack), 1);
+    assert_eq!(count(Block::Air), 18);
+    assert_eq!(s.solid_cells(ORIGIN, 0).len(), 32);
+    // Offset by (-2, 0, -2): chests at (1,0) and (3,0), B (0,2), G (4,2),
+    // counters (0,4) and (4,4), plate rack (1,4); the x = 2 column of the
+    // +Z edge stays free so the spawn can climb aboard.
+    let has = |x, z, b: Block| cells.contains(&(x, 64, z, b as u8));
+    assert!(has(99, -42, Block::Chest) && has(101, -42, Block::Chest));
+    assert!(has(98, -40, Block::ButcherBlock) && has(102, -40, Block::Griddle));
+    assert!(has(98, -38, Block::Counter) && has(102, -38, Block::Counter));
+    assert!(has(99, -38, Block::PlateRack) && has(100, -38, Block::Air));
+    // Each chest's +Z face points at a free deck cell.
+    assert!(has(99, -41, Block::Air) && has(101, -41, Block::Air));
 }
 
 #[test]

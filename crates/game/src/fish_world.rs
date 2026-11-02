@@ -50,6 +50,11 @@ impl FishWorld {
         &self.store
     }
 
+    /// Add a fish outside the spawner, in school 0. `None` for an unknown species.
+    pub fn spawn(&mut self, species: &str, pos: [f64; 3], heading: f64) -> Option<EntityId> {
+        self.store.spawn(species, pos, heading, 0)
+    }
+
     /// Fish left in today's stock.
     pub fn stock(&self) -> u32 {
         self.spawner.stock()

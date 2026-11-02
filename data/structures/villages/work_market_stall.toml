@@ -1,0 +1,21 @@
+# A fish market stall: open counter under a thatch awning (docs/design/villages-and-villagers.md 2.3).
+kind = "building"
+size = [5, 4, 4]      # x, y, z
+origin_offset = [-2, 0, -3]
+palette = { P = "dock_planks", L = "dock_post", T = "thatch", R = "drying_rack", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPPPP", "PPPPP", "PPPPP", "PPPPP"],
+  # y = 1 (counter of drying racks along the back, posts at the corners)
+  ["LRRRL", ".....", ".....", "L...L"],
+  # y = 2
+  ["L...L", ".....", ".....", "L...L"],
+  # y = 3 (awning)
+  ["TTTTT", "TTTTT", "TTTTT", "TTTTT"],
+]
+connectors = [
+  { cell = [2, 1, 3], facing = "+z", pool = "boardwalks" },
+]
+spawns = [
+  { cell = [2, 1, 1], kind = "villager" },
+]

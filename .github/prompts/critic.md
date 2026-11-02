@@ -1,7 +1,8 @@
 # Play critic instructions
 
 You are the play critic for Mince Raft. You play the game the way a new
-player would and report where its control flow and layout get in the way.
+player would and report where its control flow, layout, performance and rendering get in
+the way.
 Read `CLAUDE.md` first; its clean-room rules bind you.
 
 ## Clean-room rules
@@ -42,6 +43,9 @@ For each goal report:
 - states that trap the player;
 - actions whose effect nothing visible reported.
 
+Include a goal that walks or flies across region borders in a streamed
+world (start it with `start walk stream`), not only the raft scene.
+
 One trap is by design: opening the console releases pointer lock, and
 leaving it leaves the pointer unlocked (debug-console doc, console mode
 section). If you meet it, report it as by design, not as a bug.
@@ -61,12 +65,34 @@ distance between related elements. Scale below 2 on a portrait viewport
 is advisory: mention it, but it is not a finding. On any other viewport
 it is a finding.
 
+## Performance and rendering
+
+Two more kinds of finding come from play in a streamed world:
+
+- `perf`: the game stalls or hitches while terrain loads, for example as
+  you cross into new ground.
+- `render`: a visible fault at block edges or along region borders, such
+  as gaps, seams or flicker.
+
+Each needs an `expect` repro like any other finding. In a streamed world
+(`start walk stream`) you can read these fields, and they are the ones to
+`expect` on for `perf` and `render` findings:
+
+- `regions.max_per_frame`
+- `chunks.max_per_tick`
+- `verts.max_per_frame`
+- `events.overbudget`
+- `render.faults`
+
+They exist only on streamed worlds. In any other world they are not there,
+so do not expect on them.
+
 ## Findings
 
 Output one JSON array of findings and nothing else. Each finding is an
 object with exactly these string fields:
 
-- `kind`: `control-flow` or `layout`
+- `kind`: `control-flow`, `layout`, `perf` or `render`
 - `severity`: `low`, `medium` or `high`
 - `goal`: the goal it came up in
 - `observation`: what you saw

@@ -148,6 +148,17 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     assert!(len > 0.0, "flora.toml: sun_x, sun_z must not both be 0");
     let (sx, sz) = (sx / len, sz / len);
     writeln!(out, "pub const FLORA_SUN: (f64, f64) = ({sx:?}, {sz:?});").unwrap();
+    let (wx, wz) = (
+        num(&doc["settings"]["wind_x"]),
+        num(&doc["settings"]["wind_z"]),
+    );
+    let len = (wx * wx + wz * wz).sqrt();
+    assert!(len > 0.0, "flora.toml: wind_x, wind_z must not both be 0");
+    let (wx, wz) = (wx / len, wz / len);
+    writeln!(out, "pub const FLORA_WIND: (f64, f64) = ({wx:?}, {wz:?});").unwrap();
+    let cap = int(&doc["settings"], "exposure_cap");
+    assert!(cap > 0, "flora.toml: exposure_cap must be positive");
+    writeln!(out, "pub const FLORA_EXPOSURE_CAP: i32 = {cap};").unwrap();
     let flat = num(&doc["settings"]["sun_facing_flat"]);
     writeln!(out, "pub const FLORA_SUN_FACING_FLAT: f64 = {flat:?};").unwrap();
     let radius = int(&doc["settings"], "light_radius");
@@ -155,6 +166,15 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     let radius = int(&doc["settings"], "edge_radius");
     assert!(radius > 0, "flora.toml: edge_radius must be positive");
     writeln!(out, "pub const FLORA_EDGE_RADIUS: i32 = {radius};").unwrap();
+    let radius = int(&doc["settings"], "tree_kind_radius");
+    assert!(radius > 0, "flora.toml: tree_kind_radius must be positive");
+    writeln!(out, "pub const FLORA_TREE_KIND_RADIUS: i32 = {radius};").unwrap();
+    let none = num(&doc["settings"]["conifer_none"]);
+    assert!(
+        (0.0..=1.0).contains(&none),
+        "flora.toml: conifer_none must be in 0..=1"
+    );
+    writeln!(out, "pub const FLORA_CONIFER_NONE: f64 = {none:?};").unwrap();
     let radii: Vec<i64> = doc["settings"]["hollow_radii"]
         .as_array()
         .expect("hollow_radii array")
@@ -167,6 +187,55 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
     );
     let n = radii.len();
     writeln!(out, "pub const FLORA_HOLLOW_RADII: [i32; {n}] = {radii:?};").unwrap();
+    for (k, name) in [
+        ("wetness_slope_ref", "FLORA_WETNESS_SLOPE_REF"),
+        ("wetness_hollow_ref", "FLORA_WETNESS_HOLLOW_REF"),
+        ("wetness_slope_weight", "FLORA_WETNESS_SLOPE_WEIGHT"),
+        ("wetness_hollow_weight", "FLORA_WETNESS_HOLLOW_WEIGHT"),
+    ] {
+        let v = num(doc["settings"]
+            .get(k)
+            .unwrap_or_else(|| panic!("missing {k}")));
+        if k.ends_with("_ref") {
+            assert!(v > 0.0, "flora.toml: {k} must be positive");
+        } else {
+            assert!(v >= 0.0, "flora.toml: {k} must not be negative");
+        }
+        writeln!(out, "pub const {name}: f64 = {v:?};").unwrap();
+    }
+    let radius = int(&doc["settings"], "wetness_water_radius");
+    assert!(
+        radius > 0,
+        "flora.toml: wetness_water_radius must be positive"
+    );
+    writeln!(out, "pub const FLORA_WETNESS_WATER_RADIUS: i32 = {radius};").unwrap();
+    let weight = num(&doc["settings"]["wetness_water_weight"]);
+    assert!(
+        weight >= 0.0,
+        "flora.toml: wetness_water_weight must not be negative"
+    );
+    writeln!(
+        out,
+        "pub const FLORA_WETNESS_WATER_WEIGHT: f64 = {weight:?};"
+    )
+    .unwrap();
+    let bias = doc["settings"]["wetness_bias"]
+        .as_table()
+        .expect("wetness_bias table");
+    let mut rows = String::new();
+    for (name, v) in bias {
+        assert!(
+            biomes.contains(name),
+            "flora.toml: wetness_bias names unknown biome {name}"
+        );
+        write!(rows, "(Biome::{}, {:?}), ", camel(name), num(v)).unwrap();
+    }
+    writeln!(
+        out,
+        "pub static FLORA_WETNESS_BIAS: [(Biome, f64); {}] = [{rows}];",
+        bias.len()
+    )
+    .unwrap();
     for layer in flora_check::NICHE_LAYERS {
         let k = format!("niche_margin_{layer}");
         let m = num(doc["settings"]

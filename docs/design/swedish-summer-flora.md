@@ -5,7 +5,7 @@ scope: generator
 source: "#1686"
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
   E: todo
@@ -22,7 +22,8 @@ phases:
 - `Biases` (`crates/terrain/src/lib.rs`) is a struct of slices of trait objects (`DensityBias`, `OpenWater`, ...) plus options. There is no per-column flora input yet, so the hydrology hook of 3.4 is a new field or trait of the same shape.
 - `berry_bush` exists (Taiga 0.012, Shrubland 0.015); `frost_grass` has `snow_stays = true`, the model for the evergreen berries and lichen.
 - Phase A done (plan #1690; PRs #1708, #1713, #1715, #1716, #1717): `crates/terrain/src/niche.rs` and the `niche` table in `data/flora.toml` give the validated trapezoid response and the layers height_above_sea, soil_depth, light, slope, sun_facing and hollow, with margins and radii in `[settings]`; no entry uses a niche yet.
-- Not present: forest edge, exposure, tree kind, wetness, disturbance layers, any of the section 2 plants, and any season clock.
+- Phase B done (plan #1721; PRs #1752, #1845, #1868): `niche.rs` adds the `edge`, `exposure` and `conifer` (neighbouring tree kind) layers, with radii, caps and margins in `[settings]` of `data/flora.toml` and margin tests in `tests_flora.rs`; no entry uses a niche yet.
+- Not present: wetness, disturbance layers, any of the section 2 plants, and any season clock.
 
 ## Reconciliation notes
 
