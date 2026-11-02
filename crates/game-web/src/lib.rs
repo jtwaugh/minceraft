@@ -12,6 +12,7 @@ use game::events::GameEvent;
 use game::input::TickInput;
 use game::interactions::{Button, HeldThing};
 use game::items::{ItemInstance, Items};
+use game::messages::{drop_key, Messages};
 use game::sampler::Sampler;
 use game::scene::{raft_scene, RaftScene, FIELD_SIZE, FIELD_Y, SEA_MIN, SEA_SIZE};
 use game::walk::Walker;
@@ -1019,6 +1020,17 @@ mod tests {
     }
 
     #[test]
+    fn message_templates_carry_text_timing_and_drop_key() {
+        let m = message_templates().unwrap_or_else(|_| panic!());
+        let names = m.reason_names();
+        let i = names.iter().position(|n| n == "hands_full").unwrap();
+        assert_eq!(m.reason_texts()[i], "Hands full: drop with {drop_key}");
+        assert_eq!(m.drop_key(), "Q");
+        assert_eq!((m.hold_ticks(), m.fade_ticks()), (30, 10));
+        assert_eq!(m.event_names().len(), m.event_texts().len());
+    }
+
+    #[test]
     fn describes_fish_bite() {
         let e = GameEvent::FishBite {
             player: "player".into(),
@@ -1425,6 +1437,63 @@ pub fn item_names() -> Vec<String> {
         .into_iter()
         .map(|d| d.name)
         .collect()
+}
+
+/// The HUD message strings and timing from `data/messages.toml`, with the
+/// drop key's label for `{drop_key}`. Names and texts are parallel arrays.
+#[wasm_bindgen]
+pub struct MessageTemplates {
+    messages: Messages,
+    drop_key: String,
+}
+
+#[wasm_bindgen]
+impl MessageTemplates {
+    /// Event names that get a message.
+    #[wasm_bindgen(getter)]
+    pub fn event_names(&self) -> Vec<String> {
+        self.messages.events.iter().map(|e| e.0.clone()).collect()
+    }
+    /// The template for each name in `event_names`.
+    #[wasm_bindgen(getter)]
+    pub fn event_texts(&self) -> Vec<String> {
+        self.messages.events.iter().map(|e| e.1.clone()).collect()
+    }
+    /// `action_refused` reason names.
+    #[wasm_bindgen(getter)]
+    pub fn reason_names(&self) -> Vec<String> {
+        self.messages.reasons.iter().map(|e| e.0.clone()).collect()
+    }
+    /// The template for each name in `reason_names`.
+    #[wasm_bindgen(getter)]
+    pub fn reason_texts(&self) -> Vec<String> {
+        self.messages.reasons.iter().map(|e| e.1.clone()).collect()
+    }
+    /// Ticks a message shows at full strength.
+    #[wasm_bindgen(getter)]
+    pub fn hold_ticks(&self) -> u32 {
+        self.messages.hold_ticks
+    }
+    /// Ticks it then takes to fade out.
+    #[wasm_bindgen(getter)]
+    pub fn fade_ticks(&self) -> u32 {
+        self.messages.fade_ticks
+    }
+    /// Label of the drop key (`data/input.toml`), e.g. `Q`.
+    #[wasm_bindgen(getter)]
+    pub fn drop_key(&self) -> String {
+        self.drop_key.clone()
+    }
+}
+
+/// The shipped message templates (`data/messages.toml`).
+#[wasm_bindgen]
+pub fn message_templates() -> Result<MessageTemplates, JsError> {
+    let bindings = Bindings::default_from_data().map_err(|e| JsError::new(&e.to_string()))?;
+    Ok(MessageTemplates {
+        messages: Messages::default_messages(),
+        drop_key: drop_key(&bindings),
+    })
 }
 
 /// Animal species names from `data/animals.toml`, sorted.
