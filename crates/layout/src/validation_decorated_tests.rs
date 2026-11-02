@@ -98,6 +98,8 @@ fn new_flora_decorates_its_tile() {
         Block::DryGrassTallLower,
         Block::DryGrassTallUpper,
         Block::LeafLitter,
+        Block::Lingon,
+        Block::Blabar,
     ] {
         let mut r = island(0);
         put(&mut r, 20, TOP, 20, b);

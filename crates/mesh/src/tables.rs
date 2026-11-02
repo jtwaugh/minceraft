@@ -83,6 +83,8 @@ pub mod b {
     pub const DOCK_PLANKS: u8 = 81;
     pub const DOCK_POST: u8 = 82;
     pub const CHEST: u8 = 83;
+    pub const LINGON: u8 = 84;
+    pub const BLABAR: u8 = 85;
 }
 
 use b::*;

@@ -809,3 +809,22 @@ collision = "full"
 opacity = 255
 opaque_cube = true
 color = "#9c6b3a"
+
+# Berry ground cover (swedish-summer-flora D.1): flat plants like leaf_litter.
+[[block]]
+id = 84
+name = "lingon"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#6b7a3a"
+
+[[block]]
+id = 85
+name = "blabar"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#4d6a3c"

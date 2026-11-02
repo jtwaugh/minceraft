@@ -47,7 +47,7 @@ pub fn box_hidden(b: u8, dy: i32, n: u8, solid: bool) -> bool {
 /// `viewer/mesh.js`), or `None` for blocks that aren't flat shapes.
 pub fn flat_lift(b: u8) -> Option<f64> {
     match b {
-        LEAF_LITTER | LILY_PAD => Some(1.0 / 16.0),
+        LEAF_LITTER | LINGON | BLABAR | LILY_PAD => Some(1.0 / 16.0),
         _ => None,
     }
 }

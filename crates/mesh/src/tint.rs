@@ -76,7 +76,8 @@ impl Tints<'_> {
             }
             WATER => water,
             DUNE_GRASS_LOWER | DUNE_GRASS_UPPER => dry,
-            OAK_LEAVES | LEAF_LITTER | LILY_PAD | BERRY_BUSH | BUSH | JUNGLE_BUSH => leaf,
+            OAK_LEAVES | LEAF_LITTER | LINGON | BLABAR | LILY_PAD | BERRY_BUSH | BUSH
+            | JUNGLE_BUSH => leaf,
             BIRCH_LEAVES => mix(self.color(b), 0.55),
             SPRUCE_LEAVES => mix(self.color(b), 0.7),
             _ => return None,
@@ -161,6 +162,8 @@ mod tests {
         for b in [
             OAK_LEAVES,
             LEAF_LITTER,
+            LINGON,
+            BLABAR,
             LILY_PAD,
             BERRY_BUSH,
             BUSH,
