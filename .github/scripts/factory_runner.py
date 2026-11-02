@@ -5,6 +5,10 @@ job, claude-fix.yml).
     load(repo, get, env)      -> the same, reading $FACTORY_RUNNER and the
                                  repo's self-hosted runners through `get`
 
+    python3 factory_runner.py <owner/repo>
+        prints the runs-on JSON (the note goes to stderr), for claude.yml's
+        implement job, which events start without the tick
+
 `variable` is FACTORY_RUNNER as the workflows read it: a JSON label or list
 ("warm", ["self-hosted", "x"]). It is used when at least one runner is online
 and has every label in it; busy runners count, since the job only queues
@@ -15,6 +19,7 @@ says why a set variable wasn't used ("" when it was, or was unset).
 """
 import json
 import os
+import sys
 
 FALLBACK = '"ubuntu-latest"'
 
@@ -47,3 +52,16 @@ def load(repo, get, env=None):
     except (RuntimeError, KeyError, TypeError):
         runners = None
     return choose(variable, runners)
+
+
+def main(argv):
+    import gh_cache
+    out, note = load(argv[1], gh_cache.get)
+    if note:
+        print(note, file=sys.stderr)
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
