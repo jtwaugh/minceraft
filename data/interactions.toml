@@ -100,3 +100,17 @@ button = "secondary"
 target = "any"
 require_line_out = true
 action = "reel"
+
+# Fish are hit like animals (docs/design/fish-and-fishing.md 4.5): the sword,
+# or a punch with the hands empty.
+[[rule]]
+held = "tool:sword"
+button = "primary"
+target = "entity:fish"
+action = "attack"
+
+[[rule]]
+held = "any"
+button = "primary"
+target = "entity:fish"
+action = "attack" # fallback: punch

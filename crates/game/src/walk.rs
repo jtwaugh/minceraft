@@ -1290,6 +1290,31 @@ impl Walker {
             }
         }
         for hit in &self.dispatcher.hits {
+            if let Some(f) = self.fish.store().get(hit.id) {
+                let taken = hit.damage.min(f.health);
+                if taken > 0 {
+                    self.events.push(GameEvent::EntityHurt {
+                        entity: hit.id,
+                        attacker: "player".to_string(),
+                        damage: taken,
+                    });
+                }
+                if let Some(c) = self.fish.hit(hit.id, hit.damage) {
+                    self.events.push(GameEvent::EntityKilled {
+                        entity: hit.id,
+                        kind: c.species.clone(),
+                        attacker: "player".to_string(),
+                    });
+                    self.events.push(GameEvent::FishCaught {
+                        player: "player".to_string(),
+                        species: c.species,
+                        item: c.raw_item.clone(),
+                        method: "sword".to_string(),
+                    });
+                    self.state.hands = Some(ItemInstance { item: c.raw_item });
+                }
+                continue;
+            }
             let was_dying = self
                 .animals
                 .get(hit.id)
@@ -1819,6 +1844,63 @@ mod tests {
         let far = w.spawn_fish("mackerel", [0.5, 4.0, -40.0], 0.0).unwrap();
         w.tick(&look(-0.05, false));
         assert_ne!(w.target(), Target::Entity { id: far });
+    }
+
+    fn fish_in_front(w: &mut Walker) -> crate::targeting::EntityId {
+        let id = w.spawn_fish("mackerel", [0.5, 4.6, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        id
+    }
+
+    #[test]
+    fn a_sword_hit_kills_a_fish_into_the_hands() {
+        let mut w = settled();
+        let id = fish_in_front(&mut w);
+        let before = w.fish.stock() as usize + w.fish().len();
+        w.player_state_mut().select(1);
+        w.tick(&look(-0.4, false));
+        w.drain_events();
+        w.tick(&click());
+        assert_eq!(w.hands().map(|h| h.item.as_str()), Some("raw_mackerel"));
+        assert_eq!(w.fish().get(id), None);
+        assert_eq!(w.fish.stock() as usize + w.fish().len(), before - 1);
+        let ev = w.drain_events();
+        assert!(ev.contains(&hurt(id, 4)), "{ev:?}");
+        assert!(ev.contains(&killed(id, "mackerel")), "{ev:?}");
+        assert!(ev.contains(&GameEvent::FishCaught {
+            player: "player".into(),
+            species: "mackerel".into(),
+            item: "raw_mackerel".into(),
+            method: "sword".into(),
+        }));
+    }
+
+    #[test]
+    fn punches_wound_a_fish_until_it_dies() {
+        let mut w = settled();
+        let id = fish_in_front(&mut w);
+        w.drain_events();
+        w.tick(&click());
+        assert_eq!(w.fish().get(id).map(|f| f.health), Some(3));
+        assert!(w.hands().is_none());
+        for _ in 0..3 {
+            w.tick(&look(-0.4, false));
+            w.tick(&click());
+        }
+        assert_eq!(w.fish().get(id), None);
+        assert_eq!(w.hands().map(|h| h.item.as_str()), Some("raw_mackerel"));
+    }
+
+    #[test]
+    fn full_hands_do_not_hit_a_fish() {
+        let mut w = settled();
+        let id = fish_in_front(&mut w);
+        w.player_state_mut().select(1);
+        w.state.hands = Some(seeds());
+        w.tick(&click());
+        assert_eq!(w.fish().get(id).map(|f| f.health), Some(4));
+        assert_eq!(w.hands(), Some(&seeds()));
     }
 
     fn cow_health(w: &Walker, id: crate::targeting::EntityId) -> u32 {
