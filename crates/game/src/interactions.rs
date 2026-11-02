@@ -13,7 +13,6 @@ use crate::input::TickInput;
 use crate::stations::StationKinds;
 use crate::targeting::{self, EntityId, Face};
 use std::fmt;
-use std::sync::OnceLock;
 
 const DEFAULT_INTERACTIONS: &str = include_str!("../../../data/interactions.toml");
 
@@ -366,12 +365,7 @@ fn held_matches(rule: &Held, held: &HeldThing) -> bool {
 
 /// Whether `name` is a station block in the shipped table.
 fn is_station(name: &str) -> bool {
-    static KINDS: OnceLock<StationKinds> = OnceLock::new();
-    KINDS
-        .get_or_init(|| {
-            StationKinds::default_from_data().expect("data/stations.toml must be valid")
-        })
-        .is_station(name)
+    StationKinds::shipped().is_station(name)
 }
 
 fn rule_matches(rule: &Rule, ctx: &ResolveCtx) -> bool {
@@ -750,11 +744,24 @@ mod tests {
                 ActionKind::Forage,
             ),
             rule(Held::Any, Button::Primary, animal, ActionKind::Attack),
+            rule(
+                Held::AnyItem,
+                Button::Interact,
+                Target::Station,
+                ActionKind::PutDown,
+            ),
+            rule(
+                Held::Empty,
+                Button::Interact,
+                Target::Station,
+                ActionKind::Take,
+            ),
         ];
         expected[1].require_air_above = true;
         expected[2].require_air_above = true;
         expected[4].require_air_above = true;
         expected[4].target_face = Some("top".into());
+        expected[11].target_face = Some("top".into());
         assert_eq!(Interactions::default_rules().rules, expected);
     }
 
@@ -821,8 +828,6 @@ mod tests {
     fn first_match_wins_with_new_kinds() {
         let mut rules = one_rule("any_item", "interact", "block:station", "put_down");
         rules.extend(one_rule("any", "interact", "block:station", "take"));
-        let st = Interactions::default_rules();
-        assert!(st.rules.iter().all(|r| r.button != Button::Interact));
         let name = {
             let k = StationKinds::default_from_data().unwrap();
             ["counter", "griddle"].into_iter().find(|n| k.is_station(n))

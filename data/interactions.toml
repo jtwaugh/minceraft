@@ -71,3 +71,16 @@ held = "any"
 button = "primary"
 target = "entity:animal"
 action = "attack" # fallback: punch
+
+[[rule]]
+held = "any_item"
+button = "interact"
+target = "block:station"
+target_face = "top"
+action = "put_down"
+
+[[rule]]
+held = "empty"
+button = "interact"
+target = "block:station"
+action = "take"

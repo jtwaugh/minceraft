@@ -262,6 +262,9 @@ fn describe_event(e: &GameEvent) -> String {
         GameEvent::ItemPickedUp { item, player } => {
             format!("item_picked_up item={item} player={player}")
         }
+        GameEvent::ItemPutDown { item, target } => {
+            format!("item_put_down item={item} target={target}")
+        }
         GameEvent::BlockTilled { position, from, to } => {
             format!(
                 "block_tilled position={} from={from} to={to}",
