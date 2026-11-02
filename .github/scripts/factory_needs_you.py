@@ -18,6 +18,9 @@ Waits on the maintainer:
 - a ticket PR that is Ready but can't merge by itself: it touches a
   CODEOWNERS path, or another open PR is for the same ticket;
 - a ticket PR over the size limit;
+- a PR whose checks wait on approval (`action_required`): GitHub won't run
+  workflows on a PR the tick opened with the workflow token until the
+  maintainer approves them, so no verdict ever comes;
 - an open PR that isn't a factory ticket (design docs, spec, factory
   changes): only the maintainer merges those;
 - an open `spec-question`, and a question the tick opened
@@ -52,6 +55,8 @@ def pr_reason(snap, pr):
     """Why this open PR waits on the maintainer, or None."""
     if pr.get("draft") or pr.get("merged") or PARKED & set(pr.get("labels", [])):
         return None
+    if any(r["conclusion"] == "action_required" for r in pr.get("runs", [])):
+        return "Its checks wait on your approval: open the PR and approve the workflows"
     if not is_ticket_pr(snap, pr):
         return "Not a factory ticket: review and merge it, or close it"
     fixing = claude_fixing(snap, pr)
