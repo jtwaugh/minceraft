@@ -65,7 +65,7 @@
 // meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
 // all mesh kinds), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
 // every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
-// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, sun.x|y|z (unit vector toward the sun this frame, time of day plus alpha), daylight (scene brightness this frame), locked, ticks, alpha, yaw, pitch, eye.x|y|z,
+// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, sun.x|y|z (unit vector toward the sun this frame, time of day plus alpha), daylight (scene brightness this frame), locked, prompt (the click cue text, "Click to play", while the game waits for a click, else null; `expect prompt = none` tests for null), hint (open|folded: the controls hint panel), ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
@@ -95,6 +95,8 @@ import { meshCracks } from '../meshcheck.js';
 import { REGION_SIZE } from '../stream.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
+import { waitingForClick, CUE_TEXT } from '../waitingcue.js';
+import { createHintState } from '../hintui.js';
 import { heldDraw } from '../helditem.js';
 import { hudLayout } from '../hudlayout.js';
 import { layoutChecks } from '../hudcheck.js';
@@ -173,9 +175,12 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   const seen = [];
   const most = stream ? { regions: 0, chunks: 0, verts: 0 } : null; // running maxima of one frame's work
   const render = stream ? { faults: 0 } : null; // crack faults over every region meshed so far
+  const hint = createHintState();
+  document.addEventListener('pointerlockchange', () => hint.update(input.locked));
   const frame = controller.frame;
   controller.frame = (dt) => {
     const state = frame(dt);
+    hint.update(input.locked);
     seen.push(...state.events);
     if (most) {
       const { work, faults } = meshFrame(walk, state.regions, damage);
@@ -188,7 +193,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
+  return { scene, canvas, document, window, input, hint, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus', '.': 'Period' };
@@ -273,6 +278,8 @@ function read(w, path) {
   if (path === 'sprinting') return w.walk.sprinting();
   if (path === 'paused') return w.walk.paused();
   if (path === 'locked') return w.input.locked;
+  if (path === 'prompt') return waitingForClick(w.input) ? CUE_TEXT : null;
+  if (path === 'hint') return w.hint.open ? 'open' : 'folded';
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
   if (['ticks', 'alpha', 'yaw', 'pitch', 'fov', 'underwater'].includes(path)) return s[path];
@@ -518,7 +525,7 @@ function step(w, { op, args }) {
       const at = Math.max(1, args.findIndex((a) => OPS[a]));
       const path = args.slice(0, at).join(' '), cmp = args[at], raw = args.slice(at + 1).join(' ');
       if (!OPS[cmp]) throw new Error(`unknown operator '${cmp}'`);
-      const got = read(w, path);
+      const got = read(w, path) ?? 'none'; // a null path (prompt) is written none
       const want = typeof got === 'number' ? +raw : typeof got === 'boolean' ? raw === 'true' : raw;
       if (!OPS[cmp](got, want)) throw new Error(`expected ${path} ${cmp} ${raw}, got ${got}`);
       return;
