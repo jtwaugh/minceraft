@@ -13,3 +13,30 @@ gust_strength = 0.5       # g in speed * (1 + g * gust), clamped at zero
 direction_wobble = 0.2    # largest sideways push from gusts, as a fraction of the speed
 speed_floor = 0.0         # wind speed is clamped to [speed_floor, speed_ceiling] ...
 speed_ceiling = 12.0      # ... in blocks per second
+
+# Biome roughness (docs/design/biome-roughness-wind.md Phase A), read by
+# crates/game/src/wind_roughness_config.rs. Values are 0..1, one per biome in
+# data/biomes.toml (every biome needs one), plus `water` for sea-level-or-below
+# samples. blend_height is in blocks; the cell, step and radius are in blocks
+# and must satisfy the RoughnessParams multiple rules.
+roughness_drag = 0.5      # how much full roughness slows the wind, 0..1
+roughness_floor = 0.3     # least speed multiplier, 0..1
+blend_height = 12         # blocks over which roughness fades out with height
+gust_damping = 0.0        # extra gust damping by roughness, 0..1 (0 in Phase A)
+roughness_cell_size = 64  # side of one cached roughness cell
+roughness_step = 8        # spacing of heightmap samples
+roughness_radius = 32     # smoothing half-width
+
+[roughness]
+"Rainforest" = 0.9
+"Forest" = 0.8
+"Seasonal Forest" = 0.7
+"Taiga" = 0.65
+"Swampland" = 0.6
+"Shrubland" = 0.45
+"Savanna" = 0.4
+"Plains" = 0.2
+"Tundra" = 0.15
+"Desert" = 0.08
+"Ice Desert" = 0.06
+water = 0.02

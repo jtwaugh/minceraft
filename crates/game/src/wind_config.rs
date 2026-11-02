@@ -2,6 +2,7 @@
 //! See docs/design/wind.md Phase A.
 
 use crate::data_error::{DataError, DataErrorKind, DataFile};
+use crate::wind_roughness_config::ROUGHNESS_KEYS;
 
 const DEFAULT_WIND: &str = include_str!("../../../data/wind.toml");
 
@@ -78,7 +79,10 @@ impl WindConfig {
     pub fn parse(text: &str) -> Result<WindConfig, DataError> {
         let root: toml::value::Table = toml::from_str(text)
             .map_err(|e: toml::de::Error| err(DataErrorKind::Parse(e.to_string())))?;
-        if let Some(key) = root.keys().find(|k| !KEYS.contains(&k.as_str())) {
+        if let Some(key) = root
+            .keys()
+            .find(|k| !KEYS.contains(&k.as_str()) && !ROUGHNESS_KEYS.contains(&k.as_str()))
+        {
             return Err(invalid(format!("unknown key `{key}`")));
         }
         let front_drift = get(&root, "front_drift")?
@@ -192,7 +196,7 @@ mod tests {
     #[test]
     fn rejects_bad_shape() {
         assert_parse_error(parse("front_size =").unwrap_err(), DataFile::Wind);
-        let text = format!("{DEFAULT_WIND}colour = 3\n");
+        let text = format!("colour = 3\n{DEFAULT_WIND}");
         assert_err_contains(parse(&text), "unknown key `colour`");
     }
 }
