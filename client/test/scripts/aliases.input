@@ -2,14 +2,14 @@ case an alias runs its lines in one tick and sets cheated
 start walk raft
 click
 lock
-expect belt.slot.4 = none
+expect belt.slot.5 = none
 expect items = 3
 expect cheated = false
 press Backquote
 type kitchen
 press Enter
 frame 50
-expect belt.slot.4 = hoe
+expect belt.slot.5 = hoe
 expect held = tool:hoe
 expect items = 11
 expect cheated = true

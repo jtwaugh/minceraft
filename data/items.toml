@@ -33,6 +33,10 @@ damage = 4
 name = "hoe"
 label = "Wooden hoe"
 
+[[tool]]
+name = "fishing_rod"
+label = "Fishing rod"
+
 [[item]]
 name = "seeds"
 label = "Seeds"

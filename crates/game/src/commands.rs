@@ -1232,12 +1232,10 @@ mod give_tests {
         let mut w = walker();
         run(&mut w, &["give tool hoe"]);
         let s = w.player_state();
-        assert_eq!(s.tool_belt[3], tool("hoe"));
-        assert_eq!(s.selected, 3);
+        assert_eq!(s.tool_belt[3], tool("fishing_rod"));
+        assert_eq!(s.tool_belt[4], tool("hoe"));
+        assert_eq!(s.selected, 4);
         assert_eq!(s.tool_belt[0], None, "slot 0 stays the empty hand");
-        run(&mut w, &["give tool sword"]);
-        assert_eq!(w.player_state().tool_belt[4], tool("sword"));
-        assert_eq!(w.player_state().selected, 4);
         assert!(w.cheated());
     }
 
@@ -1264,7 +1262,7 @@ mod give_tests {
     #[test]
     fn give_tool_with_full_belt_drops_item_named_after_tool() {
         let mut w = walker();
-        run(&mut w, &["give tool hoe", "give tool hoe"]);
+        run(&mut w, &["give tool hoe"]);
         let before = w.player_state().clone();
         let out = run(&mut w, &["give tool sword"]);
         assert!(out[0].contains("belt full"));

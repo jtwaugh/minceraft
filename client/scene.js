@@ -51,7 +51,7 @@ import { createController } from './controller.js';
 import { createSpans } from './perfspans.js';
 import { meshRegionCpu } from './regionmesh.js';
 import { REGION_SIZE } from './stream.js';
-import { NEAR, farPlane, look, skyInputs } from './view.js';
+import { NEAR, farPlane, look, skyInputs, daylightFactor } from './view.js';
 import { sampleSky, easeSky, blendSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
 import { FOG_GLSL } from '../viewer/fog.js';
 import { SNAP_GLSL, SNAP_SAMPLE_GLSL } from './texsnap.js';
@@ -147,7 +147,7 @@ function program(cut) {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir; in float vdepth;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir; uniform float daylight;
     uniform float waterFresnel; // 1 while drawing water from above the surface
     out vec4 o;
     ${FOG_GLSL}
@@ -171,7 +171,7 @@ function program(cut) {
       float f = fogFar > 0.0 ? fogAmount(vdist, fogFar) : clamp((vdist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
       // above water fog fades toward the sky in the view direction; under water it is flat
       vec3 fc = fogFar > 0.0 ? skyColor(fogColor, vd, sunDir) : fogColor;
-      o = vec4(mix(c, fc, f), ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'min(alpha * waterAlphaScale(wd), 1.0)'});
+      o = vec4(mix(c, fc, f) * daylight, ${cut ? (msaa ? 'ca * alpha' : 't.a * alpha') : 'min(alpha * waterAlphaScale(wd), 1.0)'});
     }`));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
@@ -261,11 +261,11 @@ const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 
 // Animals as textured boxes (batch 15): red while hurt, tipped over while dying
 // (see animalPose). Unknown species draw grey.
 const animalModels = {};
-function drawAnimals(mvp, animals) {
+function drawAnimals(mvp, animals, daylight) {
   for (const a of animals) {
     const m = animalModels[a.species] ??= models.addModel(animalBoxes(a.species));
     const { model, tint } = animalPose(a);
-    models.drawModel(mvp, model, m, tint);
+    models.drawModel(mvp, model, m, tint, daylight);
   }
 }
 
@@ -274,20 +274,20 @@ function drawAnimals(mvp, animals) {
 // dorsal fin, one for the tail plate, which swings on its own (fishDraw).
 const fishModels = {};
 const tailTracker = createTailTracker();
-function drawFish(mvp, fish, timeSeconds) {
+function drawFish(mvp, fish, timeSeconds, daylight) {
   const swings = tailTracker.update(fish, timeSeconds);
   for (const { species, height, part, model, tint } of fishDraw(fish, swings)) {
     const m = fishModels[`${species}/${height}/${part}`] ??= models.addModel(
       part === 'tail' ? fishBoxes(species, height).slice(2) : fishBoxes(species, height).slice(0, 2));
-    models.drawModel(mvp, model, m, tint);
+    models.drawModel(mvp, model, m, tint, daylight);
   }
 }
 
 // Loose items as camera-facing icon slabs, one model per item name.
 const itemModels = {};
-function drawItems(mvp, items, timeSeconds, camera) {
+function drawItems(mvp, items, timeSeconds, camera, daylight) {
   for (const { key, model } of itemDraws(items, timeSeconds, camera)) {
-    models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)));
+    models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)), undefined, daylight);
   }
 }
 
@@ -623,6 +623,7 @@ function render(now) {
     gl.uniform1f(prog.u('fogFar'), view.fogFar);
     gl.uniform3fv(prog.u('eye'), eye);
     gl.uniform3fv(prog.u('tint'), view.tint);
+    gl.uniform1f(prog.u('daylight'), daylightFactor(day));
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
@@ -635,9 +636,9 @@ function render(now) {
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
-    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel);
+    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel, undefined, daylightFactor(day));
   }
-  drawFish(mvp, readFish(walk), now / 1000);
+  drawFish(mvp, readFish(walk), now / 1000, daylightFactor(day));
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   // Water faces point out of the water, so from below the surface they are
@@ -650,8 +651,8 @@ function render(now) {
   bind(solidProg, 0.72); drawParts(solidProg, meshes.ice);
   gl.depthMask(true);
   gl.bindVertexArray(null);
-  if (scene) drawAnimals(mvp, readAnimals(walk));
-  drawItems(mvp, readItems(walk), now / 1000, { yaw });
+  if (scene) drawAnimals(mvp, readAnimals(walk), daylightFactor(day));
+  drawItems(mvp, readItems(walk), now / 1000, { yaw }, daylightFactor(day));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
   for (const { pos, size, snow } of particles) drawBox(mvp, [...pos.map((v) => v - size), ...pos.map((v) => v + size)], snow ? 'flake' : true);
   if (!flying) drawHeld(proj);

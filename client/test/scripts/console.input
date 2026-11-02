@@ -101,14 +101,14 @@ case give tool hoe uses the first empty slot and selects it
 start walk raft
 click
 lock
-expect belt.slot.4 = none
+expect belt.slot.5 = none
 expect belt.selected = 0
 press Backquote
 type give tool hoe
 press Enter
 frame 50 x2
-expect belt.slot.4 = hoe
-expect belt.selected = 3
+expect belt.slot.5 = hoe
+expect belt.selected = 4
 expect held = tool:hoe
 expect cheated = true
 
@@ -146,15 +146,16 @@ press Backquote
 type give tool hoe
 press Enter
 frame 50 x2
-expect belt.slot.4 = hoe
+expect belt.slot.5 = hoe
 lock
 press Backquote
 type clear belt
 press Enter
 frame 50 x2
-expect belt.slot.4 = none
+expect belt.slot.5 = none
 expect belt.slot.2 = sword
 expect belt.slot.3 = hoe
+expect belt.slot.4 = fishing_rod
 expect console.last = cleared belt
 
 case clear hands empties the hands

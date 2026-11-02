@@ -24,10 +24,14 @@ export function mergeBoxes(boxes, uvOf) {
   return { vertices, indices };
 }
 
+/** The tint a model is drawn with: [r, g, b] scaled by the frame's daylight (1 leaves it unchanged). */
+export const daylitTint = (tint, daylight = 1) => tint.map((c) => c * daylight);
+
 /**
  * Creates the drawer for the tileset export `exportJson` (may have no models;
  * every face is then grey). Returns { atlas, addModel(boxes) -> handle,
- * drawModel(mvp, modelMatrix, handle, tint) } where tint is [r, g, b] and the
+ * drawModel(mvp, modelMatrix, handle, tint, daylight) } where tint is [r, g, b], daylight
+ * scales it (default 1), and the
  * matrices are column-major Float32Array(16)s.
  */
 export function createModelDrawer(gl, exportJson, textureNames = []) {
@@ -86,7 +90,7 @@ export function createModelDrawer(gl, exportJson, textureNames = []) {
     return { vao, count: indices.length };
   }
 
-  function drawModel(mvp, modelMatrix, handle, tint = [1, 1, 1]) {
+  function drawModel(mvp, modelMatrix, handle, tint = [1, 1, 1], daylight = 1) {
     gl.useProgram(p);
     gl.activeTexture(gl.TEXTURE0 + MODEL_UNIT);
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -94,7 +98,7 @@ export function createModelDrawer(gl, exportJson, textureNames = []) {
     gl.uniform1i(loc.atlas, MODEL_UNIT);
     gl.uniformMatrix4fv(loc.mvp, false, mvp);
     gl.uniformMatrix4fv(loc.model, false, modelMatrix);
-    gl.uniform3fv(loc.tint, tint);
+    gl.uniform3fv(loc.tint, daylitTint(tint, daylight));
     gl.bindVertexArray(handle.vao);
     gl.drawElements(gl.TRIANGLES, handle.count, gl.UNSIGNED_SHORT, 0);
     gl.bindVertexArray(null);

@@ -6,7 +6,10 @@
 
 use crate::collision::Aabb;
 use crate::fish_bodies::FishBodies;
-use crate::targeting::EntityId;
+use crate::targeting::{EntityId, TargetableEntity};
+
+/// The kind a fish has for `cast_target` and `TargetFacts.entity`.
+pub const FISH_KIND: &str = "fish";
 
 /// Which school a fish belongs to; members steer towards its centre (3.2).
 pub type SchoolId = u32;
@@ -136,6 +139,18 @@ impl FishStore {
         self.fish.iter_mut()
     }
 
+    /// The fish as targets, of kind `fish`, for `cast_target`.
+    pub fn targetables(&self) -> Vec<TargetableEntity> {
+        self.fish
+            .iter()
+            .map(|f| TargetableEntity {
+                id: f.id,
+                kind: FISH_KIND.to_string(),
+                aabb: f.aabb(),
+            })
+            .collect()
+    }
+
     pub fn bodies(&self) -> &FishBodies {
         &self.bodies
     }
@@ -156,6 +171,16 @@ mod tests {
 
     fn ids(s: &FishStore) -> Vec<EntityId> {
         s.iter().map(|f| f.id).collect()
+    }
+
+    #[test]
+    fn targetables_are_fish_boxes() {
+        let mut s = store(100);
+        assert!(s.targetables().is_empty());
+        let id = s.spawn(&species()[0], [1.5, 50.0, -3.5], 0.0, 1).unwrap();
+        let t = s.targetables();
+        assert_eq!((t.len(), t[0].id, t[0].kind.as_str()), (1, id, FISH_KIND));
+        assert_eq!(t[0].aabb, s.get(id).unwrap().aabb());
     }
 
     #[test]

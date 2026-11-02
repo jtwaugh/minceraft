@@ -294,8 +294,8 @@ pub struct PlayerState {
 }
 
 impl PlayerState {
-    /// The v0 belt: empty hand, sword, hoe, and two reserved slots (fishing
-    /// rod and bucket). Fails if the tables lack the starting tools.
+    /// The v0 belt: empty hand, sword, hoe, fishing rod, and one reserved slot
+    /// (the bucket). Fails if the tables lack the starting tools.
     pub fn new(items: &Items) -> Result<PlayerState, ItemsError> {
         let tool = |name: &str| {
             if items.has_tool(name) {
@@ -310,7 +310,13 @@ impl PlayerState {
             }
         };
         Ok(PlayerState {
-            tool_belt: [None, tool("sword")?, tool("hoe")?, None, None],
+            tool_belt: [
+                None,
+                tool("sword")?,
+                tool("hoe")?,
+                tool("fishing_rod")?,
+                None,
+            ],
             selected: 0,
             hands: None,
         })
@@ -470,7 +476,7 @@ mod tests {
         assert_eq!(name(0), None);
         assert_eq!(name(1), Some("sword"));
         assert_eq!(name(2), Some("hoe"));
-        assert_eq!(name(3), None);
+        assert_eq!(name(3), Some("fishing_rod"));
         assert_eq!(name(4), None);
         assert_eq!(p.selected, 0);
         assert_eq!(p.hands, None);
@@ -553,6 +559,8 @@ mod tests {
         p.select(2);
         assert_eq!(p.held_thing(), HeldThing::Tool("hoe".into()));
         p.select(3);
+        assert_eq!(p.held_thing(), HeldThing::Tool("fishing_rod".into()));
+        p.select(4);
         assert_eq!(p.held_thing(), HeldThing::Empty);
     }
 

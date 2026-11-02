@@ -1056,11 +1056,12 @@ impl Walker {
         self.state.hands.as_ref()
     }
 
-    /// Stub entities plus the loose items and animals, as the eye ray sees them.
+    /// Stub entities plus the loose items, animals and fish, as the eye ray sees them.
     fn all_entities(&self) -> Vec<TargetableEntity> {
         let mut all = self.entities.clone();
         all.extend(self.items.targetables());
         all.extend(self.animals.targetables());
+        all.extend(self.fish.store().targetables());
         all
     }
 
@@ -1147,7 +1148,12 @@ impl Walker {
             let [x, y, z] = pos;
             let from = self.world.block_at(x, y, z);
             let tilled = self.tiller.till(&mut self.world, pos, self.sim_tick);
-            if tilled.is_some() {
+            if tilled.is_none() {
+                self.events.push(GameEvent::ActionRefused {
+                    action: "till".to_string(),
+                    reason: Reason::NothingHere,
+                });
+            } else {
                 self.events.push(GameEvent::BlockTilled {
                     position: pos,
                     from: from.info().name.to_string(),
@@ -1184,6 +1190,8 @@ impl Walker {
                     position: pos,
                     crop: crop_name(kind).to_string(),
                 });
+            } else {
+                self.refuse("plant", Reason::NothingHere);
             }
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Pick), ctx.target) {
@@ -1195,7 +1203,11 @@ impl Walker {
             let mature = tile.and_then(tile_crop_state) == Some("mature");
             let drops = pick_crop(&mut self.world, &self.crops, &mut self.harvest_rng, pos);
             let at = pos.map(|c| f64::from(c) + 0.5);
-            if let Some(item) = pick_flower(&mut self.world, &self.item_table, pos) {
+            let flower = pick_flower(&mut self.world, &self.item_table, pos);
+            if flower.is_none() && !(mature && drops.is_some()) {
+                self.refuse("pick", Reason::NothingHere);
+            }
+            if let Some(item) = flower {
                 if self.state.hands.is_none() {
                     self.events.push(GameEvent::ItemPickedUp {
                         item: item.clone(),
@@ -1722,6 +1734,18 @@ mod tests {
             w.preview(Button::Primary).map(|r| r.action),
             Some(ActionKind::Attack)
         );
+    }
+
+    #[test]
+    fn the_eye_ray_targets_a_spawned_fish_in_reach_only() {
+        let mut w = settled();
+        let id = w.spawn_fish("mackerel", [0.5, 4.6, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        assert_eq!(w.fish().get(id).map(|f| f.id), Some(id));
+        let far = w.spawn_fish("mackerel", [0.5, 4.0, -40.0], 0.0).unwrap();
+        w.tick(&look(-0.05, false));
+        assert_ne!(w.target(), Target::Entity { id: far });
     }
 
     fn cow_health(w: &Walker, id: crate::targeting::EntityId) -> u32 {
@@ -3609,6 +3633,72 @@ mod tests {
         assert_eq!(seen, run(), "replays identically");
     }
 
+    fn nothing_here(w: &mut Walker) -> Vec<String> {
+        w.drain_events()
+            .into_iter()
+            .filter_map(|e| match e {
+                GameEvent::ActionRefused {
+                    action,
+                    reason: Reason::NothingHere,
+                } => Some(action),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn till_refuses_nothing_here_only_when_it_does_nothing() {
+        // A planter side with a block over it: the rule matches, the till can't.
+        let mut w = floor_walker(8, Block::PlanterDirt);
+        w.world.set_block(0, 3, -1, Block::Air);
+        w.world.set_block(0, 4, -2, Block::Stone);
+        let aim = TickInput {
+            pitch: -1.0,
+            ..down(true, true)
+        };
+        w.tick(&aim);
+        assert_eq!(nothing_here(&mut w), ["till"]);
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, true));
+        assert!(nothing_here(&mut w).is_empty());
+    }
+
+    #[test]
+    fn plant_refuses_nothing_here_only_when_no_seed_goes_in() {
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, true));
+        w.drain_events();
+        // The rule matches on the held seeds, but the hands hold none.
+        w.set_held(HeldThing::Item("seeds".into()));
+        w.tick(&down(true, false));
+        assert_eq!(nothing_here(&mut w), ["plant"]);
+        w.clear_held_override();
+        w.state.hands = seed_hands();
+        w.tick(&down(true, false));
+        assert!(nothing_here(&mut w).is_empty());
+    }
+
+    #[test]
+    fn pick_refuses_nothing_here_for_an_immature_crop_only() {
+        let mut w = crop_walker(mature() - 1);
+        w.tick(&down(true, false));
+        assert_eq!(nothing_here(&mut w), ["pick"]);
+        let mut w = crop_walker(mature());
+        w.tick(&down(true, false));
+        assert!(nothing_here(&mut w).is_empty());
+        let mut w = flower_walker(Block::Dandelion);
+        w.tick(&down(true, false));
+        assert!(nothing_here(&mut w).is_empty());
+    }
+
+    #[test]
+    fn forage_miss_emits_no_refusal() {
+        let mut w = grass_walker(1_000_000);
+        w.tick(&look(0.0, false));
+        w.tick(&press_secondary());
+        assert!(nothing_here(&mut w).is_empty());
+    }
+
     #[test]
     fn tilling_a_planter_emits_planter_farmland() {
         let mut w = floor_walker(8, Block::PlanterDirt);
@@ -4208,10 +4298,14 @@ mod tests {
         let pos = w.player().pos;
         assert_eq!(
             dropped,
-            vec![("sword", pos, "death"), ("hoe", pos, "death")]
+            vec![
+                ("sword", pos, "death"),
+                ("hoe", pos, "death"),
+                ("fishing_rod", pos, "death")
+            ]
         );
         assert!(w.player_state().tool_belt.iter().all(Option::is_none));
-        assert_eq!(w.items().len(), 2);
+        assert_eq!(w.items().len(), 3);
         assert_eq!(w.player_state().held_thing(), HeldThing::Empty);
         w.respawn().unwrap();
         assert!(w.player_state().tool_belt.iter().all(Option::is_none));

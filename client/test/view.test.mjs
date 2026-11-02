@@ -3,7 +3,7 @@
 // Run: node --test client/test/view.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NEAR, nearPlaneCorners, basis, look, farPlane, FOG_END, fogAt, skyInputs, SUN_DIR } from '../view.js';
+import { NEAR, nearPlaneCorners, basis, look, farPlane, FOG_END, fogAt, skyInputs, SUN_DIR, daylightFactor } from '../view.js';
 import { fogAmount } from '../../viewer/fog.js';
 
 const FOV = 70 * Math.PI / 180; // data/input.toml look.fov_degrees
@@ -97,4 +97,10 @@ test('the sky pass runs above water with the biome colour, and not under water',
   assert.deepEqual(skyInputs(look({ ...base, underwater: false }), 0.3, 0.1, FOV, 16 / 9, noon).sunDir, noon);
   assert.deepEqual(skyInputs(look({ ...base, underwater: false }), 0.3, 0.1, FOV, 16 / 9, undefined).sunDir, SUN_DIR);
   assert.equal(skyInputs(look({ ...base, underwater: true }), 0.3, 0.1, FOV, 16 / 9), null);
+});
+
+test('daylightFactor is the controller daylight, or 1 with no day state', () => {
+  assert.equal(daylightFactor({ daylight: 0.25 }), 0.25);
+  assert.equal(daylightFactor({ daylight: 0 }), 0);
+  assert.equal(daylightFactor(null), 1);
 });
