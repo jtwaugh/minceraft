@@ -299,7 +299,12 @@ fn wind_direction_ignores_roughness_and_caches_agree() {
     use crate::wind_config::WindConfig;
     use crate::wind_field::{direction, Wind};
     let c = config();
-    let wc = WindConfig::default_from_data().unwrap();
+    // Gusts are undamped by default, so only the front keeps its direction.
+    let wc = WindConfig {
+        gust_strength: 0.0,
+        direction_wobble: 0.0,
+        ..WindConfig::default_from_data().unwrap()
+    };
     let flat = Wind::new(
         SEED,
         wc.clone(),
