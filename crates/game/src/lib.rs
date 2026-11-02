@@ -63,3 +63,4 @@ pub mod wind_roughness_config;
 #[cfg(test)]
 mod wind_roughness_tests;
 pub mod wind_shelter;
+pub mod wind_terrain;
