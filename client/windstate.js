@@ -16,7 +16,8 @@ export function createWindState(wind, Wind, swaySpeed) {
   return {
     /**
      * Advance one frame at world (x, z), sim `tick + alpha`, `dt` seconds.
-     * Returns { dir: [x, z] unit (zero when calm), strength 0..1, phase
+     * Returns { dir: [x, z] unit (zero when calm), vec: [x, z] blocks per
+     * second, strength 0..1, phase
      * radians in [0, 2pi), sway amplitude scale 0..1 }. Under
      * `reducedMotion` phase and sway are 0; dir and strength stay real.
      */
@@ -26,12 +27,12 @@ export function createWindState(wind, Wind, swaySpeed) {
       const dir = [...Wind.direction(wx, wz)];
       if (reducedMotion) {
         phase = 0;
-        return { dir, strength, phase: 0, sway: 0 };
+        return { dir, vec: [wx, wz], strength, phase: 0, sway: 0 };
       }
       const step = Math.min(Math.max(dt, 0), MAX_FRAME_DT);
       const rate = swaySpeed * (PHASE_RATE_MIN + (1 - PHASE_RATE_MIN) * strength);
       phase = (phase + step * rate) % TURN;
-      return { dir, strength, phase, sway: strength };
+      return { dir, vec: [wx, wz], strength, phase, sway: strength };
     },
   };
 }
