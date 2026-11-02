@@ -194,6 +194,26 @@ impl Scene {
         self.0.helm.to_vec()
     }
 
+    /// World x, y and z of the raft's first counter at the rest pose, or
+    /// nothing when it has none.
+    #[wasm_bindgen(getter)]
+    pub fn counter(&self) -> Vec<i32> {
+        let scene = &self.0;
+        let id = Block::Counter as u8;
+        scene
+            .cells
+            .iter()
+            .find(|c| {
+                let i = scene.raft.index(
+                    (c[0] - scene.raft.x0) as u32,
+                    c[1] as u32,
+                    (c[2] - scene.raft.z0) as u32,
+                );
+                scene.raft.blocks[i] == id
+            })
+            .map_or_else(Vec::new, |c| c.to_vec())
+    }
+
     /// Sea floor and water, in `generate_region_decorated` layout.
     pub fn sea_blocks(&self) -> Vec<u8> {
         self.0.sea.blocks.clone()
