@@ -36,6 +36,7 @@ height_cell = 64          # edge of one cached height cell
 height_step = 8           # spacing of heightmap samples and cell nodes
 height_radius = 16        # smoothing half-width for H
 height_radius_wide = 48   # smoothing half-width for H_wide
+surface_offset = 1.0      # blocks above H for callers that pass no height (finite, may be negative)
 
 # Exposure: speed factor from height above H_wide. gain, floor, ceiling above
 # zero, floor <= ceiling; ease_len zero or above.
@@ -43,6 +44,24 @@ exposure_gain = 0.02      # factor change per block above the mean
 exposure_floor = 0.6      # lowest factor (hollows)
 exposure_ceiling = 1.5    # highest factor (hilltops)
 exposure_ease_len = 4.0   # blocks over which the effect eases in
+
+# Shelter (docs/design/terrain-wind-shelter.md Phase A): the steepest rise of
+# the ground upwind of a point slows the wind. Distances are blocks, positive.
+# floor is the factor at full shelter, 0..1. rise is blocks per block;
+# rise_max > rise_min. epsilon (above zero) is the wind speed below which the
+# upwind samples contract onto the point.
+shelter_distances = [8.0, 16.0, 32.0]  # upwind sample distances
+shelter_floor = 0.3       # factor at full shelter
+shelter_rise_min = 0.0    # rise at and below which there is no shelter
+shelter_rise_max = 0.5    # rise at and above which the factor is the floor
+shelter_epsilon = 0.5     # calm-wind speed, blocks per second
+
+# Channelling: in low ground the wind turns toward the contour of H.
+# strength is 0..1; the ramps and delta are above zero.
+channel_strength = 0.8    # largest blend weight toward the contour
+channel_depth_ramp = 6.0  # blocks below H_wide at which the depth ramp reaches 1
+channel_grad_ramp = 0.2   # |grad H| at which the slope ramp reaches 1
+channel_delta = 2.0       # half-width of the finite difference for grad H, blocks
 
 [roughness]
 "Rainforest" = 0.9

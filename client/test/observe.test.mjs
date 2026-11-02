@@ -69,3 +69,15 @@ test('after steps: slot, aim and console show up', () => {
   assert.deepEqual(Object.keys(playerObservation(s).console), ['text', 'last']);
   s.close();
 });
+
+test('the work and render counters are diagnostic, and no other path moved class', () => {
+  const diagnostic = ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults'];
+  assert.deepEqual(Object.keys(PATHS).filter((p) => PATHS[p] === 'diagnostic').sort(), diagnostic.sort());
+  assert.equal(PATHS['regions.loaded'], 'debug');
+  const s = createSession(['walk', 'stream']);
+  try {
+    const d = debugObservation(s);
+    for (const p of diagnostic) assert.ok(p in d, p);
+    assert.ok(!JSON.stringify(playerObservation(s)).includes('max_per_frame'));
+  } finally { s.close(); }
+});

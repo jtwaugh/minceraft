@@ -141,3 +141,24 @@ test('the real process answers one JSON line per request', async () => {
   assert.equal(responses[4].observation.mode, 'walk');
   run(parse(responses[5].transcript)[0]);
 });
+
+test('player mode allows diagnostic paths on a streamed world only', () => {
+  const paths = ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults'];
+  const streamed = newState();
+  assert.equal(handle(streamed, { start: ['walk', 'stream'] }).ok, true);
+  try {
+    for (const p of paths) {
+      const r = handle(streamed, { exec: `expect ${p} >= 0` });
+      assert.equal(r.ok, true, `${p}: ${r.error}`);
+    }
+    assert.equal(handle(streamed, { exec: 'until regions.max_per_frame >= 0' }).ok, true);
+    assert.match(handle(streamed, { exec: 'expect regions.loaded >= 0' }).error, /debug path/);
+  } finally { streamed.session.close(); }
+  const plain = newState();
+  assert.equal(handle(plain, { start: ['walk'] }).ok, true);
+  try {
+    for (const p of paths) {
+      assert.match(handle(plain, { exec: `expect ${p} >= 0` }).error, /needs a session started with stream/, p);
+    }
+  } finally { plain.session.close(); }
+});
