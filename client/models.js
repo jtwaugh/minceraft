@@ -81,14 +81,20 @@ const FACES = [
  * One box { lo: [x, y, z], size: [w, h, d], faces: { front, back, left,
  * right, top, bottom } } to { vertices: Float32Array (x y z u v per vertex, 24
  * vertices), indices: Uint16Array (36, counter-clockwise seen from outside) }.
- * `uvOf(faceName)` is packAtlas's uvOf; face names are `model.face` strings.
+ * `uvOf(faceName)` is packAtlas's uvOf; face names are `model.face` strings,
+ * or `~model.face` for the same art mirrored left to right.
  */
 export function boxVertices(box, uvOf) {
   const { lo, size } = box;
   const vertices = new Float32Array(24 * 5);
   const indices = new Uint16Array(36);
   FACES.forEach((f, n) => {
-    const { u0, v0, u1, v1 } = uvOf((box.faces || {})[f.name]);
+    const name = (box.faces || {})[f.name];
+    // A `~` prefix draws the face mirrored left to right.
+    const mirror = typeof name === 'string' && name.startsWith('~');
+    const uv = uvOf(mirror ? name.slice(1) : name);
+    const [u0, u1] = mirror ? [uv.u1, uv.u0] : [uv.u0, uv.u1];
+    const { v0, v1 } = uv;
     const tl = f.tl.map((hi, a) => lo[a] + hi * size[a]);
     const r = f.right.map((d, a) => d * size[a]), d = f.down.map((e, a) => e * size[a]);
     const corners = [[0, 0, u0, v0], [0, 1, u0, v1], [1, 1, u1, v1], [1, 0, u1, v0]]; // TL BL BR TR

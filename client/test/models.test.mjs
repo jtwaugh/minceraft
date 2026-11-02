@@ -128,3 +128,13 @@ test('every batch-15 animal model is requested by the client', async () => {
   assert.equal(animalBoxes('cow')[0].faces.front, 'cow.front');
   assert.deepEqual(animalBoxes('dragon')[0].faces, {});
 });
+
+test('a ~ face name draws the face mirrored left to right', () => {
+  const uvOf = (n) => (n === 'a' ? { u0: 0.25, v0: 0, u1: 0.5, v1: 0.5 } : { u0: 0, v0: 0, u1: 0, v1: 0 });
+  const uvs = (name) => {
+    const { vertices } = boxVertices({ lo: [0, 0, 0], size: [1, 1, 1], faces: { front: name } }, uvOf);
+    return [0, 1, 2, 3].map((k) => [vertices[k * 5 + 3], vertices[k * 5 + 4]]);
+  };
+  assert.deepEqual(uvs('a'), [[0.25, 0], [0.25, 0.5], [0.5, 0.5], [0.5, 0]]);
+  assert.deepEqual(uvs('~a'), [[0.5, 0], [0.5, 0.5], [0.25, 0.5], [0.25, 0]]);
+});
