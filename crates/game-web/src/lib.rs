@@ -432,6 +432,11 @@ impl Walk {
         self.0.time_of_day()
     }
 
+    /// Whether the clock is frozen (`time freeze`).
+    pub fn day_frozen(&self) -> bool {
+        self.0.day_frozen()
+    }
+
     /// Scene brightness now, in 0..1.
     pub fn daylight(&self) -> f64 {
         self.0.daylight()

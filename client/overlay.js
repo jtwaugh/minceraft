@@ -24,6 +24,9 @@
 //   faceAnimal(walk, look) -> [dx, dy] mouse movement that turns `look` ({ yaw, pitch })
 //     to the first animal's middle
 
+//   formatTime(fraction, frozen) -> "HH:MM (0.xxx)", plus " frozen" when the clock is held
+//     fraction 0..1 with 0 midnight; the clock never prints 24:00
+
 export const FACES = ['bottom', 'top', 'north', 'south', 'west', 'east'];
 const KINDS = ['none', 'block', 'entity'];
 
@@ -114,4 +117,11 @@ export function faceAnimal(walk, { yaw, pitch }, sensitivity = 0.0025) {
   let dyaw = want[0] - yaw;
   dyaw -= 2 * Math.PI * Math.round(dyaw / (2 * Math.PI));
   return [Math.round(dyaw / sensitivity), Math.round(-(want[1] - pitch) / sensitivity)];
+}
+
+export function formatTime(fraction, frozen) {
+  const minutes = Math.min(1439, Math.floor(fraction * 1440));
+  const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  return `time ${hh}:${mm} (${fraction.toFixed(3)})${frozen ? ' frozen' : ''}`;
 }

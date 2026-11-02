@@ -32,7 +32,7 @@ const CLASSES = {
   partial: ['target.id', 'target.face', 'box', 'console.last', 'console.text', 'phase.left'],
   debug: [
     'regions.loaded', 'regions.freed', 'regions.pending', 'regions.x', 'regions.z',
-    'console.lines', 'cheated', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
+    'console.lines', 'cheated', 'time', 'time.frozen', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',

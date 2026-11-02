@@ -37,7 +37,7 @@ import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
 import { mountHint, hintScale } from './hintui.js';
 import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
-import { formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
+import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { meshRegionCpu } from './regionmesh.js';
@@ -634,6 +634,7 @@ function render(now) {
       (hitch ? `${hitch}\n` : '') +
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 cheated: ${walk.cheated() ? 'yes' : 'no'}
+${formatTime(walk.time_of_day(), walk.day_frozen())}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;

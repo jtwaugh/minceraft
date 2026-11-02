@@ -2,7 +2,7 @@
 // Run: node --test client/test/overlay.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readAim, formatAim, readBelt, formatBelt, readItems } from '../overlay.js';
+import { readAim, formatAim, readBelt, formatBelt, readItems, formatTime } from '../overlay.js';
 
 function fakeWalk({ target = [0, 0, 0, 0, 0], box = [], rules = {}, last = -1 } = {}) {
   return {
@@ -71,4 +71,11 @@ test('readItems reads one item per loose item, in order', () => {
     { id: 4, name: 'stick', pos: [1, 6, 2], size: 0.25 },
     { id: 9, name: 'wheat', pos: [3.5, 7, -4], size: 0.25 },
   ]);
+});
+
+test('formatTime prints a 24-hour clock, the fraction and a frozen note', () => {
+  assert.equal(formatTime(0, false), 'time 00:00 (0.000)');
+  assert.equal(formatTime(0.5, false), 'time 12:00 (0.500)');
+  assert.equal(formatTime(0.9999, false), 'time 23:59 (1.000)');
+  assert.equal(formatTime(0.25, true), 'time 06:00 (0.250) frozen');
 });
