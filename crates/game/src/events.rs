@@ -57,6 +57,13 @@ pub enum GameEvent {
     /// The carried item went onto a station. `target` is the station's block
     /// name.
     ItemPutDown { item: String, target: String },
+    /// The carried item went into a chest. `chest` is its raft-local cell and
+    /// `slot` the slot index it took.
+    ItemStored {
+        item: String,
+        chest: [i32; 3],
+        slot: usize,
+    },
     /// The hoe tilled the block at `position`. `from` and `to` are block
     /// names before and after.
     BlockTilled {

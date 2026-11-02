@@ -296,6 +296,9 @@ fn describe_event(e: &GameEvent) -> String {
         GameEvent::ItemPutDown { item, target } => {
             format!("item_put_down item={item} target={target}")
         }
+        GameEvent::ItemStored { item, chest, slot } => {
+            format!("item_stored item={item} chest={} slot={slot}", pos(chest))
+        }
         GameEvent::BlockTilled { position, from, to } => {
             format!(
                 "block_tilled position={} from={from} to={to}",
@@ -795,6 +798,22 @@ impl Walk {
     /// The item on each station in [`Walk::station_cells`], in the same order.
     pub fn station_item_names(&self) -> Vec<String> {
         self.0.station_items().into_iter().map(|(_, i)| i).collect()
+    }
+
+    /// The occupied chest slots, three numbers each: the chest's raft-local
+    /// cell `x, y, z`. Item names are in [`Walk::chest_item_names`], in the
+    /// same order.
+    pub fn chest_cells(&self) -> Vec<i32> {
+        self.0
+            .chest_items()
+            .into_iter()
+            .flat_map(|(c, _)| c)
+            .collect()
+    }
+
+    /// The item in each slot in [`Walk::chest_cells`], in the same order.
+    pub fn chest_item_names(&self) -> Vec<String> {
+        self.0.chest_items().into_iter().map(|(_, i)| i).collect()
     }
 
     /// How many loose items lie in the world.

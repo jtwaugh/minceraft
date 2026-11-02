@@ -5,6 +5,7 @@
 use crate::aliases::Aliases;
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
+use crate::chests::{slot_count_from_data, Chests};
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::commands::{run_line, GameState, Registry};
 use crate::crops::Crops;
@@ -242,6 +243,8 @@ pub struct Walker {
     aliases: Aliases,
     /// Items sitting on raft stations, keyed by raft-local cell.
     stations: Stations,
+    /// Items in raft chests, keyed by raft-local cell.
+    chests: Chests,
 }
 
 impl Walker {
@@ -318,6 +321,7 @@ impl Walker {
                 aliases: Vec::new(),
             },
             stations: Stations::new(),
+            chests: Chests::new(slot_count_from_data().expect("shipped chests.toml")),
         })
     }
 
@@ -492,6 +496,17 @@ impl Walker {
             }
             h.str(&item.item);
         }
+        for (cell, slots) in self.chests.iter() {
+            for c in cell {
+                h.u64(i64::from(c) as u64);
+            }
+            for (i, slot) in slots.iter().enumerate() {
+                if let Some(item) = slot {
+                    h.u64(i as u64);
+                    h.str(&item.item);
+                }
+            }
+        }
         h.finish()
     }
 
@@ -501,6 +516,15 @@ impl Walker {
         self.stations
             .iter()
             .map(|(c, i)| (c, i.item.clone()))
+            .collect()
+    }
+
+    /// The items in raft chests as `(raft-local cell, item name)`, one per
+    /// occupied slot, sorted by cell then slot.
+    pub fn chest_items(&self) -> Vec<([i32; 3], String)> {
+        self.chests
+            .iter()
+            .flat_map(|(c, slots)| slots.iter().flatten().map(move |i| (c, i.item.clone())))
             .collect()
     }
 
@@ -1448,6 +1472,20 @@ impl Walker {
                             target: name.to_string(),
                         });
                     }
+                    Err(item) => self.state.hands = Some(item),
+                }
+            }
+            ActionKind::Store => {
+                let Some(item) = self.state.hands.take() else {
+                    return;
+                };
+                let name = item.item.clone();
+                match self.chests.deposit(cell, item) {
+                    Ok(slot) => self.events.push(GameEvent::ItemStored {
+                        item: name,
+                        chest: cell,
+                        slot,
+                    }),
                     Err(item) => self.state.hands = Some(item),
                 }
             }
