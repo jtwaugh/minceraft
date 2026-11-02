@@ -91,6 +91,34 @@ impl FishWorld {
         })
     }
 
+    /// Make fish `id` swim to `point` instead of wandering, until the lure
+    /// is cleared or a scatter. No-op for an unknown id.
+    pub fn set_lure(&mut self, id: EntityId, point: [f64; 3]) {
+        if let Some(f) = self.store.iter_mut().find(|f| f.id == id) {
+            f.lure = Some(point);
+        }
+    }
+
+    /// Let fish `id` wander again. No-op for an unknown id.
+    pub fn clear_lure(&mut self, id: EntityId) {
+        if let Some(f) = self.store.iter_mut().find(|f| f.id == id) {
+            f.lure = None;
+        }
+    }
+
+    /// True if fish `id` is lured and within `lure_distance` of the point.
+    pub fn lure_arrived(&self, id: EntityId) -> bool {
+        let Some(f) = self.store.get(id) else {
+            return false;
+        };
+        let Some(p) = f.lure else {
+            return false;
+        };
+        let c = [f.pos[0], f.pos[1] + f.box_size[1] / 2.0, f.pos[2]];
+        let d2: f64 = (0..3).map(|i| (p[i] - c[i]).powi(2)).sum();
+        d2.sqrt() <= self.steer.config().lure_distance
+    }
+
     /// Fish left in today's stock.
     pub fn stock(&self) -> u32 {
         self.spawner.stock()
@@ -222,6 +250,27 @@ mod tests {
             .unwrap()
             .swim_speed;
         assert!(speed(10 + ticks + 5) <= tuna * crate::clock::TICK_SECONDS + 1e-9);
+    }
+
+    #[test]
+    fn set_lure_brings_the_fish_and_a_hit_or_clear_drops_it() {
+        let world = pool();
+        let far = Aabb::new([100.0, 80.0, 100.0], [100.6, 81.8, 100.6]);
+        let mut w = FishWorld::default_from_data(3, 1).unwrap();
+        let id = w.spawn("tuna", [-8.5, 54.0, 0.5], 90.0).unwrap();
+        assert!(!w.lure_arrived(id));
+        w.set_lure(id, [3.5, 55.0, 0.5]);
+        for tick in 0..400 {
+            w.tick(tick, [0.0, 0.0], &far, &world, |_, _| None);
+        }
+        assert!(w.lure_arrived(id));
+        w.clear_lure(id);
+        assert!(!w.lure_arrived(id));
+        w.set_lure(id, [3.5, 55.0, 0.5]);
+        assert_eq!(w.hit(id, 1, [0.0; 3]), None);
+        assert_eq!(w.store().get(id).unwrap().lure, None);
+        w.set_lure(99, [0.0; 3]);
+        w.clear_lure(99);
     }
 
     #[test]

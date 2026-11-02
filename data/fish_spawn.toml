@@ -13,4 +13,5 @@ clearance = 1             # keep this far below the surface and above the bottom
 scatter_distance = 4      # a swimming player this close scatters fish ...
 scatter_speed = 2.0       # ... which swim at this multiple of their speed
 hit_scatter_ticks = 60   # a hit fish that survives, and its school, scatter this many ticks
+lure_distance = 0.5        # a lured fish this close to its lure has arrived and stops
 retarget_ticks = [40, 100] # wander picks a new heading after this many ticks, inclusive

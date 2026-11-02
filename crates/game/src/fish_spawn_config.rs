@@ -26,11 +26,13 @@ pub struct FishSpawnConfig {
     pub scatter_speed: f64,
     /// Ticks a surviving hit fish and its school scatter from the attacker.
     pub hit_scatter_ticks: u32,
+    /// Blocks from a lure at which a lured fish has arrived and stops.
+    pub lure_distance: f64,
     /// Inclusive range of ticks before the wander picks a new heading.
     pub retarget_ticks: [u32; 2],
 }
 
-const KEYS: [&str; 11] = [
+const KEYS: [&str; 12] = [
     "daily_stock",
     "target_count",
     "target_radius",
@@ -41,6 +43,7 @@ const KEYS: [&str; 11] = [
     "scatter_distance",
     "scatter_speed",
     "hit_scatter_ticks",
+    "lure_distance",
     "retarget_ticks",
 ];
 
@@ -105,6 +108,7 @@ impl FishSpawnConfig {
             scatter_distance: blocks(&root, "scatter_distance")?,
             scatter_speed: blocks(&root, "scatter_speed")?,
             hit_scatter_ticks: whole(&root, "hit_scatter_ticks")?,
+            lure_distance: blocks(&root, "lure_distance")?,
             retarget_ticks,
         };
         if !(config.ring_inner < config.ring_outer && config.ring_outer < config.despawn_radius) {
