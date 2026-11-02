@@ -3,12 +3,13 @@
 // is plain data that Node tests check; the DOM renderer is a thin mirror.
 //
 //   hudModel({ belt, health, maxHealth, phase, secondsLeft }) ->
-//     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected }], selected, hands, ready, hearts: { full, half, empty } }
+//     { crosshair, timer: { phase, secondsLeft }, slots: [{ name, selected }], selected, hands, ready, stowed, hearts: { full, half, empty } }
 //
 //   slotView(set, name, selected) -> { frame, icon }   frame is `slot` or `slot_selected`; icon is the item's texture name or null
 //   mountHud(document, set, parent) draws frames and icons from the parsed tileset at an integer scale (interfaceScale).
 //
 // `ready` is the selected tool's name when the hands are empty, else null.
+// `stowed` is true while the hands are full, so the belt's tools are put away.
 // The ready tool is drawn in the hands frame at READY_ALPHA; a carried item is opaque.
 // Health is in half-hearts, so 19 of 20 is nine full hearts and one half.
 
@@ -50,6 +51,7 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
     selected: belt.selected,
     hands: belt.hands,
     ready: !belt.hands && belt.held?.startsWith('tool:') ? belt.held.slice(5) : null,
+    stowed: belt.hands != null,
     hearts: { full, half, empty: Math.ceil(maxHealth / 2) - full - half },
   };
 }

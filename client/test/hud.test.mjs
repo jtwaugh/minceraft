@@ -157,6 +157,12 @@ test('ready is the selected tool while the hands are empty', () => {
   assert.equal(ready({ selected: 2, hands: 'seeds', held: 'item:seeds' }), null);
 });
 
+test('the tools are stowed while the hands are full', () => {
+  const stowed = (b) => hudModel({ belt: { ...belt, ...b }, health: 20, maxHealth: 20 }).stowed;
+  assert.equal(stowed({ selected: 2, hands: null, held: 'tool:hoe' }), false);
+  assert.equal(stowed({ selected: 2, hands: 'seeds', held: 'item:seeds' }), true);
+});
+
 test('the hands frame draws the ready tool faded, a carried item opaque, and nothing else only the frame', async () => {
   const { mountHud } = await import('../hud.js');
   const { hudLayout } = await import('../hudlayout.js');

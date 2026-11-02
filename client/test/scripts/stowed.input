@@ -1,0 +1,23 @@
+# Stowed tools in the HUD model (docs/design/ready-and-stowed-tools.md Phase B):
+# the belt's tools are stowed while the hands are full, and back once they're empty.
+# Raft scene: three seeds lie on the islet east of the spawn.
+
+case the tools are stowed while carrying and back after dropping
+start walk raft
+click
+lock
+expect hud.stowed = false
+press Digit3
+frame 50 x2
+mouse 632 120
+frame 50 x2
+button down right
+button up right
+frame 50 x2
+expect hud.hands = seeds
+expect hud.stowed = true
+press KeyQ
+frame 50 x2
+expect hud.hands = none
+expect hud.stowed = false
+expect hud.ready = hoe
