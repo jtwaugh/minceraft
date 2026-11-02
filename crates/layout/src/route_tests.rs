@@ -54,3 +54,15 @@ fn shipped_defaults() {
         (150.0, 30.0, 30.0)
     );
 }
+
+#[test]
+fn shipped_coast_fits_inside_the_corridor() {
+    let p = RouteParams::shipped();
+    assert!(p.coast_near_min >= p.channel_half_width + p.channel_falloff);
+    assert!(p.coast_near_min <= p.coast_near_max);
+    assert!(p.coast_ramp_min <= p.coast_ramp_max);
+    assert!(p.coast_height_min <= p.coast_height_max);
+    assert!(p.coast_wobble_length > 0.0);
+    // 256 blocks: a route region's distance to the corridor border.
+    assert!(p.coast_near_max + p.coast_ramp_max + p.coast_width + p.coast_fade < 256.0);
+}

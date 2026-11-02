@@ -71,11 +71,18 @@ pub mod b {
     pub const DUNE_GRASS_LOWER: u8 = 66;
     pub const DUNE_GRASS_UPPER: u8 = 67;
     pub const TEST_WATERLOGGED_PLANT: u8 = 68;
+    pub const THATCH: u8 = 69;
+    pub const BARREL: u8 = 70;
+    pub const COUNTER: u8 = 74;
+    pub const PLATE_RACK: u8 = 75;
     pub const FLOE_ICE: u8 = 76;
     pub const KELP_0: u8 = 77;
     pub const KELP_1: u8 = 78;
     pub const OYSTER: u8 = 79;
     pub const SCALLOP: u8 = 80;
+    pub const DOCK_PLANKS: u8 = 81;
+    pub const DOCK_POST: u8 = 82;
+    pub const CHEST: u8 = 83;
 }
 
 use b::*;
@@ -92,10 +99,11 @@ const fn flags(ids: &[u8]) -> [bool; 256] {
 
 /// Full cubes that hide the faces of whatever is next to them.
 #[rustfmt::skip]
-const SOLID: [u8; 18] = [
+const SOLID: [u8; 25] = [
     STONE, DIRT, GRASS, SAND, GRAVEL, OAK_LOG, BIRCH_LOG, SPRUCE_LOG, PUMPKIN, RAFT_PLANKS,
     BUTCHER_BLOCK, GRIDDLE, CRATE, FARMLAND_DRY, FARMLAND_WET, PLANTER_DIRT,
-    PLANTER_FARMLAND_DRY, PLANTER_FARMLAND_WET,
+    PLANTER_FARMLAND_DRY, PLANTER_FARMLAND_WET, THATCH, BARREL, COUNTER, PLATE_RACK, DOCK_PLANKS,
+    DOCK_POST, CHEST,
 ];
 pub const OPAQUE: [bool; 256] = flags(&SOLID);
 pub const LEAVES: [bool; 256] = flags(&[OAK_LEAVES, BIRCH_LEAVES, SPRUCE_LEAVES]);

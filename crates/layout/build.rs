@@ -74,6 +74,15 @@ struct RouteParams {
     climate_falloff: f64,
     cold_below: f64,
     warm_above: f64,
+    coast_near_min: f64,
+    coast_near_max: f64,
+    coast_ramp_min: f64,
+    coast_ramp_max: f64,
+    coast_height_min: f64,
+    coast_height_max: f64,
+    coast_width: f64,
+    coast_fade: f64,
+    coast_wobble_length: f64,
 }
 
 /// Mirrors `ScoringConfig` in `src/scoring.rs`.
@@ -285,7 +294,8 @@ fn main() {
          channel_falloff: {:?}, channel_depth_below_sea: {:?}, channel_clear_above: {:?}, \
          corridor_margin: {:?}, temp_start: {:?}, temp_end: {:?}, \
          d_humid_start: {:?}, d_humid_end: {:?}, climate_half_width: {:?}, \
-         climate_falloff: {:?}, cold_below: {:?}, warm_above: {:?} }};\n",
+         climate_falloff: {:?}, cold_below: {:?}, warm_above: {:?}, \
+         coast_near_min: {:?}, coast_near_max: {:?}, coast_ramp_min: {:?}, coast_ramp_max: {:?}, coast_height_min: {:?}, coast_height_max: {:?}, coast_width: {:?}, coast_fade: {:?}, coast_wobble_length: {:?} }};\n",
         r.spacing,
         r.spacing_spread,
         r.max_turn_degrees,
@@ -301,7 +311,16 @@ fn main() {
         r.climate_half_width,
         r.climate_falloff,
         r.cold_below,
-        r.warm_above
+        r.warm_above,
+        r.coast_near_min,
+        r.coast_near_max,
+        r.coast_ramp_min,
+        r.coast_ramp_max,
+        r.coast_height_min,
+        r.coast_height_max,
+        r.coast_width,
+        r.coast_fade,
+        r.coast_wobble_length
     );
     std::fs::write(out_dir.join("route.rs"), out).unwrap();
 

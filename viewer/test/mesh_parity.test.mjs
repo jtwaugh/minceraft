@@ -19,7 +19,7 @@ const ctx = { COLORS: [], faceLayer, variants: { 249: { count: 3, cum: [0.6, 0.8
 ctx.COLORS[B.birch_leaves] = [150, 190, 90];
 ctx.COLORS[B.spruce_leaves] = [60, 110, 70];
 
-const KEEP = new Set([B.air, B.dirt, B.grass, B.stone, B.sand, B.gravel, B.water, B.ice, B.oak_log, B.birch_log, B.spruce_log,
+const KEEP = new Set([B.air, B.dirt, B.grass, B.stone, B.sand, B.gravel, B.water, B.ice, B.oak_log, B.birch_log, B.spruce_log, B.chest,
   B.oak_leaves, B.birch_leaves, B.spruce_leaves, B.cactus, B.berry_bush, B.bush, B.jungle_bush, B.snow_layer,
   B.leaf_litter, B.lily_pad]);
 const restrict = (blocks) => blocks.map((b) => (KEEP.has(b) || CROSS[b] ? b : B.air));
@@ -84,15 +84,14 @@ for (const corners of [false, true]) {
   });
 }
 
-// The +Z face takes the front layer in both meshers (stone stands in for the chest, which
-// the Rust mesher doesn't list as solid yet).
+// The +Z face of a chest takes the front layer in both meshers.
 for (const greedy of [false, true]) {
   test(`wasm mesher matches meshBlocks with a front layer${greedy ? ', greedy' : ''}`, () => {
     const size = 4, blocks = new Uint8Array(size * size * H);
-    blocks[(1 * size + 1) * H + 5] = B.stone;
-    blocks[(1 * size + 2) * H + 5] = B.stone;
+    blocks[(1 * size + 1) * H + 5] = B.chest;
+    blocks[(1 * size + 2) * H + 5] = B.chest;
     const frontLayer = new Uint8Array(256).fill(0xFF);
-    frontLayer[B.stone] = 200;
+    frontLayer[B.chest] = 200;
     const c = { ...ctx, frontLayer };
     const tints = randomTints(size, false);
     const js = meshBlocks(c, blocks, tints, size, 0, { greedy });

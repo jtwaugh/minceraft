@@ -20,8 +20,6 @@ pub struct WindConfig {
     pub speed_scale: f64,
     /// Feature size of the gust noise, blocks.
     pub gust_size: f64,
-    /// Seconds for the gust noise to change by one feature.
-    pub gust_time_scale: f64,
     /// `g` in `speed · (1 + g·gust)`.
     pub gust_strength: f64,
     /// Largest sideways push from gusts, as a fraction of the speed.
@@ -41,12 +39,11 @@ pub struct WindConfig {
     pub channel: ChannelParams,
 }
 
-const KEYS: [&str; 27] = [
+const KEYS: [&str; 26] = [
     "front_size",
     "front_drift",
     "speed_scale",
     "gust_size",
-    "gust_time_scale",
     "gust_strength",
     "direction_wobble",
     "speed_floor",
@@ -224,7 +221,6 @@ impl WindConfig {
             front_drift,
             speed_scale: positive(&root, "speed_scale")?,
             gust_size: positive(&root, "gust_size")?,
-            gust_time_scale: positive(&root, "gust_time_scale")?,
             gust_strength: non_negative(&root, "gust_strength")?,
             direction_wobble: non_negative(&root, "direction_wobble")?,
             speed_floor: non_negative(&root, "speed_floor")?,
@@ -264,7 +260,7 @@ mod tests {
             "front passes in under a minute"
         );
         assert!(c.gust_size < c.front_size);
-        assert!(c.speed_scale > 0.0 && c.gust_time_scale > 0.0);
+        assert!(c.speed_scale > 0.0);
         assert!(c.gust_strength >= 0.0 && c.direction_wobble >= 0.0);
         assert!(c.speed_floor <= c.speed_ceiling);
     }
@@ -295,7 +291,6 @@ mod tests {
             ("front_drift = [4.0, 1.5]", "front_drift = 4.0"),
             ("speed_scale = 6.0", "speed_scale = 0.0"),
             ("gust_size = 48", "gust_size = -48"),
-            ("gust_time_scale = 3.0", "gust_time_scale = 0"),
             ("gust_strength = 0.5", "gust_strength = -0.5"),
             ("gust_strength = 0.5", "gust_strength = inf"),
             ("direction_wobble = 0.2", "direction_wobble = -0.2"),
