@@ -76,7 +76,7 @@
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
-// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
@@ -282,6 +282,7 @@ function read(w, path) {
   if (path === 'phase.left') return s.hud.timer.secondsLeft;
   if (path === 'hud.selected') return s.hud.selected;
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
+  if (path === 'hud.ready') return s.hud.ready ?? 'none';
   if (path === 'items') return w.walk.loose_items();
   if (path === 'fish') return readFish(w.walk).length;
   if (path.startsWith('fish.near')) {

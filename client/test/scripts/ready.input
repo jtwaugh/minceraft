@@ -1,0 +1,28 @@
+# The ready tool in the HUD model (docs/design/ready-and-stowed-tools.md Phase A):
+# the selected tool's name while the hands are empty, none once carrying.
+# Raft scene: three seeds lie on the islet east of the spawn.
+
+case the selected tool is ready while the hands are empty
+start walk raft
+click
+lock
+expect hud.ready = none
+press Digit3
+frame 50 x2
+expect hud.ready = hoe
+expect hud.hands = none
+
+case picking up an item clears ready
+start walk raft
+click
+lock
+press Digit3
+frame 50 x2
+expect hud.ready = hoe
+mouse 632 120
+frame 50 x2
+button down right
+button up right
+frame 50 x2
+expect hud.ready = none
+expect hud.hands = seeds
