@@ -1,0 +1,44 @@
+# The wind pin (docs/design/wind.md Phase B): `wind pin` fixes the vector the
+# per-frame wind state uses, `wind unpin` frees it, reduced motion stills sway.
+
+case pinned wind sets direction and readout, unpin frees it
+start walk raft
+click
+lock
+frame 50 x2
+press Backquote
+expect mode = console
+type wind pin 5 0
+expect console.text = wind pin 5 0
+press Enter
+lock
+frame 50 x2
+expect console.last = wind pinned to (5, 0)
+expect wind.dir.x ~ 1
+expect wind.dir.z ~ 0
+expect wind.readout = wind E 5.0 b/s (gust 0.42) R 0.47 x0.76
+press Backquote
+type wind unpin
+press Enter
+lock
+frame 50 x2
+expect console.last = wind free
+expect wind.readout != wind E 5.0 b/s (gust 0.42) R 0.47 x0.76
+
+case reduced motion keeps the readout real but stops sway
+start walk raft
+click
+lock
+frame 50
+press Backquote
+type wind pin 0 5
+press Enter
+lock
+reduced off
+frame 50 x2
+expect wind.sway > 0
+reduced on
+frame 50 x2
+expect wind.sway = 0
+expect wind.dir.z = 0
+expect wind.readout = wind S 5.0 b/s (gust 0.42) R 0.47 x0.76

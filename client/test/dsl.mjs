@@ -56,6 +56,7 @@
 //                               tileset from viewer/textures.json); changes nothing in the world,
 //                               but remembers the result for the `layout.*` paths
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
+//   reduced on|off              prefers-reduced-motion for the wind state (default off)
 //   mark                        remember the current eye (and raft offset), for `moved` and `raft.moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
 //                               since the case began (`expect no event <name>` for the opposite)
@@ -83,6 +84,8 @@
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
 // layout.belt.offcentre (CSS px between the belt panel's centre and the viewport's centre), layout.hud.height (the bottom block, hearts top to belt panel bottom, / viewport height),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
+// wind.dir.x|z, wind.strength, wind.sway (the per-frame windstate.js result for the eye, the walk's wind pin
+// and the reduced-motion setting, as of the last frame), wind.readout (the debug overlay's wind line),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
 // events.foraged (`foraged` events seen since the case began), events.overbudget (stream only: frames whose work,
 // as counted for the work paths, went over a budget in client/workbudget.js; each is an event
@@ -90,6 +93,7 @@
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing), bobber (none|flying|floating|resting|dipping; a cast is a secondary press with the rod held), bobber.near <x> <y> <z> <r> (1 if the bobber is within r blocks of that point, else 0), fish (fish in the world), fish.near <x> <y> <z> <r> (fish within r blocks of that point; the path takes arguments: `expect fish.near 10 64 3 5 = 1`).
 
 import { readFileSync } from 'node:fs';
+import * as terrain_game from '../pkg/game_web.js';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
 import * as terrain from '../../viewer/pkg/terrain_web.js';
 import { B, VERTEX_BYTES, legendContext } from '../../viewer/mesh.js';
@@ -104,6 +108,9 @@ import { createHintState } from '../hintui.js';
 import { heldDraw } from '../helditem.js';
 import { hudLayout } from '../hudlayout.js';
 import { layoutChecks } from '../hudcheck.js';
+import { createWindState } from '../windstate.js';
+import { formatWind } from '../windreadout.js';
+import { SWAY_SPEED } from '../sway.js';
 import { spawnTestItems, readAnimals, readFish, readBobber, faceAnimal, spawnTestAnimals } from '../overlay.js';
 
 let ready = false;
@@ -189,9 +196,15 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   const render = stream ? { faults: 0 } : null; // crack faults over every region meshed so far
   const hint = createHintState();
   document.addEventListener('pointerlockchange', () => hint.update(input.locked));
+  const windField = new terrain_game.Wind(STREAM_SEED);
+  const windState = createWindState(windField, terrain_game.Wind, SWAY_SPEED);
   const frame = controller.frame;
   controller.frame = (dt) => {
     const state = frame(dt);
+    const [x, , z] = state.eye;
+    const wind = windState.frame(x, z, walk.sim_tick(), state.alpha, dt, w.reduced, walk.wind_pin());
+    if (w.reduced) wind.dir = [0, 0]; // as scene.js does
+    w.wind = { ...wind, readout: formatWind(wind.vec[0], wind.vec[1], wind.strength, windField.roughness(x, z), windField.ground_multiplier(x, z)) };
     hint.update(input.locked);
     seen.push(...state.events);
     if (most) {
@@ -203,9 +216,10 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
     }
     return state;
   };
+  const w = { reduced: false, wind: null };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, hint, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
+  return Object.assign(w, { scene, canvas, document, window, input, hint, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null });
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus', '.': 'Period' };
@@ -265,6 +279,11 @@ function read(w, path) {
   if (path.startsWith('layout.')) {
     if (!w.layout) throw new Error(`${path} needs an earlier \`layout <w> <h>\``);
     const v = w.layout[path.slice(7)];
+    if (v === undefined) throw new Error(`unknown path '${path}'`);
+    return v;
+  }
+  if (path.startsWith('wind.')) {
+    const v = { 'wind.dir.x': w.wind.dir[0], 'wind.dir.z': w.wind.dir[1], 'wind.strength': w.wind.strength, 'wind.sway': w.wind.sway, 'wind.readout': w.wind.readout }[path];
     if (v === undefined) throw new Error(`unknown path '${path}'`);
     return v;
   }
@@ -557,6 +576,10 @@ function step(w, { op, args }) {
       return step(w, { op: 'expect', args });
     }
     case 'held': w.walk.set_held(args[0]); return;
+    case 'reduced':
+      if (!['on', 'off'].includes(args[0])) throw new Error('reduced on|off');
+      w.reduced = args[0] === 'on';
+      return;
     case 'mark': w.mark = w.controller.state.eye.slice(); w.markRaft = w.walk.raft_offset(w.controller.state.alpha); return;
     case 'expect': {
       const negated = args[0] === 'no' && args[1] === 'event';
