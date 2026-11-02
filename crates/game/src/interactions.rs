@@ -10,8 +10,10 @@
 
 use crate::data_error::{DataError, DataErrorKind, DataFile};
 use crate::input::TickInput;
+use crate::stations::StationKinds;
 use crate::targeting::{self, EntityId, Face};
 use std::fmt;
+use std::sync::OnceLock;
 
 const DEFAULT_INTERACTIONS: &str = include_str!("../../../data/interactions.toml");
 
@@ -31,6 +33,8 @@ pub enum Held {
     Empty,
     Any,
     AnyTool,
+    /// An ordinary carried item: not empty hands, not a tool.
+    AnyItem,
     Tool(String),
     Item(String),
 }
@@ -39,12 +43,16 @@ pub enum Held {
 pub enum Button {
     Primary,
     Secondary,
+    /// The E key.
+    Interact,
 }
 
 /// What the crosshair is on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Block(String),
+    /// Any block named in `data/stations.toml` (`block:station`).
+    Station,
     Entity(String),
     None,
 }
@@ -57,6 +65,8 @@ pub enum ActionKind {
     Plant,
     Pick,
     Forage,
+    PutDown,
+    Take,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -164,6 +174,7 @@ fn parse_held(value: &str) -> Option<Held> {
         "empty" => Some(Held::Empty),
         "any" => Some(Held::Any),
         "any_tool" => Some(Held::AnyTool),
+        "any_item" => Some(Held::AnyItem),
         _ => match split_named(value)? {
             ("tool", name) => Some(Held::Tool(name.to_string())),
             ("item", name) => Some(Held::Item(name.to_string())),
@@ -176,6 +187,7 @@ fn parse_button(value: &str) -> Option<Button> {
     match value {
         "primary" => Some(Button::Primary),
         "secondary" => Some(Button::Secondary),
+        "interact" => Some(Button::Interact),
         _ => None,
     }
 }
@@ -185,6 +197,7 @@ fn parse_target(value: &str) -> Option<Target> {
         return Some(Target::None);
     }
     match split_named(value)? {
+        ("block", "station") => Some(Target::Station),
         ("block", name) => Some(Target::Block(name.to_string())),
         ("entity", kind) => Some(Target::Entity(kind.to_string())),
         _ => None,
@@ -198,6 +211,8 @@ fn parse_action(value: &str) -> Option<ActionKind> {
         "plant" => Some(ActionKind::Plant),
         "pick" => Some(ActionKind::Pick),
         "forage" => Some(ActionKind::Forage),
+        "put_down" => Some(ActionKind::PutDown),
+        "take" => Some(ActionKind::Take),
         _ => None,
     }
 }
@@ -342,10 +357,21 @@ fn held_matches(rule: &Held, held: &HeldThing) -> bool {
         (Held::Any, _) => true,
         (Held::Empty, HeldThing::Empty) => true,
         (Held::AnyTool, HeldThing::Tool(_)) => true,
+        (Held::AnyItem, HeldThing::Item(_)) => true,
         (Held::Tool(a), HeldThing::Tool(b)) => a == b,
         (Held::Item(a), HeldThing::Item(b)) => a == b,
         _ => false,
     }
+}
+
+/// Whether `name` is a station block in the shipped table.
+fn is_station(name: &str) -> bool {
+    static KINDS: OnceLock<StationKinds> = OnceLock::new();
+    KINDS
+        .get_or_init(|| {
+            StationKinds::default_from_data().expect("data/stations.toml must be valid")
+        })
+        .is_station(name)
 }
 
 fn rule_matches(rule: &Rule, ctx: &ResolveCtx) -> bool {
@@ -356,6 +382,11 @@ fn rule_matches(rule: &Rule, ctx: &ResolveCtx) -> bool {
         (Target::None, targeting::Target::None) => None,
         (Target::Block(name), targeting::Target::Block { face, .. })
             if ctx.facts.block.as_deref() == Some(name) =>
+        {
+            Some(*face)
+        }
+        (Target::Station, targeting::Target::Block { face, .. })
+            if ctx.facts.block.as_deref().is_some_and(is_station) =>
         {
             Some(*face)
         }
@@ -424,7 +455,11 @@ fn run_action(
 ) -> ActionKind {
     match action {
         ActionKind::Attack => hits.extend(attack(&ctx.target, damage)),
-        ActionKind::Till | ActionKind::Plant | ActionKind::Pick => {}
+        ActionKind::Till
+        | ActionKind::Plant
+        | ActionKind::Pick
+        | ActionKind::PutDown
+        | ActionKind::Take => {}
         ActionKind::Forage => {
             forage();
         }
@@ -721,6 +756,87 @@ mod tests {
         expected[4].require_air_above = true;
         expected[4].target_face = Some("top".into());
         assert_eq!(Interactions::default_rules().rules, expected);
+    }
+
+    fn one_rule(held: &str, button: &str, target: &str, action: &str) -> Vec<Rule> {
+        let text = format!(
+            "[[rule]]\nheld = \"{held}\"\nbutton = \"{button}\"\ntarget = \"{target}\"\naction = \"{action}\"\n"
+        );
+        Interactions::from_toml(&text).unwrap().rules
+    }
+
+    #[test]
+    fn new_grammar_values_parse() {
+        let r = &one_rule("any_item", "interact", "block:station", "put_down")[0];
+        assert_eq!(r.held, Held::AnyItem);
+        assert_eq!(r.button, Button::Interact);
+        assert_eq!(r.target, Target::Station);
+        assert_eq!(r.action, ActionKind::PutDown);
+        assert_eq!(
+            one_rule("empty", "interact", "none", "take")[0].action,
+            ActionKind::Take
+        );
+        assert!(with_base(&BASE.replace("\"empty\"", "\"any_thing\"")).is_err());
+        assert!(with_base(&BASE.replace("secondary", "interact2")).is_err());
+        assert!(with_base(&BASE.replace("forage", "put")).is_err());
+    }
+
+    #[test]
+    fn any_item_matches_carried_items_only() {
+        let rules = one_rule("any_item", "interact", "none", "put_down");
+        let mut c = ctx(HeldThing::Empty, Button::Interact, "grass", Face::Top);
+        c.target = targeting::Target::None;
+        assert_eq!(resolve(&rules, &c), None);
+        c.held = tool("hoe");
+        assert_eq!(resolve(&rules, &c), None);
+        c.held = HeldThing::Item("seeds".into());
+        assert!(resolve(&rules, &c).is_some());
+    }
+
+    #[test]
+    fn station_class_matches_station_blocks_only() {
+        let rules = one_rule("empty", "interact", "block:station", "take");
+        let kinds = StationKinds::default_from_data().unwrap();
+        let names = [
+            "counter",
+            "butcher_block",
+            "griddle",
+            "chest",
+            "plate_rack",
+            "grass",
+            "dirt",
+        ];
+        assert!(names.iter().any(|n| kinds.is_station(n)));
+        for n in names {
+            let c = ctx(HeldThing::Empty, Button::Interact, n, Face::Top);
+            assert_eq!(resolve(&rules, &c).is_some(), kinds.is_station(n), "{n}");
+        }
+        let c = ctx(HeldThing::Empty, Button::Interact, "grass", Face::Top);
+        assert_eq!(resolve(&rules, &c), None);
+        let c = ctx(HeldThing::Empty, Button::Secondary, "grass", Face::Top);
+        assert_eq!(resolve(&rules, &c), None);
+    }
+
+    #[test]
+    fn first_match_wins_with_new_kinds() {
+        let mut rules = one_rule("any_item", "interact", "block:station", "put_down");
+        rules.extend(one_rule("any", "interact", "block:station", "take"));
+        let st = Interactions::default_rules();
+        assert!(st.rules.iter().all(|r| r.button != Button::Interact));
+        let name = {
+            let k = StationKinds::default_from_data().unwrap();
+            ["counter", "griddle"].into_iter().find(|n| k.is_station(n))
+        };
+        let Some(name) = name else { return };
+        let c = ctx(
+            HeldThing::Item("seeds".into()),
+            Button::Interact,
+            name,
+            Face::Top,
+        );
+        assert_eq!(resolve(&rules, &c).unwrap().action, ActionKind::PutDown);
+        let c = ctx(HeldThing::Empty, Button::Interact, name, Face::Top);
+        assert_eq!(resolve(&rules, &c).unwrap().action, ActionKind::Take);
     }
 
     #[test]
