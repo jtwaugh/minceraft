@@ -218,3 +218,25 @@ test('while stowed the belt frames and icons are drawn faded; with empty hands t
   for (const el of art(stowed)) assert.ok(alpha(el) > 0 && alpha(el) < 1);
   for (const el of art(draw({ hands: null, held: 'tool:sword' }))) assert.equal(alpha(el), 1);
 });
+
+test('the hands frame pulses in proportion to pulse and draws plainly at 0', async () => {
+  const { mountHud, pulseStyle } = await import('../hud.js');
+  assert.deepEqual(pulseStyle(0), { transform: '', filter: '' });
+  const scale = (p) => Number(pulseStyle(p).transform.match(/scale\(([\d.]+)\)/)[1]);
+  const bright = (p) => Number(pulseStyle(p).filter.match(/brightness\(([\d.]+)\)/)[1]);
+  assert.ok(scale(0.5) > 1 && scale(1) > scale(0.5));
+  assert.ok(bright(0.5) > 1 && bright(1) > bright(0.5));
+  globalThis.ImageData = class { constructor(d, w, h) { Object.assign(this, { data: d, width: w, height: h }); } };
+  const grid = (w, h) => Array(h).fill('a'.repeat(w));
+  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), sun: grid(8, 8), panel_c: grid(4, 4), sword: grid(8, 8), ...Object.fromEntries(['heart_full', 'heart_half', 'heart_empty'].map((n) => [n, grid(9, 9)])), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
+  const doc = fakeDocument();
+  const hud = mountHud(doc, set, doc.body, { innerWidth: 800, innerHeight: 450 });
+  const slot = () => doc.body.children[1].children[7];
+  const b = { ...belt, hands: 'sword', held: 'item:sword' };
+  hud.update(hudModel({ belt: b, health: 20, maxHealth: 20, pulse: 0.5 }));
+  assert.equal(slot().style.transform, pulseStyle(0.5).transform);
+  assert.equal(slot().style.filter, pulseStyle(0.5).filter);
+  hud.update(hudModel({ belt: b, health: 20, maxHealth: 20, pulse: 0 }));
+  assert.equal(slot().style.transform, '');
+  assert.equal(slot().style.filter, '');
+});
