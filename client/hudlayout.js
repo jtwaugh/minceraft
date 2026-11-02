@@ -47,7 +47,7 @@ function row(set, names, x, y, gap) {
  * `{ scale, rects }` for a `hudModel` result: `rects.crosshair`, `rects.belt` (the slot row), `rects.beltPanel` (the strip around it), `rects.slotNumbers` (one glyph rect per slot),
  * `rects.slots` (one per slot), `rects.slotIcons` (the item's icon centred in each slot, or null) and `rects.hearts` (the whole row) plus `rects.heartIcons`,
  * `rects.timer` (box centred at the top, with `phase` and `digits` rects inside), `rects.handsPanel` (the strip
- * right of the belt's), `rects.handsSlot` (the frame on it, with the carried item's `icon` rect or null) and
+ * right of the belt's), `rects.handsSlot` (the frame on it, with the carried item's or else the ready tool's `icon` rect, or null) and
  * `rects.hands` (the name row above the hands strip, with the label rect and one rect per glyph; zero-sized when
  * empty). The belt and hands strips and the hearts share a centred column; the hearts sit above it on its left
  * edge and the name above it on its right edge, or above the hearts when the two would not fit side by side.
@@ -83,8 +83,10 @@ export function hudLayout(model, set, viewport) {
   const beltX = left + pad, beltY = panelY + pad;
   const handsPanelX = left + panelW + handsGap;
   const handsSlot = rect(handsPanelX + pad, panelY + pad, handsFrame.w * scale, handsFrame.h * scale);
-  // The carried item's icon is centred in the hands frame on whole texels, as in the belt slots.
-  const heldSize = model.hands ? textureSize(set, model.hands) : null;
+  // The carried item's icon, or the ready tool's while the hands are empty, is centred in the hands frame on whole
+  // texels, as in the belt slots. Only `hands` drives the name label.
+  const heldName = model.hands || model.ready;
+  const heldSize = heldName ? textureSize(set, heldName) : null;
   const heldIcon = heldSize && rect(
     handsSlot.x + Math.floor((handsFrame.w - heldSize.w) / 2) * scale, handsSlot.y + Math.floor((handsFrame.h - heldSize.h) / 2) * scale,
     heldSize.w * scale, heldSize.h * scale);
