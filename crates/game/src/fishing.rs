@@ -37,6 +37,9 @@ pub struct Fishing {
     bobber: Option<Bobber>,
     rng: Rng,
     bite: Bite,
+    /// The fish holding a lure for this line; released once the bite is
+    /// back to idle (the line was reeled in), by the next `tick_bite`.
+    lured: Option<EntityId>,
 }
 
 impl Fishing {
@@ -47,6 +50,7 @@ impl Fishing {
             bobber: None,
             rng: Rng::new(BITE_SEED),
             bite: Bite::Idle,
+            lured: None,
         }
     }
 
@@ -116,6 +120,11 @@ impl Fishing {
         fish: &mut FishWorld,
         events: &mut Vec<GameEvent>,
     ) {
+        if self.bite == Bite::Idle {
+            if let Some(id) = self.lured.take() {
+                fish.clear_lure(id);
+            }
+        }
         let Some(b) = &mut self.bobber else { return };
         if b.state() != BobberState::Floating {
             return;
@@ -128,6 +137,7 @@ impl Fishing {
             Bite::Waiting(_) => match nearest_fish(fish, pos, self.cfg.near_radius) {
                 Some(id) => {
                     fish.lure_to_bobber(id, pos, world);
+                    self.lured = Some(id);
                     Bite::Luring(id)
                 }
                 None => Bite::Idle,
@@ -332,6 +342,25 @@ mod tests {
         assert_eq!(f.bite, Bite::Idle);
         f.tick_bite(&w, &mut world, &mut ev);
         assert!(matches!(f.bite, Bite::Waiting(_)));
+    }
+
+    #[test]
+    fn reeling_in_while_luring_frees_the_fish() {
+        let w = pool(12, 50);
+        let mut world = FishWorld::default_from_data(1, 1 << 28).unwrap();
+        let id = world.spawn("mackerel", [3.0, 57.5, 0.5], 0.0).unwrap();
+        let mut f = fishing();
+        let mut ev = Vec::new();
+        f.cast([0.5, 62.0, 0.5], [0.0, -1.0, 0.0], &mut ev);
+        for _ in 0..80 {
+            f.tick(&w, true, [0.5, 62.0, 0.5], &mut ev);
+        }
+        f.bite = Bite::Waiting(1);
+        f.tick_bite(&w, &mut world, &mut ev);
+        assert!(world.store().get(id).unwrap().lure.is_some());
+        f.reel(&mut ev);
+        f.tick_bite(&w, &mut world, &mut ev);
+        assert!(world.store().get(id).unwrap().lure.is_none());
     }
 
     #[test]

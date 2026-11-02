@@ -743,7 +743,8 @@ impl Walk {
 
     /// The fishing bobber: empty with no line out, else five numbers,
     /// `state, dipping, x, y, z`. `state` is 0 flying, 1 floating, 2
-    /// resting; `dipping` is 1 while a bite is on the line (a fish has bitten); `(x, y, z)` is the centre of the bobber.
+    /// resting; `dipping` is 1 while a bite is on the line (a fish has
+    /// bitten); `(x, y, z)` is the centre of the bobber.
     pub fn bobber(&self) -> Vec<f64> {
         use game::bobber::BobberState;
         self.0.bobber().map_or_else(Vec::new, |b| {
