@@ -202,7 +202,7 @@ test('the ready tool fills the hands frame when the hands are empty, without a l
 
 test('a carried item wins over the ready tool', () => {
   const held = hudLayout(withTimer(7, 'sword'), set, { w: 1366, h: 768 }).rects.handsSlot.icon;
-  const both = hudLayout({ ...withTimer(7, 'sword'), ready: null }, set, { w: 1366, h: 768 }).rects.handsSlot.icon;
+  const both = hudLayout({ ...withTimer(7, 'sword'), ready: 'hoe' }, withHoe, { w: 1366, h: 768 }).rects.handsSlot.icon;
   assert.deepEqual(both, held);
   assert.equal(held.w, held.h);
 });
