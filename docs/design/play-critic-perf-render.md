@@ -1,6 +1,6 @@
 ---
 title: Play critic sees lag and render faults
-status: accepted
+status: done
 scope: game
 source: "#1526"
 superseded_by: ""
