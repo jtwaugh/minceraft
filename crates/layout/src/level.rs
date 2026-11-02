@@ -58,12 +58,20 @@ pub struct Route {
 }
 
 /// The `[climate]` table: the `AlongPath` temperature offsets at the first and
-/// last anchorage. A record of what the bias used, not an input.
+/// last anchorage. The table still records the bias, but `sea_ice_band` is an
+/// input. A file without the key loads with the band on.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "toml-io", derive(serde::Serialize, serde::Deserialize))]
 pub struct Climate {
     pub temp_start: f64,
     pub temp_end: f64,
+    #[cfg_attr(feature = "toml-io", serde(default = "default_sea_ice_band"))]
+    pub sea_ice_band: bool,
+}
+
+#[cfg(feature = "toml-io")]
+fn default_sea_ice_band() -> bool {
+    true
 }
 
 /// A loaded level file.

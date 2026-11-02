@@ -135,7 +135,8 @@ fn climate_loads_and_round_trips() {
         f.climate,
         Some(Climate {
             temp_start: -0.25,
-            temp_end: 0.15
+            temp_end: 0.15,
+            sea_ice_band: true
         })
     );
     let text = f.to_toml().unwrap();
@@ -149,6 +150,25 @@ fn missing_climate_loads() {
     let f = LevelFile::from_toml(t).unwrap();
     assert_eq!(f.climate, None);
     assert!(!f.to_toml().unwrap().contains("climate"));
+}
+
+#[test]
+fn sea_ice_band_false_round_trips() {
+    let t = EXAMPLE.replace("temp_end = 0.15", "temp_end = 0.15\nsea_ice_band = false");
+    let f = LevelFile::from_toml(&t).unwrap();
+    assert!(!f.climate.unwrap().sea_ice_band);
+    let text = f.to_toml().unwrap();
+    assert!(text.contains("sea_ice_band = false"));
+    assert_eq!(LevelFile::from_toml(&text).unwrap(), f);
+}
+
+#[test]
+fn non_bool_sea_ice_band_is_named() {
+    let t = EXAMPLE.replace("temp_end = 0.15", "temp_end = 0.15\nsea_ice_band = 1");
+    match LevelFile::from_toml(&t) {
+        Err(LevelFileError::Parse(m)) => assert!(m.contains("sea_ice_band"), "{m}"),
+        other => panic!("{other:?}"),
+    }
 }
 
 #[test]
