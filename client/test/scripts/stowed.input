@@ -21,3 +21,42 @@ frame 50 x2
 expect hud.hands = none
 expect hud.stowed = false
 expect hud.ready = hoe
+
+case a belt key while carrying moves the selection and pulses the hands frame
+start walk raft
+click
+lock
+press Digit3
+frame 50 x2
+mouse 632 120
+frame 50 x2
+button down right
+button up right
+frame 50 x2
+expect hud.hands = seeds
+expect hud.pulse = 0
+press Digit2
+frame 50
+expect hud.selected = 1
+expect hud.stowed = true
+expect hud.pulse > 0
+frame 50
+expect hud.pulse > 0
+expect hud.pulse < 1
+frame 50 x10
+expect hud.pulse = 0
+expect hud.selected = 1
+
+case a belt key with empty hands does not pulse
+start walk raft
+click
+lock
+expect hud.hands = none
+press Digit2
+frame 50
+expect hud.selected = 1
+expect hud.pulse = 0
+press Digit3
+frame 50 x2
+expect hud.selected = 2
+expect hud.pulse = 0

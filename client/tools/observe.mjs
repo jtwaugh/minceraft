@@ -34,7 +34,7 @@ const CLASSES = {
     'regions.loaded', 'regions.freed', 'regions.pending', 'regions.x', 'regions.z',
     'console.lines', 'cheated', 'time', 'time.frozen', ...axes('sun'), 'daylight', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
-    'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
+    'underwater', 'held', 'held.drawn', 'hud.pulse', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt', 'bobber', 'bobber.near', 'fish', 'fish.near',
     'wind.dir.x', 'wind.dir.z', 'wind.strength', 'wind.sway', 'wind.readout',

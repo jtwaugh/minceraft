@@ -81,7 +81,7 @@
 // planter.ground and planter.crop (the same for the first planter),
 // station.count (items on raft stations), station.item counter (the item on the raft's first counter, or none),
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
-// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), hud.stowed (true|false: the hands are full, so the tools are stowed), phase (gathering|service), phase.left (whole seconds),
+// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), hud.stowed (true|false: the hands are full, so the tools are stowed), hud.pulse (the hands-frame pulse, 0..1: 1 on the frame a belt key moves the selection while carrying, falling to 0 over 0.4 s; 0 when idle), phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
 // layout.belt.offcentre (CSS px between the belt panel's centre and the viewport's centre), layout.hud.height (the bottom block, hearts top to belt panel bottom, / viewport height),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
@@ -330,6 +330,7 @@ function read(w, path) {
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
   if (path === 'hud.ready') return s.hud.ready ?? 'none';
   if (path === 'hud.stowed') return s.hud.stowed;
+  if (path === 'hud.pulse') return s.hud.pulse;
   if (path === 'items') return w.walk.loose_items();
   if (path === 'station.count') return w.walk.station_item_names().length;
   if (path.startsWith('station.item')) { // the first counter's, wherever the raft is
