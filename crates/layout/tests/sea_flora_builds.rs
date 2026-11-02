@@ -5,8 +5,11 @@
 use layout::{build_route, build_route_layout, SeaFlora, WorldConfig};
 use terrain::HEIGHT;
 
-/// Shellfish placed in the area below, counted in the default build.
-const EXPECTED: usize = 6;
+/// Shellfish placed in the area below, counted in the default build. The sea-ice
+/// floe band (sea-ice-floes.md A) leaves open water where the sea top was solid
+/// ice, and the pass skips only frozen columns, so it places more than before
+/// the band.
+const EXPECTED: usize = 17;
 
 #[test]
 fn shellfish_placed_the_same_in_every_build() {

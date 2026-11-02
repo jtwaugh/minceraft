@@ -24,8 +24,8 @@ const axes = (head) => ['x', 'y', 'z'].map((a) => `${head}.${a}`);
 
 const CLASSES = {
   player: [
-    'mode', 'locked', 'target.kind', 'belt.selected', ...BELT_SLOTS.map((n) => `belt.slot.${n}`),
-    'hands', 'health', 'hearts.full', 'hearts.half', 'hearts.empty', 'hud.selected', 'hud.hands', 'phase',
+    'mode', 'locked', 'prompt', 'hint', 'target.kind', 'belt.selected', ...BELT_SLOTS.map((n) => `belt.slot.${n}`),
+    'hands', 'health', 'hearts.full', 'hearts.half', 'hearts.empty', 'hud.selected', 'hud.hands', 'hud.ready', 'phase',
     // The last `layout` line's HUD geometry, which play.mjs already returns in player mode.
     'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction',
   ],
@@ -56,10 +56,13 @@ export function playerObservation(session) {
   return {
     mode,
     locked: r('locked'),
+    prompt: r('prompt'),
+    hint: r('hint'),
     hud: {
       hearts: { full: r('hearts.full'), half: r('hearts.half'), empty: r('hearts.empty') },
       belt: { selected: r('hud.selected'), slots: BELT_SLOTS.map((n) => r(`belt.slot.${n}`)) },
       hands: r('hud.hands'),
+      ready: r('hud.ready'),
       timer: { phase: r('phase'), digits: digitNames(secondsLeft).map((d) => d.slice(-1)).join('') },
     },
     target,

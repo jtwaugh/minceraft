@@ -107,3 +107,53 @@ press Tab
 expect mode = inventory
 press Tab
 expect mode = fly
+
+case Tab, Tab relocks the pointer; Tab, Escape leaves it unlocked
+start walk
+click
+expect locked = true
+press Tab
+expect locked = false
+press Tab
+expect locked = true
+press Tab
+press Escape
+expect locked = false
+
+case blur drops the lock
+start walk
+click
+expect locked = true
+blur
+expect locked = false
+
+case the click cue follows the pointer through Tab, Tab and Tab, Escape
+start walk
+expect prompt != none
+click
+expect prompt = none
+press Tab
+press Tab
+expect locked = true
+expect prompt = none
+press Tab
+press Escape
+expect locked = false
+expect prompt = Click to play
+
+case the cue is off in the inventory and the console, and the hint folds on the first lock
+start walk debug
+expect hint = open
+click
+expect hint = folded
+press Backquote
+expect mode = console
+expect prompt = none
+press Escape
+unlock
+press Tab
+lock
+press Tab
+expect mode = inventory
+expect prompt = none
+expect hint = folded

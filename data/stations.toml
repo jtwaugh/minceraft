@@ -1,0 +1,24 @@
+# Cooking station blocks (docs/design/cooking-stations.md section 3).
+# These are this game's own choices; they do not come from SPEC.md.
+# `surface = true` means the block holds one item on top; false means it
+# holds items another way (chest slots, plate rack).
+
+[[station]]
+name = "counter"
+surface = true
+
+[[station]]
+name = "butcher_block"
+surface = true
+
+[[station]]
+name = "griddle"
+surface = true
+
+[[station]]
+name = "chest"
+surface = false
+
+[[station]]
+name = "plate_rack"
+surface = false

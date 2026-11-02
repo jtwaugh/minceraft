@@ -8,6 +8,8 @@
 # turn_rate  = 180           # degrees per second, > 0
 # school     = [3, 6]        # school size, inclusive, 1 <= min <= max
 # raw_item   = "raw_x"       # item (data/items.toml) a caught fish becomes
+# health     = 4             # half-hearts a fish takes to kill, >= 1; the
+#                            # wooden sword (data/items.toml) kills in one hit
 
 [[body]]
 species = "mackerel"
@@ -16,6 +18,7 @@ swim_speed = 1.5
 turn_rate = 180
 school = [3, 6]
 raw_item = "raw_mackerel"
+health = 4
 
 [[body]]
 species = "salmon"
@@ -24,6 +27,7 @@ swim_speed = 2.0
 turn_rate = 120
 school = [2, 4]
 raw_item = "raw_salmon"
+health = 4
 
 [[body]]
 species = "tuna"
@@ -32,3 +36,4 @@ swim_speed = 2.5
 turn_rate = 90
 school = [1, 2]
 raw_item = "raw_tuna"
+health = 4

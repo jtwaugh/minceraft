@@ -47,9 +47,10 @@ function row(set, names, x, y, gap) {
  * `{ scale, rects }` for a `hudModel` result: `rects.crosshair`, `rects.belt` (the slot row), `rects.beltPanel` (the strip around it), `rects.slotNumbers` (one glyph rect per slot),
  * `rects.slots` (one per slot), `rects.slotIcons` (the item's icon centred in each slot, or null) and `rects.hearts` (the whole row) plus `rects.heartIcons`,
  * `rects.timer` (box centred at the top, with `phase` and `digits` rects inside), `rects.handsPanel` (the strip
- * right of the belt's), `rects.handsSlot` (the frame on it, with the carried item's `icon` rect or null) and
+ * right of the belt's), `rects.handsSlot` (the frame on it, with the carried item's or else the ready tool's `icon` rect, or null) and
  * `rects.hands` (the name row above the hands strip, with the label rect and one rect per glyph; zero-sized when
- * empty). The belt and hands strips and the hearts share a centred column; the hearts sit above it on its left
+ * empty). The belt panel is centred in the viewport with the hands strip on its right (when that would run off the
+ * viewport, the two strips are centred together as a column instead); the hearts sit above on the belt panel's left
  * edge and the name above it on its right edge, or above the hearts when the two would not fit side by side.
  */
 export function hudLayout(model, set, viewport) {
@@ -78,13 +79,20 @@ export function hudLayout(model, set, viewport) {
   const handsPanelW = handsFrame.w * scale + 2 * pad, handsGap = HANDS_GAP * scale;
   const rowW = panelW + handsGap + handsPanelW;
   const colW = Math.max(rowW, heartsW);
-  const left = Math.floor((vw - colW) / 2);
+  // The belt panel is centred under the crosshair with the hands strip hanging off its right; if that
+  // pushes the hands strip off the viewport, the whole column is centred instead.
+  const beltCentred = Math.floor((vw - panelW) / 2);
+  const left = beltCentred + rowW > vw ? Math.floor((vw - colW) / 2) : beltCentred;
+  // Hearts keep the belt panel's left edge, but slide left just enough to stay inside the viewport when they are wider than the belt.
+  const heartsX = Math.max(0, Math.min(left, vw - heartsW));
   const panelY = vh - BOTTOM_MARGIN - panelH;
   const beltX = left + pad, beltY = panelY + pad;
   const handsPanelX = left + panelW + handsGap;
   const handsSlot = rect(handsPanelX + pad, panelY + pad, handsFrame.w * scale, handsFrame.h * scale);
-  // The carried item's icon is centred in the hands frame on whole texels, as in the belt slots.
-  const heldSize = model.hands ? textureSize(set, model.hands) : null;
+  // The carried item's icon, or the ready tool's while the hands are empty, is centred in the hands frame on whole
+  // texels, as in the belt slots. Only `hands` drives the name label.
+  const heldName = model.hands || model.ready;
+  const heldSize = heldName ? textureSize(set, heldName) : null;
   const heldIcon = heldSize && rect(
     handsSlot.x + Math.floor((handsFrame.w - heldSize.w) / 2) * scale, handsSlot.y + Math.floor((handsFrame.h - heldSize.h) / 2) * scale,
     heldSize.w * scale, heldSize.h * scale);
@@ -106,7 +114,7 @@ export function hudLayout(model, set, viewport) {
     const n = (i + 1) % 10;
     return { ...stringRects(set, String(n), scale, r.x + scale, r.y + scale)[0], n };
   });
-  const heartIcons = place(heartRow.r, left, heartsY);
+  const heartIcons = place(heartRow.r, heartsX, heartsY);
 
   const phaseName = PHASE_ICONS[model.timer.phase];
   const phaseSize = phaseName ? textureSize(set, phaseName) : null;
@@ -131,7 +139,7 @@ export function hudLayout(model, set, viewport) {
   const { w: handsW, h: handsH } = measure(handsScale);
   const handsX = handsPanelX + handsPanelW - handsW;
   // Beside the hearts when they fit side by side, otherwise stacked above them.
-  const beside = handsW === 0 || handsX >= left + heartsW + LABEL_GAP * scale;
+  const beside = handsW === 0 || handsX >= heartsX + heartsW + LABEL_GAP * scale;
   const handsY = (beside ? heartsY + heartsH : heartsY) - handsH;
   const labelRect = name ? rect(handsX, handsY, handsW, handsH) : null;
 
@@ -144,7 +152,7 @@ export function hudLayout(model, set, viewport) {
       slots,
       slotIcons,
       slotNumbers,
-      hearts: rect(left, heartsY, heartsW, heartsH),
+      hearts: rect(heartsX, heartsY, heartsW, heartsH),
       heartIcons,
       timer: {
         ...rect(timerX, TOP_MARGIN, timerW, timerH),

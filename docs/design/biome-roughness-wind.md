@@ -21,9 +21,12 @@ Checked against `master` (5a68a3b).
 - **Tree count.** SPEC step 13 and 9.1 describe the tree-density noise and per-biome terms; `decorate.rs` uses `BIOME_INFO` `tree_bonus`. No public function returns a chunk's tree count without decorating (only needed for option B).
 - **Sea ice.** `docs/design/sea-ice-floes.md` (accepted) adds floes; the coarse heightmap reads the density lattice, so ice never changes `top_y` and frozen sea counts as water there.
 - **Plan #1860 (Phase A) built:** the `[roughness]` table and drag keys in `data/wind.toml` (#1861, `crates/game/src/wind_roughness_config.rs`, `wind_config.rs`), the pure speed multiplier with smoothstep height easing (#1862, `crates/game/src/wind_drag.rs`), and the seeded forest, plains and sea behaviour tests (#1863, #1912). The fill `RoughnessParams`/`fill_cell`/`roughness_at` is in `crates/game/src/wind_roughness.rs` (#1811).
-- **Not built:** the roughness table, `R(x, z)`, the speed multiplier, the readout fields. World output is untouched by this idea.
+- **Plan #1931 (Phase A) built:** the bounded `R` cache (#1932, PR #1945, `crates/game/src/wind_roughness_cache.rs`) and the multiplier applied to the front wind in `Wind::at` (#1933, PR #1985, `crates/game/src/wind_field.rs`, `Wind::roughness_at`). It is a separate memo, not shared with the breeze.
+- **Not built:** the `R` and multiplier fields on the debug wind readout. World output is untouched by this idea.
 
 ## Reconciliation notes
+
+- **Phase A still incomplete (plan #1931).** The cache and the wiring into `Wind::at` are built (PRs #1945, #1985). Still missing: the `R` and multiplier fields on the debug wind readout, which wait on wind Phase B (no wind command in `data/commands.toml` or `crates/game/src/commands.rs`); and re-ordering roughness after terrain wind (`wind_terrain.rs`) once that is wired into `Wind::at`.
 
 - **Phase A still incomplete (plan #1860).** The plan's three tickets are closed, but they cover only the data table, the multiplier function and its tests. Still missing: the bounded shared cell cache (`wind_roughness.rs` says "There is no cache here"); wiring `R` and the multiplier into the wind function, applied to the mean and gust terms separately before the floor and ceiling (nothing in `crates/game/src/` calls the multiplier from the wind function); and the `R` and multiplier fields on the debug wind readout (`data/commands.toml`, `crates/game/src/commands.rs`). The plan deferred these until wind Phase A and Phase B close.
 

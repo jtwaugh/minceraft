@@ -7,13 +7,14 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
   E: todo
 ---
 
 ## Current state
 
+- **Phase C done (plan #1905).** `Walker` owns and ticks a `FishWorld` (#1928), `game-web` exports fish rows and `spawn_fish` (#1939), `client/fishmodels.js` holds the fish box models and pose (#1925) with a tail swing tied to swim speed (#1949), `client/overlay.js` reads fish and the DSL has fish expectations with `client/test/scripts/fish.input` (#1986), and `client/scene.js` draws them (#2039). Fish are drawn before the blended water pass.
 - **Phase B done (plan #1833).** `crates/game` has `fish_spawn_config.rs`, `fish_columns.rs`, `fish_entities.rs`, `fish_spawner.rs`, `fish_steer.rs` and `fish_world.rs`, tested headless by `crates/game/tests/fish_days.rs` (plan #1601: #1663, #1665, #1666, #1668, #1675, #1677; stock reset on entering gathering: #1841). `FishWorld` is still called only from tests, not the game tick; Phases C and D wire it when a consumer exists.
 - **Phase A done (plan #1534).** `data/fish.toml` ships mackerel, salmon and tuna (#1586), the four raw fish items are in `data/items.toml` and can be given and carried (#1576), and `data/fish_bodies.toml` holds the game-side body data, read by `crates/game/src/fish_bodies.rs` (#1594). The bullets below that say `data/fish.toml` has no species or `data/items.toml` has no fish items predate this.
 - **Spawn query exists, no species.** `species_for(&FishColumn)` and the `data/fish.toml` loader are in `crates/layout/src/fish.rs` (`Fish::shipped`, `Fish::species_for`); `data/fish.toml` is schema comments only (decided in #93). `FishColumn` carries habitat, temperature and depth; `Layout::habitat_map` (`crates/layout/src/habitat_map.rs`) produces them per region. Habitat ids in `data/habitats.toml`: `frozen`, `warm_shallows`, `deep_water`, `rocky_shore`, `cold_open`, `temperate_open`.
@@ -139,8 +140,9 @@ Fish render as box models from the existing art (batch 11), using the textured b
 
 ### 4.3 Bite
 
-- While the bobber floats, a bite comes after a random delay (data, default 3 to 8 seconds). The species is drawn from the fish near the bobber if any are within a few blocks, otherwise from `species_for` at the bobber's column. A fish that is visibly swimming near the bobber is the one that bites, and it swims to the bobber first, with the `fishing_wake` particle trailing it.
+- While the bobber floats, a bite comes after a random delay (data, default 3 to 8 seconds). The species is drawn from the fish near the bobber, within a few blocks. If no fish is within a few blocks, there is no bite: the rod needs visible fish. A fish that is visibly swimming near the bobber is the one that bites, and it swims to the bobber first, with the `fishing_wake` particle trailing it. (Decided in #2078.)
 - On the bite, the bobber dips (and the `splash` particles play). The reel window is open for a set time (data, default 1 second).
+- If the daily stock is empty when the bobber is cast, there are no bites until the next stock reset. (Decided in #2079.)
 
 ### 4.4 Reel
 
@@ -149,7 +151,7 @@ Fish render as box models from the existing art (batch 11), using the textured b
 - Fishing cannot be done while carrying, so a catch never displaces a carried item.
 - The bite is a single timed press. There is no hold or reel minigame, for any species.
 
-> **Reconciler:** see notes 7, 10 and 13. The rod's "stows" when the hands fill matches basic-gameplay section 6. "Species drawn ... otherwise from `species_for` at the bobber's column" can pick a species with no fish entity in the water; the bite must then spawn or take a stock-limited fish. See open question 3.
+> **Reconciler:** see notes 7, 10 and 13. The rod's "stows" when the hands fill matches basic-gameplay section 6. The case of a bite with no fish near the bobber is settled in section 4.3.
 
 ### 4.5 Sword
 
@@ -203,8 +205,4 @@ Add to the events of basic-gameplay section 11:
 2. **Particles for `splash` and `fishing_wake`.** The client has no particle system.
    - A: Phase D ships without particles and a follow-up adds them (suggested).
    - B: add a minimal sprite-particle path to the client in Phase D.
-3. **A bite on a species with no fish nearby (section 4.3).**
-   - A: the bite spawns a fish of the drawn species just out of view and swims it to the bobber, taking one from the stock (suggested; keeps rule 1 approximately true).
-   - B: no bite if no fish is within a few blocks (the rod needs visible fish).
 4. **Squid body and swim data (note 1).** A: game-owned `data/fish_bodies.toml` entry like the fish (suggested). B: open a `research` question for the facts SPEC 14 lacks.
-5. **Stock when the stock is empty and the bobber is cast.** A: no bites until the next reset (suggested; matches rule 4). B: allow a slow trickle.

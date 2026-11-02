@@ -72,3 +72,9 @@ test('parseFindings does not throw on malformed input', () => {
   assert.match(parseFindings('42').error, /array/);
   assert.deepEqual(parseFindings('[]'), { valid: [], rejected: [], error: null });
 });
+
+test('advisory may be absent or a boolean, nothing else', () => {
+  assert.equal(validateFinding(with_('advisory', true)).ok, true);
+  assert.equal(validateFinding(with_('advisory', false)).ok, true);
+  for (const v of ['true', 1, null, {}]) assert.equal(validateFinding(with_('advisory', v)).ok, false);
+});

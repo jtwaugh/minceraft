@@ -23,6 +23,8 @@ pub struct FishBody {
     /// Inclusive range of fish in one school.
     pub school: [u32; 2],
     pub raw_item: String,
+    /// Half-hearts of damage that kill the fish.
+    pub health: u32,
 }
 
 /// The bodies, in file order.
@@ -65,6 +67,7 @@ fn parse_body(n: usize, value: &toml::Value) -> Result<FishBody, DataError> {
         "turn_rate",
         "school",
         "raw_item",
+        "health",
     ];
     if let Some(field) = table.keys().find(|k| !fields.contains(&k.as_str())) {
         return Err(bad(&format!("unknown field `{field}`")));
@@ -93,6 +96,11 @@ fn parse_body(n: usize, value: &toml::Value) -> Result<FishBody, DataError> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| bad("`raw_item` must be a non-empty string"))?
         .to_string();
+    let health = table
+        .get("health")
+        .and_then(|v| u32::try_from(v.as_integer()?).ok())
+        .filter(|h| *h >= 1)
+        .ok_or_else(|| bad("`health` must be a positive integer"))?;
     Ok(FishBody {
         species,
         box_size,
@@ -100,6 +108,7 @@ fn parse_body(n: usize, value: &toml::Value) -> Result<FishBody, DataError> {
         turn_rate,
         school,
         raw_item,
+        health,
     })
 }
 
@@ -166,7 +175,7 @@ mod tests {
     fn body(species: &str, extra: &str) -> String {
         format!(
             "[[body]]\nspecies = \"{species}\"\nbox = [0.4, 0.3]\nswim_speed = 1.5\n\
-             turn_rate = 180\nschool = [3, 6]\nraw_item = \"raw_{species}\"\n{extra}"
+             turn_rate = 180\nschool = [3, 6]\nraw_item = \"raw_{species}\"\nhealth = 4\n{extra}"
         )
     }
 
@@ -186,6 +195,8 @@ mod tests {
         for s in &fish.species {
             let body = b.get(&s.id).unwrap();
             assert_eq!(body.raw_item, format!("raw_{}", s.id));
+            let sword = Items::default_items().damage(Some("sword"));
+            assert_eq!(body.health, sword, "{}", s.id);
         }
         assert!(b.get("squid").is_none());
     }
@@ -197,6 +208,18 @@ mod tests {
         assert_eq!(m.box_size, [0.4, 0.3]);
         assert_eq!((m.swim_speed, m.turn_rate), (1.5, 180.0));
         assert_eq!(m.school, [3, 6]);
+        assert_eq!(m.health, 4);
+    }
+
+    #[test]
+    fn rejects_missing_health() {
+        let text = body("mackerel", "").replace("health = 4\n", "") + &body("tuna", "");
+        assert_bad_entry(
+            parse(&text).unwrap_err(),
+            DataFile::FishBodies,
+            "mackerel",
+            "`health`",
+        );
     }
 
     #[test]
@@ -243,6 +266,9 @@ mod tests {
             ("turn_rate = 180", "turn_rate = -5", "`turn_rate`"),
             ("school = [3, 6]", "school = [0, 6]", "`school`"),
             ("school = [3, 6]", "school = [6, 3]", "`school`"),
+            ("health = 4", "health = 0", "`health`"),
+            ("health = 4", "health = -2", "`health`"),
+            ("health = 4", "health = 1.5", "`health`"),
         ];
         for (from, to, field) in cases {
             let text = body("mackerel", "").replace(from, to) + &body("tuna", "");

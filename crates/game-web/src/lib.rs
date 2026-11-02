@@ -294,6 +294,9 @@ fn describe_event(e: &GameEvent) -> String {
                 position.map(|c| c.to_string()).join(",")
             )
         }
+        GameEvent::ActionRefused { action, reason } => {
+            format!("action_refused action={action} reason={}", reason.name())
+        }
     }
 }
 
@@ -806,7 +809,9 @@ impl Wind {
     pub fn new(seed: u64) -> Result<Wind, JsError> {
         let cfg = game::wind_config::WindConfig::default_from_data()
             .map_err(|e| JsError::new(&e.to_string()))?;
-        Ok(Wind(game::wind_field::Wind::new(seed, cfg)))
+        let rough = game::wind_roughness_config::RoughnessConfig::default_from_data()
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Wind(game::wind_field::Wind::new(seed, cfg, &rough)))
     }
 
     /// `[dx, dz]` in blocks per second; `ticks` is `tick + alpha`.
@@ -843,6 +848,18 @@ mod tests {
         let js = include_str!("../../../client/stream.js");
         let line = format!("export const REGION_SIZE = {};", layout::REGION_SIZE);
         assert!(js.contains(&line), "client/stream.js needs `{line}`");
+    }
+
+    #[test]
+    fn describes_action_refused() {
+        let e = GameEvent::ActionRefused {
+            action: "till".into(),
+            reason: game::events::Reason::NothingHere,
+        };
+        assert_eq!(
+            describe_event(&e),
+            "action_refused action=till reason=nothing_here"
+        );
     }
 
     fn walk() -> Walk {

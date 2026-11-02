@@ -26,6 +26,8 @@ pub struct FishEntity {
     pub school: SchoolId,
     /// Box width (x and z) and height (y), from `data/fish_bodies.toml`.
     pub box_size: [f64; 2],
+    /// Half-hearts of damage left; the fish is removed at 0.
+    pub health: u32,
 }
 
 impl FishEntity {
@@ -82,6 +84,7 @@ impl FishStore {
             depth_target: pos[1],
             school,
             box_size: body.box_size,
+            health: body.health,
         });
         Some(id)
     }
@@ -99,6 +102,20 @@ impl FishStore {
     pub fn remove(&mut self, id: EntityId) -> Option<FishEntity> {
         let i = self.fish.binary_search_by_key(&id, |f| f.id).ok()?;
         Some(self.fish.remove(i))
+    }
+
+    /// Hit fish `id` for `damage` half-hearts. Returns the damage it took
+    /// (capped at its health) and whether it died, in which case it is
+    /// removed. `None` for an unknown id.
+    pub fn hit(&mut self, id: EntityId, damage: u32) -> Option<(u32, bool)> {
+        let i = self.fish.binary_search_by_key(&id, |f| f.id).ok()?;
+        let taken = damage.min(self.fish[i].health);
+        self.fish[i].health -= taken;
+        let died = self.fish[i].health == 0;
+        if died {
+            self.fish.remove(i);
+        }
+        Some((taken, died))
     }
 
     pub fn len(&self) -> usize {
@@ -153,6 +170,7 @@ mod tests {
         assert_eq!((f.pos, f.heading, f.school), ([1.5, 50.0, -3.5], 90.0, 7));
         assert_eq!(f.depth_target, 50.0);
         assert_eq!(f.box_size, bodies.get(sp).unwrap().box_size);
+        assert_eq!(f.health, bodies.get(sp).unwrap().health);
         let b = f.aabb();
         assert_eq!(b.min[1], 50.0);
         assert!((b.max[1] - 50.0 - f.box_size[1]).abs() < 1e-12);
@@ -204,5 +222,25 @@ mod tests {
             s.iter().cloned().collect::<Vec<_>>()
         };
         assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn hits_wound_then_kill() {
+        let mut s = store(5);
+        let (a, b) = (species()[0].clone(), species()[1].clone());
+        let (id, other) = (
+            s.spawn(&a, [0.0; 3], 0.0, 0).unwrap(),
+            s.spawn(&b, [1.0; 3], 0.0, 0).unwrap(),
+        );
+        let health = s.get(id).unwrap().health;
+        assert!(health >= 2);
+        assert_eq!(s.hit(id, 1), Some((1, false)));
+        assert_eq!(s.get(id).unwrap().health, health - 1);
+        assert_eq!(s.hit(id, 0), Some((0, false)));
+        assert_eq!(s.hit(id, 100), Some((health - 1, true)));
+        assert_eq!(s.get(id), None);
+        assert_eq!(s.hit(id, 1), None);
+        assert_eq!(s.hit(99, 1), None);
+        assert_eq!(ids(&s), [other]);
     }
 }

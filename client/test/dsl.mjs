@@ -13,8 +13,8 @@
 //                               `stream` is a streamed world (seed 12345) starting over region 0 0,
 //                               meshing one region per frame (`at <x> <z>` starts elsewhere, 72 up); every frame's new and remeshed regions
 //                               are meshed on the CPU as scene.js does (client/regionmesh.js, no upload)
-//   click                       click the canvas (requests pointer lock)
-//   lock | unlock | blur        pointer lock gained / lost; window loses focus
+//   click                       click the canvas (requests pointer lock, which is granted at once)
+//   lock | unlock | blur        pointer lock gained / lost; window loses focus (and the lock)
 //   down <code> | up <code>     KeyboardEvent.code, e.g. KeyW, Space, ShiftLeft
 //   repeat <code>               an auto-repeat keydown
 //   press <code>                down then up
@@ -65,7 +65,7 @@
 // meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
 // all mesh kinds), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
 // every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
-// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, sun.x|y|z (unit vector toward the sun this frame, time of day plus alpha), daylight (scene brightness this frame), locked, ticks, alpha, yaw, pitch, eye.x|y|z,
+// console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, sun.x|y|z (unit vector toward the sun this frame, time of day plus alpha), daylight (scene brightness this frame), locked, prompt (the click cue text, "Click to play", while the game waits for a click, else null; `expect prompt = none` tests for null), hint (open|folded: the controls hint panel), ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
 // (none|block|entity), target.id, target.face, rule.primary|secondary|last
 // (the matched rule's action, or none), box (outlined: true|false), underwater,
@@ -76,7 +76,7 @@
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
-// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
@@ -95,6 +95,8 @@ import { meshCracks } from '../meshcheck.js';
 import { REGION_SIZE } from '../stream.js';
 import { attachInput } from '../input.js';
 import { createController } from '../controller.js';
+import { waitingForClick, CUE_TEXT } from '../waitingcue.js';
+import { createHintState } from '../hintui.js';
 import { heldDraw } from '../helditem.js';
 import { hudLayout } from '../hudlayout.js';
 import { layoutChecks } from '../hudcheck.js';
@@ -144,7 +146,14 @@ export function parse(src) {
 function world({ mode = 'walk', raft = false, debug = raft, stream = false, at = [50.5, 40.5], budget = 1, damage = null }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
-  const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
+  const canvas = target({
+    lockRequests: 0,
+    requestPointerLock() { // as a browser grants it
+      this.lockRequests++;
+      document.pointerLockElement = canvas;
+      document.dispatchEvent(new Event('pointerlockchange'));
+    },
+  });
   const document = target({
     pointerLockElement: null,
     exitPointerLock() {
@@ -166,9 +175,12 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   const seen = [];
   const most = stream ? { regions: 0, chunks: 0, verts: 0 } : null; // running maxima of one frame's work
   const render = stream ? { faults: 0 } : null; // crack faults over every region meshed so far
+  const hint = createHintState();
+  document.addEventListener('pointerlockchange', () => hint.update(input.locked));
   const frame = controller.frame;
   controller.frame = (dt) => {
     const state = frame(dt);
+    hint.update(input.locked);
     seen.push(...state.events);
     if (most) {
       const { work, faults } = meshFrame(walk, state.regions, damage);
@@ -181,7 +193,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
+  return { scene, canvas, document, window, input, hint, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus', '.': 'Period' };
@@ -266,6 +278,8 @@ function read(w, path) {
   if (path === 'sprinting') return w.walk.sprinting();
   if (path === 'paused') return w.walk.paused();
   if (path === 'locked') return w.input.locked;
+  if (path === 'prompt') return waitingForClick(w.input) ? CUE_TEXT : null;
+  if (path === 'hint') return w.hint.open ? 'open' : 'folded';
   if (path === 'lock_requests') return w.canvas.lockRequests;
   if (path === 'moved') return Math.hypot(...d);
   if (['ticks', 'alpha', 'yaw', 'pitch', 'fov', 'underwater'].includes(path)) return s[path];
@@ -282,6 +296,7 @@ function read(w, path) {
   if (path === 'phase.left') return s.hud.timer.secondsLeft;
   if (path === 'hud.selected') return s.hud.selected;
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
+  if (path === 'hud.ready') return s.hud.ready ?? 'none';
   if (path === 'items') return w.walk.loose_items();
   if (path === 'fish') return readFish(w.walk).length;
   if (path.startsWith('fish.near')) {
@@ -355,7 +370,10 @@ function step(w, { op, args }) {
     case 'lock': document.pointerLockElement = canvas; return fire(document, 'pointerlockchange');
     case 'unlock': document.pointerLockElement = null; return fire(document, 'pointerlockchange');
     case 'respawn': return w.controller.respawn();
-    case 'blur': return fire(window, 'blur');
+    case 'blur': // the browser drops the lock on focus loss
+      document.pointerLockElement = null;
+      fire(document, 'pointerlockchange');
+      return fire(window, 'blur');
     case 'down': return key('keydown', args[0]);
     case 'up': return key('keyup', args[0]);
     case 'repeat': return key('keydown', args[0], true);
@@ -507,7 +525,7 @@ function step(w, { op, args }) {
       const at = Math.max(1, args.findIndex((a) => OPS[a]));
       const path = args.slice(0, at).join(' '), cmp = args[at], raw = args.slice(at + 1).join(' ');
       if (!OPS[cmp]) throw new Error(`unknown operator '${cmp}'`);
-      const got = read(w, path);
+      const got = read(w, path) ?? 'none'; // a null path (prompt) is written none
       const want = typeof got === 'number' ? +raw : typeof got === 'boolean' ? raw === 'true' : raw;
       if (!OPS[cmp](got, want)) throw new Error(`expected ${path} ${cmp} ${raw}, got ${got}`);
       return;

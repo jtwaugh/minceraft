@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { packAtlas, boxVertices } from '../models.js';
-import { FISH_MODELS, fishBoxes, fishPose, createTailTracker, tailHinge, TAIL_AMPLITUDE } from '../fishmodels.js';
+import { FISH_MODELS, fishBoxes, fishPose, createTailTracker, fishDraw, tailHinge, TAIL_AMPLITUDE } from '../fishmodels.js';
 
 const exportJson = JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url)));
 const atlas = packAtlas(exportJson);
@@ -99,4 +99,14 @@ test('fishPose swing turns only the tail about its hinge', () => {
   assert.ok(near(m(p.tail, [0, 0, hinge]), [10, 5, -3 + hinge]));
   assert.ok(near(m(p.tail, [0, 0, hinge + 1]), [11, 5, -3 + hinge]));
   assert.deepEqual(Array.from(fishPose({ pos: [1, 2, 3], heading: 20 }).tail), Array.from(fishPose({ pos: [1, 2, 3], heading: 20 }).model));
+});
+
+test('fishDraw gives a body and a tail draw per fish, swinging only the tail', () => {
+  const fish = [{ id: 7, species: 'tuna', pos: [1, 2, 3], heading: 0, size: [0.6, 0.5] }];
+  const d = fishDraw(fish, new Map([[7, 20]]));
+  assert.deepEqual(d.map((x) => [x.species, x.height, x.part]), [['tuna', 0.5, 'body'], ['tuna', 0.5, 'tail']]);
+  assert.notDeepEqual(Array.from(d[0].model), Array.from(d[1].model));
+  const still = fishDraw(fish, new Map());
+  assert.ok(Array.from(still[0].model).every((v, i) => Math.abs(v - still[1].model[i]) < 1e-6));
+  assert.deepEqual(fishDraw([], new Map()), []);
 });

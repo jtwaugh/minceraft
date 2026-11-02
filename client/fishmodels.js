@@ -106,3 +106,20 @@ export function createTailTracker() {
     size: () => state.size,
   };
 }
+
+/**
+ * What to draw for the frame's `fish` ({ id, species, pos, heading, size }) given
+ * the tail `swings` (Map id -> degrees, from createTailTracker): two draws per
+ * fish, { species, height, part: 'body' | 'tail', model, tint }. The body part
+ * is the body and dorsal fin (fishBoxes 0 and 1), the tail part box 2.
+ */
+export function fishDraw(fish, swings) {
+  const out = [];
+  for (const f of fish) {
+    const height = f.size[1];
+    const p = fishPose(f, swings.get(f.id) ?? 0, tailHinge(f.species, height));
+    out.push({ species: f.species, height, part: 'body', model: p.model, tint: p.tint });
+    out.push({ species: f.species, height, part: 'tail', model: p.tail, tint: p.tint });
+  }
+  return out;
+}

@@ -181,7 +181,7 @@ fn coarse_heightmap_matches_full_terrain() {
             let (x, z) = (i * step, k * step);
             let solid = |y: u32| {
                 let b = r.get(x, y, z);
-                b != Block::Air && b != Block::Water && b != Block::Ice
+                b != Block::Air && b != Block::Water && b != Block::Ice && b != Block::FloeIce
             };
             let top = (0..128).rev().find(|&y| solid(y)).unwrap_or(0);
             // gaps: air runs above sea level with solid above and below
