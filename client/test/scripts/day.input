@@ -1,0 +1,48 @@
+# The controller reports the sun and daylight at the clock's time of day (docs/design/day-night-cycle.md Phase B).
+
+case sun height and daylight follow the set time
+start walk raft
+click
+lock
+press Backquote
+type time freeze
+press Enter
+frame 50
+lock
+press Backquote
+type time set 0.5
+press Enter
+frame 50 x2
+expect daylight ~ 1
+expect sun.y > 0.9
+lock
+press Backquote
+type time set 0
+press Enter
+frame 50 x2
+expect daylight ~ 0.15
+expect sun.y < -0.9
+lock
+press Backquote
+type time set 0.25
+press Enter
+frame 50 x2
+expect sun.y ~ 0
+expect daylight < 1
+expect daylight > 0.15
+
+case a frozen clock gives a constant value
+start walk raft
+click
+lock
+press Backquote
+type time freeze
+press Enter
+frame 50 x2
+expect time.frozen = true
+mark
+frame 50 x2
+expect sun.y ~ 0.28006
+frame 500 x10
+expect sun.y ~ 0.28006
+expect daylight ~ 1
