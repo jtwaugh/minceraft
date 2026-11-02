@@ -93,3 +93,6 @@ export function nearPlaneCorners(eye, yaw, pitch, fovY, aspect, near = NEAR) {
   }
   return out;
 }
+
+/** The daylight multiplier for terrain and plants this frame: the controller's, or 1 with no day state. */
+export const daylightFactor = (day) => day?.daylight ?? 1;
