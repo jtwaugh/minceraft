@@ -40,6 +40,8 @@
 //   stand planter               the same, on the islet's first planter
 //   stand helm                  teleport onto the raft's helm cell, level gaze
 //   stand deck                  teleport onto the raft's deck, a cell south of the helm, level gaze
+//   stand counter               teleport onto the deck cell beside the raft's first counter (wherever the raft
+//                               is now), looking at the counter's top
 //   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
 //                               looks at after `stand field`; `place tall_grass` puts tall grass there,
 //                               `place air` clears it again
@@ -75,6 +77,7 @@
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
+// station.count (items on raft stations), station.item counter (the item on the raft's first counter, or none),
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
@@ -126,6 +129,14 @@ function meshFrame(walk, r, damage) {
     faults += meshCracks(damage ? damage(mesh.opaque) : mesh.opaque, REGION_SIZE).length;
   }
   return { work: { regions: r.mesh.length + r.remesh.length, chunks: r.chunks, verts }, faults };
+}
+
+/** Where the raft's rest-pose point (x, y, z) is now: turned by the quarter turns so far about the pivot, then moved by the offset. */
+function raftPoint(w, x, y, z) {
+  const [px, pz] = w.walk.raft_pivot(), [ox, oy, oz] = w.walk.raft_offset(1);
+  let dx = x - px, dz = z - pz;
+  for (let n = ((Math.round(w.walk.raft_heading(1) / (Math.PI / 2)) % 4) + 4) % 4; n > 0; n--) [dx, dz] = [-dz, dx];
+  return [px + dx + ox, y + oy, pz + dz + oz];
 }
 
 /** Split a script into cases of `{ name, line, steps: [{ line, op, args }] }`. */
@@ -298,6 +309,13 @@ function read(w, path) {
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
   if (path === 'hud.ready') return s.hud.ready ?? 'none';
   if (path === 'items') return w.walk.loose_items();
+  if (path === 'station.count') return w.walk.station_item_names().length;
+  if (path.startsWith('station.item')) { // the first counter's, wherever the raft is
+    if (path.slice(12).trim() !== 'counter') throw new Error('station.item counter');
+    const c = Array.from(w.scene.counter), cells = Array.from(w.walk.station_cells());
+    const k = cells.findIndex((_, n) => n % 3 === 0 && c.every((v, d) => cells[n + d] === v));
+    return k < 0 ? 'none' : w.walk.station_item_names()[k / 3];
+  }
   if (path === 'fish') return readFish(w.walk).length;
   if (path.startsWith('fish.near')) {
     const [x, y, z, r] = path.slice(9).trim().split(/\s+/).map(Number);
@@ -440,7 +458,22 @@ function step(w, { op, args }) {
       return;
     }
     case 'stand': {
-      if (!['field', 'planter', 'helm', 'deck'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm|deck (raft scene only)');
+      if (!['field', 'planter', 'helm', 'deck', 'counter'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm|deck|counter (raft scene only)');
+      if (args[0] === 'counter') {
+        const [cx, cy, cz] = w.scene.counter;
+        const at = (x, y, z) => raftPoint(w, x, y, z);
+        const [sx, sy, sz] = at(cx + 0.5, cy + 1, cz - 0.5);
+        w.walk.teleport(sx, sy, sz);
+        w.controller.frame(0.05);
+        const eye = w.walk.eye(1), [tx, ty, tz] = at(cx + 0.5, cy + 1, cz + 0.5);
+        const { yaw, pitch } = w.controller.state;
+        const want = [Math.atan2(tx - eye[0], -(tz - eye[2])), Math.atan2(ty - eye[1], Math.hypot(tx - eye[0], tz - eye[2]))];
+        let dyaw = want[0] - yaw;
+        dyaw -= 2 * Math.PI * Math.round(dyaw / (2 * Math.PI));
+        fire(document, 'mousemove', { movementX: Math.round(dyaw / 0.0025), movementY: Math.round(-(want[1] - pitch) / 0.0025) });
+        w.controller.frame(0.05);
+        return;
+      }
       if (args[0] === 'deck') {
         const [hx, hy, hz] = w.scene.helm;
         w.walk.teleport(hx + 0.5, hy + 1, hz + 1.5);

@@ -38,7 +38,7 @@ const CLASSES = {
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt', 'fish', 'fish.near',
     'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
-    'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
+    'station.count', 'station.item', 'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
   diagnostic: ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults'],
 };
