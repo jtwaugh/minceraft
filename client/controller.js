@@ -45,7 +45,7 @@
 // client/test/scripts/*.input drive this through the DSL in client/test/dsl.mjs.
 
 import { stepWalk } from './walk.js';
-import { readAim, readBelt } from './overlay.js';
+import { readAim, readBelt, readBobber } from './overlay.js';
 import { hudModel } from './hud.js';
 import { createStream, regionOf } from './stream.js';
 import { createParticles } from './particles.js';
@@ -120,6 +120,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
       const events = Array.from(walk.drain_events());
       particles.spawnMisses(events);
+      particles.spawnSplash(events, readBobber(walk)?.pos);
       if (snow) particles.spawnSnow(snow.cells, eye, snow.wind, dt);
       particles.update(dt);
       Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, day: readDay(walk, alpha), events, particles: particles.list, particleCount: particles.count });
