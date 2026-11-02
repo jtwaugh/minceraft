@@ -117,7 +117,10 @@ fn run() -> Vec<Vec<(EntityId, [f64; 3])>> {
             .iter()
             .filter(|f| (f.pos[0] - anchor[0]).hypot(f.pos[2] - anchor[1]) <= config.target_radius)
             .count() as u32;
-        assert!(near <= config.target_count, "tick {tick}: {near} fish");
+        // Only the top-up is capped; fish spawned in the ring can swim in later.
+        if fw.is_phase_change(tick) {
+            assert!(near <= config.target_count, "tick {tick}: {near} fish");
+        }
         assert!(fw.store().len() as u32 + fw.stock() <= config.daily_stock);
         for f in fw.store().iter() {
             assert!(in_water(&world, f), "tick {tick}: {f:?} out of water");

@@ -281,7 +281,7 @@ fn check_snow_ice(r: &Region, cm: &ClimateMap) -> (usize, usize) {
             let tp = t - (top - 64) as f64 / 64.0 * 0.3;
             let below = c[top as usize - 1];
             let at = c[top as usize];
-            let want = tp < 0.5 && blocks_movement(below) && below != ICE;
+            let want = tp < 0.5 && blocks_movement(below) && !is_sea_ice(below);
             if (tp - 0.5).abs() < 1e-5 {
                 continue; // f32 rounding of the exported temperature
             }

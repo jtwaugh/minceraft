@@ -943,11 +943,6 @@ impl Generator {
         }
     }
 
-    /// Surface pass for one column (SPEC 4).
-    ///
-    /// `frozen`: the column's T < 0.5, so a water top placed at y = 63 by the
-    /// beach/stone-patch rule becomes ice like the sea fill does.
-    #[allow(clippy::too_many_arguments)]
     /// Block at y = `SEA_LEVEL - 1` over open sea in the column (sea-ice-floes.md A):
     /// solid ice below `SEA_ICE_T_ICE`, floe ice or water in the band up to
     /// T = 0.5 (`t + k * n < 0.5`), water elsewhere and on `open_water`.
@@ -986,6 +981,11 @@ impl Generator {
         a + (b - a) * tz
     }
 
+    /// Surface pass for one column (SPEC 4).
+    ///
+    /// `sea_top`: the block `sea_top` chose for y = 63, so a water top placed
+    /// there by the beach/stone-patch rule becomes ice or floe ice like the sea fill.
+    #[allow(clippy::too_many_arguments)]
     fn surface(
         &self,
         x: i32,
