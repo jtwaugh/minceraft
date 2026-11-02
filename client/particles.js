@@ -13,7 +13,7 @@
 //   p.count                how many are live
 
 import { B, H, swaysUnder } from '../viewer/mesh.js';
-import { swayOffset } from './sway.js';
+import { FIXED_WIND, swayOffset } from './sway.js';
 
 const BURST = 8;
 const LIFE = 0.6; // seconds
@@ -75,8 +75,8 @@ export function createParticles() {
         const cx = x + 0.5, cz = z + 0.5;
         if (Math.hypot(cx - eye[0], y - eye[1], cz - eye[2]) > SNOW_RADIUS) continue;
         // the gust is how far the wind leans this cell over, 0..1 (squared, so flakes come at the peaks)
-        const [dx, dz] = swayOffset(1, cx, cz, phase, 1);
-        const gust = (dx * dx + dz * dz) / 2;
+        const [dx, dz] = swayOffset(1, cx, cz, phase, FIXED_WIND, 1);
+        const gust = dx * dx + dz * dz;
         if (rand() >= SNOW_RATE * gust * gust * dt) continue;
         // off the edge the snow leans toward, anywhere along it
         const l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l, along = rand() - 0.5;
