@@ -1,0 +1,5 @@
+# Storage chests (docs/design/cooking-stations.md section 7).
+# This is this game's own choice; it does not come from SPEC.md.
+
+# Slots in each chest. Each slot holds one item; nothing stacks.
+slots = 18

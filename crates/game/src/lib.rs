@@ -8,6 +8,7 @@ pub mod animals;
 pub mod bindings;
 pub mod bobber;
 pub mod camera;
+pub mod chests;
 pub mod clock;
 pub mod collision;
 pub mod commands;

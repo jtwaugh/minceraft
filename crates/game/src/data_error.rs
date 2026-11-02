@@ -23,6 +23,7 @@ pub enum DataFile {
     Wind,
     Day,
     Stations,
+    Chests,
 }
 
 impl DataFile {
@@ -44,6 +45,7 @@ impl DataFile {
             DataFile::Wind => "wind.toml",
             DataFile::Day => "day.toml",
             DataFile::Stations => "stations.toml",
+            DataFile::Chests => "chests.toml",
         }
     }
 }
