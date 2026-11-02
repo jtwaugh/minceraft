@@ -101,6 +101,8 @@ fn new_flora_decorates_its_tile() {
         Block::LeafLitter,
         Block::Lingon,
         Block::Blabar,
+        Block::Smultron,
+        Block::Johannesort,
     ] {
         let mut r = island(0);
         put(&mut r, 20, TOP, 20, b);

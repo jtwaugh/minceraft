@@ -203,9 +203,9 @@ test('cactus_flower draws as crossed quads', () => {
   assert.equal(m.cutout.faces, size * size * 4);
 });
 
-test('tulips draw as crossed quads', () => {
+test('tulips and meadow flowers draw as crossed quads', () => {
   const size = 4;
-  for (const b of [B.tulip_red, B.tulip_salmon, B.tulip_yellow]) {
+  for (const b of [B.tulip_red, B.tulip_salmon, B.tulip_yellow, B.smultron, B.johannesort]) {
     const blocks = meadow(size);
     for (let c = 0; c < size * size; c++) blocks[c * H + 60] = b;
     const m = meshBlocks(ctx, blocks, tints(size), size, 0);

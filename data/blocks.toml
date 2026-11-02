@@ -828,3 +828,22 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#4d6a3c"
+
+# Meadow flowers (swedish-summer-flora D.2): cross plants.
+[[block]]
+id = 86
+name = "smultron"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#8a9a4a"
+
+[[block]]
+id = 87
+name = "johannesort"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#d9b92e"
