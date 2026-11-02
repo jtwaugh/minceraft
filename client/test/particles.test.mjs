@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { B, H } from '../../viewer/mesh.js';
-import { createParticles, snowOnFoliage } from '../particles.js';
+import { createParticles, snowOnFoliage, particleTexture, PARTICLE_TEXTURES } from '../particles.js';
+import { SCENE_TEXTURES } from '../scenetextures.js';
+import { readFileSync } from 'node:fs';
 
 // 3 x 3 inner columns with pad 1: stone to y 60, then `under` and snow in each listed inner column.
 function region(cols) {
@@ -144,4 +146,33 @@ test('wake particles expire and the live count stays bounded', () => {
     p.update(1 / 60);
   }
   assert.equal(p.count, 0, 'all expire once no fish is lured');
+});
+
+test('splash particles draw splash_<frame>, wake fishing_wake, snow and misses as boxes', () => {
+  const p = createParticles();
+  p.spawnSplash(['fish_bite'], [0, 63, 0]);
+  p.spawnWake([{ id: 1, pos: [0, 63, 0], lured: true }], 1);
+  p.spawnMisses(['forage_missed position=1,64,2']);
+  p.spawnSnow([[0, 64, 0]], [0, 64, 0], { dir: [1, 0], strength: 1, phase: Math.PI / 2 }, 1e6);
+  const seen = new Set();
+  for (let i = 0; i < 5; i++) {
+    for (const q of p.list) {
+      const tex = particleTexture(q);
+      if (q.sprite === 'splash') assert.equal(tex, `splash_${q.frame}`);
+      else if (q.sprite === 'fishing_wake') assert.equal(tex, 'fishing_wake');
+      else assert.equal(tex, null, 'snow and forage-miss particles keep their boxes');
+      seen.add(tex);
+    }
+    p.update(0.12);
+  }
+  assert.deepEqual([...seen].sort(), [null, 'fishing_wake', 'splash_0', 'splash_1', 'splash_2', 'splash_3'].sort());
+  assert.equal(particleTexture({ sprite: 'nope' }), null);
+});
+
+test('particle textures are packed into the scene atlas and exist in the art', () => {
+  const art = readFileSync(new URL('../../art/batches_7_12.json', import.meta.url), 'utf8');
+  for (const name of PARTICLE_TEXTURES) {
+    assert.ok(SCENE_TEXTURES.includes(name), name);
+    assert.ok(art.includes(`"${name}"`), name);
+  }
 });

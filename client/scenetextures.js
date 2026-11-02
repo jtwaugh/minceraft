@@ -3,5 +3,6 @@ import { RAFT_TEXTURES } from './raftmodel.js';
 import { ITEM_TEXTURES } from './itemmodel.js';
 import { HELD_TEXTURES } from './helditem.js';
 import { BOBBER_TEXTURES } from './bobbermodel.js';
+import { PARTICLE_TEXTURES } from './particles.js';
 
-export const SCENE_TEXTURES = [...RAFT_TEXTURES, ...ITEM_TEXTURES, ...HELD_TEXTURES, ...BOBBER_TEXTURES];
+export const SCENE_TEXTURES = [...RAFT_TEXTURES, ...ITEM_TEXTURES, ...HELD_TEXTURES, ...BOBBER_TEXTURES, ...PARTICLE_TEXTURES];

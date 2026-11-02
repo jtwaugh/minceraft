@@ -29,11 +29,11 @@ import { VERTEX_BYTES, AO_SHADE, POS_SCALE, UV_SCALE, SHADE_SCALE, B, legendCont
 import { meshBlocksWasm } from '../viewer/meshwasm.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
-import { animalBoxes, animalPose } from './models.js';
+import { animalBoxes, animalPose, CLEAR_EDGES } from './models.js';
 import { bobberBoxes, lineBoxes, bobberDraw } from './bobbermodel.js';
 import { fishBoxes, fishDraw, createTailTracker } from './fishmodels.js';
 import { raftBoxes, raftMatrix } from './raftmodel.js';
-import { itemBoxes, itemDraws, readStations, stationDraws } from './itemmodel.js';
+import { itemBoxes, itemDraws, itemPose, readStations, stationDraws } from './itemmodel.js';
 import { heldBoxes, heldDraw } from './helditem.js';
 import { SCENE_TEXTURES } from './scenetextures.js';
 import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
@@ -71,7 +71,7 @@ import { parseSeed } from './seed.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
 import { mountPanelStyle } from './uistyle.js';
-import { snowOnFoliage } from './particles.js';
+import { snowOnFoliage, particleTexture } from './particles.js';
 
 const { InputSampler, Walk, Scene, SimClock, FlyCamera, Wind, view_matrix } = game;
 
@@ -305,6 +305,18 @@ const itemModels = {};
 function drawItems(mvp, items, timeSeconds, camera, daylight) {
   for (const { key, model } of itemDraws(items, timeSeconds, camera)) {
     models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)), undefined, daylight);
+  }
+}
+
+// Particles with art (particleTexture) as camera-facing slabs like the loose
+// items, one model per texture; the rest as boxes, snow flakes solid white.
+const particleModels = {};
+function drawParticles(mvp, particles, camera, daylight) {
+  for (const p of particles) {
+    const tex = particleTexture(p);
+    if (!tex) { drawBox(mvp, [...p.pos.map((v) => v - p.size), ...p.pos.map((v) => v + p.size)], p.snow ? 'flake' : true); continue; }
+    const m = particleModels[tex] ??= models.addModel([{ lo: [-0.5, -0.5, -0.01], size: [1, 1, 0.02], faces: { front: tex, back: tex, ...CLEAR_EDGES } }]);
+    models.drawModel(mvp, itemPose({ pos: p.pos, size: 2 * p.size, id: 0 }, 0, camera), m, undefined, daylight);
   }
 }
 
@@ -688,7 +700,7 @@ function render(now) {
   if (scene) drawAnimals(mvp, readAnimals(walk), daylightFactor(day));
   drawItems(mvp, readItems(walk), now / 1000, { yaw }, daylightFactor(day));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
-  for (const { pos, size, snow } of particles) drawBox(mvp, [...pos.map((v) => v - size), ...pos.map((v) => v + size)], snow ? 'flake' : true);
+  drawParticles(mvp, particles, { yaw }, daylightFactor(day));
   if (!flying) drawHeld(proj);
   inventoryView.update(controller.state.inventory, controller.state.belt);
   deathView.update(controller.state.dead);

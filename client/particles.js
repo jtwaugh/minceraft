@@ -19,6 +19,9 @@
 //   p.update(dt)           age by dt seconds, drop the expired
 //   p.list                 live particles: { pos: [x, y, z], vel, age, life, size, snow, sprite, frame }
 //   p.count                how many are live
+//
+// particleTexture(p) names the art a particle is drawn with (scene.js packs
+// PARTICLE_TEXTURES into the model atlas); particles without one draw as boxes.
 
 import { B, H, swaysUnder } from '../viewer/mesh.js';
 import { SWAY_WAVE } from './sway.js';
@@ -47,6 +50,14 @@ const SNOW_DRIFT = 0.25; // blocks per second, along the wind
 const SNOW_LIFE = 1.6; // seconds
 const SNOW_SIZE = 0.025;
 const SNOW_MAX = 256; // live flakes at most
+
+export const PARTICLE_TEXTURES = [...Array.from({ length: SPLASH_FRAMES }, (_, i) => `splash_${i}`), 'fishing_wake'];
+
+/** The texture name particle `p` is drawn with: splash_<frame>, fishing_wake, or null (snow, misses: a box). */
+export function particleTexture(p) {
+  const name = p.sprite === 'splash' ? `splash_${p.frame ?? 0}` : p.sprite;
+  return PARTICLE_TEXTURES.includes(name) ? name : null;
+}
 
 /**
  * World [x, y, z] of every snow layer resting on swaying foliage (swaysUnder) in
