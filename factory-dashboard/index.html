@@ -202,18 +202,23 @@ function confirmAct(a) {
     if (d.returnValue !== "ok") return;
     const steps = [];
     if (a.op) steps.push(a.op);
+    if (a.ops) steps.push(...a.ops);
     if (a.action === "comment") steps.push({action: "comment", number: a.number, body: body.value});
     if (a.action === "close") steps.push({action: "close", number: a.number, reason: a.reason, comment: a.body !== undefined ? body.value : ""});
     if (a.action === "label") steps.push({action: "label", number: a.number, label: a.label});
     if (a.alsoClose && document.getElementById("dlgclose").checked)
       steps.push({action: "close", number: a.alsoClose, reason: "completed", comment: a.closeNote || ""});
-    let last = "";
+    let last = "", done = 0;
     for (const s of steps) {
       const r = await post("/api/act", s);
-      if (!r.ok) { toast(s.number ? `Failed on #${s.number}: ${r.message}` : `Failed: ${r.message}`); return; }
-      last = r.message;
+      if (!r.ok) {
+        toast((s.number ? `Failed on #${s.number}: ${r.message}` : `Failed: ${r.message}`) + (a.ops && done ? ` (${done} done before it)` : ""));
+        if (done) poll();
+        return;
+      }
+      last = r.message; done++;
     }
-    toast(a.op ? (last || "Done.") : `Done. Shown here now; GitHub confirms it on the next read.`);
+    toast(a.ops ? `Approved ${done} ticket(s). Shown here now; GitHub confirms it on the next read.` : a.op ? (last || "Done.") : `Done. Shown here now; GitHub confirms it on the next read.`);
     poll();
   };
 }
@@ -224,9 +229,29 @@ document.addEventListener("click", e => {
 });
 
 // ---- builders for each kind of waiting item
+// A PR with a conflict or failed CI: hand it to @claude, or fix it in a local session.
+function brokenActions(i) {
+  const asks = (i.problems || []).map(p => p === "conflict" ? "merge master into the branch and resolve the conflicts"
+    : `fix the failing checks (${p.replace(/^CI failed: /, "")})`);
+  return [
+    btn("Tag @claude", {action: "comment", number: i.number, title: `Ask Claude to fix PR #${i.number}`,
+      text: (i.fixing ? `Heads up: ${i.fixer}. ` : "") + "Posts this as you. An @claude comment starts Claude on the PR.",
+      body: `@claude Fix this PR: ${asks.join(", and ")}. Stay within the PR's scope, and push to this branch.`,
+      ok: "Post comment"}, "primary"),
+    btn("Solve locally", {op: {action: "fix-pr", number: i.number}, title: `Fix PR #${i.number} locally`, ok: "Open Terminal",
+      text: "Opens Terminal in your minceraft checkout and starts Claude on this PR. It checks no fixer is already running, " +
+        "merges master or fixes CI on the PR branch, and asks before pushing. It never merges."}),
+  ];
+}
+
 function needsYouActions(i) {
   const out = [];
-  if (i.type === "factory-question" && i.ticket) {
+  if (i.problems && i.problems.length) out.push(...brokenActions(i));
+  if (i.type === "broken") {
+    out.push(btn("Comment", {action: "comment", number: i.number, title: `Comment on PR #${i.number}`, body: "", ok: "Post comment"}));
+    out.push(btn("Close PR", {action: "close", number: i.number, reason: "not_planned", title: `Close PR #${i.number}`,
+      text: "Closes the PR without merging.", body: "", ok: "Close"}));
+  } else if (i.type === "factory-question" && i.ticket) {
     out.push(btn(`Retry #${i.ticket} with @claude`, {
       action: "comment", number: i.ticket, title: `Comment on ticket #${i.ticket}`,
       text: "Posts this as you. An @claude comment starts the implementer on the ticket.",
@@ -262,7 +287,7 @@ function needsYouActions(i) {
           "If anything was pushed since the last read, GitHub refuses it.", ok: "Merge"}, "primary"));
     else if (!CFG.readOnly)
       out.push(`<button type="button" disabled title="Merge unlocks when every check passes">${i.ci === "failed" ? "Merge: CI failed" : "Merge: waiting on CI"}</button>`);
-    if ((i.reason || "").startsWith("Ready, but it touches files only you can approve"))
+    if (!(i.problems && i.problems.length) && (i.reason || "").startsWith("Ready, but it touches files only you can approve"))
       out.push(btn("Fix locally", {op: {action: "fix-pr", number: i.number}, title: `Fix PR #${i.number} locally`,
         ok: "Open Terminal", text: "Opens Terminal in your minceraft checkout and starts Claude on this PR. " +
           "It checks no fixer is already running, reviews and fixes it on the PR branch, and asks before pushing. It never merges."}));
@@ -378,26 +403,40 @@ function render(p) {
   </div></section>`);
 
   // A section with a count; an empty one collapses to its header line.
-  const card = (title, items, none) => items.length
-    ? `<section><h2>${title} <span class="count">${items.length}</span></h2>${items.join("")}</section>`
+  const card = (title, items, none, head = "") => items.length
+    ? `<section><h2>${title} <span class="count">${items.length}</span></h2>${head}${items.join("")}</section>`
     : `<section class="none"><h2>${title} <span class="count">0</span><span class="hint">${esc(none)}</span></h2></section>`;
   const left = [], right = [];
 
   // The second line of a waiting item: a pill for what kind of ask it is, then the detail.
+  const problemPills = i => (i.problems || []).map(p => `<span class="pill bad">${esc(p)}</span>`).join("");
   const nyLead = i => {
+    if (i.type === "broken") {
+      const p = i.prInfo || {}, fromIssue = /issue-(\d+)/.exec(p.head || "");
+      return problemPills(i) + (i.fixing ? `<span class="pill ok">Claude on it</span>` : "") +
+        `<span class="why">${esc(i.reason)}${i.ticket ? ` · ticket ${issue(i.ticket)}` : fromIssue ? ` · from ${issue(fromIssue[1])}` : ""}` +
+        `${p.head && p.head !== i.title ? ` · ${esc(p.head)}` : ""}</span>`;
+    }
     if (i.type === "pr") {
       const p = i.prInfo || {}, fromIssue = /issue-(\d+)/.exec(p.head || "");
       const external = /^Not a factory ticket/.test(i.reason);
       const detail = external ? "Not from the factory, so nothing merges it for you." : i.reason;
       const ci = {passed: ["ok", "CI passed"], none: ["", "no checks"], running: ["", "CI running"], failed: ["bad", "CI failed"]}[i.ci];
       return (i.approved ? `<span class="pill ok">approved</span>` : i.own ? `<span class="pill">your PR</span>` : `<span class="pill warn">needs review</span>`) +
-        (ci ? `<span class="pill ${ci[0]}">${ci[1]}</span>` : "") + `<span class="why">${esc(detail)}` +
+        (i.problems && i.problems.length ? problemPills(i) : ci ? `<span class="pill ${ci[0]}">${ci[1]}</span>` : "") +
+        `<span class="why">${esc(detail)}${i.fixer ? ` · ${esc(i.fixer)}` : ""}` +
         `${fromIssue ? ` · from ${issue(fromIssue[1])}` : ""}${p.head && p.head !== i.title ? ` · ${esc(p.head)}` : ""}</span>`;
     }
     return `<span class="why">${esc(i.reason)}${i.ticket ? ` · ticket ${issue(i.ticket)}` : ""}</span>`;
   };
 
-  // Needs you.
+  // Needs you. Unapproved tickets can be approved in one go.
+  const unapproved = ny.filter(i => i.type === "unapproved");
+  const approveAll = unapproved.length > 1 ? `<div class="actions">${btn(`Approve (label factory) all ${unapproved.length} tickets`, {
+    ops: unapproved.map(i => ({action: "label", number: i.number, label: "factory"})),
+    title: `Approve ${unapproved.length} tickets`, ok: "Approve all",
+    text: "Adds the factory label to " + unapproved.map(i => `#${i.number}`).join(", ") +
+      ". The tick starts each once its dependencies close."}, "primary")}</div>` : "";
   left.push(card("Waiting on you", ny.map(i => `
     <div class="item">
       <div class="row"><span class="num">${i.kind === "pr" ? pr(i.number) : issue(i.number)}</span>
@@ -407,7 +446,7 @@ function render(p) {
       ${i.options && i.options.length ? `<ul class="options">${i.options.map(([l, t]) =>
         `<li><b>${esc(l)}.</b> ${md(t)}</li>`).join("")}</ul>` : ""}
       <div class="actions">${needsYouActions(i)}</div>
-    </div>`), "Nothing waits on you."));
+    </div>`), "Nothing waits on you.", approveAll));
   if (reports.length)
     left.push(`<section class="reports">${reports.map(r => `<div class="item"><div class="row">
       <span class="pill">report</span><span class="num">${issue(r.number)}</span><span class="title">${esc(r.title)}</span>
@@ -419,6 +458,13 @@ function render(p) {
     left.push(`<section class="reports">${decided.map(q => `<div class="item"><div class="row">
       <span class="pill ok">decided ${esc(q.decision)}</span><span class="num">${issue(q.number)}</span><span class="title">${esc(q.title)}</span>
       <span class="why">waiting on the spec editor's PR</span>${when(q.at)}</div></div>`).join("")}</section>`);
+
+  // Tickets you approved here: labelled factory, waiting on the tick to start them.
+  const approved = d.approved || [];
+  if (approved.length)
+    left.push(`<section class="reports">${approved.map(t => `<div class="item"><div class="row">
+      <span class="pill ok">factory</span><span class="num">${issue(t.number)}</span><span class="title">${esc(t.title)}</span>
+      <span class="why">approved; the tick starts it once its dependencies close</span>${when(new Date(t.at * 1000).toISOString())}</div></div>`).join("")}</section>`);
 
   // Started tickets with no PR.
   const stLabel = {running: ["ok", "building"], starting: ["ok", "starting"], "open-pr": ["warn", "opening PR"],
