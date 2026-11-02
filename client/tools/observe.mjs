@@ -27,7 +27,7 @@ const CLASSES = {
     'mode', 'locked', 'prompt', 'hint', 'target.kind', 'belt.selected', ...BELT_SLOTS.map((n) => `belt.slot.${n}`),
     'hands', 'health', 'hearts.full', 'hearts.half', 'hearts.empty', 'hud.selected', 'hud.hands', 'hud.ready', 'phase',
     // The last `layout` line's HUD geometry, which play.mjs already returns in player mode.
-    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction',
+    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction', 'layout.belt.offcentre', 'layout.hud.height',
   ],
   partial: ['target.id', 'target.face', 'box', 'console.last', 'console.text', 'phase.left'],
   debug: [

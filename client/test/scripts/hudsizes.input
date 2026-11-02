@@ -17,6 +17,8 @@ layout 390 844
 expect layout.scale = 3
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
+expect layout.belt.offcentre <= 2
+expect layout.hud.height <= 0.2
 expect layout.timer = inside
 expect layout.slotnumbers = inside
 expect layout.hands.label = inside
@@ -35,6 +37,8 @@ layout 1366 768
 expect layout.scale = 4
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
+expect layout.belt.offcentre <= 2
+expect layout.hud.height <= 0.2
 expect layout.timer = inside
 expect layout.slotnumbers = inside
 expect layout.hands.label = inside
@@ -53,6 +57,8 @@ layout 1920 1080
 expect layout.scale = 6
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
+expect layout.belt.offcentre <= 2
+expect layout.hud.height <= 0.2
 expect layout.timer = inside
 expect layout.slotnumbers = inside
 expect layout.hands.label = inside
@@ -71,6 +77,8 @@ layout 3440 1440
 expect layout.scale = 9
 expect layout.problems = 0
 expect layout.belt.fraction <= 0.5
+expect layout.belt.offcentre <= 2
+expect layout.hud.height <= 0.2
 expect layout.timer = inside
 expect layout.slotnumbers = inside
 expect layout.hands.label = inside
