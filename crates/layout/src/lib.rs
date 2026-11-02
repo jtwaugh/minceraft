@@ -46,13 +46,19 @@ pub enum DensityTerm {
     /// (1 - smoothstep(near + ramp + width, near + ramp + width + fade, d))`
     /// the base height moves toward `SEA_LEVEL + height` by `w`. Columns on
     /// the left, or within `near`, get `w = 0`. No density clamp.
+    ///
+    /// `near`, `ramp` and `height` vary with the arc length of the column's
+    /// nearest polyline point: a smooth interpolation between hashes of
+    /// `seed` at every `wobble_length` blocks, between their min and max.
     Coast {
         points: Vec<(f64, f64)>,
-        near: f64,
-        ramp: f64,
-        height: f64,
+        seed: u64,
+        near: (f64, f64),
+        ramp: (f64, f64),
+        height: (f64, f64),
         width: f64,
         fade: f64,
+        wobble_length: f64,
     },
 }
 

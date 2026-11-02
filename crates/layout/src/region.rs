@@ -79,7 +79,7 @@ impl DensityTerm {
                 width,
                 fade,
                 ..
-            } => polyline(points, near + ramp + width + fade),
+            } => polyline(points, near.1 + ramp.1 + width + fade),
         }
     }
 }
