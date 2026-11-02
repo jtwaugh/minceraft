@@ -74,6 +74,7 @@ pub fn build_route_layout(world: &WorldConfig, route: &Route) -> (Layout, Vec<Le
                     (p[1] - dist * hx).round() as i32,
                 ],
                 spawn_water_radius: V0_SPAWN_WATER_RADIUS,
+                supplies: Vec::new(),
             }
         })
         .collect();

@@ -48,6 +48,7 @@ fn level() -> Level {
         anchorage: [0, 20],
         island_center: [20, 20],
         spawn_water_radius: 4.0,
+        supplies: Vec::new(),
     }
 }
 

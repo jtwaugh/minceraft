@@ -10,6 +10,8 @@ use std::path::Path;
 
 use terrain::SEA_LEVEL;
 
+use crate::structure::Structure;
+
 /// Per-level metadata for the game.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "toml-io", derive(serde::Serialize, serde::Deserialize))]
@@ -20,6 +22,23 @@ pub struct Level {
     pub anchorage: [i32; 2],
     pub island_center: [i32; 2],
     pub spawn_water_radius: f64,
+    /// The raft's supplies (docs/design/cooking-stations.md 7.1), restocked
+    /// every day. Item names are checked by the game, not here.
+    #[cfg_attr(
+        feature = "toml-io",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    pub supplies: Vec<Supply>,
+}
+
+/// One `[[level.supplies]]` entry: `count` of `item` go in the raft chest
+/// number `chest` (raft-local cell order in `raft_start`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "toml-io", derive(serde::Serialize, serde::Deserialize))]
+pub struct Supply {
+    pub item: String,
+    pub count: u32,
+    pub chest: usize,
 }
 
 /// The `[world]` table. `sea_level` is not stored: it must equal
@@ -74,6 +93,13 @@ pub enum LevelFileError {
         found: [i32; 2],
         anchorage: [i32; 2],
     },
+    /// A `[[level.supplies]]` entry with a zero `count` or a `chest` index
+    /// past the raft's chests.
+    BadSupply {
+        level: String,
+        index: usize,
+        field: &'static str,
+    },
     /// Writing failed (e.g. a seed above `i64::MAX` is not a TOML integer).
     Write(String),
 }
@@ -96,6 +122,11 @@ impl fmt::Display for LevelFileError {
                 f,
                 "route starts at {found:?} but level 1's anchorage is {anchorage:?}"
             ),
+            Self::BadSupply {
+                level,
+                index,
+                field,
+            } => write!(f, "level `{level}` supplies[{index}]: bad `{field}`"),
             Self::Write(m) => write!(f, "cannot write level file: {m}"),
         }
     }
@@ -141,6 +172,31 @@ fn check_route(r: &Route, levels: &[Level]) -> Result<(), LevelFileError> {
     Ok(())
 }
 
+/// Checks each level's supplies against the chests in `raft_start`.
+#[cfg(feature = "toml-io")]
+fn check_supplies(levels: &[Level]) -> Result<(), LevelFileError> {
+    let chest = terrain::block_id("chest");
+    let cells = Structure::raft_start().cells([0, 0, 0], 0);
+    let chests = cells.iter().filter(|c| Some(c.3) == chest).count();
+    for l in levels {
+        for (index, s) in l.supplies.iter().enumerate() {
+            let field = if s.count == 0 {
+                "count"
+            } else if s.chest >= chests {
+                "chest"
+            } else {
+                continue;
+            };
+            return Err(LevelFileError::BadSupply {
+                level: l.id.clone(),
+                index,
+                field,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Reading and writing level files needs the `toml-io` feature.
 #[cfg(feature = "toml-io")]
 impl LevelFile {
@@ -157,6 +213,7 @@ impl LevelFile {
                 return Err(LevelFileError::DuplicateLevelId(l.id.clone()));
             }
         }
+        check_supplies(&raw.levels)?;
         if let Some(r) = &raw.route {
             check_route(r, &raw.levels)?;
         }
@@ -171,6 +228,7 @@ impl LevelFile {
     }
 
     pub fn to_toml(&self) -> Result<String, LevelFileError> {
+        check_supplies(&self.levels)?;
         if let Some(r) = &self.route {
             check_route(r, &self.levels)?;
         }

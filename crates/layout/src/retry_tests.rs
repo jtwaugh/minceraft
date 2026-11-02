@@ -79,7 +79,12 @@ fn committed_v0_level_file_validates_first_try() {
     // The loop agrees: first attempt, same level.
     let found = find_level(file.world.seed, |_| level.clone(), &t()).unwrap();
     assert_eq!((found.seed, found.attempts), (file.world.seed, 1));
-    assert_eq!(found.level, default_v0_level(file.world.seed));
+    // The generator makes the geometry; the file adds the supplies.
+    let generated = Level {
+        supplies: level.supplies.clone(),
+        ..default_v0_level(file.world.seed)
+    };
+    assert_eq!(found.level, generated);
 }
 
 #[test]
