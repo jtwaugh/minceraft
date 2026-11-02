@@ -1,6 +1,6 @@
 ---
 title: Play critic sees lag and render faults
-status: accepted
+status: done
 scope: game
 source: "#1526"
 superseded_by: ""
@@ -10,7 +10,7 @@ phases:
   C: done
   D: done
   E: done
-  F: todo
+  F: done
 ---
 
 ## Current state
@@ -22,6 +22,7 @@ Checked against the code on `master`:
 - **Phase C done (plan #1681).** PRs #1705 (UV snap built from shared constants in `client/texsnap.js`, tested at every view angle), #1735 (`client/meshcheck.js` crack check on opaque full-block faces) and #1706 (`client/test/regionborder.test.mjs`, padded neighbour regions mesh like the two together) built section 4; the Section 4 bullets below describe the code before them.
 - **Phase D done (plan #1919, after #1743).** PRs #1802 (`perf` and `render` in `KINDS`), #1809 (`render.faults` on streamed worlds), #1837 (prompt kinds and streamed-world goals), #1926 (`diagnostic` class in `client/tools/observe.mjs`, gated to streamed worlds in `play.mjs`) and #1936 (prompt names the diagnostic paths) built section 6; the Section 6 bullet below describes the code before them.
 - **Phase E done (plan #2035, after #1983).** PRs #1987 (replay median verdict, `client/tools/perfpass.mjs`), #1991 (`performance.mark` spans around tick, mesh and upload), #2009 (headless Chrome runner printing hitch records), #2055 (`advisory` field on findings, skipped by `verify.mjs`), #2096 (`report.mjs` groups advisory findings apart), #2054 (workflow draft) and #2060 (enabled as `.github/workflows/claude-perfpass.yml`) built section 3; the Section 3 text below describes the code before them.
+- **Phase F done (plan #2159).** PRs #2195 (`client/pixelcheck.js`, palette and shade check giving `render.seams`), #2192 (fixed render mode in the scene: fog off, tint off, fixed shading) and #2208 (`client/tools/pixelpass.mjs`, headless runner printing `render.seams`, a crop list and whether two renders match) built section 5; the Section 5 text above describes the code before them. Whether SwiftShader renders identically every run stays a `[manual check]` for the maintainer.
 - **Frame stats (section 1).** `client/frametimes.js` has `FrameTimes` (300-frame ring buffer, nearest-rank `percentile`, `summary()` = `{ frames, p50, p99 }`, `format()`) and `FRAME_BUDGET_MS` (1000 / 60). `client/scene.js` creates `frames = new FrameTimes(300)`, pushes `now - lastFrame` each frame, exposes `window.frameStats = () => frames.summary()` and builds the overlay text from `format()` plus an "over/within the 16.7 ms p99 budget" line. There is no max, no hitch count and no per-frame work record. `client/test/frametimes.test.mjs` tests it.
 - **Region meshing (section 2).** `meshRegion` in `client/scene.js` does the CPU half (`padRegion` from `client/regionpad.js`, `columnTints`, `meshBlocksWasm` from `viewer/meshwasm.js`, over `crates/web/src/mesh.rs`) and the GPU half (`upload`, `regionParts`, `meshes`) in one function. The `stale` map and the one-per-spare-frame remesh of neighbours also live in `scene.js`'s `render`. `padRegion` and `meshBlocksWasm` are plain JS over wasm, and `client/test/meshorigin.test.mjs` already calls `meshBlocksWasm` from Node, so the CPU half can run headless.
 - **Streaming (section 2).** `client/stream.js` `createStream({ budget = 1 })` turns `walk.drain_stream()` events into regions to mesh (at most `budget` per frame, nearest first) and regions to free. `controller.js` `streamRegions` returns `{ mesh, free, remesh, loaded, freed, pending, centre }` from it each frame. The DSL (`client/test/dsl.mjs`) has `start ... stream`, which runs this and exposes `regions.loaded|freed|pending|x|z`, but meshes nothing.
