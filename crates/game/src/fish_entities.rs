@@ -34,6 +34,8 @@ pub struct FishEntity {
     /// Ticks left scattering from `scatter_from` after a hit.
     pub scatter_ticks: u32,
     pub scatter_from: [f64; 3],
+    /// A point the fish swims to instead of wandering; a scatter clears it.
+    pub lure: Option<[f64; 3]>,
 }
 
 impl FishEntity {
@@ -93,6 +95,7 @@ impl FishStore {
             health: body.health,
             scatter_ticks: 0,
             scatter_from: [0.0; 3],
+            lure: None,
         });
         Some(id)
     }
@@ -135,6 +138,7 @@ impl FishStore {
         for f in self.fish.iter_mut().filter(|f| f.school == school) {
             f.scatter_ticks = ticks;
             f.scatter_from = from;
+            f.lure = None;
         }
     }
 

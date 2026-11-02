@@ -161,6 +161,13 @@ impl FishSteer {
                         f.scatter_from
                     })
                 });
+            if away.is_some() {
+                f.lure = None;
+            }
+            let lured = f.lure.map(|p| {
+                let centre = [f.pos[0], f.pos[1] + f.box_size[1] / 2.0, f.pos[2]];
+                [0, 1, 2].map(|i| p[i] - centre[i])
+            });
             let goal = if let Some(p) = away {
                 speed *= c.scatter_speed;
                 let (dx, dz) = (f.pos[0] - p[0], f.pos[2] - p[2]);
@@ -168,6 +175,20 @@ impl FishSteer {
                     *heading = heading_of(dx, dz);
                 }
                 *heading
+            } else if let Some(d) = lured {
+                // A lure overrides the wander: swim at the point, then stop.
+                let dist = d[0].hypot(d[1]).hypot(d[2]);
+                f.depth_target = f.pos[1] + d[1];
+                if dist <= c.lure_distance {
+                    speed = 0.0;
+                } else {
+                    speed = speed.min(dist / TICK_SECONDS);
+                }
+                if d[0].hypot(d[2]) > 1e-9 {
+                    heading_of(d[0], d[2])
+                } else {
+                    f.heading
+                }
             } else {
                 let [sx, sz, n] = centres[&f.school];
                 let [gx, gz] = dir(*heading);
@@ -358,6 +379,82 @@ mod tests {
                 assert!(spread(&store) < 8.0, "tick {t}: {}", spread(&store));
             }
         }
+    }
+
+    /// Reach the point, report arrival, and hold there.
+    fn lured(seed: u64) -> (FishStore, FishSteer, Rng, EntityId) {
+        let (mut store, steer) = setup(&[("mackerel", [-6.5, 54.0, 0.5], 0)]);
+        let id = store.iter().next().unwrap().id;
+        store.iter_mut().next().unwrap().lure = Some([5.5, 55.0, 3.5]);
+        (store, steer, Rng::new(seed), id)
+    }
+
+    fn lure_gap(store: &FishStore, id: EntityId) -> f64 {
+        let f = store.get(id).unwrap();
+        let p = f.lure.unwrap();
+        let c = [f.pos[0], f.pos[1] + f.box_size[1] / 2.0, f.pos[2]];
+        (0..3).map(|i| (p[i] - c[i]).powi(2)).sum::<f64>().sqrt()
+    }
+
+    #[test]
+    fn a_lured_fish_arrives_in_time_and_stays() {
+        let world = pool(10);
+        let (mut store, mut steer, mut rng, id) = lured(4);
+        let speed = store.bodies().get("mackerel").unwrap().swim_speed;
+        let gap = lure_gap(&store, id);
+        let need = gap / (speed * TICK_SECONDS);
+        let limit = need as u32 + 200;
+        let near = steer.config().lure_distance;
+        let mut arrived = None;
+        for t in 0..limit + 100 {
+            steer.tick(&mut store, &world, None, &mut rng);
+            if arrived.is_none() && lure_gap(&store, id) <= near {
+                arrived = Some(t);
+            }
+        }
+        let t = arrived.expect("fish never arrived");
+        let floor = (gap - near) / (speed * TICK_SECONDS);
+        assert!(f64::from(t) + 1.0 >= floor, "{t}");
+        assert!(t < limit, "{t} >= {limit}");
+        assert!(lure_gap(&store, id) <= near);
+    }
+
+    #[test]
+    fn clearing_the_lure_returns_to_wandering() {
+        let world = pool(10);
+        let (mut store, mut steer, mut rng, id) = lured(4);
+        for _ in 0..400 {
+            steer.tick(&mut store, &world, None, &mut rng);
+        }
+        let held = store.get(id).unwrap().pos;
+        store.iter_mut().next().unwrap().lure = None;
+        for _ in 0..400 {
+            steer.tick(&mut store, &world, None, &mut rng);
+        }
+        assert_ne!(store.get(id).unwrap().pos, held);
+    }
+
+    #[test]
+    fn a_scatter_overrides_the_lure() {
+        let world = pool(10);
+        let (mut store, mut steer, mut rng, id) = lured(4);
+        steer.tick(&mut store, &world, Some([-6.5, 54.0, 0.5]), &mut rng);
+        assert_eq!(store.get(id).unwrap().lure, None);
+    }
+
+    #[test]
+    fn lured_runs_are_deterministic() {
+        let world = pool(10);
+        let run = || {
+            let (mut store, mut steer, mut rng, _) = lured(8);
+            (0..300)
+                .map(|_| {
+                    steer.tick(&mut store, &world, None, &mut rng);
+                    positions(&store)
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(run(), run());
     }
 
     #[test]
