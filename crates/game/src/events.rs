@@ -104,7 +104,6 @@ pub enum Reason {
     TooFar,
     HandsFull,
     ToolsStowed,
-    WrongTool,
     NothingHere,
 }
 
@@ -115,7 +114,6 @@ impl Reason {
             Reason::TooFar => "too_far",
             Reason::HandsFull => "hands_full",
             Reason::ToolsStowed => "tools_stowed",
-            Reason::WrongTool => "wrong_tool",
             Reason::NothingHere => "nothing_here",
         }
     }
@@ -131,7 +129,6 @@ mod tests {
             (Reason::TooFar, "too_far"),
             (Reason::HandsFull, "hands_full"),
             (Reason::ToolsStowed, "tools_stowed"),
-            (Reason::WrongTool, "wrong_tool"),
             (Reason::NothingHere, "nothing_here"),
         ];
         for (r, n) in all {
