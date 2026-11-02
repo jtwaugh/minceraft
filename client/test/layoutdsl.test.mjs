@@ -24,6 +24,19 @@ test('layout.* paths match the value layout returns', () => {
   ].join('\n')));
 });
 
+test('layout.belt.offcentre and layout.hud.height follow the rects', () => {
+  const s = createSession(['walk']);
+  const { value } = s.execStep({ op: 'layout', args: ['1366', '768'] });
+  s.close();
+  const { beltPanel: b, hearts: h } = value.rects;
+  run(script([
+    'layout 1366 768',
+    `expect layout.belt.offcentre ~ ${Math.abs(b.x + b.w / 2 - 683)}`,
+    `expect layout.hud.height ~ ${(b.y + b.h - h.y) / 768}`,
+    'expect layout.hud.height <= 0.2',
+  ].join('\n')));
+});
+
 test('a layout.* expectation can fail', () => {
   assert.throws(() => run(script('layout 1366 768\nexpect layout.scale = 999')), /layout\.scale/);
 });

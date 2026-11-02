@@ -81,6 +81,7 @@
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
+// layout.belt.offcentre (CSS px between the belt panel's centre and the viewport's centre), layout.hud.height (the bottom block, hearts top to belt panel bottom, / viewport height),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
 // events.foraged (`foraged` events seen since the case began), events.overbudget (stream only: frames whose work,
@@ -368,14 +369,16 @@ function layout(w, args) {
   if (args.length !== 2 || !(vw > 0) || !(vh > 0)) throw new Error('usage: layout <w> <h> (positive viewport size in pixels)');
   tileset ??= JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url), 'utf8'));
   const viewport = { w: vw, h: vh };
-  const { scale, rects } = hudLayout(w.controller.state.hud, tileset, viewport);
-  const result = { scale, rects, problems: layoutChecks({ scale, rects }, viewport) };
+  const { scale, rects, beltCentred } = hudLayout(w.controller.state.hud, tileset, viewport);
+  const result = { scale, rects, problems: layoutChecks({ scale, rects, beltCentred }, viewport) };
   const where = (rs) => {
     if (!rs.length || rs.some((r) => !r || !(r.w > 0 && r.h > 0))) return 'missing';
     return rs.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= vw && r.y + r.h <= vh) ? 'inside' : 'outside';
   };
   w.layout = {
     scale, problems: result.problems.length, 'belt.w': rects.belt.w, 'belt.fraction': rects.belt.w / vw,
+    'belt.offcentre': Math.abs(rects.beltPanel.x + rects.beltPanel.w / 2 - vw / 2),
+    'hud.height': (rects.beltPanel.y + rects.beltPanel.h - rects.hearts.y) / vh,
     timer: where([rects.timer]), slotnumbers: where(rects.slotNumbers), 'hands.label': where([rects.hands.label]),
   };
   return result;
