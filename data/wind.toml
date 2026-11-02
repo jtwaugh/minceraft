@@ -13,3 +13,20 @@ gust_strength = 0.5       # g in speed * (1 + g * gust), clamped at zero
 direction_wobble = 0.2    # largest sideways push from gusts, as a fraction of the speed
 speed_floor = 0.0         # wind speed is clamped to [speed_floor, speed_ceiling] ...
 speed_ceiling = 12.0      # ... in blocks per second
+
+# Terrain height (docs/design/terrain-wind-shelter.md Phase A). cell and the
+# radii are in blocks; cell is a multiple of height_step, the radii are
+# multiples of height_step, height_radius_wide >= height_radius, and
+# height_step is a multiple of 4. height_cell and height_step are whole
+# numbers.
+height_cell = 64          # edge of one cached height cell
+height_step = 8           # spacing of heightmap samples and cell nodes
+height_radius = 16        # smoothing half-width for H
+height_radius_wide = 48   # smoothing half-width for H_wide
+
+# Exposure: speed factor from height above H_wide. gain, floor, ceiling above
+# zero, floor <= ceiling; ease_len zero or above.
+exposure_gain = 0.02      # factor change per block above the mean
+exposure_floor = 0.6      # lowest factor (hollows)
+exposure_ceiling = 1.5    # highest factor (hilltops)
+exposure_ease_len = 4.0   # blocks over which the effect eases in
