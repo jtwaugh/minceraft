@@ -1,0 +1,19 @@
+# A small landing, a secondary plaza among the buildings (docs/design/villages-and-villagers.md 2.1, 2.2).
+kind = "landing"
+size = [3, 2, 3]      # x, y, z
+origin_offset = [-1, 0, -1]
+palette = { P = "dock_planks", "." = "air" }
+layers = [
+  # y = 0 (floor)
+  ["PPP", "PPP", "PPP"],
+  # y = 1 (connectors and spawns)
+  ["...", "...", "..."],
+]
+connectors = [
+  { cell = [1, 1, 0], facing = "-z", pool = "boardwalks" },
+  { cell = [1, 1, 2], facing = "+z", pool = "buildings" },
+  { cell = [2, 1, 1], facing = "+x", pool = "decor" },
+]
+spawns = [
+  { cell = [1, 1, 1], kind = "villager" },
+]
