@@ -3,3 +3,7 @@
 
 # Slots in each chest. Each slot holds one item; nothing stacks.
 slots = 18
+
+# Ticks the client's `chest_refused` flag stays set after a full chest
+# refuses a deposit (the short shake; section 7.2, note 13).
+refused_ticks = 10

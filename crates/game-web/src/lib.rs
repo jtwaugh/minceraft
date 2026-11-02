@@ -819,6 +819,11 @@ impl Walk {
         self.0.chest_items().into_iter().map(|(_, i)| i).collect()
     }
 
+    /// Whether a full chest refused a deposit within the last few ticks.
+    pub fn chest_refused(&self) -> bool {
+        self.0.chest_refused()
+    }
+
     /// How many loose items lie in the world.
     pub fn loose_items(&self) -> u32 {
         self.0.items().len() as u32

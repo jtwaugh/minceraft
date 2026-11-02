@@ -34,6 +34,28 @@ pub fn slot_count(text: &str) -> Result<usize, DataError> {
     usize::try_from(slots).map_err(|_| err(DataErrorKind::Invalid("`slots` is too large".into())))
 }
 
+/// Ticks the refusal flag stays set, from `data/chests.toml`.
+pub fn refused_ticks_from_data() -> Result<u64, DataError> {
+    let err = |kind| DataError::new(DataFile::Chests, kind);
+    let root: toml::Value = DEFAULT_CHESTS
+        .parse()
+        .map_err(|e: toml::de::Error| err(DataErrorKind::Parse(e.to_string())))?;
+    let n = root
+        .get("refused_ticks")
+        .ok_or_else(|| err(DataErrorKind::MissingKey("refused_ticks".into())))?
+        .as_integer()
+        .ok_or_else(|| {
+            err(DataErrorKind::Invalid(
+                "`refused_ticks` must be an integer".into(),
+            ))
+        })?;
+    u64::try_from(n).ok().filter(|&n| n >= 1).ok_or_else(|| {
+        err(DataErrorKind::Invalid(
+            "`refused_ticks` must be at least 1".into(),
+        ))
+    })
+}
+
 /// The contents of every chest, keyed by raft-local cell.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chests {

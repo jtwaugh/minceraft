@@ -5,7 +5,7 @@
 use crate::aliases::Aliases;
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
-use crate::chests::{slot_count_from_data, Chests};
+use crate::chests::{refused_ticks_from_data, slot_count_from_data, Chests};
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::commands::{run_line, GameState, Registry};
 use crate::crops::Crops;
@@ -245,6 +245,8 @@ pub struct Walker {
     stations: Stations,
     /// Items in raft chests, keyed by raft-local cell.
     chests: Chests,
+    /// The tick before which a full chest's refusal still shows.
+    chest_refused_until: u64,
 }
 
 impl Walker {
@@ -322,6 +324,7 @@ impl Walker {
             },
             stations: Stations::new(),
             chests: Chests::new(slot_count_from_data().expect("shipped chests.toml")),
+            chest_refused_until: 0,
         })
     }
 
@@ -526,6 +529,12 @@ impl Walker {
             .iter()
             .flat_map(|(c, slots)| slots.iter().flatten().map(move |i| (c, i.item.clone())))
             .collect()
+    }
+
+    /// Whether a full chest refused a deposit within the last few ticks
+    /// (`refused_ticks` in `data/chests.toml`), for the client's shake.
+    pub fn chest_refused(&self) -> bool {
+        self.sim_tick < self.chest_refused_until
     }
 
     /// Whether a cheat command has run this session.
@@ -1511,7 +1520,12 @@ impl Walker {
                         chest: cell,
                         slot,
                     }),
-                    Err(item) => self.state.hands = Some(item),
+                    Err(item) => {
+                        self.state.hands = Some(item);
+                        let n = refused_ticks_from_data().expect("shipped chests.toml");
+                        self.chest_refused_until = self.sim_tick + n;
+                        self.refuse("store", Reason::ChestFull);
+                    }
                 }
             }
             ActionKind::Take => {

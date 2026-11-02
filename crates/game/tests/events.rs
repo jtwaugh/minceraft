@@ -8,7 +8,7 @@
 //! There is one test per event kind that exists, and each session replays
 //! to identical events and world hash.
 
-use game::events::GameEvent;
+use game::events::{GameEvent, Reason};
 use game::input::TickInput;
 use game::items::ItemInstance;
 use game::scene::raft_scene;
@@ -743,6 +743,42 @@ fn storing_in_a_chest_empties_the_hands_and_emits_item_stored() {
     s.tick(&press);
     assert_eq!(s.w.hands(), None);
     assert_eq!(s.take(), vec![]);
+}
+
+#[test]
+fn a_full_chest_refuses_a_deposit_and_raises_the_flag_for_a_while() {
+    let (mut s, cell) = at_station(Block::Chest, true);
+    let press = press_at(&s, cell, false);
+    let slots = 18;
+    for i in 0..slots {
+        s.tick(&press);
+        assert_eq!(s.w.hands(), None);
+        assert!(!s.w.chest_refused());
+        if i + 1 < slots {
+            let feet = s.w.player().pos;
+            carry_beef(&mut s, feet);
+        }
+    }
+    let feet = s.w.player().pos;
+    carry_beef(&mut s, feet);
+    s.take();
+    let stored = s.w.chest_items();
+    assert_eq!(stored.len(), slots);
+    s.tick(&press);
+    assert_eq!(s.w.hands(), beef().as_ref());
+    assert_eq!(s.w.chest_items(), stored);
+    assert_eq!(
+        s.take(),
+        vec![GameEvent::ActionRefused {
+            action: "store".into(),
+            reason: Reason::ChestFull
+        }]
+    );
+    assert!(s.w.chest_refused());
+    s.ticks(&idle(), 9);
+    assert!(s.w.chest_refused());
+    s.tick(&idle());
+    assert!(!s.w.chest_refused());
 }
 
 #[test]
