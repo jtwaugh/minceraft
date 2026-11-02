@@ -247,3 +247,76 @@ fn cached_value_matches_uncached_at_forest_plains_and_sea() {
         }
     }
 }
+
+fn wind_speed(w: &crate::wind_field::Wind, (x, z): (f64, f64), ticks: f64) -> f64 {
+    let (dx, dz) = w.at(x, z, ticks);
+    (dx * dx + dz * dz).sqrt()
+}
+
+#[test]
+fn wind_is_slower_in_forest_than_plains_and_fastest_at_sea() {
+    use crate::wind_config::WindConfig;
+    use crate::wind_field::Wind;
+    let c = config();
+    let wc = WindConfig::default_from_data().unwrap();
+    let w = Wind::new(SEED, wc.clone(), &c);
+    let s = spots(&c, &scan());
+    // Same fronts: compare the roughness-scaled speed to the unscaled one
+    // at the same point, so the front's own variation drops out.
+    let ratio = |p: (f64, f64)| {
+        let flat = Wind::new(
+            SEED,
+            wc.clone(),
+            &RoughnessConfig {
+                roughness_drag: 0.0,
+                ..config()
+            },
+        );
+        let mut t = 0.0;
+        loop {
+            let base = wind_speed(&flat, p, t);
+            if base > wc.speed_floor * 2.0 && base < wc.speed_ceiling * 0.9 {
+                return wind_speed(&w, p, t) / base;
+            }
+            t += 500.0;
+            assert!(t < 1e6, "no mid-range front at {p:?}");
+        }
+    };
+    let (f, p, o) = (ratio(s.forest), ratio(s.plains), ratio(s.sea));
+    assert!(f < p && p < o, "forest {f} plains {p} sea {o}");
+    for q in [s.forest, s.plains, s.sea] {
+        let m = w.ground_multiplier(q.0, q.1);
+        assert!(m >= c.roughness_floor && m <= 1.0);
+        assert_eq!(
+            w.roughness_at(q.0, q.1),
+            roughness_at(SEED, &c.params(), q.0, q.1)
+        );
+    }
+}
+
+#[test]
+fn wind_direction_ignores_roughness_and_caches_agree() {
+    use crate::wind_config::WindConfig;
+    use crate::wind_field::{direction, Wind};
+    let c = config();
+    let wc = WindConfig::default_from_data().unwrap();
+    let flat = Wind::new(
+        SEED,
+        wc.clone(),
+        &RoughnessConfig {
+            roughness_drag: 0.0,
+            ..config()
+        },
+    );
+    let rough = Wind::new(SEED, wc.clone(), &c);
+    let s = spots(&c, &scan());
+    for p in [s.forest, s.plains, s.sea] {
+        for t in [0.0, 3000.0, 9000.0] {
+            let (a, b) = (flat.at(p.0, p.1, t), rough.at(p.0, p.1, t));
+            let (da, db) = (direction(a.0, a.1), direction(b.0, b.1));
+            assert!((da.0 - db.0).abs() < 1e-9 && (da.1 - db.1).abs() < 1e-9);
+            let cold = Wind::new(SEED, wc.clone(), &c);
+            assert_eq!(cold.at(p.0, p.1, t), b);
+        }
+    }
+}
