@@ -1,0 +1,60 @@
+# DRAFT: copy this file to .github/workflows/claude-perfpass.yml (the agent app cannot write there).
+#
+# The scheduled perf pass (docs/design/play-critic-perf-render.md, Phase E, decided in #1975): real frame
+# timing in headless Chrome, run beside the critic workflow. The pixel pass stays local.
+#
+# Advisory: perfpass.mjs exits 0 whatever the verdict. It exits 2 when Chrome is missing, which fails the job.
+# Read-only: no secrets beyond the default token, and it never files, commits or pushes.
+name: Claude perf pass
+
+on:
+  schedule:
+    - cron: '47 6 * * 1' # Mondays, 06:47 UTC; the critic runs at 06:17
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-perfpass
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Keep in step with ci.yml.
+  RUST_TOOLCHAIN: 1.97.1
+  BINARYEN_VERSION: version_133
+
+jobs:
+  perfpass:
+    name: Perf pass
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/wasm-tools
+        with:
+          binaryen: ${{ env.BINARYEN_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Build (./build.sh)
+        run: ./build.sh
+
+      - name: Install client dependencies
+        run: npm install --prefix client
+
+      - id: chrome
+        name: Install headless Chrome
+        uses: browser-actions/setup-chrome@v2
+
+      - name: Perf pass (advisory)
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: node client/tools/perfpass.mjs 12345
