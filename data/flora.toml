@@ -50,7 +50,9 @@
 #                 wetness_hollow_weight * (-hollow / wetness_hollow_ref), each term
 #                 clamped to 0..1, the sum clamped to 0..1. Flat ground and hollows
 #                 score high, steep slopes and ridges low. Uses the slope and hollow
-#                 layers' reads only.
+#                 layers' reads only. Then wetness_bias[biome] (0 if absent) is added, and
+#                 up to wetness_water_weight * (1 - d / wetness_water_radius) for the
+#                 nearest water column at distance d; the sum is clamped to 0..1.
 
 [settings]
 patch_noise_salt = 7001
@@ -89,6 +91,13 @@ wetness_slope_ref = 0.5
 wetness_hollow_ref = 4.0
 wetness_slope_weight = 0.4
 wetness_hollow_weight = 0.6
+# Columns searched (circle) for water by the `wetness` layer, and the most it adds
+# beside water. The radius must stay within READ_REACH and, with a tree's reach,
+# inside the decoration margin (a test checks it).
+wetness_water_radius = 6
+wetness_water_weight = 0.3
+# Per-biome amount added to `wetness` (biomes not listed add 0).
+wetness_bias = { Swampland = 0.3, Rainforest = 0.15, Desert = -0.3, Tundra = -0.1 }
 # Soft margins of the niche response, in each layer's own units.
 niche_margin_height_above_sea = 2.0
 niche_margin_soil_depth = 1.0
