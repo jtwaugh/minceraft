@@ -1,0 +1,12 @@
+# The fishing rod's numbers (docs/design/fish-and-fishing.md sections 4.2 to
+# 4.4), read by crates/game/src/fishing_config.rs.
+# Numbers are this game's own and tuned here. Every key is required and must
+# be above zero; bite_delay_ticks is [min, max] with min <= max. Distances
+# are in blocks, times in ticks (20 per second).
+
+cast_speed = 12.0          # bobber launch speed along the look direction, blocks per second
+cast_upward_kick = 4.0     # extra upward launch speed, blocks per second
+max_distance = 24          # the bobber is reeled in when the player is farther than this
+bite_delay_ticks = [60, 160] # a bite comes after this many ticks, inclusive (3 to 8 seconds)
+reel_window_ticks = 20     # the reel window stays open this long after a bite (1 second)
+near_radius = 4            # fish this close to the bobber ("a few blocks") are drawn from first; tuned here
