@@ -718,6 +718,28 @@ impl Walk {
         self.0.fish().iter().map(|f| f.species.clone()).collect()
     }
 
+    /// The fishing bobber: empty with no line out, else five numbers,
+    /// `state, dipping, x, y, z`. `state` is 0 flying, 1 floating, 2
+    /// resting; `dipping` is 1 while a bite is on the line (always 0 until
+    /// bites exist); `(x, y, z)` is the centre of the bobber.
+    pub fn bobber(&self) -> Vec<f64> {
+        use game::bobber::BobberState;
+        self.0.bobber().map_or_else(Vec::new, |b| {
+            let state = match b.state() {
+                BobberState::Flying => 0.0,
+                BobberState::Floating => 1.0,
+                BobberState::Resting => 2.0,
+            };
+            let [x, y, z] = b.pos();
+            vec![state, 0.0, x, y, z]
+        })
+    }
+
+    /// The rod tip `alpha` (0..1) between the last two ticks: `x, y, z`.
+    pub fn rod_tip(&self, alpha: f64) -> Vec<f64> {
+        self.0.rod_tip(alpha).to_vec()
+    }
+
     /// The loose items, five numbers each: `id, x, y, z, box_size`.
     /// `(x, y, z)` is the centre of the item's box and `box_size` is its
     /// edge length. Item names are in [`Walk::item_names`], in the same
@@ -951,6 +973,19 @@ mod tests {
         }
         assert_eq!(rows[..5], [a as f64, 1.5, 6.0, 2.5, 90.0]);
         assert_eq!(rows[7], b as f64);
+    }
+
+    #[test]
+    fn bobber_rows_are_empty_without_a_line_and_the_rod_tip_is_near_the_eye() {
+        let w = walk();
+        assert!(w.bobber().is_empty());
+        let (eye, tip) = (w.0.eye(1.0), w.rod_tip(1.0));
+        assert_eq!(tip.len(), 3);
+        let d = (0..3)
+            .map(|i| (tip[i] - eye[i]).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        assert!(d > 0.1 && d < 2.0, "{d}");
     }
 
     #[test]

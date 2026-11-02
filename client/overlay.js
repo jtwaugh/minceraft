@@ -21,6 +21,8 @@
 //   readItems(walk) -> [{ id, name, pos, size }]
 //     pos     centre of the item's box; size the box's edge length
 //   readFish(walk) -> [{ id, species, pos, heading, size }]
+//   readBobber(walk) -> null | { state: flying|floating|resting, dipping, pos }
+//   readRodTip(walk, alpha) -> [x, y, z]
 //     pos     centre of the bottom face; heading in degrees; size [width, height] of the box
 //   spawnTestAnimals(walk, kinds) puts animals on the raft scene's islet
 //   faceAnimal(walk, look) -> [dx, dy] mouse movement that turns `look` ({ yaw, pitch })
@@ -99,6 +101,16 @@ export function readFish(walk) {
     const [id, x, y, z, heading, w, h] = rows.slice(i * 7, i * 7 + 7);
     return { id, species: name, pos: [x, y, z], heading, size: [w, h] };
   });
+}
+
+const BOBBER_STATES = ['flying', 'floating', 'resting'];
+export function readBobber(walk) {
+  const [state, dipping, x, y, z] = Array.from(walk.bobber());
+  return state === undefined ? null : { state: BOBBER_STATES[state], dipping: dipping === 1, pos: [x, y, z] };
+}
+
+export function readRodTip(walk, alpha = 1) {
+  return Array.from(walk.rod_tip(alpha));
 }
 
 export function readItems(walk) {

@@ -83,7 +83,7 @@
 // events.foraged (`foraged` events seen since the case began), events.overbudget (stream only: frames whose work,
 // as counted for the work paths, went over a budget in client/workbudget.js; each is an event
 // `overbudget <field>=<value> ...` naming the fields over, e.g. `expect no event overbudget`),
-// events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing), fish (fish in the world), fish.near <x> <y> <z> <r> (fish within r blocks of that point; the path takes arguments: `expect fish.near 10 64 3 5 = 1`).
+// events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing), bobber (none|flying|floating|resting|dipping; a cast is a secondary press with the rod held), bobber.near <x> <y> <z> <r> (1 if the bobber is within r blocks of that point, else 0), fish (fish in the world), fish.near <x> <y> <z> <r> (fish within r blocks of that point; the path takes arguments: `expect fish.near 10 64 3 5 = 1`).
 
 import { readFileSync } from 'node:fs';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
@@ -100,7 +100,7 @@ import { createHintState } from '../hintui.js';
 import { heldDraw } from '../helditem.js';
 import { hudLayout } from '../hudlayout.js';
 import { layoutChecks } from '../hudcheck.js';
-import { spawnTestItems, readAnimals, readFish, faceAnimal, spawnTestAnimals } from '../overlay.js';
+import { spawnTestItems, readAnimals, readFish, readBobber, faceAnimal, spawnTestAnimals } from '../overlay.js';
 
 let ready = false;
 function init() {
@@ -303,6 +303,16 @@ function read(w, path) {
     const [x, y, z, r] = path.slice(9).trim().split(/\s+/).map(Number);
     if (![x, y, z, r].every(Number.isFinite)) throw new Error('fish.near <x> <y> <z> <r>');
     return readFish(w.walk).filter((f) => Math.hypot(f.pos[0] - x, f.pos[1] - y, f.pos[2] - z) <= r).length;
+  }
+  if (path === 'bobber') {
+    const b = readBobber(w.walk);
+    return b ? (b.dipping ? 'dipping' : b.state) : 'none';
+  }
+  if (path.startsWith('bobber.near')) {
+    const [x, y, z, r] = path.slice(11).trim().split(/\s+/).map(Number);
+    if (![x, y, z, r].every(Number.isFinite)) throw new Error('bobber.near <x> <y> <z> <r>');
+    const b = readBobber(w.walk);
+    return b && Math.hypot(b.pos[0] - x, b.pos[1] - y, b.pos[2] - z) <= r ? 1 : 0;
   }
   if (path === 'animals') return readAnimals(w.walk).length;
   if (path === 'animals.dying') return readAnimals(w.walk).filter((a) => a.dying).length;

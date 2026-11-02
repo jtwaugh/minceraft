@@ -209,6 +209,8 @@ pub struct Walker {
     spawn_rng: Rng,
     /// Yaw of the last ticked input, so commands can place things ahead.
     look_yaw: f32,
+    /// Pitch of the last ticked input.
+    look_pitch: f32,
     /// Events emitted since the last `drain_events`.
     events: Vec<GameEvent>,
     /// Ticks stepped so far, for cooldowns.
@@ -287,6 +289,7 @@ impl Walker {
             harvest_rng: Rng::new(HARVEST_SEED),
             spawn_rng: Rng::new(SPAWN_SEED),
             look_yaw: 0.0,
+            look_pitch: 0.0,
             events: Vec::new(),
             sim_tick: 0,
             phases: PhaseClock::default_phases()
@@ -696,6 +699,24 @@ impl Walker {
         self.look_yaw
     }
 
+    /// The bobber, if a line is out.
+    pub fn bobber(&self) -> Option<&crate::bobber::Bobber> {
+        self.fishing.bobber()
+    }
+
+    /// Where the rod tip is, `alpha` between the last two ticks: ahead of and
+    /// below the eye by the amounts in `data/fishing.toml`.
+    pub fn rod_tip(&self, alpha: f64) -> [f64; 3] {
+        let cfg = self.fishing.config();
+        let (sy, cy) = f64::from(self.look_yaw).sin_cos();
+        let (sp, cp) = f64::from(self.look_pitch).sin_cos();
+        let look = [sy * cp, sp, -cy * cp];
+        let eye = self.eye(alpha);
+        let mut tip = [0, 1, 2].map(|i| eye[i] + look[i] * cfg.rod_tip_reach);
+        tip[1] -= cfg.rod_tip_drop;
+        tip
+    }
+
     /// The sim RNG that `spawn` scatters with.
     pub fn spawn_rng_mut(&mut self) -> &mut Rng {
         &mut self.spawn_rng
@@ -767,6 +788,7 @@ impl Walker {
         };
         self.run_queued_commands();
         self.look_yaw = input.yaw;
+        self.look_pitch = input.pitch;
         self.sim_tick += 1;
         if self.day_frozen {
             let d = self.day.day_ticks();
