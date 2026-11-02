@@ -163,3 +163,43 @@ fn habitats_appear_across_seeds_and_warm_shallows_are_warm() {
         );
     }
 }
+
+#[test]
+fn band_columns_classify_broken_ice_and_agree_across_regions() {
+    let mut band = 0;
+    for seed in 0..12u64 {
+        let mut l = level_layout(seed);
+        l.climate.push(ClimateBias::Radial {
+            center: (0.0, 0.0),
+            r_inner: 1.0e6,
+            r_outer: 2.0e6,
+            d_temp: -0.4,
+            d_humid: 0.0,
+        });
+        let h = Habitats::shipped();
+        let (frozen, broken) = (
+            h.id_of("frozen").unwrap().0,
+            h.id_of("broken_ice").unwrap().0,
+        );
+        let big = l.habitat_map(-64, -64, 128, 128);
+        for i in 0..big.habitat.len() {
+            if big.derived.water_depth[i] == 0 {
+                continue;
+            }
+            let t = f64::from(big.temperature[i]);
+            let in_band =
+                !big.derived.frozen[i] && (terrain::data::SEA_ICE_T_ICE..0.5).contains(&t);
+            band += in_band as u32;
+            assert_eq!(usize::from(big.habitat[i]) == broken, in_band);
+            assert_eq!(usize::from(big.habitat[i]) == frozen, big.derived.frozen[i]);
+        }
+        let small = l.habitat_map(-20, -10, 64, 64);
+        for z in 0..64usize {
+            for x in 0..64usize {
+                let (i, j) = ((z + 54) * 128 + x + 44, z * 64 + x);
+                assert_eq!(big.habitat[i], small.habitat[j], "({x},{z})");
+            }
+        }
+    }
+    assert!(band > 0, "no band columns in any window");
+}
