@@ -462,6 +462,16 @@ impl Walk {
         self.0.day().daylight(t.rem_euclid(1.0))
     }
 
+    /// Sky base colour at full night, `[r, g, b]`.
+    pub fn night_sky(&self) -> Vec<u8> {
+        self.0.day().night_sky().to_vec()
+    }
+
+    /// Sky base colour at dawn and dusk, `[r, g, b]`.
+    pub fn dusk_sky(&self) -> Vec<u8> {
+        self.0.day().dusk_sky().to_vec()
+    }
+
     /// Whether the player is sprinting.
     pub fn sprinting(&self) -> bool {
         self.0.sprinting()
@@ -896,6 +906,13 @@ mod tests {
         let held = w.time_of_day();
         w.0.tick(&TickInput::default());
         assert_eq!(w.time_of_day(), held);
+    }
+
+    #[test]
+    fn sky_exports_match_the_clock() {
+        let w = walk();
+        assert_eq!(w.night_sky(), w.0.day().night_sky().to_vec());
+        assert_eq!(w.dusk_sky(), w.0.day().dusk_sky().to_vec());
     }
 
     #[test]

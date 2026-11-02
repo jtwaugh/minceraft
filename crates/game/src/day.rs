@@ -21,6 +21,8 @@ pub struct DayClock {
     min_daylight: f64,
     dawn_width: f64,
     dusk_width: f64,
+    night_sky: [u8; 3],
+    dusk_sky: [u8; 3],
 }
 
 fn err(kind: DataErrorKind) -> DataError {
@@ -29,6 +31,22 @@ fn err(kind: DataErrorKind) -> DataError {
 
 fn invalid(msg: &str) -> DataError {
     err(DataErrorKind::Invalid(msg.into()))
+}
+
+/// An `[r, g, b]` array of integers, each in 0..=255.
+fn rgb(value: &toml::Value, key: &str) -> Result<[u8; 3], DataError> {
+    let bad = || {
+        invalid(&format!(
+            "`{key}` must be [r, g, b], each an integer from 0 to 255"
+        ))
+    };
+    let items = value.as_array().filter(|a| a.len() == 3).ok_or_else(bad)?;
+    let mut out = [0u8; 3];
+    for (slot, item) in out.iter_mut().zip(items) {
+        let n = item.as_integer().ok_or_else(bad)?;
+        *slot = u8::try_from(n).map_err(|_| bad())?;
+    }
+    Ok(out)
 }
 
 impl DayClock {
@@ -77,7 +95,11 @@ impl DayClock {
             .as_float()
             .filter(|w| *w > 0.0 && *w <= 0.5)
             .ok_or_else(|| invalid("`dusk_width` must be a number above 0, up to 0.5"))?;
+        let night_sky = rgb(get("night_sky")?, "night_sky")?;
+        let dusk_sky = rgb(get("dusk_sky")?, "dusk_sky")?;
         Ok(DayClock {
+            night_sky,
+            dusk_sky,
             min_daylight,
             dawn_width,
             dusk_width,
@@ -96,6 +118,16 @@ impl DayClock {
     /// The tick within the day at which tick 0 starts (the start fraction).
     pub fn start_offset_ticks(&self) -> u64 {
         self.start_offset_ticks
+    }
+
+    /// Sky base colour at full night, `[r, g, b]`.
+    pub fn night_sky(&self) -> [u8; 3] {
+        self.night_sky
+    }
+
+    /// Sky base colour at dawn and dusk, `[r, g, b]`.
+    pub fn dusk_sky(&self) -> [u8; 3] {
+        self.dusk_sky
     }
 
     /// Time of day at `tick`, in 0..1 (never 1.0); 0 is midnight. Wrapped in
@@ -151,8 +183,10 @@ impl DayClock {
 mod tests {
     use super::*;
 
-    const TEXT: &str = "length_seconds = 10\nstart_fraction = 0.25\nsun_tilt_degrees = 30.0\nsun_azimuth_degrees = 40.0\nmin_daylight = 0.2\ndawn_width = 0.1\ndusk_width = 0.2\n";
-    const SUN: &str = "sun_tilt_degrees = 30.0\nsun_azimuth_degrees = 40.0\nmin_daylight = 0.2\ndawn_width = 0.1\ndusk_width = 0.2\n";
+    const TEXT: &str = "length_seconds = 10\nstart_fraction = 0.25\nsun_tilt_degrees = 30.0\nsun_azimuth_degrees = 40.0\nmin_daylight = 0.2\ndawn_width = 0.1\ndusk_width = 0.2\nnight_sky = [1, 2, 3]\ndusk_sky = [4, 5, 255]\n";
+    const SUN: &str = "sun_tilt_degrees = 30.0\nsun_azimuth_degrees = 40.0\nmin_daylight = 0.2\ndawn_width = 0.1\ndusk_width = 0.2\nnight_sky = [1, 2, 3]\ndusk_sky = [4, 5, 255]\n";
+
+    const SKY: &str = "night_sky = [1, 2, 3]\ndusk_sky = [4, 5, 255]\n";
 
     #[test]
     fn starts_at_the_start_fraction_and_wraps() {
@@ -357,7 +391,7 @@ mod tests {
         let head = "length_seconds = 5\nstart_fraction = 0.5\nsun_tilt_degrees = 10.0\nsun_azimuth_degrees = 0.0\n";
         let case = |m: &str, d: &str, s: &str| {
             DayClock::from_toml(&format!(
-                "{head}min_daylight = {m}\ndawn_width = {d}\ndusk_width = {s}\n"
+                "{head}min_daylight = {m}\ndawn_width = {d}\ndusk_width = {s}\n{SKY}"
             ))
         };
         assert!(case("0.0", "0.1", "0.1").is_ok());
@@ -378,5 +412,38 @@ mod tests {
         }
         let e = DayClock::from_toml(head).unwrap_err();
         assert_eq!(e.kind, DataErrorKind::MissingKey("min_daylight".into()));
+    }
+
+    #[test]
+    fn sky_colours_load_and_are_validated() {
+        let c = DayClock::from_toml(TEXT).unwrap();
+        assert_eq!(c.night_sky(), [1, 2, 3]);
+        assert_eq!(c.dusk_sky(), [4, 5, 255]);
+        let d = DayClock::default_day().unwrap();
+        assert_eq!(d.night_sky(), [10, 14, 38]);
+        assert_eq!(d.dusk_sky(), [214, 118, 84]);
+        let base = TEXT.replace(SKY, "");
+        for key in ["night_sky", "dusk_sky"] {
+            let other = if key == "night_sky" {
+                "dusk_sky"
+            } else {
+                "night_sky"
+            };
+            let e = DayClock::from_toml(&format!("{base}{other} = [1, 2, 3]\n")).unwrap_err();
+            assert_eq!(e.kind, DataErrorKind::MissingKey(key.into()));
+            for bad in [
+                "[1, 2]",
+                "[1, 2, 3, 4]",
+                "[0, 0, 256]",
+                "[-1, 0, 0]",
+                "[1.5, 0, 0]",
+                "\"x\"",
+                "[]",
+            ] {
+                let text = format!("{base}{other} = [1, 2, 3]\n{key} = {bad}\n");
+                let e = DayClock::from_toml(&text).unwrap_err();
+                assert!(matches!(e.kind, DataErrorKind::Invalid(_)), "{key} {bad}");
+            }
+        }
     }
 }
