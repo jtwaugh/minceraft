@@ -1,0 +1,44 @@
+# Putting an item on a raft counter and taking it back (docs/design/cooking-stations.md
+# Phase B): the item stays on its counter while the raft is driven round a turn.
+
+case an item put on a counter stays through a turn and comes back
+start walk raft
+click
+lock
+stand deck
+spawn item raw_beef
+mouse 628 380
+frame 50 x2
+expect target.kind = entity
+button down right
+frame 50 x2
+button up right
+frame 50 x2
+expect hands = raw_beef
+stand counter
+press KeyE
+frame 50 x2
+expect hands = none
+expect station.count = 1
+expect station.item counter = raw_beef
+expect event item_put_down item=raw_beef target=counter
+stand helm
+# level the gaze again after looking down at the counter
+mouse 0 -2000
+mouse 0 628
+press KeyE
+frame 50 x2
+expect driving = true
+down KeyD
+until raft.heading > 1.6
+up KeyD
+press KeyE
+frame 50 x2
+expect driving = false
+expect station.item counter = raw_beef
+stand counter
+press KeyE
+frame 50 x2
+expect hands = raw_beef
+expect station.count = 0
+expect station.item counter = none
