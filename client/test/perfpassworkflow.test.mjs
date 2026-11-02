@@ -1,14 +1,10 @@
-// The scheduled perf-pass workflow draft: triggers, permissions, command. Run: node --test client/test/perfpassworkflow.test.mjs
+// The scheduled perf-pass workflow: triggers, permissions, command. Run: node --test client/test/perfpassworkflow.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const text = readFileSync(new URL('../../.github/workflow-drafts/claude-perfpass.yml', import.meta.url), 'utf8');
+const text = readFileSync(new URL('../../.github/workflows/claude-perfpass.yml', import.meta.url), 'utf8');
 const code = text.replace(/^\s*#.*$/gm, ''); // comments may mention secrets and pushes
-
-test('the header says where to copy the draft', () => {
-  assert.match(text, /copy this file to \.github\/workflows\/claude-perfpass\.yml/);
-});
 
 test('runs on a schedule and on demand, not on pushes', () => {
   assert.match(code, /^on:\n {2}schedule:\n {4}- cron: '[^']+'/m);
