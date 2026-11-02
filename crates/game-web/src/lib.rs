@@ -895,6 +895,16 @@ impl Wind {
         vec![dx, dz]
     }
 
+    /// Surface roughness `R` in `[0, 1]` at `(x, z)`.
+    pub fn roughness(&self, x: f64, z: f64) -> f64 {
+        self.0.roughness_at(x, z)
+    }
+
+    /// Speed multiplier roughness gives the mean wind at the ground.
+    pub fn ground_multiplier(&self, x: f64, z: f64) -> f64 {
+        self.0.ground_multiplier(x, z)
+    }
+
     /// `clamp(|wind| / speed_ceiling, 0, 1)` for a wind vector from `at`.
     pub fn strength(&self, dx: f64, dz: f64) -> f64 {
         self.0.strength(dx, dz)
@@ -949,6 +959,30 @@ mod tests {
             describe_event(&e),
             "fish_caught player=player species=mackerel item=raw_mackerel method=sword"
         );
+    }
+
+    #[test]
+    fn wind_roughness_exports_match_the_game_crate() {
+        let seed = 12345;
+        let pts = [
+            (0.0, 0.0),
+            (37.5, -120.25),
+            (-900.0, 410.0),
+            (5000.0, 5000.0),
+        ];
+        let cfg = game::wind_config::WindConfig::default_from_data().unwrap();
+        let rough = game::wind_roughness_config::RoughnessConfig::default_from_data().unwrap();
+        let reference = game::wind_field::Wind::new(seed, cfg, &rough);
+        let w = Wind::new(seed).unwrap_or_else(|_| panic!());
+        // Cold cache here, in reverse order, then again warm.
+        for _ in 0..2 {
+            for &(x, z) in pts.iter().rev() {
+                let r = w.roughness(x, z);
+                assert!((0.0..=1.0).contains(&r));
+                assert_eq!(r, reference.roughness_at(x, z));
+                assert_eq!(w.ground_multiplier(x, z), reference.ground_multiplier(x, z));
+            }
+        }
     }
 
     fn walk() -> Walk {
