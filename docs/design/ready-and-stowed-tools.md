@@ -22,7 +22,7 @@ phases:
 ## Reconciliation notes
 
 - **Hands frame doubles as two things.** The doc has the frame show either a carried item or the ready tool. `hands` (item name) also drives the name label above the strip (`rects.hands`). Keep the label for carried items only, so the tool preview needs a separate model field (for example `ready`) rather than reusing `hands`.
-- **Dimmed/greyed/faded art.** Dimmed slots, a grey selection frame and a faded or outlined tool icon need either new textures in `art/` (own palette, `snake_case` names, per `art/PROMPT.md`) or a canvas filter in `hud.js`. The smallest way is to draw the existing textures at reduced alpha in `hud.js`, which needs no art. If textures are wanted instead, add them to the art batches and `validate.py`.
+- **Dimmed/greyed/faded art.** Dimmed slots, a grey selection frame and a faded or outlined tool icon need either new textures in `art/` (own palette, `snake_case` names, per `art/PROMPT.md`) or a canvas filter in `hud.js`. Decided: draw the existing textures at reduced alpha in `client/hud.js`, with no new art and no change to the art batches or `validate.py`. Phase A's faded tool icon and Phase B's dimmed slots and greyed selection frame use this one choice. (Decided in #2013.)
 - **Pulse.** The hands-frame pulse on a belt key while carrying needs a transient timer in client state. Keep it in `client/controller.js` (testable, no WebGL), not in `scene.js`.
 - **"Hands full: drop with Q" depends on the action-feedback idea.** No design doc or accepted idea for action feedback exists in `docs/design/` (checked by search). Until it does, that line is not buildable; Phase C below waits on it.
 - **Observation shape.** `hud.stowed` and `hud.ready` are player-classified paths, so add them to `CLASSES.player` and `playerObservation` in `client/tools/observe.mjs`. `ready` should be the tool name when hands are empty and a tool is selected, else null (when carrying, the frame shows the item, which `hud.hands` already reports).
@@ -74,5 +74,4 @@ The hands and belt follow the Overcooked rule (basic-gameplay section 6, #215): 
 ## Open questions
 
 1. **Action-feedback mechanism.** The idea refers to an "action-feedback idea" that has no design doc. Options: (A) wait for it, plan Phase C afterwards; (B) drop the message from this doc and ship Phases A and B only; (C) build a minimal one-line message in the HUD here.
-2. **Dim/fade rendering.** Options: (A) reduced alpha in `hud.js` with existing textures; (B) new dimmed and outlined textures in `art/`.
 3. **Belt key while carrying** (the idea's own question): the idea keeps #215 and only shows the state. Left as the author decided; no change needed.
