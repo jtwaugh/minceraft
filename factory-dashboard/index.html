@@ -262,6 +262,10 @@ function needsYouActions(i) {
           "If anything was pushed since the last read, GitHub refuses it.", ok: "Merge"}, "primary"));
     else if (!CFG.readOnly)
       out.push(`<button type="button" disabled title="Merge unlocks when every check passes">${i.ci === "failed" ? "Merge: CI failed" : "Merge: waiting on CI"}</button>`);
+    if ((i.reason || "").startsWith("Ready, but it touches files only you can approve"))
+      out.push(btn("Fix locally", {op: {action: "fix-pr", number: i.number}, title: `Fix PR #${i.number} locally`,
+        ok: "Open Terminal", text: "Opens Terminal in your minceraft checkout and starts Claude on this PR. " +
+          "It checks no fixer is already running, reviews and fixes it on the PR branch, and asks before pushing. It never merges."}));
     out.push(btn("Ask @claude to review", {action: "comment", number: i.number, title: `Ask Claude to review PR #${i.number}`,
       text: "Posts this as you. An @claude comment starts Claude on the PR; it replies there.",
       body: "@claude Review this PR: say whether it's ready to merge, and list anything that should change first.", ok: "Post comment"}));
