@@ -2,6 +2,8 @@
 //! See docs/design/wind.md Phase A.
 
 use crate::data_error::{DataError, DataErrorKind, DataFile};
+use crate::wind_exposure::ExposureParams;
+use crate::wind_height::WindHeightParams;
 
 const DEFAULT_WIND: &str = include_str!("../../../data/wind.toml");
 
@@ -24,9 +26,13 @@ pub struct WindConfig {
     /// Wind speed limits, blocks per second.
     pub speed_floor: f64,
     pub speed_ceiling: f64,
+    /// Smoothed ground height lattice.
+    pub height: WindHeightParams,
+    /// Speed factor from height above the wide mean.
+    pub exposure: ExposureParams,
 }
 
-const KEYS: [&str; 9] = [
+const KEYS: [&str; 17] = [
     "front_size",
     "front_drift",
     "speed_scale",
@@ -36,6 +42,14 @@ const KEYS: [&str; 9] = [
     "direction_wobble",
     "speed_floor",
     "speed_ceiling",
+    "height_cell",
+    "height_step",
+    "height_radius",
+    "height_radius_wide",
+    "exposure_gain",
+    "exposure_floor",
+    "exposure_ceiling",
+    "exposure_ease_len",
 ];
 
 fn err(kind: DataErrorKind) -> DataError {
@@ -69,6 +83,63 @@ fn non_negative(root: &toml::value::Table, key: &str) -> Result<f64, DataError> 
         .ok_or_else(|| invalid(format!("`{key}` must be a finite number, zero or above")))
 }
 
+/// A whole number of blocks that fits in `i32`, zero or above.
+fn blocks(root: &toml::value::Table, key: &str) -> Result<i32, DataError> {
+    get(root, key)?
+        .as_integer()
+        .and_then(|n| i32::try_from(n).ok())
+        .filter(|n| *n >= 0)
+        .ok_or_else(|| {
+            invalid(format!(
+                "`{key}` must be a whole number of blocks, zero or above"
+            ))
+        })
+}
+
+fn height_params(root: &toml::value::Table) -> Result<WindHeightParams, DataError> {
+    let p = WindHeightParams {
+        cell: blocks(root, "height_cell")?,
+        step: blocks(root, "height_step")?,
+        radius: blocks(root, "height_radius")?,
+        radius_wide: blocks(root, "height_radius_wide")?,
+    };
+    if p.step == 0 || p.step % 4 != 0 {
+        return Err(invalid("`height_step` must be a multiple of 4".into()));
+    }
+    if p.cell == 0 || p.cell % p.step != 0 {
+        return Err(invalid(
+            "`height_cell` must be a multiple of `height_step`".into(),
+        ));
+    }
+    if p.radius % p.step != 0 {
+        return Err(invalid(
+            "`height_radius` must be a multiple of `height_step`".into(),
+        ));
+    }
+    if p.radius_wide % p.step != 0 {
+        return Err(invalid(
+            "`height_radius_wide` must be a multiple of `height_step`".into(),
+        ));
+    }
+    if p.radius_wide < p.radius {
+        return Err(invalid("need height_radius <= height_radius_wide".into()));
+    }
+    Ok(p)
+}
+
+fn exposure_params(root: &toml::value::Table) -> Result<ExposureParams, DataError> {
+    let p = ExposureParams {
+        gain: positive(root, "exposure_gain")?,
+        floor: positive(root, "exposure_floor")?,
+        ceiling: positive(root, "exposure_ceiling")?,
+        ease_len: non_negative(root, "exposure_ease_len")?,
+    };
+    if p.floor > p.ceiling {
+        return Err(invalid("need exposure_floor <= exposure_ceiling".into()));
+    }
+    Ok(p)
+}
+
 impl WindConfig {
     /// The shipped `data/wind.toml`.
     pub fn default_from_data() -> Result<WindConfig, DataError> {
@@ -96,6 +167,8 @@ impl WindConfig {
             direction_wobble: non_negative(&root, "direction_wobble")?,
             speed_floor: non_negative(&root, "speed_floor")?,
             speed_ceiling: positive(&root, "speed_ceiling")?,
+            height: height_params(&root)?,
+            exposure: exposure_params(&root)?,
         };
         if config.speed_floor > config.speed_ceiling {
             return Err(invalid("need speed_floor <= speed_ceiling".into()));
@@ -172,6 +245,112 @@ mod tests {
             assert_eq!(e.file, DataFile::Wind);
             assert!(e.to_string().starts_with("wind.toml: "), "{e}");
             assert_err_contains(Err::<(), _>(e), &format!("`{key}` must be"));
+        }
+    }
+
+    #[test]
+    fn shipped_terrain_keys_build_params() {
+        let c = WindConfig::default_from_data().unwrap();
+        assert_eq!(
+            c.height,
+            WindHeightParams {
+                cell: 64,
+                step: 8,
+                radius: 16,
+                radius_wide: 48
+            }
+        );
+        assert_eq!(c.exposure.gain, 0.02);
+        assert!(c.exposure.floor < 1.0 && 1.0 < c.exposure.ceiling);
+    }
+
+    #[test]
+    fn rejects_bad_terrain_values() {
+        let cases = [
+            (
+                "height_cell = 64",
+                "height_cell = 60",
+                "`height_cell` must be a multiple",
+            ),
+            (
+                "height_cell = 64",
+                "height_cell = 0",
+                "`height_cell` must be a multiple",
+            ),
+            (
+                "height_cell = 64",
+                "height_cell = 64.0",
+                "`height_cell` must be a whole",
+            ),
+            (
+                "height_cell = 64",
+                "height_cell = -64",
+                "`height_cell` must be a whole",
+            ),
+            (
+                "height_step = 8",
+                "height_step = 6",
+                "`height_step` must be a multiple of 4",
+            ),
+            (
+                "height_step = 8",
+                "height_step = 0",
+                "`height_step` must be a multiple of 4",
+            ),
+            (
+                "height_radius = 16",
+                "height_radius = 12",
+                "`height_radius` must be a multiple",
+            ),
+            (
+                "height_radius_wide = 48",
+                "height_radius_wide = 44",
+                "`height_radius_wide` must be a multiple",
+            ),
+            (
+                "height_radius_wide = 48",
+                "height_radius_wide = 8",
+                "need height_radius <= height_radius_wide",
+            ),
+            (
+                "exposure_gain = 0.02",
+                "exposure_gain = 0",
+                "`exposure_gain` must be",
+            ),
+            (
+                "exposure_gain = 0.02",
+                "exposure_gain = inf",
+                "`exposure_gain` must be",
+            ),
+            (
+                "exposure_floor = 0.6",
+                "exposure_floor = nan",
+                "`exposure_floor` must be",
+            ),
+            (
+                "exposure_ceiling = 1.5",
+                "exposure_ceiling = -1",
+                "`exposure_ceiling` must be",
+            ),
+            (
+                "exposure_ceiling = 1.5",
+                "exposure_ceiling = 0.5",
+                "need exposure_floor <= exposure_ceiling",
+            ),
+            (
+                "exposure_ease_len = 4.0",
+                "exposure_ease_len = -1",
+                "`exposure_ease_len` must be",
+            ),
+            (
+                "exposure_ease_len = 4.0",
+                "exposure_ease_len = inf",
+                "`exposure_ease_len` must be",
+            ),
+        ];
+        for (from, to, msg) in cases {
+            assert!(DEFAULT_WIND.contains(from), "{from}");
+            assert_err_contains(parse(&DEFAULT_WIND.replace(from, to)), msg);
         }
     }
 
