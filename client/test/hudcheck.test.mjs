@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutChecks, MIN_SCALE, CROSSHAIR_CLEAR_MARGIN, MAX_HANDS_BELT_GAP } from '../hudcheck.js';
+import { layoutChecks, MIN_SCALE, CROSSHAIR_CLEAR_MARGIN, MAX_HANDS_BELT_GAP, MAX_HUD_HEIGHT_FRACTION } from '../hudcheck.js';
 import { hudLayout } from '../hudlayout.js';
 import { hudModel } from '../hud.js';
 
@@ -119,4 +119,30 @@ test('the belt-centre check passes at real sizes, fails off-centre, and is skipp
   const tiny = { w: 80, h: 45 };
   assert.equal(hudLayout(model, set, tiny).beltCentred, false);
   assert.deepEqual(belt(tiny), []);
+});
+
+for (const [w, h] of [[390, 844], [1366, 768], [1920, 1080], [3440, 1440]]) {
+  test(`real hudLayout at ${w}x${h} passes the HUD-height check`, () => {
+    const l = hudLayout(model, set, { w, h });
+    assert.deepEqual(layoutChecks(l, { w, h }).filter((c) => c.check === 'hud-height'), []);
+  });
+}
+
+test('HUD height: at the limit passes, above it fails, missing rects are skipped', () => {
+  const l = clean();
+  const limit = MAX_HUD_HEIGHT_FRACTION * vp.h;
+  l.rects.hearts = r(10, 70, 80, 9);
+  l.rects.beltPanel = r(10, 70, 80, limit);
+  assert.equal(only(l, 'hud-height').length, 0);
+  l.rects.beltPanel = r(10, 70, 80, limit + 1);
+  assert.deepEqual(only(l, 'hud-height').map((c) => c.elements), [['hearts', 'beltPanel']]);
+  delete l.rects.beltPanel;
+  assert.equal(only(l, 'hud-height').length, 0);
+});
+
+test('a forced large scale makes the real layout too tall', () => {
+  const v = { w: 1366, h: 768 };
+  const l = hudLayout(model, set, v);
+  l.rects.beltPanel = { ...l.rects.beltPanel, h: l.rects.beltPanel.h * 3 };
+  assert.equal(layoutChecks(l, v).filter((c) => c.check === 'hud-height').length, 1);
 });
