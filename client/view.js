@@ -55,7 +55,8 @@ export function look({ underwater, skyColor, fogFar, water }) {
  * Inputs of the sky pass and of the fog's sky colour: `base` is the colour to
  * pass as `skyColor`'s base (the fog colour), or null when the sky pass is
  * skipped and fog stays flat (under water). `right`, `up` and `fwd` are the
- * camera basis, `sunDir` is the supplied sun direction (default `SUN_DIR`) and `scale` is [tan(fovY / 2) * aspect, tan(fovY / 2)].
+ * camera basis, `sunDir` is the supplied sun direction (default `SUN_DIR`) and
+ * `scale` is [tan(fovY / 2) * aspect, tan(fovY / 2)].
  */
 export function skyInputs(v, yaw, pitch, fovY, aspect, sunDir = SUN_DIR) {
   if (!v.sky) return null;
