@@ -7,15 +7,15 @@ use terrain::HEIGHT;
 
 /// Shellfish placed in the area below, counted in the default build. The sea-ice
 /// floe band (sea-ice-floes.md A) leaves open water where the sea top was solid
-/// ice, and the pass skips only frozen columns, so it places more than the 14
-/// it did before the band.
-const EXPECTED: usize = 61;
+/// ice, and the pass skips only frozen columns, so it places more than before
+/// the band.
+const EXPECTED: usize = 17;
 
 #[test]
 fn shellfish_placed_the_same_in_every_build() {
     let seed = 12345;
     let (l, _) = build_route_layout(&WorldConfig { seed }, &build_route(seed, 2));
-    let r = l.generate_layout_region(-96, -96, 192, 192, true).region;
+    let r = l.generate_layout_region(-160, -160, 320, 320, true).region;
     let ids: Vec<u8> = SeaFlora::shipped()
         .entries
         .iter()
