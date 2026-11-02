@@ -203,6 +203,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
     const state = frame(dt);
     const [x, , z] = state.eye;
     const wind = windState.frame(x, z, walk.sim_tick(), state.alpha, dt, w.reduced, walk.wind_pin());
+    if (w.reduced) wind.dir = [0, 0]; // as scene.js does
     w.wind = { ...wind, readout: formatWind(wind.vec[0], wind.vec[1], wind.strength, windField.roughness(x, z), windField.ground_multiplier(x, z)) };
     hint.update(input.locked);
     seen.push(...state.events);

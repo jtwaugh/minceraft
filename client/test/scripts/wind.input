@@ -40,5 +40,5 @@ expect wind.sway > 0
 reduced on
 frame 50 x2
 expect wind.sway = 0
-expect wind.dir.z ~ 1
+expect wind.dir.z = 0
 expect wind.readout = wind S 5.0 b/s (gust 0.42) R 0.47 x0.76
