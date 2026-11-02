@@ -6,7 +6,7 @@
 //! A cell stores `R` at its four corners; the lookup is bilinear between
 //! them, so it is continuous across cell edges. A corner value depends only
 //! on the seed and the corner, because every sample sits on the world lattice
-//! of multiples of `step`. There is no cache here.
+//! of multiples of `step`. `wind_roughness_cache` memoises the fill.
 
 use terrain::SEA_LEVEL;
 

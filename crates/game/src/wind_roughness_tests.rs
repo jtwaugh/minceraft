@@ -4,6 +4,7 @@
 
 use crate::wind_drag::{mean_multiplier, DragParams};
 use crate::wind_roughness::{fill_cell, roughness_at, RoughnessParams};
+use crate::wind_roughness_cache::RoughnessCache;
 use crate::wind_roughness_config::RoughnessConfig;
 use terrain::SEA_LEVEL;
 
@@ -223,4 +224,26 @@ fn querying_roughness_leaves_world_output_alone() {
         roughness_at(SEED, &p, n as f64 * 37.0 - 300.0, n as f64 * 11.0);
     }
     assert!(before == world());
+}
+
+#[test]
+fn cached_value_matches_uncached_at_forest_plains_and_sea() {
+    let c = config();
+    let p = c.params();
+    let s = spots(&c, &scan());
+    for cap in [1, 2, 64] {
+        let mut cache = RoughnessCache::new(SEED, p.clone(), cap);
+        for _ in 0..2 {
+            for (x, z) in [s.forest, s.plains, s.sea] {
+                for (dx, dz) in [(0.0, 0.0), (5.0, -3.0), (-20.0, 17.0)] {
+                    let (x, z) = (x + dx, z + dz);
+                    assert_eq!(
+                        cache.lookup(x, z),
+                        roughness_at(SEED, &p, x, z),
+                        "cap {cap}"
+                    );
+                }
+            }
+        }
+    }
 }
