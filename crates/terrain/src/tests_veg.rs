@@ -107,7 +107,7 @@ fn check_plants(r: &Region) -> [usize; Block::COUNT] {
                     Block::DeadBush => below == SAND,
                     Block::BrownMushroom | Block::RedMushroom => is_opaque_cube(below),
                     Block::Pumpkin => below == GRASS || below == DIRT,
-                    Block::SnowLayer => blocks_movement(below) && below != ICE,
+                    Block::SnowLayer => blocks_movement(below) && !is_sea_ice(below),
                     Block::SugarCane => {
                         below == b || {
                             (below == GRASS || below == DIRT)
