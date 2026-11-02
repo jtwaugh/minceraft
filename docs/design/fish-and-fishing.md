@@ -7,13 +7,14 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
   E: todo
 ---
 
 ## Current state
 
+- **Phase C done (plan #1905).** `Walker` owns and ticks a `FishWorld` (#1928), `game-web` exports fish rows and `spawn_fish` (#1939), `client/fishmodels.js` holds the fish box models and pose (#1925) with a tail swing tied to swim speed (#1949), `client/overlay.js` reads fish and the DSL has fish expectations with `client/test/scripts/fish.input` (#1986), and `client/scene.js` draws them (#2039). Fish are drawn before the blended water pass.
 - **Phase B done (plan #1833).** `crates/game` has `fish_spawn_config.rs`, `fish_columns.rs`, `fish_entities.rs`, `fish_spawner.rs`, `fish_steer.rs` and `fish_world.rs`, tested headless by `crates/game/tests/fish_days.rs` (plan #1601: #1663, #1665, #1666, #1668, #1675, #1677; stock reset on entering gathering: #1841). `FishWorld` is still called only from tests, not the game tick; Phases C and D wire it when a consumer exists.
 - **Phase A done (plan #1534).** `data/fish.toml` ships mackerel, salmon and tuna (#1586), the four raw fish items are in `data/items.toml` and can be given and carried (#1576), and `data/fish_bodies.toml` holds the game-side body data, read by `crates/game/src/fish_bodies.rs` (#1594). The bullets below that say `data/fish.toml` has no species or `data/items.toml` has no fish items predate this.
 - **Spawn query exists, no species.** `species_for(&FishColumn)` and the `data/fish.toml` loader are in `crates/layout/src/fish.rs` (`Fish::shipped`, `Fish::species_for`); `data/fish.toml` is schema comments only (decided in #93). `FishColumn` carries habitat, temperature and depth; `Layout::habitat_map` (`crates/layout/src/habitat_map.rs`) produces them per region. Habitat ids in `data/habitats.toml`: `frozen`, `warm_shallows`, `deep_water`, `rocky_shore`, `cold_open`, `temperate_open`.
