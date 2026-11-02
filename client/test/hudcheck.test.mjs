@@ -105,3 +105,18 @@ test('containment: timer, hands and hearts parts must sit inside their parent', 
   l.rects.hands = { ...r(10, 50, 10, 7), label: { ...r(10, 50, 10, 7), glyphs: [r(10, 50, 5, 7), r(16, 50, 5, 7)] } };
   assert.deepEqual(only(l, 'containment').map((c) => c.elements), [['timer.digits[1]', 'timer'], ['hands.label.glyphs[1]', 'hands'], ['heartIcons[1]', 'hearts']]);
 });
+
+test('the belt-centre check passes at real sizes, fails off-centre, and is skipped in the fallback', () => {
+  const belt = (v) => layoutChecks(hudLayout(model, set, v), v).filter((c) => c.check === 'belt-centre');
+  for (const v of [{ w: 1366, h: 768 }, { w: 390, h: 844 }]) {
+    assert.equal(hudLayout(model, set, v).beltCentred, true);
+    assert.deepEqual(belt(v), []);
+  }
+  const l = { beltCentred: true, rects: { beltPanel: r(10, 80, 40, 10) } };
+  assert.deepEqual(layoutChecks(l, vp).map((c) => c.check), ['belt-centre']);
+  l.rects.beltPanel = r(32, 80, 40, 10);
+  assert.deepEqual(layoutChecks(l, vp), []);
+  const tiny = { w: 80, h: 45 };
+  assert.equal(hudLayout(model, set, tiny).beltCentred, false);
+  assert.deepEqual(belt(tiny), []);
+});

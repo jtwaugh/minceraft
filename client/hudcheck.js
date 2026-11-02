@@ -8,6 +8,8 @@ export const MIN_SCALE = 2;
 export const CROSSHAIR_CLEAR_MARGIN = 8;
 /** Largest gap between the hands row and the belt, in texels (multiplied by the HUD scale). */
 export const MAX_HANDS_BELT_GAP = 16;
+/** Largest distance, in CSS pixels, between the belt panel's centre and the viewport's. */
+export const MAX_BELT_OFFCENTRE = 2;
 
 const ELEMENTS = ['crosshair', 'belt', 'hearts', 'timer', 'hands', 'handsPanel'];
 
@@ -69,6 +71,15 @@ export function handsDistanceChecks(layout) {
   return [{ check: 'distance', elements: ['hands', 'belt'], detail: `hands are ${gap}px above the belt, more than ${limit}px` }];
 }
 
+/** The belt panel's centre more than `MAX_BELT_OFFCENTRE` from the viewport's. Skipped when the layout fell back to centring the column. */
+export function beltCentreChecks(layout, viewport) {
+  const p = layout.rects.beltPanel;
+  if (!p || layout.beltCentred === false) return [];
+  const off = p.x + p.w / 2 - viewport.w / 2;
+  if (Math.abs(off) <= MAX_BELT_OFFCENTRE) return [];
+  return [{ check: 'belt-centre', elements: ['beltPanel'], detail: `belt panel is ${Math.abs(off)}px off the viewport centre, more than ${MAX_BELT_OFFCENTRE}px` }];
+}
+
 const inside = (c, p) => c.x >= p.x && c.y >= p.y && c.x + c.w <= p.x + p.w && c.y + c.h <= p.y + p.h;
 
 /** Child rectangles that stick out of their parent: slot icons and numbers out of their slot frame, and the parts of the timer, hands and hearts. */
@@ -86,5 +97,5 @@ export function containmentChecks(layout) {
 
 /** All mechanical problems in `layout` (a `hudLayout` result) for `viewport`; empty when there are none. */
 export function layoutChecks(layout, viewport) {
-  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport), ...scaleChecks(layout, viewport), ...clearZoneChecks(layout), ...handsDistanceChecks(layout), ...containmentChecks(layout)];
+  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport), ...scaleChecks(layout, viewport), ...clearZoneChecks(layout), ...handsDistanceChecks(layout), ...beltCentreChecks(layout, viewport), ...containmentChecks(layout)];
 }
