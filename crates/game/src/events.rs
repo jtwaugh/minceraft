@@ -35,6 +35,15 @@ pub enum GameEvent {
         kind: String,
         attacker: String,
     },
+    /// A fish was taken out of the water. `species` is its `data/fish.toml`
+    /// key, `item` the raw item now in the hands, `method` is `"sword"`
+    /// (a punch counts as the sword) or `"rod"`.
+    FishCaught {
+        player: String,
+        species: String,
+        item: String,
+        method: String,
+    },
     /// A loose item was created by an action. `source` is `"player"`
     /// (Drop), `"animal"`, `"forage"`, `"till"`, `"harvest"` or `"death"`.
     ItemDropped {
@@ -80,6 +89,10 @@ pub enum GameEvent {
     /// A dead player came back at `position` (the start spawn) with full
     /// health.
     PlayerRespawned { position: [f64; 3] },
+    /// A bobber was cast from `position` (the eye).
+    LineCast { player: String, position: [f64; 3] },
+    /// The line came in; `caught` is whether a fish was on it.
+    LineReeled { player: String, caught: bool },
     /// An action the player tried was refused. `action` is `"swing"`,
     /// `"till"`, `"plant"`, `"pick"`, `"forage"` or `"pickup"`.
     ActionRefused { action: String, reason: Reason },

@@ -269,6 +269,14 @@ fn describe_event(e: &GameEvent) -> String {
         } => {
             format!("entity_killed entity={entity} kind={kind} attacker={attacker}")
         }
+        GameEvent::FishCaught {
+            player,
+            species,
+            item,
+            method,
+        } => {
+            format!("fish_caught player={player} species={species} item={item} method={method}")
+        }
         GameEvent::ItemDropped {
             item,
             position,
@@ -316,6 +324,12 @@ fn describe_event(e: &GameEvent) -> String {
                 "player_respawned position={}",
                 position.map(|c| c.to_string()).join(",")
             )
+        }
+        GameEvent::LineCast { player, position } => {
+            format!("line_cast player={player} position={}", pos(position))
+        }
+        GameEvent::LineReeled { player, caught } => {
+            format!("line_reeled player={player} caught={caught}")
         }
         GameEvent::ActionRefused { action, reason } => {
             format!("action_refused action={action} reason={}", reason.name())
@@ -898,6 +912,20 @@ mod tests {
         assert_eq!(
             describe_event(&e),
             "action_refused action=till reason=nothing_here"
+        );
+    }
+
+    #[test]
+    fn describes_fish_caught() {
+        let e = GameEvent::FishCaught {
+            player: "player".into(),
+            species: "mackerel".into(),
+            item: "raw_mackerel".into(),
+            method: "sword".into(),
+        };
+        assert_eq!(
+            describe_event(&e),
+            "fish_caught player=player species=mackerel item=raw_mackerel method=sword"
         );
     }
 

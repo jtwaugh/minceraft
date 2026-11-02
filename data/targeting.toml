@@ -7,6 +7,9 @@
 block = 4.5
 # Furthest entity the eye ray can select, in blocks.
 entity = 3.0
+# Range of the second look when a press finds nothing in reach: a target
+# found here earns a `too_far` refusal instead of `nothing_here`.
+refusal = 6.0
 
 [entity]
 # Each side of an entity's box grows by this before the ray test, in blocks.

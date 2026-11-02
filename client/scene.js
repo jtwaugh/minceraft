@@ -36,8 +36,9 @@ import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } fr
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
-import { SWAY_FLOOR, SWAY_AMPLITUDE, SWAY_SPEED, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE, swayPhase } from './sway.js';
+import { SWAY_FLOOR, SWAY_AMPLITUDE, SWAY_SPEED, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE } from './sway.js';
 import { createWindState } from './windstate.js';
+import { formatWind } from './windreadout.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
@@ -553,18 +554,20 @@ function drawParts(prog, parts) {
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const windState = createWindState(new Wind(seed), Wind, SWAY_SPEED);
+let lastWind = null; // windState.frame of the previous render
 let simTicks = 0; // sim ticks this session, the wind field's clock
 
 function render(now) {
   work = { meshed: 0, remeshed: 0, verts: 0, ticks: 0, chunks: 0 };
   remeshFarm();
 
-  const snow = reducedMotion.matches ? null : { cells: snowCells, phase: swayPhase(now, false) };
+  const snow = reducedMotion.matches || !lastWind ? null : { cells: snowCells, wind: lastWind }; // last frame's wind: this frame's needs the eye
   const { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = spans.span('tick', () => controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow));
   work.ticks = ticks;
   simTicks += ticks;
   const wind = windState.frame(eye[0], eye[2], simTicks, alpha, (now - (lastFrame ?? now)) / 1000, reducedMotion.matches);
   if (reducedMotion.matches) wind.dir = [0, 0];
+  lastWind = wind;
   if (regions) {
     work.chunks = regions.chunks;
     regions.free.forEach(freeRegion);
@@ -677,6 +680,7 @@ function render(now) {
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 cheated: ${walk.cheated() ? 'yes' : 'no'}
 ${formatTime(walk.time_of_day(), walk.day_frozen())}
+${formatWind(wind.vec[0], wind.vec[1], wind.strength)}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;

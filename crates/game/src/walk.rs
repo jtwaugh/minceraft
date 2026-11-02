@@ -13,6 +13,8 @@ use crate::events::{GameEvent, Reason};
 use crate::farm::{FarmTile, FarmWorld};
 use crate::fish_entities::FishStore;
 use crate::fish_world::FishWorld;
+use crate::fishing::Fishing;
+use crate::fishing_config::FishingConfig;
 use crate::forage::{Forage, ForageConfig, Forager};
 use crate::growth::grow_crops;
 use crate::hands::{Hands, HandsConfig};
@@ -198,6 +200,7 @@ pub struct Walker {
     items: ItemStore,
     animals: AnimalStore,
     fish: FishWorld,
+    fishing: Fishing,
     forager: Forager,
     tiller: Tiller,
     crops: Crops,
@@ -273,6 +276,11 @@ impl Walker {
             ),
             fish: FishWorld::default_from_data(FISH_SEED, FIRST_FISH_ID)
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+            fishing: Fishing::new(
+                FishingConfig::default_from_data()
+                    .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
+                ItemEntityConfig::default_from_data(),
+            ),
             forager: Forager::new(ForageConfig::default_from_data(), FORAGE_SEED),
             tiller: Tiller::new(TillConfig::default_from_data(), TILL_SEED),
             crops: Crops::default_crops(),
@@ -446,6 +454,9 @@ impl Walker {
             h.str(&f.species);
             h.f64s(&f.pos);
             h.f64s(&[f.heading]);
+        }
+        if let Some(b) = self.fishing.bobber() {
+            h.f64s(&b.pos());
         }
         if let Some(f) = &self.floating {
             h.f64s(&f.raft.offset());
@@ -772,6 +783,7 @@ impl Walker {
             self.state.select(slot);
         }
         let hands_were_empty = self.state.hands.is_none();
+        let rod_in_hand = self.held() == HeldThing::Tool("fishing_rod".into());
         match &mut self.floating {
             Some(f) => {
                 // The raft moves (carrying the player), then the player's own
@@ -812,6 +824,8 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&world);
+                self.fishing
+                    .tick(&world, rod_in_hand, self.player.pos, &mut self.events);
                 let dropped = self.animals.tick(&world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 self.fish.tick(
@@ -851,6 +865,8 @@ impl Walker {
                 self.prev_eye = self.cur_eye;
                 self.cur_eye = eye_above(self.player.pos, &self.physics, input.sneak);
                 self.items.tick(&self.world);
+                self.fishing
+                    .tick(&self.world, rod_in_hand, self.player.pos, &mut self.events);
                 let dropped = self.animals.tick(&self.world);
                 Self::spawn_drops(&mut self.items, &mut self.events, dropped);
                 let pos = self.player.pos;
@@ -1081,7 +1097,12 @@ impl Walker {
     }
 
     /// Record this tick's aim and run the presses in `input` against it.
-    fn take_aim(&mut self, aim: Aim, input: &TickInput) {
+    fn take_aim(&mut self, mut aim: Aim, input: &TickInput) {
+        let line_out = self.fishing.line_out();
+        aim.facts.line_out = line_out;
+        if let Some((_, facts)) = &mut aim.far {
+            facts.line_out = line_out;
+        }
         self.target = aim.target;
         self.target_box = aim.boxed;
         let ctx = ResolveCtx {
@@ -1095,6 +1116,37 @@ impl Walker {
         pressed.primary &= self.state.hands.is_none();
         if input.primary && !pressed.primary {
             self.refuse("swing", Reason::ToolsStowed);
+        }
+        if let (Target::None, Some((far, facts))) = (aim.target, aim.far) {
+            for (button, action, silent) in [
+                (Button::Primary, "swing", true),
+                (Button::Secondary, "use", false),
+            ] {
+                let pressed = match button {
+                    Button::Primary => pressed.primary,
+                    _ => pressed.secondary,
+                };
+                let resolves = |target| {
+                    resolve(
+                        &self.rules.rules,
+                        &ResolveCtx {
+                            held: ctx.held.clone(),
+                            button,
+                            target,
+                            facts: facts.clone(),
+                        },
+                    )
+                    .is_some()
+                };
+                // A press that works on no target at all (a cast) is not refused.
+                let too_far = !matches!(far, Target::None) && resolves(far);
+                let works_bare = matches!(far, Target::None) && resolves(far);
+                if pressed && too_far {
+                    self.refuse(action, Reason::TooFar);
+                } else if pressed && !silent && !works_bare {
+                    self.refuse(action, Reason::NothingHere);
+                }
+            }
         }
         if pressed.primary {
             self.events.push(GameEvent::Swing {
@@ -1136,6 +1188,13 @@ impl Walker {
                 Button::Secondary => self.anim.start_use(),
                 Button::Interact => {}
             }
+        }
+        if ran.contains(&ActionKind::Cast) {
+            let eye = self.cur_eye;
+            self.fishing.cast(eye, look_dir(input), &mut self.events);
+        }
+        if ran.contains(&ActionKind::Reel) {
+            self.fishing.reel(&mut self.events);
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
             let outcome = self.forager.forage(pos, self.sim_tick);
@@ -1259,6 +1318,31 @@ impl Walker {
             }
         }
         for hit in &self.dispatcher.hits {
+            if let Some(f) = self.fish.store().get(hit.id) {
+                let taken = hit.damage.min(f.health);
+                if taken > 0 {
+                    self.events.push(GameEvent::EntityHurt {
+                        entity: hit.id,
+                        attacker: "player".to_string(),
+                        damage: taken,
+                    });
+                }
+                if let Some(c) = self.fish.hit(hit.id, hit.damage) {
+                    self.events.push(GameEvent::EntityKilled {
+                        entity: hit.id,
+                        kind: c.species.clone(),
+                        attacker: "player".to_string(),
+                    });
+                    self.events.push(GameEvent::FishCaught {
+                        player: "player".to_string(),
+                        species: c.species,
+                        item: c.raw_item.clone(),
+                        method: "sword".to_string(),
+                    });
+                    self.state.hands = Some(ItemInstance { item: c.raw_item });
+                }
+                continue;
+            }
             let was_dying = self
                 .animals
                 .get(hit.id)
@@ -1528,6 +1612,9 @@ struct Aim {
     facts: TargetFacts,
     /// The box to outline and whether the raft owns it.
     boxed: Option<(Aabb, bool)>,
+    /// Only when nothing is in reach and a button was pressed: what the
+    /// longer `refusal_reach` look finds instead.
+    far: Option<(Target, TargetFacts)>,
 }
 
 /// Rules see a raft block by its name: the base world has no block where the
@@ -1573,6 +1660,27 @@ fn aim(
     eye: [f64; 3],
     input: &TickInput,
 ) -> Aim {
+    let mut a = aim_within(world, entities, cfg, items, eye, input);
+    if a.target == Target::None && (input.primary || input.secondary) {
+        let long = TargetingConfig {
+            block_reach: cfg.refusal_reach,
+            entity_reach: cfg.refusal_reach,
+            ..*cfg
+        };
+        let f = aim_within(world, entities, &long, items, eye, input);
+        a.far = Some((f.target, f.facts));
+    }
+    a
+}
+
+fn aim_within(
+    world: &impl CollisionWorld,
+    entities: &[TargetableEntity],
+    cfg: &TargetingConfig,
+    items: &Items,
+    eye: [f64; 3],
+    input: &TickInput,
+) -> Aim {
     let dir = look_dir(input);
     let target = cast_target(world, entities, cfg, eye, dir);
     match target {
@@ -1609,6 +1717,7 @@ fn aim(
                     ..TargetFacts::default()
                 },
                 boxed,
+                far: None,
             }
         }
         Target::Entity { id } => {
@@ -1620,12 +1729,14 @@ fn aim(
                     ..TargetFacts::default()
                 },
                 boxed: e.map(|e| (e.aabb, false)),
+                far: None,
             }
         }
         Target::None => Aim {
             target,
             facts: TargetFacts::default(),
             boxed: None,
+            far: None,
         },
     }
 }
@@ -1761,6 +1872,63 @@ mod tests {
         let far = w.spawn_fish("mackerel", [0.5, 4.0, -40.0], 0.0).unwrap();
         w.tick(&look(-0.05, false));
         assert_ne!(w.target(), Target::Entity { id: far });
+    }
+
+    fn fish_in_front(w: &mut Walker) -> crate::targeting::EntityId {
+        let id = w.spawn_fish("mackerel", [0.5, 4.6, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        id
+    }
+
+    #[test]
+    fn a_sword_hit_kills_a_fish_into_the_hands() {
+        let mut w = settled();
+        let id = fish_in_front(&mut w);
+        let before = w.fish.stock() as usize + w.fish().len();
+        w.player_state_mut().select(1);
+        w.tick(&look(-0.4, false));
+        w.drain_events();
+        w.tick(&click());
+        assert_eq!(w.hands().map(|h| h.item.as_str()), Some("raw_mackerel"));
+        assert_eq!(w.fish().get(id), None);
+        assert_eq!(w.fish.stock() as usize + w.fish().len(), before - 1);
+        let ev = w.drain_events();
+        assert!(ev.contains(&hurt(id, 4)), "{ev:?}");
+        assert!(ev.contains(&killed(id, "mackerel")), "{ev:?}");
+        assert!(ev.contains(&GameEvent::FishCaught {
+            player: "player".into(),
+            species: "mackerel".into(),
+            item: "raw_mackerel".into(),
+            method: "sword".into(),
+        }));
+    }
+
+    #[test]
+    fn punches_wound_a_fish_until_it_dies() {
+        let mut w = settled();
+        let id = fish_in_front(&mut w);
+        w.drain_events();
+        w.tick(&click());
+        assert_eq!(w.fish().get(id).map(|f| f.health), Some(3));
+        assert!(w.hands().is_none());
+        for _ in 0..3 {
+            w.tick(&look(-0.4, false));
+            w.tick(&click());
+        }
+        assert_eq!(w.fish().get(id), None);
+        assert_eq!(w.hands().map(|h| h.item.as_str()), Some("raw_mackerel"));
+    }
+
+    #[test]
+    fn full_hands_do_not_hit_a_fish() {
+        let mut w = settled();
+        let id = fish_in_front(&mut w);
+        w.player_state_mut().select(1);
+        w.state.hands = Some(seeds());
+        w.tick(&click());
+        assert_eq!(w.fish().get(id).map(|f| f.health), Some(4));
+        assert_eq!(w.hands(), Some(&seeds()));
     }
 
     fn cow_health(w: &Walker, id: crate::targeting::EntityId) -> u32 {
@@ -3665,6 +3833,67 @@ mod tests {
         assert_eq!((*position, crop.as_str()), ([0, 4, 0], "wheat"));
         assert_eq!(yields[0], "wheat");
         assert_eq!(seen, run(), "replays identically");
+    }
+
+    /// Looking down so the floor is 5.5 blocks along the ray: past `block`
+    /// reach (4.5), inside `refusal` reach.
+    fn far_floor(secondary: bool, primary: bool) -> TickInput {
+        TickInput {
+            pitch: -(1.62f32 / 5.5).asin(),
+            secondary,
+            primary,
+            ..TickInput::default()
+        }
+    }
+
+    #[test]
+    fn a_press_past_reach_refuses_too_far_when_the_rule_would_match() {
+        let mut w = grass_floor_walker(1);
+        w.tick(&far_floor(false, false));
+        assert_eq!(w.target(), Target::None);
+        assert!(refusals(&mut w).is_empty(), "no press, no refusal");
+        w.tick(&far_floor(true, false));
+        assert_eq!(refusals(&mut w), [("use".to_string(), Reason::TooFar)]);
+        assert!(!tilled(&w, 0));
+    }
+
+    #[test]
+    fn a_cast_at_open_sky_is_not_refused() {
+        let mut w = grass_floor_walker(1);
+        w.set_held(HeldThing::Tool("fishing_rod".into()));
+        w.tick(&look(0.0, false));
+        w.drain_events();
+        w.tick(&press_secondary());
+        assert!(refusals(&mut w).is_empty());
+    }
+
+    #[test]
+    fn a_secondary_press_at_nothing_refuses_nothing_here() {
+        let mut w = grass_floor_walker(1);
+        w.tick(&look(0.0, false));
+        w.drain_events();
+        w.tick(&press_secondary());
+        assert_eq!(refusals(&mut w), [("use".to_string(), Reason::NothingHere)]);
+        // The floor is beyond even the refusal reach.
+        let mut w = grass_floor_walker(1);
+        w.tick(&TickInput {
+            pitch: -(1.62f32 / 7.0).asin(),
+            secondary: true,
+            ..TickInput::default()
+        });
+        assert_eq!(refusals(&mut w), [("use".to_string(), Reason::NothingHere)]);
+    }
+
+    #[test]
+    fn a_primary_press_at_empty_air_refuses_nothing() {
+        let mut w = grass_floor_walker(1);
+        w.tick(&look(0.0, false));
+        w.drain_events();
+        w.tick(&TickInput {
+            primary: true,
+            ..TickInput::default()
+        });
+        assert!(refusals(&mut w).is_empty());
     }
 
     fn nothing_here(w: &mut Walker) -> Vec<String> {
