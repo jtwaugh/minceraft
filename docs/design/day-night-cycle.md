@@ -5,7 +5,7 @@ scope: game
 source: "#1748"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
 ---
 
@@ -19,7 +19,8 @@ Checked against `master` (731a1ff).
 - **Tint path:** the main program has a per-vertex `tint` attribute and a `tint` uniform (`client/scene.js`); shade and AO are baked per face in `crates/mesh`. No scene-wide light level or per-block sky light exists.
 - **Console:** commands are defined in Rust in `crates/game/src/commands.rs` (`tp`, `give`, `spawn`, `pause`, `resume`, `step`, ...), not in a data file. `data/commands.toml` holds only cheat-code aliases (`[[alias]]`).
 - **Reduced motion:** `client/scene.js:524` reads `prefers-reduced-motion`; it zeroes sway and water frames only. Nothing day-related is affected yet.
-- **Not built:** no `time_of_day`, `sun_dir`, `daylight`, `data/day.toml`, `time` command or time readout.
+- **Phase A done (plan #1888):** `data/day.toml`, `DayClock` (`crates/game/src/day.rs`), `time_of_day`, `sun_dir` and `daylight` (PRs #1851, #1869, #1880); the Walker holds the clock with an offset and freeze flag (#1898); the `time` console command (#1899); wasm exports in `crates/game-web` (#1900); time in the debug readout (#1929).
+- **Not built (Phase B):** the client still uses the constant `SUN_DIR`; sky, fog and scene brightness do not follow `daylight`.
 - **Waiting on this:** `villages-and-villagers.md` (note 10, deferred home-at-night), `fish-and-fishing.md` (spawning ignores time of day), `world-layout.md` Phase C (fish query omits time of day), `wind.md` (no daily swing), SPEC "Crop growth" (decided in #392, waits on a separate sky-light value).
 
 ## Reconciliation notes
