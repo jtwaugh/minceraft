@@ -68,6 +68,8 @@ pub enum ActionKind {
     Pick,
     Forage,
     PutDown,
+    /// Put the carried item in a chest (cooking-stations 7.2).
+    Store,
     Take,
     Cast,
     Reel,
@@ -220,6 +222,7 @@ fn parse_action(value: &str) -> Option<ActionKind> {
         "pick" => Some(ActionKind::Pick),
         "forage" => Some(ActionKind::Forage),
         "put_down" => Some(ActionKind::PutDown),
+        "store" => Some(ActionKind::Store),
         "take" => Some(ActionKind::Take),
         "cast" => Some(ActionKind::Cast),
         "reel" => Some(ActionKind::Reel),
@@ -486,6 +489,7 @@ fn run_action(
         | ActionKind::Plant
         | ActionKind::Pick
         | ActionKind::PutDown
+        | ActionKind::Store
         | ActionKind::Take
         | ActionKind::Cast
         | ActionKind::Reel => {}
@@ -783,6 +787,12 @@ mod tests {
             rule(
                 Held::AnyItem,
                 Button::Interact,
+                Target::Block("chest".into()),
+                ActionKind::Store,
+            ),
+            rule(
+                Held::AnyItem,
+                Button::Interact,
                 Target::Station,
                 ActionKind::PutDown,
             ),
@@ -797,7 +807,7 @@ mod tests {
         expected[2].require_air_above = true;
         expected[4].require_air_above = true;
         expected[4].target_face = Some("top".into());
-        expected[11].target_face = Some("top".into());
+        expected[12].target_face = Some("top".into());
         // Later sections append rules after the section 7 ones.
         assert_eq!(
             Interactions::default_rules().rules[..expected.len()],
@@ -826,6 +836,27 @@ mod tests {
         assert!(with_base(&BASE.replace("\"empty\"", "\"any_thing\"")).is_err());
         assert!(with_base(&BASE.replace("secondary", "interact2")).is_err());
         assert!(with_base(&BASE.replace("forage", "put")).is_err());
+    }
+
+    #[test]
+    fn chest_stores_on_any_face_and_counter_still_puts_down() {
+        let item = || HeldThing::Item("bread".into());
+        for face in [Face::Top, Face::Bottom, Face::North, Face::East] {
+            let c = ctx(item(), Button::Interact, "chest", face);
+            assert_eq!(action(&c), Some(ActionKind::Store), "{face:?}");
+        }
+        let c = ctx(item(), Button::Interact, "counter", Face::Top);
+        assert_eq!(action(&c), Some(ActionKind::PutDown));
+        // Empty hands on a chest: the existing take rule (the chest view is decided elsewhere).
+        let c = ctx(HeldThing::Empty, Button::Interact, "chest", Face::Top);
+        assert_eq!(action(&c), Some(ActionKind::Take));
+    }
+
+    #[test]
+    fn store_action_parses() {
+        let r = &one_rule("any_item", "interact", "block:chest", "store")[0];
+        assert_eq!(r.target, Target::Block("chest".into()));
+        assert_eq!(r.action, ActionKind::Store);
     }
 
     #[test]
