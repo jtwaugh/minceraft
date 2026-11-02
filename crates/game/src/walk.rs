@@ -1056,11 +1056,12 @@ impl Walker {
         self.state.hands.as_ref()
     }
 
-    /// Stub entities plus the loose items and animals, as the eye ray sees them.
+    /// Stub entities plus the loose items, animals and fish, as the eye ray sees them.
     fn all_entities(&self) -> Vec<TargetableEntity> {
         let mut all = self.entities.clone();
         all.extend(self.items.targetables());
         all.extend(self.animals.targetables());
+        all.extend(self.fish.store().targetables());
         all
     }
 
@@ -1722,6 +1723,18 @@ mod tests {
             w.preview(Button::Primary).map(|r| r.action),
             Some(ActionKind::Attack)
         );
+    }
+
+    #[test]
+    fn the_eye_ray_targets_a_spawned_fish_in_reach_only() {
+        let mut w = settled();
+        let id = w.spawn_fish("mackerel", [0.5, 4.6, -2.0], 0.0).unwrap();
+        w.tick(&look(-0.4, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        assert_eq!(w.fish().get(id).map(|f| f.id), Some(id));
+        let far = w.spawn_fish("mackerel", [0.5, 4.0, -40.0], 0.0).unwrap();
+        w.tick(&look(-0.05, false));
+        assert_ne!(w.target(), Target::Entity { id: far });
     }
 
     fn cow_health(w: &Walker, id: crate::targeting::EntityId) -> u32 {
