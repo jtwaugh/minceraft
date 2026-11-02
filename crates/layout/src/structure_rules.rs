@@ -24,10 +24,11 @@ pub struct ParsedStructure {
     pub rotations: Vec<u8>,
 }
 
-const KINDS: [(&str, PieceKind); 6] = [
+const KINDS: [(&str, PieceKind); 7] = [
     ("plaza", PieceKind::Plaza),
     ("dock", PieceKind::Dock),
     ("boardwalk", PieceKind::Boardwalk),
+    ("landing", PieceKind::Landing),
     ("building", PieceKind::Building),
     ("cap", PieceKind::Cap),
     ("decor", PieceKind::Decor),
