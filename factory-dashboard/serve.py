@@ -194,6 +194,25 @@ def investigate_prompt(state, topic):
     return "\n".join(lines)
 
 
+CODEOWNERS_READY = "Ready, but it touches files only you can approve"
+
+
+def fix_pr_prompt(state, n):
+    """What a local Claude is asked to do with a ready PR that only the maintainer can approve."""
+    i = waiting_pr(state, n)
+    if not (i.get("reason") or "").startswith(CODEOWNERS_READY):
+        raise ValueError(f"#{n} isn't a ready PR touching CODEOWNERS paths")
+    return (f"PR #{n} in {state.repo} ({i.get('title', '')}) is ready by the factory's checks, but it "
+            "touches CODEOWNERS paths, so only I can approve it. Review it locally and fix it if it needs it.\n"
+            f"First check nothing else is fixing it: `git fetch`, look for new commits on the branch, runs in "
+            f"progress, and any `@claude fix` comment or factory-fix marker newer than the last review. If a "
+            f"fixer is running, stop and tell me. Then check out the PR (`gh pr checkout {n}`), read the "
+            "whole diff with extra care for the CODEOWNERS-owned files, run the checks CLAUDE.md lists for "
+            "what it touches, and fix what's wrong on the PR branch. Never write \"@claude\" in a GitHub "
+            f"comment. Ask me before pushing, and don't merge, approve or close it. {NEVER_LIVE_TICK} "
+            "End with what you changed (or why nothing needed changing) and whether it's safe to merge.")
+
+
 def open_terminal(state, prompt, dry):
     """Start an interactive Claude in a new Terminal window in the repo, with the prompt as its first message."""
     fd, path = tempfile.mkstemp(prefix="factory-investigate-", suffix=".txt")
@@ -218,6 +237,11 @@ def act_ops(state, body, dry):
     """Remediation for the alerts. Every target is checked against the last read."""
     kind, d, R = body.get("action"), state.data or {}, ["-R", state.repo]
     h = d.get("health") or {}
+    if kind == "fix-pr":
+        n = body.get("number")
+        if not isinstance(n, int):
+            raise ValueError("number must be an int")
+        return open_terminal(state, fix_pr_prompt(state, n), dry)
     if kind == "investigate":
         if body.get("topic") not in ("runner", "tick"):
             raise ValueError("unknown topic")

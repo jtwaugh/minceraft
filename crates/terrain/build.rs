@@ -203,6 +203,39 @@ fn gen_flora(path: &PathBuf, blocks: &[String], biomes: &[String]) {
         }
         writeln!(out, "pub const {name}: f64 = {v:?};").unwrap();
     }
+    let radius = int(&doc["settings"], "wetness_water_radius");
+    assert!(
+        radius > 0,
+        "flora.toml: wetness_water_radius must be positive"
+    );
+    writeln!(out, "pub const FLORA_WETNESS_WATER_RADIUS: i32 = {radius};").unwrap();
+    let weight = num(&doc["settings"]["wetness_water_weight"]);
+    assert!(
+        weight >= 0.0,
+        "flora.toml: wetness_water_weight must not be negative"
+    );
+    writeln!(
+        out,
+        "pub const FLORA_WETNESS_WATER_WEIGHT: f64 = {weight:?};"
+    )
+    .unwrap();
+    let bias = doc["settings"]["wetness_bias"]
+        .as_table()
+        .expect("wetness_bias table");
+    let mut rows = String::new();
+    for (name, v) in bias {
+        assert!(
+            biomes.contains(name),
+            "flora.toml: wetness_bias names unknown biome {name}"
+        );
+        write!(rows, "(Biome::{}, {:?}), ", camel(name), num(v)).unwrap();
+    }
+    writeln!(
+        out,
+        "pub static FLORA_WETNESS_BIAS: [(Biome, f64); {}] = [{rows}];",
+        bias.len()
+    )
+    .unwrap();
     for layer in flora_check::NICHE_LAYERS {
         let k = format!("niche_margin_{layer}");
         let m = num(doc["settings"]

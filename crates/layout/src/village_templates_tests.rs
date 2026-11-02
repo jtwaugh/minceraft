@@ -20,6 +20,8 @@ fn templates_exist_and_have_a_kind() {
     for name in [
         "plaza_small",
         "plaza_wide",
+        "landing_small",
+        "landing_wide",
         "dock_straight",
         "boardwalk_straight",
         "boardwalk_corner",

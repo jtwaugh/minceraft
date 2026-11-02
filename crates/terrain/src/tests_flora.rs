@@ -7,7 +7,7 @@ use crate::decorate::{MARGIN_CELLS, READ_REACH};
 use crate::flora::{place, Flora, FloraShape, FloraTint, FLORA};
 use crate::flora::{
     FloraRequires, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
-    FLORA_LIGHT_RADIUS, FLORA_TREE_KIND_RADIUS, FLORA_WIND,
+    FLORA_LIGHT_RADIUS, FLORA_TREE_KIND_RADIUS, FLORA_WETNESS_WATER_RADIUS, FLORA_WIND,
 };
 use crate::niche::{conifer, edge, exposure, hollow, light, wetness, NicheLayer};
 use crate::{Biases, Generator, Region, HEIGHT, SEA_LEVEL};
@@ -1524,7 +1524,8 @@ fn conifer_niche_entry_is_independent_of_region() {
 fn wetness_values() -> [f64; 4] {
     let (w, d) = (75, 33);
     let mut blocks = vec![0u8; w * d * HEIGHT];
-    let mut world = World::for_test(&mut blocks, w as i32, d as i32);
+    let biome = vec![Biome::Plains as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&biome);
     let near = |x: i32, z: i32, cx: i32| (x - cx).pow(2) + (z - 16).pow(2) <= 4;
     for z in 0..d as i32 {
         for x in 0..w as i32 {
@@ -1562,4 +1563,48 @@ fn a_wetness_niche_places_in_the_hollow_and_not_on_the_ridge() {
 #[test]
 fn wetness_niche_entry_is_independent_of_region() {
     region_independent(&niche_entry!(&[(NicheLayer::Wetness, 0.6, 1.0)]));
+}
+
+/// Wetness at the middle of a flat 41 by 41 grass world whose every column is
+/// `biome`, with (if `lake`) a water column at 3 columns east.
+fn flat_wetness(biome: Biome, lake: bool) -> f64 {
+    let (w, d) = (41, 41);
+    let mut blocks = vec![0u8; w * d * HEIGHT];
+    let ids = vec![biome as u8; w * d];
+    let mut world = World::for_test(&mut blocks, w as i32, d as i32).with_biome(&ids);
+    for z in 0..d as i32 {
+        for x in 0..w as i32 {
+            for y in 0..=70 {
+                world.set(x, y, z, Block::Dirt as u8);
+            }
+            if lake && x == 23 {
+                world.set(x, 70, z, Block::Water as u8);
+            }
+        }
+    }
+    wetness(&world, 20, 20)
+}
+
+#[test]
+fn a_wetter_biome_scores_higher_wetness_on_the_same_terrain() {
+    let wet = flat_wetness(Biome::Swampland, false);
+    let dry = flat_wetness(Biome::Desert, false);
+    assert!(wet > dry && (0.0..=1.0).contains(&wet), "{wet} {dry}");
+}
+
+#[test]
+fn a_column_beside_water_is_wetter_than_one_far_from_it() {
+    let near = flat_wetness(Biome::Plains, true);
+    let far = flat_wetness(Biome::Plains, false);
+    assert!(near > far, "{near} {far}");
+}
+
+#[test]
+fn wetness_water_search_and_tree_reach_stay_inside_the_decoration_margin() {
+    const TREE_REACH: i32 = 7;
+    const {
+        assert!(FLORA_WETNESS_WATER_RADIUS > 0);
+        assert!(FLORA_WETNESS_WATER_RADIUS + TREE_REACH <= MARGIN_CELLS * 16);
+        assert!(FLORA_WETNESS_WATER_RADIUS <= READ_REACH);
+    }
 }

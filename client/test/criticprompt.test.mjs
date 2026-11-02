@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { PATHS } from '../tools/observe.mjs';
 
 const prompt = readFileSync(new URL('../../.github/prompts/critic.md', import.meta.url), 'utf8');
-const has = (word) => new RegExp(`(?<![\\w.])${word.replace(/\./g, '\\.')}(?![\\w])`).test(prompt);
+const has = (word) => new RegExp(`(?<![\\w.])${word.replace(/\./g, '\\.')}(?![\\w]|\\.\\w)`).test(prompt);
 
 test('prompt names no key or control', () => {
   const keys = /\b(Key[A-Z]|Digit\d|Backquote|Escape|Enter|Space|Arrow\w+|Shift\w*|Control\w*|Mouse\d?|Tab|F\d{1,2})\b/;
@@ -45,4 +45,11 @@ test('prompt lists perf and render in the intro and kind line, and the streamed-
   assert.match(prompt, /- `kind`: `control-flow`, `layout`, `perf` or `render`/);
   assert.match(prompt, /region borders in a streamed\s+world/);
   assert.ok(prompt.includes('start walk stream'));
+});
+
+test('prompt names every diagnostic path and says they need a streamed world', () => {
+  const diagnostic = Object.keys(PATHS).filter((p) => PATHS[p] === 'diagnostic');
+  assert.ok(diagnostic.length > 0);
+  assert.deepEqual(diagnostic.filter((p) => !has(p)), []);
+  assert.match(prompt, /exist only on\s+streamed worlds/);
 });

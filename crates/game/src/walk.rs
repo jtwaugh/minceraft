@@ -351,6 +351,11 @@ impl Walker {
         self.phases.at(self.sim_tick)
     }
 
+    /// The day clock, for time of day at an arbitrary fraction.
+    pub fn day(&self) -> &DayClock {
+        &self.day
+    }
+
     /// Time of day now, in 0..1 (0 is midnight).
     pub fn time_of_day(&self) -> f64 {
         let d = self.day.day_ticks();

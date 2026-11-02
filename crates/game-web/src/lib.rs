@@ -447,6 +447,21 @@ impl Walk {
         self.0.sun_dir().to_vec()
     }
 
+    /// Ticks in one day.
+    pub fn day_ticks(&self) -> f64 {
+        self.0.day().day_ticks() as f64
+    }
+
+    /// Unit vector toward the sun at time of day `t`, wrapped into 0..1.
+    pub fn sun_dir_at(&self, t: f64) -> Vec<f64> {
+        self.0.day().sun_dir(t.rem_euclid(1.0)).to_vec()
+    }
+
+    /// Scene brightness at time of day `t`, wrapped into 0..1.
+    pub fn daylight_at(&self, t: f64) -> f64 {
+        self.0.day().daylight(t.rem_euclid(1.0))
+    }
+
     /// Whether the player is sprinting.
     pub fn sprinting(&self) -> bool {
         self.0.sprinting()
@@ -883,6 +898,21 @@ mod tests {
         let held = w.time_of_day();
         w.0.tick(&TickInput::default());
         assert_eq!(w.time_of_day(), held);
+    }
+
+    #[test]
+    fn day_at_exports_match_the_clock_and_wrap() {
+        let mut w = walk();
+        assert_eq!(w.day_ticks(), w.0.day().day_ticks() as f64);
+        for f in [0.0, 0.3, 0.75] {
+            w.0.set_time_of_day(f);
+            assert_eq!(w.sun_dir_at(w.time_of_day()), w.sun_dir());
+            assert_eq!(w.daylight_at(w.time_of_day()), w.daylight());
+        }
+        for (t, wrapped) in [(-0.75, 0.25), (1.5, 0.5), (2.0, 0.0)] {
+            assert_eq!(w.daylight_at(t), w.daylight_at(wrapped));
+            assert_eq!(w.sun_dir_at(t), w.sun_dir_at(wrapped));
+        }
     }
 
     #[test]

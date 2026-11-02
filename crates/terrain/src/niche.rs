@@ -16,8 +16,9 @@ use crate::decorate::World;
 use crate::flora::{
     Flora, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
     FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT, FLORA_TREE_KIND_RADIUS,
-    FLORA_WETNESS_HOLLOW_REF, FLORA_WETNESS_HOLLOW_WEIGHT, FLORA_WETNESS_SLOPE_REF,
-    FLORA_WETNESS_SLOPE_WEIGHT, FLORA_WIND, NICHE_MARGIN_CONIFER, NICHE_MARGIN_EDGE,
+    FLORA_WETNESS_BIAS, FLORA_WETNESS_HOLLOW_REF, FLORA_WETNESS_HOLLOW_WEIGHT,
+    FLORA_WETNESS_SLOPE_REF, FLORA_WETNESS_SLOPE_WEIGHT, FLORA_WETNESS_WATER_RADIUS,
+    FLORA_WETNESS_WATER_WEIGHT, FLORA_WIND, NICHE_MARGIN_CONIFER, NICHE_MARGIN_EDGE,
     NICHE_MARGIN_EXPOSURE, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT,
     NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING, NICHE_MARGIN_WETNESS,
 };
@@ -112,9 +113,39 @@ pub(crate) fn wetness(world: &World, x: i32, z: i32) -> f64 {
     let (gx, gz) = gradient(world, x, z);
     let flat = 1.0 - libm_sqrt(gx * gx + gz * gz) / FLORA_WETNESS_SLOPE_REF;
     let low = -hollow(world, x, z) / FLORA_WETNESS_HOLLOW_REF;
+    let biome = world.biome(x, z);
+    let bias = FLORA_WETNESS_BIAS
+        .iter()
+        .find(|b| b.0 == biome)
+        .map_or(0.0, |b| b.1);
+    let near = water_distance(world, x, z).map_or(0.0, |d| {
+        FLORA_WETNESS_WATER_WEIGHT * (1.0 - d / FLORA_WETNESS_WATER_RADIUS as f64)
+    });
     (FLORA_WETNESS_SLOPE_WEIGHT * flat.clamp(0.0, 1.0)
-        + FLORA_WETNESS_HOLLOW_WEIGHT * low.clamp(0.0, 1.0))
-    .clamp(0.0, 1.0)
+        + FLORA_WETNESS_HOLLOW_WEIGHT * low.clamp(0.0, 1.0)
+        + bias
+        + near)
+        .clamp(0.0, 1.0)
+}
+
+/// Straight-line distance to the nearest water column within
+/// `FLORA_WETNESS_WATER_RADIUS` of `(x, z)` (a circle); a column is water
+/// where its [`surface_height`] block is liquid.
+fn water_distance(world: &World, x: i32, z: i32) -> Option<f64> {
+    let r = FLORA_WETNESS_WATER_RADIUS;
+    let mut best = r * r + 1;
+    for dz in -r..=r {
+        for dx in -r..=r {
+            let d = dx * dx + dz * dz;
+            if d < best {
+                let h = surface_height(world, x + dx, z + dz);
+                if h >= 0 && is_liquid(world.get(x + dx, h, z + dz)) {
+                    best = d;
+                }
+            }
+        }
+    }
+    (best <= r * r).then(|| libm_sqrt(best as f64))
 }
 
 /// [`surface_height`] at `(x, z)` minus its mean over 8 columns (axis and
