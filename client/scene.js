@@ -41,6 +41,8 @@ import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
 import { mountHint, hintScale } from './hintui.js';
+import { mountCue } from './cueui.js';
+import { waitingForClick } from './waitingcue.js';
 import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
 import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readFish, readItems } from './overlay.js';
 import { createSampler } from './samplers.js';
@@ -501,6 +503,7 @@ const controller = createController({ input, walk, fly, clock, document, flying,
   sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds } });
 const deathView = mountDeath(document, tileset, controller);
 const hint = mountHint(document, tileset);
+const cue = mountCue(document, tileset);
 // The debug readout folds into a top-left button: open by default only in debug mode, and the choice is remembered.
 let overlayOpen = debug;
 try { overlayOpen = JSON.parse(localStorage.getItem('overlayOpen') ?? String(debug)) === true; } catch { /* blocked storage: use the default */ }
@@ -646,6 +649,7 @@ function render(now) {
   deathView.update(controller.state.dead);
   hud.update(flying ? { ...controller.state.hud, crosshair: false } : controller.state.hud);
   hint.update(input.locked);
+  cue.update(waitingForClick(input));
 
   if (lastFrame !== null) frames.push(now - lastFrame, work);
   lastFrame = now;
