@@ -113,6 +113,10 @@ impl FishSteer {
         }
     }
 
+    pub fn config(&self) -> &FishSpawnConfig {
+        &self.config
+    }
+
     /// Advance every fish one tick. `swimmer` is the position of a player
     /// who is in the water, if any; fish within the scatter distance swim
     /// away from it.
@@ -146,10 +150,17 @@ impl FishSteer {
             *ticks_left -= 1;
 
             let mut speed = body.swim_speed;
-            let away = swimmer.filter(|p| {
-                let d = [0, 1, 2].map(|i| f.pos[i] - p[i]);
-                d[0].hypot(d[1]).hypot(d[2]) < c.scatter_distance
-            });
+            let away = swimmer
+                .filter(|p| {
+                    let d = [0, 1, 2].map(|i| f.pos[i] - p[i]);
+                    d[0].hypot(d[1]).hypot(d[2]) < c.scatter_distance
+                })
+                .or_else(|| {
+                    (f.scatter_ticks > 0).then(|| {
+                        f.scatter_ticks -= 1;
+                        f.scatter_from
+                    })
+                });
             let goal = if let Some(p) = away {
                 speed *= c.scatter_speed;
                 let (dx, dz) = (f.pos[0] - p[0], f.pos[2] - p[2]);

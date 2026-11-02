@@ -1327,7 +1327,7 @@ impl Walker {
                         damage: taken,
                     });
                 }
-                if let Some(c) = self.fish.hit(hit.id, hit.damage) {
+                if let Some(c) = self.fish.hit(hit.id, hit.damage, self.player.pos) {
                     self.events.push(GameEvent::EntityKilled {
                         entity: hit.id,
                         kind: c.species.clone(),
