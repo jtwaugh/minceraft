@@ -71,7 +71,9 @@ fn every_shellfish_sits_where_its_entry_allows() {
             let i = ((z - z0) as u32 * w + (x - x0) as u32) as usize;
             let depth = u32::from(map.derived.water_depth[i]);
             assert_ne!(map.habitat[i], NO_HABITAT);
-            let h = &habitats.rules[usize::from(map.habitat[i])].id;
+            let h = &habitats.rules
+                [usize::from(crate::sea_flora_pass::flora_habitat(&map, &habitats, i))]
+            .id;
             assert!(
                 e.habitats.iter().any(|id| habitats.rules[id.0].id == *h),
                 "{h}"

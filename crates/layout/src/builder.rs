@@ -61,6 +61,7 @@ pub fn default_v0_level(seed: u64) -> Level {
             (dist * angle.sin()).round() as i32,
         ],
         spawn_water_radius: V0_SPAWN_WATER_RADIUS,
+        supplies: Vec::new(),
     }
 }
 

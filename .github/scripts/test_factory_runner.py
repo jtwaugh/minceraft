@@ -4,6 +4,11 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import contextlib  # noqa: E402
+import io  # noqa: E402
+
+import factory_runner  # noqa: E402
+import gh_cache  # noqa: E402
 from factory_runner import FALLBACK, choose, load  # noqa: E402
 
 
@@ -76,6 +81,35 @@ class Load(unittest.TestCase):
             out, note = load("o/r", get, {"FACTORY_RUNNER": '"warm"'})
             self.assertEqual(out, FALLBACK, found)
             self.assertIn("couldn't read", note)
+
+
+class Main(unittest.TestCase):
+    """The command claude.yml's runner job runs: the choice on stdout, alone."""
+    def run_main(self, found, variable):
+        get, calls = getter(found)
+        out, err = io.StringIO(), io.StringIO()
+        old_get, old_env = gh_cache.get, os.environ.get("FACTORY_RUNNER")
+        gh_cache.get, os.environ["FACTORY_RUNNER"] = get, variable
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = factory_runner.main(["factory_runner.py", "o/r"])
+        finally:
+            gh_cache.get = old_get
+            if old_env is None:
+                del os.environ["FACTORY_RUNNER"]
+            else:
+                os.environ["FACTORY_RUNNER"] = old_env
+        return code, out.getvalue(), err.getvalue(), calls
+
+    def test_online(self):
+        code, out, err, calls = self.run_main({"runners": [runner()]}, '"warm"')
+        self.assertEqual((code, out, err), (0, '"warm"\n', ""))
+        self.assertEqual(calls, ["repos/o/r/actions/runners?per_page=100"])
+
+    def test_offline_note_goes_to_stderr(self):
+        code, out, err, _ = self.run_main({"runners": [runner(status="offline")]}, '"warm"')
+        self.assertEqual((code, out), (0, FALLBACK + "\n"))
+        self.assertIn("no online runner has warm", err)
 
 
 if __name__ == "__main__":

@@ -72,6 +72,13 @@ button = "primary"
 target = "entity:animal"
 action = "attack" # fallback: punch
 
+# Storage chests (docs/design/cooking-stations.md 7.2): any face, above put_down.
+[[rule]]
+held = "any_item"
+button = "interact"
+target = "block:chest"
+action = "store"
+
 [[rule]]
 held = "any_item"
 button = "interact"

@@ -408,6 +408,7 @@ pub fn default_registry() -> Result<Registry<Walker>, RegistryError> {
         step_command(),
         respawn_command(),
         time_command(),
+        wind_command(),
     ])
 }
 
@@ -470,6 +471,55 @@ fn time(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> 
             Ok(vec!["time running".into()])
         }
         _ => Err("usage: time [set <fraction> | freeze | resume]".into()),
+    }
+}
+
+/// `wind`, `wind pin <dx> <dz>`, `wind unpin` (docs/design/wind.md Phase B).
+/// Not a cheat, like `time`. The pin is set only here so replays record it.
+pub fn wind_command() -> Command<Walker> {
+    const fn word(name: &'static str) -> ArgSpec {
+        ArgSpec {
+            name,
+            kind: ArgKind::Word,
+            optional: true,
+        }
+    }
+    const ARGS: [ArgSpec; 3] = [word("action"), word("dx"), word("dz")];
+    Command {
+        name: "wind",
+        aliases: &[],
+        args: &ARGS,
+        help: "show the wind; wind pin <dx> <dz>, wind unpin",
+        states: ALL_STATES,
+        cheat: false,
+        handler: wind,
+    }
+}
+
+fn wind(ctx: &mut Ctx<'_, Walker>, args: &[Arg]) -> Result<Vec<String>, String> {
+    let word = |i: usize| match args.get(i) {
+        Some(Arg::Word(w)) => Some(w.as_str()),
+        _ => None,
+    };
+    let number = |v: &str| match v.parse::<f64>() {
+        Ok(f) if f.is_finite() => Ok(f),
+        _ => Err(format!("{v} is not a number")),
+    };
+    match (word(0), word(1), word(2)) {
+        (None, _, _) => Ok(vec![match ctx.world.wind_pin() {
+            Some([dx, dz]) => format!("wind pinned to ({dx}, {dz})"),
+            None => "wind free".into(),
+        }]),
+        (Some("pin"), Some(x), Some(z)) => {
+            let (dx, dz) = (number(x)?, number(z)?);
+            ctx.world.set_wind_pin(Some([dx, dz]));
+            Ok(vec![format!("wind pinned to ({dx}, {dz})")])
+        }
+        (Some("unpin"), None, None) => {
+            ctx.world.set_wind_pin(None);
+            Ok(vec!["wind free".into()])
+        }
+        _ => Err("usage: wind [pin <dx> <dz> | unpin]".into()),
     }
 }
 
@@ -1032,17 +1082,60 @@ mod default_registry_tests {
     use super::*;
 
     #[test]
-    fn default_registry_has_exactly_the_ten_commands() {
+    fn default_registry_has_exactly_the_eleven_commands() {
         let reg = default_registry().unwrap();
         let names: Vec<&str> = reg.iter().map(|c| c.name).collect();
         assert_eq!(
             names,
             vec![
                 "help", "give", "spawn", "clear", "tp", "pause", "resume", "step", "respawn",
-                "time"
+                "time", "wind"
             ]
         );
         assert!(!reg.get("help").unwrap().cheat);
+    }
+}
+
+#[cfg(test)]
+mod wind_tests {
+    use super::*;
+    use crate::input::TickInput;
+
+    fn run(w: &mut Walker, line: &str) -> Vec<String> {
+        w.submit_command(line);
+        w.tick(&TickInput::default());
+        w.drain_command_output()
+    }
+
+    #[test]
+    fn wind_reports_pins_and_unpins() {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(Registry::new(vec![wind_command()]).unwrap());
+        assert_eq!(run(&mut w, "wind"), vec!["wind free"]);
+        assert_eq!(run(&mut w, "wind pin 3 -4"), vec!["wind pinned to (3, -4)"]);
+        assert_eq!(w.wind_pin(), Some([3.0, -4.0]));
+        assert_eq!(run(&mut w, "wind"), vec!["wind pinned to (3, -4)"]);
+        assert_eq!(run(&mut w, "wind unpin"), vec!["wind free"]);
+        assert_eq!(w.wind_pin(), None);
+        assert!(!w.cheated());
+    }
+
+    #[test]
+    fn bad_arguments_leave_the_pin_unchanged() {
+        let mut w = Walker::new([0.5, 5.0, 0.5]).unwrap();
+        w.set_commands(Registry::new(vec![wind_command()]).unwrap());
+        run(&mut w, "wind pin 1 2");
+        for bad in [
+            "wind pin x 1",
+            "wind pin 1 NaN",
+            "wind pin inf 1",
+            "wind pin 1",
+            "wind spin",
+        ] {
+            let out = run(&mut w, bad);
+            assert_eq!(out.len(), 1, "{bad}");
+            assert_eq!(w.wind_pin(), Some([1.0, 2.0]), "{bad}");
+        }
     }
 }
 
@@ -1324,7 +1417,7 @@ mod tp_tests {
         assert_eq!((p.pos[0], p.pos[2]), (700.5, -299.5));
         let top = (0..terrain::HEIGHT as i32)
             .rev()
-            .find(|&y| w.block_at(700, y, -300) != terrain::Block::Air)
+            .find(|&y| w.block_at(700, y, -300).info().collision != terrain::Collision::None)
             .unwrap();
         // One tick of gravity at most separates it from the surface.
         assert!((p.pos[1] - (top as f64 + 1.0)).abs() < 0.5, "{p:?} {top}");

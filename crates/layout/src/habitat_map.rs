@@ -1,6 +1,7 @@
 //! Habitat map for a region (design: world-layout Phase C, 3 step 7, 4.5).
 
 use crate::{DerivedMaps, HabitatInputs, Habitats, HumidityTerms, Layout, TemperatureTerms};
+use terrain::data::SEA_ICE_T_ICE;
 use terrain::{generate_climate, HumidityBias, TemperatureBias};
 
 /// `habitat` value for land columns (no habitat). Real habitats are rule
@@ -65,12 +66,14 @@ impl Layout {
                 if derived.water_depth[i] == 0 {
                     return NO_HABITAT;
                 }
+                let t = f64::from(climate.temperature[i]);
                 let id = habitats.classify(&HabitatInputs {
-                    temperature: f64::from(climate.temperature[i]),
+                    temperature: t,
                     depth: u32::from(derived.water_depth[i]),
                     bottom: derived.bottom_block[i],
                     shore_distance: u32::from(derived.shore_distance[i]),
                     frozen: derived.frozen[i],
+                    broken_ice: !derived.frozen[i] && (SEA_ICE_T_ICE..0.5).contains(&t),
                 });
                 u8::try_from(id.0).expect("fewer than 255 habitat rules")
             })

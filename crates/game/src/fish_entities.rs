@@ -31,6 +31,11 @@ pub struct FishEntity {
     pub box_size: [f64; 2],
     /// Half-hearts of damage left; the fish is removed at 0.
     pub health: u32,
+    /// Ticks left scattering from `scatter_from` after a hit.
+    pub scatter_ticks: u32,
+    pub scatter_from: [f64; 3],
+    /// A point the fish swims to instead of wandering; a scatter clears it.
+    pub lure: Option<[f64; 3]>,
 }
 
 impl FishEntity {
@@ -88,6 +93,9 @@ impl FishStore {
             school,
             box_size: body.box_size,
             health: body.health,
+            scatter_ticks: 0,
+            scatter_from: [0.0; 3],
+            lure: None,
         });
         Some(id)
     }
@@ -119,6 +127,19 @@ impl FishStore {
             self.fish.remove(i);
         }
         Some((taken, died))
+    }
+
+    /// Make fish `id` and every fish in its school scatter from `from` for
+    /// `ticks`. No-op for an unknown id.
+    pub fn scatter_school(&mut self, id: EntityId, from: [f64; 3], ticks: u32) {
+        let Some(school) = self.get(id).map(|f| f.school) else {
+            return;
+        };
+        for f in self.fish.iter_mut().filter(|f| f.school == school) {
+            f.scatter_ticks = ticks;
+            f.scatter_from = from;
+            f.lure = None;
+        }
     }
 
     pub fn len(&self) -> usize {

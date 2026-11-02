@@ -29,10 +29,10 @@
 //   respawn                     the death screen's respawn button: controller.respawn() (nothing while alive)
 //   frame <ms> [xN]             run N frames of ms each (default 1)
 //   spawn animal <kind>         put a cow, pig or chicken on the raft scene's islet
-//   spawn fish <species>        put a fish (a name in data/fish_bodies.toml) in the water two blocks east of
-//                               the player and level with the feet; an error if that is not water or the species is unknown
+//   spawn fish <species> [dy]   put a fish (a name in data/fish_bodies.toml) in the water two blocks east of
+//                               the player and level with the feet (dy cells higher, negative for lower); an error if that is not water or the species is unknown
 //   spawn item <name>           drop a loose item a block east of the player (any scene)
-//   face animal                 turn to look at the first animal (a mousemove)
+//   face animal|fish            turn to look at the first animal or fish (a mousemove)
 //   approach animal             teleport next to the first animal (it flees; reach is short)
 //   held <held>                 what the player holds: empty, tool:hoe, item:seeds
 //   drop <n>                    teleport n blocks up, to fall back and take fall damage
@@ -40,6 +40,8 @@
 //   stand planter               the same, on the islet's first planter
 //   stand helm                  teleport onto the raft's helm cell, level gaze
 //   stand deck                  teleport onto the raft's deck, a cell south of the helm, level gaze
+//   stand counter               teleport onto the deck cell beside the raft's first counter (wherever the raft
+//                               is now), looking at the counter's top
 //   place flower dandelion|rose   put that flower on the raft scene's field, in the cell the player
 //                               looks at after `stand field`; `place tall_grass` puts tall grass there,
 //                               `place air` clears it again
@@ -54,6 +56,7 @@
 //                               tileset from viewer/textures.json); changes nothing in the world,
 //                               but remembers the result for the `layout.*` paths
 //   until <path> <op> <value>   run 100 ms frames until the expectation holds (at most 20000)
+//   reduced on|off              prefers-reduced-motion for the wind state (default off)
 //   mark                        remember the current eye (and raft offset), for `moved` and `raft.moved`
 //   expect event <name> [key=value ...]  an event with that name (and those fields) has been seen
 //                               since the case began (`expect no event <name>` for the opposite)
@@ -75,10 +78,14 @@
 // field.ground and field.crop (block names at the field's middle tile, or air),
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
+// station.count (items on raft stations), station.item counter (the item on the raft's first counter, or none),
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
 // sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
+// layout.belt.offcentre (CSS px between the belt panel's centre and the viewport's centre), layout.hud.height (the bottom block, hearts top to belt panel bottom, / viewport height),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
+// wind.dir.x|z, wind.strength, wind.sway (the per-frame windstate.js result for the eye, the walk's wind pin
+// and the reduced-motion setting, as of the last frame), wind.readout (the debug overlay's wind line),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
 // events.foraged (`foraged` events seen since the case began), events.overbudget (stream only: frames whose work,
 // as counted for the work paths, went over a budget in client/workbudget.js; each is an event
@@ -86,6 +93,7 @@
 // events (number of events seen since the case began), sim_tick (the sim's tick count), paused, animals (alive or dying), animals.dying (how many are dying), animals.hurt (how many are flashing), bobber (none|flying|floating|resting|dipping; a cast is a secondary press with the rod held), bobber.near <x> <y> <z> <r> (1 if the bobber is within r blocks of that point, else 0), fish (fish in the world), fish.near <x> <y> <z> <r> (fish within r blocks of that point; the path takes arguments: `expect fish.near 10 64 3 5 = 1`).
 
 import { readFileSync } from 'node:fs';
+import * as terrain_game from '../pkg/game_web.js';
 import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg/game_web.js';
 import * as terrain from '../../viewer/pkg/terrain_web.js';
 import { B, VERTEX_BYTES, legendContext } from '../../viewer/mesh.js';
@@ -100,6 +108,9 @@ import { createHintState } from '../hintui.js';
 import { heldDraw } from '../helditem.js';
 import { hudLayout } from '../hudlayout.js';
 import { layoutChecks } from '../hudcheck.js';
+import { createWindState } from '../windstate.js';
+import { formatWind } from '../windreadout.js';
+import { SWAY_SPEED } from '../sway.js';
 import { spawnTestItems, readAnimals, readFish, readBobber, faceAnimal, spawnTestAnimals } from '../overlay.js';
 
 let ready = false;
@@ -126,6 +137,14 @@ function meshFrame(walk, r, damage) {
     faults += meshCracks(damage ? damage(mesh.opaque) : mesh.opaque, REGION_SIZE).length;
   }
   return { work: { regions: r.mesh.length + r.remesh.length, chunks: r.chunks, verts }, faults };
+}
+
+/** Where the raft's rest-pose point (x, y, z) is now: turned by the quarter turns so far about the pivot, then moved by the offset. */
+function raftPoint(w, x, y, z) {
+  const [px, pz] = w.walk.raft_pivot(), [ox, oy, oz] = w.walk.raft_offset(1);
+  let dx = x - px, dz = z - pz;
+  for (let n = ((Math.round(w.walk.raft_heading(1) / (Math.PI / 2)) % 4) + 4) % 4; n > 0; n--) [dx, dz] = [-dz, dx];
+  return [px + dx + ox, y + oy, pz + dz + oz];
 }
 
 /** Split a script into cases of `{ name, line, steps: [{ line, op, args }] }`. */
@@ -177,9 +196,15 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   const render = stream ? { faults: 0 } : null; // crack faults over every region meshed so far
   const hint = createHintState();
   document.addEventListener('pointerlockchange', () => hint.update(input.locked));
+  const windField = new terrain_game.Wind(STREAM_SEED);
+  const windState = createWindState(windField, terrain_game.Wind, SWAY_SPEED);
   const frame = controller.frame;
   controller.frame = (dt) => {
     const state = frame(dt);
+    const [x, , z] = state.eye;
+    const wind = windState.frame(x, z, walk.sim_tick(), state.alpha, dt, w.reduced, walk.wind_pin());
+    if (w.reduced) wind.dir = [0, 0]; // as scene.js does
+    w.wind = { ...wind, readout: formatWind(wind.vec[0], wind.vec[1], wind.strength, windField.roughness(x, z), windField.ground_multiplier(x, z)) };
     hint.update(input.locked);
     seen.push(...state.events);
     if (most) {
@@ -191,9 +216,10 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
     }
     return state;
   };
+  const w = { reduced: false, wind: null };
   controller.frame(0);
   const fire = (t, type, props = {}) => t.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props));
-  return { scene, canvas, document, window, input, hint, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null };
+  return Object.assign(w, { scene, canvas, document, window, input, hint, controller, walk, fire, mark: controller.state.eye, markRaft: [0, 0, 0], events: seen, most, render, text: '', output: [], layout: null });
 }
 
 const SYMBOLS = { ' ': 'Space', '-': 'Minus', _: 'Minus', '.': 'Period' };
@@ -256,6 +282,11 @@ function read(w, path) {
     if (v === undefined) throw new Error(`unknown path '${path}'`);
     return v;
   }
+  if (path.startsWith('wind.')) {
+    const v = { 'wind.dir.x': w.wind.dir[0], 'wind.dir.z': w.wind.dir[1], 'wind.strength': w.wind.strength, 'wind.sway': w.wind.sway, 'wind.readout': w.wind.readout }[path];
+    if (v === undefined) throw new Error(`unknown path '${path}'`);
+    return v;
+  }
   if (path === 'particles') return s.particleCount;
   if (path === 'events.foraged') return w.events.filter((e) => e.startsWith('foraged ')).length;
   if (path === 'events.overbudget') {
@@ -298,6 +329,13 @@ function read(w, path) {
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
   if (path === 'hud.ready') return s.hud.ready ?? 'none';
   if (path === 'items') return w.walk.loose_items();
+  if (path === 'station.count') return w.walk.station_item_names().length;
+  if (path.startsWith('station.item')) { // the first counter's, wherever the raft is
+    if (path.slice(12).trim() !== 'counter') throw new Error('station.item counter');
+    const c = Array.from(w.scene.counter), cells = Array.from(w.walk.station_cells());
+    const k = cells.findIndex((_, n) => n % 3 === 0 && c.every((v, d) => cells[n + d] === v));
+    return k < 0 ? 'none' : w.walk.station_item_names()[k / 3];
+  }
   if (path === 'fish') return readFish(w.walk).length;
   if (path.startsWith('fish.near')) {
     const [x, y, z, r] = path.slice(9).trim().split(/\s+/).map(Number);
@@ -350,14 +388,16 @@ function layout(w, args) {
   if (args.length !== 2 || !(vw > 0) || !(vh > 0)) throw new Error('usage: layout <w> <h> (positive viewport size in pixels)');
   tileset ??= JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url), 'utf8'));
   const viewport = { w: vw, h: vh };
-  const { scale, rects } = hudLayout(w.controller.state.hud, tileset, viewport);
-  const result = { scale, rects, problems: layoutChecks({ scale, rects }, viewport) };
+  const { scale, rects, beltCentred } = hudLayout(w.controller.state.hud, tileset, viewport);
+  const result = { scale, rects, problems: layoutChecks({ scale, rects, beltCentred }, viewport) };
   const where = (rs) => {
     if (!rs.length || rs.some((r) => !r || !(r.w > 0 && r.h > 0))) return 'missing';
     return rs.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= vw && r.y + r.h <= vh) ? 'inside' : 'outside';
   };
   w.layout = {
     scale, problems: result.problems.length, 'belt.w': rects.belt.w, 'belt.fraction': rects.belt.w / vw,
+    'belt.offcentre': Math.abs(rects.beltPanel.x + rects.beltPanel.w / 2 - vw / 2),
+    'hud.height': (rects.beltPanel.y + rects.beltPanel.h - rects.hearts.y) / vh,
     timer: where([rects.timer]), slotnumbers: where(rects.slotNumbers), 'hands.label': where([rects.hands.label]),
   };
   return result;
@@ -408,7 +448,7 @@ function step(w, { op, args }) {
       }
       if (args[0] === 'fish' && args[1]) {
         const [x, y, z] = w.walk.feet();
-        const cell = [Math.floor(x) + 2, Math.floor(y + 0.5), Math.floor(z)];
+        const cell = [Math.floor(x) + 2, Math.floor(y + 0.5) + Number(args[2] ?? 0), Math.floor(z)];
         if (w.walk.block_at(...cell) !== B.water) {
           throw new Error(`spawn fish: no water at ${cell.join(' ')}`);
         }
@@ -420,8 +460,10 @@ function step(w, { op, args }) {
       return;
     }
     case 'face': {
-      if (args[0] !== 'animal') throw new Error('face animal');
-      const [dx, dy] = faceAnimal(w.walk, w.controller.state);
+      if (args[0] !== 'animal' && args[0] !== 'fish') throw new Error('face animal | face fish');
+      const target = args[0] === 'fish' ? readFish(w.walk)[0] : undefined;
+      if (args[0] === 'fish' && !target) throw new Error('no fish to face');
+      const [dx, dy] = faceAnimal(w.walk, w.controller.state, undefined, target);
       return fire(document, 'mousemove', { movementX: dx, movementY: dy });
     }
     case 'approach': { 
@@ -450,7 +492,22 @@ function step(w, { op, args }) {
       return;
     }
     case 'stand': {
-      if (!['field', 'planter', 'helm', 'deck'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm|deck (raft scene only)');
+      if (!['field', 'planter', 'helm', 'deck', 'counter'].includes(args[0]) || !w.scene) throw new Error('stand field|planter|helm|deck|counter (raft scene only)');
+      if (args[0] === 'counter') {
+        const [cx, cy, cz] = w.scene.counter;
+        const at = (x, y, z) => raftPoint(w, x, y, z);
+        const [sx, sy, sz] = at(cx + 0.5, cy + 1, cz - 0.5);
+        w.walk.teleport(sx, sy, sz);
+        w.controller.frame(0.05);
+        const eye = w.walk.eye(1), [tx, ty, tz] = at(cx + 0.5, cy + 1, cz + 0.5);
+        const { yaw, pitch } = w.controller.state;
+        const want = [Math.atan2(tx - eye[0], -(tz - eye[2])), Math.atan2(ty - eye[1], Math.hypot(tx - eye[0], tz - eye[2]))];
+        let dyaw = want[0] - yaw;
+        dyaw -= 2 * Math.PI * Math.round(dyaw / (2 * Math.PI));
+        fire(document, 'mousemove', { movementX: Math.round(dyaw / 0.0025), movementY: Math.round(-(want[1] - pitch) / 0.0025) });
+        w.controller.frame(0.05);
+        return;
+      }
       if (args[0] === 'deck') {
         const [hx, hy, hz] = w.scene.helm;
         w.walk.teleport(hx + 0.5, hy + 1, hz + 1.5);
@@ -519,6 +576,10 @@ function step(w, { op, args }) {
       return step(w, { op: 'expect', args });
     }
     case 'held': w.walk.set_held(args[0]); return;
+    case 'reduced':
+      if (!['on', 'off'].includes(args[0])) throw new Error('reduced on|off');
+      w.reduced = args[0] === 'on';
+      return;
     case 'mark': w.mark = w.controller.state.eye.slice(); w.markRaft = w.walk.raft_offset(w.controller.state.alpha); return;
     case 'expect': {
       const negated = args[0] === 'no' && args[1] === 'event';

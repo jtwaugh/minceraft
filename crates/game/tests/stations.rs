@@ -102,6 +102,23 @@ fn stand_beside(w: &mut Walker, scene: &RaftScene, cell: [i32; 3], carrying: boo
     }
 }
 
+/// The rest cell of the first chest on the raft.
+fn chest(scene: &RaftScene) -> [i32; 3] {
+    scene
+        .cells
+        .iter()
+        .copied()
+        .find(|&[x, y, z]| {
+            let i = scene.raft.index(
+                (x - scene.raft.x0) as u32,
+                y as u32,
+                (z - scene.raft.z0) as u32,
+            );
+            scene.raft.blocks[i] == Block::Chest as u8
+        })
+        .expect("a chest on the raft")
+}
+
 /// A raft-scene walker carrying beef beside the first counter, and then
 /// either putting it on the counter or pressing at empty air instead.
 fn session(put_down: bool) -> (Walker, RaftScene, [i32; 3]) {
@@ -178,5 +195,36 @@ fn the_world_hash_covers_station_contents() {
     let (a, ..) = session(true);
     let (b, ..) = session(true);
     assert_eq!(a.station_items(), b.station_items());
+    assert_eq!(a.world_hash(), b.world_hash());
+}
+
+/// A walker that has stored beef in the first raft chest.
+fn stored() -> (Walker, RaftScene, [i32; 3]) {
+    let scene = raft_scene();
+    let cell = chest(&scene);
+    let mut w = Walker::in_raft_scene(scene.clone()).unwrap();
+    let empty = w.world_hash();
+    stand_beside(&mut w, &scene, cell, true);
+    press(&mut w, cell);
+    assert_eq!(w.hands(), None);
+    assert_ne!(w.world_hash(), empty);
+    (w, scene, cell)
+}
+
+#[test]
+fn a_stored_item_keeps_its_chest_cell_through_swell_and_travel() {
+    let (mut w, scene, cell) = stored();
+    let expected = vec![(cell, "raw_beef".to_string())];
+    assert_eq!(w.chest_items(), expected);
+    assert!(w.station_items().is_empty());
+    travel(&mut w, &scene);
+    assert_eq!(w.chest_items(), expected);
+}
+
+#[test]
+fn the_world_hash_covers_chest_contents() {
+    let (a, ..) = stored();
+    let (b, ..) = stored();
+    assert_eq!(a.chest_items(), b.chest_items());
     assert_eq!(a.world_hash(), b.world_hash());
 }

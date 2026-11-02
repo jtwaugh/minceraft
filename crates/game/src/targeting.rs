@@ -423,6 +423,10 @@ mod tests {
             Block::DryGrassTallLower,
             Block::DryGrassTallUpper,
             Block::LeafLitter,
+            Block::Lingon,
+            Block::Blabar,
+            Block::Smultron,
+            Block::Johannesort,
         ] {
             let mut w = MemoryWorld::new();
             w.set(3, 0, 0, b);

@@ -29,11 +29,15 @@ PLAN_WORKFLOW = "claude-plan.yml"
 FIX_WORKFLOW = "claude-fix.yml"
 
 
-def gh_run(args, project=False):
+def gh_run(args, project=False, app=False):
     """`gh <args>`; project calls use PROJECT_TOKEN and repo calls WRITE_TOKEN
-    (the workflow token) when set."""
+    (the workflow token) when set. `app` calls use APP_TOKEN (a GitHub App
+    installation token) when set, else WRITE_TOKEN: a PR opened by the
+    workflow token gets its pull_request workflows held for approval."""
     env = dict(os.environ)
-    if project and env.get("PROJECT_TOKEN"):
+    if app and env.get("APP_TOKEN"):
+        env["GH_TOKEN"] = env["APP_TOKEN"]
+    elif project and env.get("PROJECT_TOKEN"):
         env["GH_TOKEN"] = env["PROJECT_TOKEN"]
     elif not project and env.get("WRITE_TOKEN"):
         env["GH_TOKEN"] = env["WRITE_TOKEN"]
@@ -51,9 +55,10 @@ class GhBackend(Backend):
         self.applied = 0  # actions that needed a write (not already satisfied)
         self.mirror = FakeBackend()
 
-    def _gh(self, *args, project=False):
+    def _gh(self, *args, project=False, app=False):
         self.requests += 1
-        return self.run(list(args), project=project)
+        # `app` only when set, so a `run` that predates it still works.
+        return self.run(list(args), project=project, **({"app": True} if app else {}))
 
     def apply(self, snapshot, action):
         actor = action.payload.get("actor")
@@ -222,7 +227,7 @@ class GhBackend(Backend):
             self._gh("issue", "comment", n, "--repo", r, "--body", START_MARKER)
         elif k == "open_pr":
             self._gh("api", "-X", "POST", f"repos/{r}/pulls", "-f", f"title={p['title']}",
-                     "-f", f"head={p['branch']}", "-f", "base=master", "-f", f"body={p['body']}")
+                     "-f", f"head={p['branch']}", "-f", "base=master", "-f", f"body={p['body']}", app=True)
         elif k == "rerun_jobs":
             self._gh("api", "-X", "POST", f"repos/{r}/actions/runs/{p['run_id']}/rerun-failed-jobs")
         elif k == "merge_pr":

@@ -5,6 +5,10 @@
 use crate::aliases::Aliases;
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
+use crate::chests::{
+    refused_ticks_from_data, restock, shipped_supplies, slot_count_from_data, Chests, LevelSupply,
+    Stocked, Supply,
+};
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::commands::{run_line, GameState, Registry};
 use crate::crops::Crops;
@@ -221,6 +225,8 @@ pub struct Walker {
     day_offset: u64,
     /// While set, the offset backs off one tick per tick so the time holds.
     day_frozen: bool,
+    /// Wind override in blocks per second `[dx, dz]`; the client uses it in place of the derived wind.
+    wind_pin: Option<[f64; 2]>,
     item_table: Items,
     state: PlayerState,
     /// Test override of the derived held thing.
@@ -240,6 +246,14 @@ pub struct Walker {
     aliases: Aliases,
     /// Items sitting on raft stations, keyed by raft-local cell.
     stations: Stations,
+    /// Items in raft chests, keyed by raft-local cell.
+    chests: Chests,
+    /// The tick before which a full chest's refusal still shows.
+    chest_refused_until: u64,
+    /// The level's supplies, restocked into the chests at each gathering start.
+    supplies: Vec<LevelSupply>,
+    /// What the last restock could not fit.
+    restock_lost: Vec<Stocked>,
 }
 
 impl Walker {
@@ -297,6 +311,7 @@ impl Walker {
             day: DayClock::default_day().map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             day_offset: 0,
             day_frozen: false,
+            wind_pin: None,
             item_table: Items::default_items(),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
@@ -315,6 +330,15 @@ impl Walker {
                 aliases: Vec::new(),
             },
             stations: Stations::new(),
+            chests: Chests::new(slot_count_from_data().expect("shipped chests.toml")),
+            chest_refused_until: 0,
+            // The v0 level lists staples `data/items.toml` does not define yet
+            // (cooking-stations.md Phase A); until it does, stock what exists.
+            supplies: shipped_supplies()
+                .into_iter()
+                .filter(|s| Items::default_items().has_item(&s.item))
+                .collect(),
+            restock_lost: Vec::new(),
         })
     }
 
@@ -407,6 +431,15 @@ impl Walker {
         self.day_frozen
     }
 
+    /// Pin the wind to a fixed vector (or release it with `None`).
+    pub fn set_wind_pin(&mut self, pin: Option<[f64; 2]>) {
+        self.wind_pin = pin;
+    }
+
+    pub fn wind_pin(&self) -> Option<[f64; 2]> {
+        self.wind_pin
+    }
+
     /// FNV-1a 64 of the replay-relevant state; the set is listed in the
     /// `replay` module docs.
     pub fn world_hash(&self) -> u64 {
@@ -414,6 +447,13 @@ impl Walker {
         h.u64(self.sim_tick);
         h.u64(self.day_offset);
         h.u64(u64::from(self.day_frozen));
+        match self.wind_pin {
+            Some(v) => {
+                h.u64(1);
+                h.f64s(&v);
+            }
+            None => h.u64(0),
+        }
         h.u64(u64::from(self.cheated));
         let p = &self.player;
         h.f64s(&p.pos);
@@ -473,6 +513,17 @@ impl Walker {
             }
             h.str(&item.item);
         }
+        for (cell, slots) in self.chests.iter() {
+            for c in cell {
+                h.u64(i64::from(c) as u64);
+            }
+            for (i, slot) in slots.iter().enumerate() {
+                if let Some(item) = slot {
+                    h.u64(i as u64);
+                    h.str(&item.item);
+                }
+            }
+        }
         h.finish()
     }
 
@@ -483,6 +534,76 @@ impl Walker {
             .iter()
             .map(|(c, i)| (c, i.item.clone()))
             .collect()
+    }
+
+    /// The items in raft chests as `(raft-local cell, item name)`, one per
+    /// occupied slot, sorted by cell then slot.
+    pub fn chest_items(&self) -> Vec<([i32; 3], String)> {
+        self.chests
+            .iter()
+            .flat_map(|(c, slots)| slots.iter().flatten().map(move |i| (c, i.item.clone())))
+            .collect()
+    }
+
+    /// Whether a full chest refused a deposit within the last few ticks
+    /// (`refused_ticks` in `data/chests.toml`), for the client's shake.
+    pub fn chest_refused(&self) -> bool {
+        self.sim_tick < self.chest_refused_until
+    }
+
+    /// Replace the level's supplies (the shipped v0 level's by default).
+    pub fn set_supplies(&mut self, supplies: Vec<LevelSupply>) {
+        self.supplies = supplies;
+    }
+
+    /// What the last restock could not fit, as `(chest cell, item, count)`.
+    pub fn restock_lost(&self) -> Vec<([i32; 3], String, usize)> {
+        let lost = self.restock_lost.iter();
+        lost.map(|s| (s.cell, s.item.clone(), s.count)).collect()
+    }
+
+    /// Top the raft chests up to the level's supplies when tick `tick` is the
+    /// first of a gathering phase (tick 0 included), and report each chest
+    /// that received something.
+    fn restock_chests(&mut self, tick: u64) {
+        let starts = self.phases.at(tick).0 == Phase::Gathering
+            && (tick == 0 || self.phases.at(tick - 1).0 != Phase::Gathering);
+        let (Some(f), true) = (&self.floating, starts) else {
+            return;
+        };
+        let chest = terrain::block_id("chest");
+        let mut cells: Vec<[i32; 3]> = f
+            .blocks
+            .iter()
+            .filter(|(_, b)| Some(**b) == chest)
+            .map(|(c, _)| *c)
+            .collect();
+        // Chest numbers follow raft cell order: y, then z, then x.
+        cells.sort_by_key(|&[x, y, z]| (y, z, x));
+        let supplies: Vec<Supply> = self
+            .supplies
+            .iter()
+            .filter_map(|s| {
+                Some(Supply {
+                    item: s.item.clone(),
+                    count: s.count,
+                    cell: *cells.get(s.chest)?,
+                })
+            })
+            .collect();
+        let r = restock(&mut self.chests, &supplies, &self.item_table).expect("supply items");
+        for s in &r.added {
+            match self.events.last_mut() {
+                Some(GameEvent::ChestRestocked { chest, items }) if *chest == s.cell => {
+                    items.extend(std::iter::repeat_n(s.item.clone(), s.count));
+                }
+                _ => self.events.push(GameEvent::ChestRestocked {
+                    chest: s.cell,
+                    items: vec![s.item.clone(); s.count],
+                }),
+            }
+        }
+        self.restock_lost = r.lost;
     }
 
     /// Whether a cheat command has run this session.
@@ -787,6 +908,7 @@ impl Walker {
         self.run_queued_commands();
         self.look_yaw = input.yaw;
         self.look_pitch = input.pitch;
+        self.restock_chests(self.sim_tick);
         self.sim_tick += 1;
         if self.day_frozen {
             let d = self.day.day_ticks();
@@ -855,6 +977,8 @@ impl Walker {
                     &world,
                     |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
                 );
+                self.fishing
+                    .tick_bite(&world, &mut self.fish, &mut self.events);
                 let aim = aim(
                     &world,
                     &entities,
@@ -897,6 +1021,8 @@ impl Walker {
                     &self.world,
                     |x, z| self.streamer.as_mut().and_then(|s| s.fish_column(x, z)),
                 );
+                self.fishing
+                    .tick_bite(&self.world, &mut self.fish, &mut self.events);
                 let aim = aim(
                     &self.world,
                     &entities,
@@ -1034,6 +1160,11 @@ impl Walker {
         self.fish.spawn(species, pos, heading)
     }
 
+    /// Make fish `id` swim to `point`, as a bite does (for tests and tools).
+    pub fn lure_fish(&mut self, id: crate::targeting::EntityId, point: [f64; 3]) {
+        self.fish.set_lure(id, point);
+    }
+
     pub fn fish(&self) -> &FishStore {
         self.fish.store()
     }
@@ -1168,6 +1299,23 @@ impl Walker {
                 }
             }
         }
+        // A secondary press on a near target no rule covers. A loose item is
+        // `pick_up`'s to accept or refuse.
+        let loose = matches!(aim.target, Target::Entity { id } if self.items.get(id).is_some());
+        if pressed.secondary
+            && !matches!(aim.target, Target::None)
+            && !loose
+            && resolve(
+                &self.rules.rules,
+                &ResolveCtx {
+                    button: Button::Secondary,
+                    ..ctx.clone()
+                },
+            )
+            .is_none()
+        {
+            self.refuse("use", Reason::NothingHere);
+        }
         if pressed.primary {
             self.events.push(GameEvent::Swing {
                 player: "player".to_string(),
@@ -1215,7 +1363,15 @@ impl Walker {
                 .cast(eye, look_dir(input.yaw, input.pitch), &mut self.events);
         }
         if ran.contains(&ActionKind::Reel) {
-            self.fishing.reel(&mut self.events);
+            if let Some(c) = self.fishing.reel_press(&mut self.fish, &mut self.events) {
+                self.events.push(GameEvent::FishCaught {
+                    player: "player".to_string(),
+                    species: c.species,
+                    item: c.raw_item.clone(),
+                    method: "rod".to_string(),
+                });
+                self.state.hands = Some(ItemInstance { item: c.raw_item });
+            }
         }
         if let (true, Target::Block { pos, .. }) = (ran.contains(&ActionKind::Forage), ctx.target) {
             let outcome = self.forager.forage(pos, self.sim_tick);
@@ -1348,7 +1504,7 @@ impl Walker {
                         damage: taken,
                     });
                 }
-                if let Some(c) = self.fish.hit(hit.id, hit.damage) {
+                if let Some(c) = self.fish.hit(hit.id, hit.damage, self.player.pos) {
                     self.events.push(GameEvent::EntityKilled {
                         entity: hit.id,
                         kind: c.species.clone(),
@@ -1428,6 +1584,25 @@ impl Walker {
                     Err(item) => self.state.hands = Some(item),
                 }
             }
+            ActionKind::Store => {
+                let Some(item) = self.state.hands.take() else {
+                    return;
+                };
+                let name = item.item.clone();
+                match self.chests.deposit(cell, item) {
+                    Ok(slot) => self.events.push(GameEvent::ItemStored {
+                        item: name,
+                        chest: cell,
+                        slot,
+                    }),
+                    Err(item) => {
+                        self.state.hands = Some(item);
+                        let n = refused_ticks_from_data().expect("shipped chests.toml");
+                        self.chest_refused_until = self.sim_tick + n;
+                        self.refuse("store", Reason::ChestFull);
+                    }
+                }
+            }
             ActionKind::Take => {
                 if let Some(item) = self.stations.take(cell) {
                     self.events.push(GameEvent::ItemPickedUp {
@@ -1479,6 +1654,7 @@ impl Walker {
         let tool = self.item_table.has_tool(&e.item.item);
         if tool {
             if self.state.first_empty_belt_slot().is_none() {
+                self.refuse("pickup", Reason::HandsFull);
                 return;
             }
         } else if self.state.hands.is_some() {
@@ -2159,6 +2335,49 @@ mod tests {
         assert!(w.items().get(id).is_some());
     }
 
+    fn facing_loose_sword() -> (Walker, crate::targeting::EntityId) {
+        let mut w = settled();
+        let id = w.spawn_item(
+            ItemInstance {
+                item: "sword".into(),
+            },
+            [0.5, 5.62, -1.0],
+        );
+        w.tick(&look(0.0, false));
+        assert_eq!(w.target(), Target::Entity { id });
+        (w, id)
+    }
+
+    #[test]
+    fn loose_tool_with_a_full_belt_is_refused_once_and_stays() {
+        let (mut w, id) = facing_loose_sword();
+        for slot in 1..crate::items::BELT_SLOTS {
+            w.state.tool_belt[slot] = Some(crate::items::ToolInstance { tool: "hoe".into() });
+        }
+        w.drain_events();
+        w.tick(&pick_up());
+        assert_eq!(
+            refusals(&mut w),
+            vec![("pickup".to_string(), Reason::HandsFull)]
+        );
+        assert!(w.items().get(id).is_some());
+        assert_eq!(w.hands(), None);
+    }
+
+    #[test]
+    fn loose_tool_with_a_free_belt_slot_is_stowed_without_refusal() {
+        let (mut w, id) = facing_loose_sword();
+        w.state.hands = Some(seeds());
+        for slot in 1..crate::items::BELT_SLOTS {
+            w.state.tool_belt[slot] = None;
+        }
+        w.drain_events();
+        w.tick(&pick_up());
+        assert!(refusals(&mut w).is_empty());
+        assert!(w.items().get(id).is_none());
+        assert_eq!(w.hands(), Some(&seeds()));
+    }
+
     #[test]
     fn a_refusal_does_not_stop_the_helm_toggle() {
         let mut w = at_the_helm();
@@ -2769,6 +2988,27 @@ mod tests {
         assert_eq!(run(true, true), run(true, true));
         assert_ne!(run(false, false), run(true, false));
         assert_ne!(run(true, false), run(true, true));
+    }
+
+    #[test]
+    fn wind_pin_round_trips_and_is_hashed() {
+        let mut w = with_cmds();
+        assert_eq!(w.wind_pin(), None);
+        w.set_wind_pin(Some([1.5, -2.0]));
+        assert_eq!(w.wind_pin(), Some([1.5, -2.0]));
+        w.set_wind_pin(None);
+        assert_eq!(w.wind_pin(), None);
+
+        let run = |pin: Option<[f64; 2]>| {
+            let mut w = with_cmds();
+            w.set_wind_pin(pin);
+            w.tick(&TickInput::default());
+            w.world_hash()
+        };
+        assert_eq!(run(Some([1.0, 2.0])), run(Some([1.0, 2.0])));
+        assert_ne!(run(None), run(Some([1.0, 2.0])));
+        assert_ne!(run(Some([1.0, 2.0])), run(Some([2.0, 1.0])));
+        assert_ne!(run(None), run(Some([0.0, 0.0])));
     }
 
     #[test]
@@ -3914,6 +4154,40 @@ mod tests {
             primary: true,
             ..TickInput::default()
         });
+        assert!(refusals(&mut w).is_empty());
+    }
+
+    fn carrying(floor: Block, item: &str) -> Walker {
+        let mut w = floor_walker(8, floor);
+        w.clear_held_override();
+        w.state.hands = Some(ItemInstance { item: item.into() });
+        w.tick(&down(false, false));
+        w.drain_events();
+        w
+    }
+
+    #[test]
+    fn a_carried_item_with_no_use_on_the_target_refuses_once() {
+        for (floor, item) in [(Block::Stone, "seeds"), (Block::Grass, "dish")] {
+            let mut w = carrying(floor, item);
+            w.tick(&down(true, false));
+            assert_eq!(refusals(&mut w), [("use".to_string(), Reason::NothingHere)]);
+        }
+    }
+
+    #[test]
+    fn working_secondary_presses_add_no_refusal() {
+        // Tilling with the hoe, planting seeds, and picking up a loose item.
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, false));
+        assert!(refusals(&mut w).is_empty());
+        w.clear_held_override();
+        w.state.hands = Some(seeds());
+        w.tick(&down(true, false));
+        assert!(refusals(&mut w).is_empty());
+        let (mut w, _) = facing_seeds();
+        w.drain_events();
+        w.tick(&pick_up());
         assert!(refusals(&mut w).is_empty());
     }
 

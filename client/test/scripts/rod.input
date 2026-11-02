@@ -1,0 +1,90 @@
+# Rod and sword fishing end to end (docs/design/fish-and-fishing.md Phase D,
+# 4.1 to 4.6). The player stands on the shore of seed 12345 at 6.5 15.5, found
+# by scanning for dry land with four blocks of water to its east, with a fish
+# spawned one cell below the feet two blocks east. A player in the water would
+# scatter the fish and drop its lure. The bite delay is seeded, so
+# `until` finds the dip on the same frame every run.
+
+case the rod casts, bites, reels in the window and puts a raw fish in the hands
+start walk stream at 6.5 15.5
+click
+lock
+frame 50 x40
+spawn fish salmon -1
+held tool:fishing_rod
+face fish
+button down right
+frame 50
+button up right
+frame 50
+expect event line_cast
+until bobber = floating
+until bobber = dipping
+expect event fish_bite
+button down right
+frame 50
+button up right
+frame 50 x2
+expect event fish_caught method=rod
+expect event line_reeled
+expect bobber = none
+expect hands != none
+expect fish = 0
+
+case a press outside the window catches nothing
+start walk stream at 6.5 15.5
+click
+lock
+frame 50 x40
+spawn fish salmon -1
+held tool:fishing_rod
+face fish
+button down right
+frame 50
+button up right
+frame 50
+until bobber = floating
+button down right
+frame 50
+button up right
+frame 50 x2
+expect event line_reeled
+expect no event fish_bite
+expect no event fish_caught
+expect bobber = none
+expect hands = none
+expect fish = 1
+
+case casting while carrying does nothing
+start walk stream at 6.5 15.5
+click
+lock
+frame 50 x40
+held item:seeds
+mouse 0 200
+button down right
+frame 50
+button up right
+frame 50 x2
+expect no event line_cast
+expect bobber = none
+
+case a sword hit on a fish gives its raw item and leaves one fewer
+start walk stream at 6.5 15.5
+click
+lock
+frame 50 x40
+spawn fish salmon -1
+expect fish = 1
+held tool:sword
+face fish
+frame 50 x2
+expect target.kind = entity
+expect rule.primary = attack
+button down left
+frame 50
+button up left
+frame 50 x2
+expect fish = 0
+expect hands != none
+expect event fish_caught method=sword

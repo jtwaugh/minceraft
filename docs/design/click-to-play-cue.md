@@ -5,8 +5,8 @@ scope: game
 source: "#1998"
 superseded_by: ""
 phases:
-  A: todo
-  B: todo
+  A: done
+  B: done
 ---
 
 ## Current state
@@ -20,6 +20,8 @@ Checked against the code:
 - **DSL gap is real.** In `client/test/dsl.mjs:147` the fake canvas's `requestPointerLock()` only counts (`lockRequests`); the fake document has `exitPointerLock` that clears `pointerLockElement` and fires `pointerlockchange`, but nothing sets it. `lock`, `unlock` and `blur` statements exist (`dsl.mjs:353-356`). The `blur` statement only fires the window event and does not unlock.
 - **Observation.** `client/tools/observe.mjs` classifies `mode` and `locked` as `player` and `lock_requests` as `debug`. There is no `prompt` or `hint` path, and `dsl.mjs` serves neither (`mode` is `death | console | inventory | fly | walk`, `dsl.mjs:217`).
 - **Nothing is built yet:** the cue, the DSL relock, and the `prompt` and `hint` observation paths.
+- **Phase A done (plan #2014).** The DSL fake canvas locks on request and `blur` unlocks (#2048, `client/test/dsl.mjs`); pure `waitingForClick` and the hint state exist (#2042, `client/waitingcue.js`); `prompt` and `hint` are served by the DSL and classified in `client/tools/observe.mjs` (#2083). Phase B's cue is built.
+- **Phase B done (plan #2183).** `client/cueui.js` (`cueLayout`, `mountCue`) draws the centred "Click to play" panel with no dim layer (#2102, #2182). `client/scene.js` mounts it and calls `cue.update(waitingForClick(input))` each frame. `client/test/cueui.test.mjs` covers fit and centring; the `prompt` expectations in `client/test/scripts/inventory.input` cover visibility. The plan had no tickets.
 
 ## Reconciliation notes
 
@@ -55,7 +57,7 @@ Five play critic runs (#1520, #1574, #1587, #1655, #1672) hit the same wall: in 
 ## 2. Want
 
 - A small "Click to play" cue (pixel font, nine-slice panel like the hint) centred on screen whenever the mode is walk or fly, the pointer is unlocked, the console and inventory are closed and the player is alive. It covers game start, Escape out of the inventory, Escape from walk mode and a window blur. It disappears as soon as the pointer locks.
-- Optionally dim the view behind it, so the frozen state reads as paused.
+- No dim layer behind it: the panel alone is the cue. (Decided in #2155.)
 - The first-run controls hint can stay as it is; the cue is the part that comes back every time.
 - The DSL's fake canvas becomes locked on `requestPointerLock` (firing `pointerlockchange`), so scripts and the critic see the real relock after Tab. A test pins Tab, Tab ending locked and Tab, Escape ending unlocked with the cue showing.
 - The player observation gains `prompt` (the cue's text, or null) and `hint` (open or folded), classified `player` in `observe.mjs`.
@@ -73,10 +75,9 @@ Five play critic runs (#1520, #1574, #1587, #1655, #1672) hit the same wall: in 
 
 **Phase A.** The harness and the observation, no visible change: the DSL's fake canvas locks on `requestPointerLock` and fires `pointerlockchange`; `blur` unlocks as a browser does (note 2); existing scripts are corrected where they encoded the gap (note 1); a pure `waitingForClick` condition and the hint's open/fold state are factored out (notes 3 and 4); `prompt` and `hint` are served by `dsl.mjs` and classified `player` in `observe.mjs`, and `playerObservation` returns them. Done when a script pins Tab, Tab ending `locked = true` and Tab, Escape ending `locked = false` with `prompt` non-null, and `client/test/*.test.mjs` passes.
 
-**Phase B.** The cue itself: a new UI module (pattern of `hintui.js` and `deathui.js`) draws the centred "Click to play" panel from `waitingForClick`, mounted in `scene.js` and updated each frame, with the optional dim layer. Done when a pure layout test shows the panel fits and is centred at the `hudsizes` viewport sizes, the cue's visibility follows `waitingForClick` in a script for game start, Escape from the inventory, Escape from walk and blur, and it hides on lock. The look is `[manual check]` (note 7). Open question 1 decides whether belt keys work behind the cue; leave input as it is until it is answered.
+**Phase B.** The cue itself: a new UI module (pattern of `hintui.js` and `deathui.js`) draws the centred "Click to play" panel from `waitingForClick`, mounted in `scene.js` and updated each frame, with no dim layer (panel only). Done when a pure layout test shows the panel fits and is centred at the `hudsizes` viewport sizes, the cue's visibility follows `waitingForClick` in a script for game start, Escape from the inventory, Escape from walk and blur, and it hides on lock. The look is `[manual check]` (note 7). Open question 1 decides whether belt keys work behind the cue; leave input as it is until it is answered. (Decided in #2155.)
 
 ## Open questions
 
 1. **Belt keys while unlocked.** Options: A) all input stays paused behind the cue (current behaviour, no change to `input.js`); B) number keys select belt slots while unlocked, which is a follow-up ticket in `input.js` and needs the cue to say so.
 2. **Relock after Escape from the inventory.** Options: A) leave it as is, the cue tells the player to click; B) also request lock after Escape and rely on the cue when the browser refuses. Browsers usually refuse, so A is the smaller change.
-3. **Dim the view?** Options: A) panel only; B) panel plus a dim layer (about 40% black) so the frozen state reads as paused; the dim could hide the thing a critic wants to look at, so B would need the observation to say it is on.

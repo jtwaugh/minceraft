@@ -78,3 +78,28 @@ test('flakes leave in the wind direction', () => {
     }
   }
 });
+
+test('a fish_bite with a bobber out splashes at the bobber; no bobber or another event adds none', () => {
+  const p = createParticles(), bobber = [4.5, 63, -2.5];
+  p.spawnSplash(['fish_bite player=1 species=salmon'], null);
+  p.spawnSplash(['line_cast player=1 position=1,2,3', 'fish_caught player=1'], bobber);
+  assert.equal(p.count, 0);
+  p.spawnSplash(['fish_bite player=1 species=salmon'], bobber);
+  assert.ok(p.count > 0);
+  for (const s of p.list) {
+    assert.equal(s.sprite, 'splash');
+    assert.ok(Math.hypot(s.pos[0] - bobber[0], s.pos[2] - bobber[2]) < 0.2);
+  }
+});
+
+test('splash particles run frames 0 to 3 and expire after their life', () => {
+  const p = createParticles();
+  p.spawnSplash(['fish_bite'], [0, 63, 0]);
+  const seen = new Set();
+  for (let i = 0; i < 20 && p.count; i++) {
+    seen.add(p.list[0].frame);
+    p.update(1 / 30);
+  }
+  assert.deepEqual([...seen], [0, 1, 2, 3]);
+  assert.equal(p.count, 0);
+});

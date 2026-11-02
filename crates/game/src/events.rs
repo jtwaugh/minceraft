@@ -57,6 +57,16 @@ pub enum GameEvent {
     /// The carried item went onto a station. `target` is the station's block
     /// name.
     ItemPutDown { item: String, target: String },
+    /// The carried item went into a chest. `chest` is its raft-local cell and
+    /// `slot` the slot index it took.
+    ItemStored {
+        item: String,
+        chest: [i32; 3],
+        slot: usize,
+    },
+    /// A gathering start put `items` (one name per item added) into the
+    /// chest at raft-local cell `chest`.
+    ChestRestocked { chest: [i32; 3], items: Vec<String> },
     /// The hoe tilled the block at `position`. `from` and `to` are block
     /// names before and after.
     BlockTilled {
@@ -93,6 +103,11 @@ pub enum GameEvent {
     LineCast { player: String, position: [f64; 3] },
     /// The line came in; `caught` is whether a fish was on it.
     LineReeled { player: String, caught: bool },
+    /// A fish bit: it reached the bobber and the reel window opened.
+    /// `species` is its `data/fish.toml` key.
+    FishBite { player: String, species: String },
+    /// The reel window closed unpressed and the fish swam off.
+    FishEscaped { player: String, species: String },
     /// An action the player tried was refused. `action` is `"swing"`,
     /// `"till"`, `"plant"`, `"pick"`, `"forage"` or `"pickup"`.
     ActionRefused { action: String, reason: Reason },
@@ -104,8 +119,8 @@ pub enum Reason {
     TooFar,
     HandsFull,
     ToolsStowed,
-    WrongTool,
     NothingHere,
+    ChestFull,
 }
 
 impl Reason {
@@ -115,8 +130,8 @@ impl Reason {
             Reason::TooFar => "too_far",
             Reason::HandsFull => "hands_full",
             Reason::ToolsStowed => "tools_stowed",
-            Reason::WrongTool => "wrong_tool",
             Reason::NothingHere => "nothing_here",
+            Reason::ChestFull => "chest_full",
         }
     }
 }
@@ -131,8 +146,8 @@ mod tests {
             (Reason::TooFar, "too_far"),
             (Reason::HandsFull, "hands_full"),
             (Reason::ToolsStowed, "tools_stowed"),
-            (Reason::WrongTool, "wrong_tool"),
             (Reason::NothingHere, "nothing_here"),
+            (Reason::ChestFull, "chest_full"),
         ];
         for (r, n) in all {
             assert_eq!(r.name(), n);

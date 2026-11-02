@@ -744,13 +744,9 @@ fn marsh_orchid_is_swampland_only_on_grass_and_independent_of_region() {
 }
 
 #[test]
-fn shrubland_gets_bush_berry_bush_and_sparse_dry_grass() {
-    let (bush, berry, dry) = (
-        Block::Bush as u8,
-        Block::BerryBush as u8,
-        Block::DryGrass as u8,
-    );
-    let (mut n_bush, mut n_berry, mut n_dry) = (0, 0, 0);
+fn shrubland_gets_bush_and_sparse_dry_grass() {
+    let (bush, dry) = (Block::Bush as u8, Block::DryGrass as u8);
+    let (mut n_bush, mut n_dry) = (0, 0);
     for seed in [12345u64, 9, 42] {
         let (x0, z0, w, d) = (-400, -400, 800, 800);
         let r = gen(seed, x0, z0, w, d, &FLORA);
@@ -764,8 +760,6 @@ fn shrubland_gets_bush_berry_bush_and_sparse_dry_grass() {
                     if b == bush {
                         assert!(shrub, "bush outside Shrubland at {x},{z}");
                         n_bush += 1;
-                    } else if b == berry && shrub {
-                        n_berry += 1;
                     } else if b == dry && shrub {
                         n_dry += 1;
                     }
@@ -773,10 +767,7 @@ fn shrubland_gets_bush_berry_bush_and_sparse_dry_grass() {
             }
         }
     }
-    assert!(
-        n_bush > 0 && n_berry > 0 && n_dry > 0,
-        "{n_bush} {n_berry} {n_dry}"
-    );
+    assert!(n_bush > 0 && n_dry > 0, "{n_bush} {n_dry}");
     assert!(n_dry < n_bush, "dry grass must stay sparse");
 }
 
@@ -1203,15 +1194,19 @@ fn entries_without_a_niche_match_entries_whose_niche_always_holds() {
         (NicheLayer::HeightAboveSea, -1000.0, 1000.0),
         (NicheLayer::SoilDepth, 0.0, 1000.0),
     ];
-    assert!(FLORA.iter().all(|f| f.niche.is_empty()));
-    let wide: Vec<Flora> = FLORA.iter().map(|f| Flora { niche: &WIDE, ..*f }).collect();
+    let plain: Vec<Flora> = FLORA
+        .iter()
+        .filter(|f| f.niche.is_empty())
+        .copied()
+        .collect();
+    assert!(plain.len() < FLORA.len());
+    let wide: Vec<Flora> = plain.iter().map(|f| Flora { niche: &WIDE, ..*f }).collect();
     for seed in [12345u64, 9] {
-        let a = gen(seed, -50, 30, 120, 90, &FLORA);
+        let a = gen(seed, -50, 30, 120, 90, &plain);
         assert!(
             a.blocks == gen(seed, -50, 30, 120, 90, &wide).blocks,
             "seed {seed}"
         );
-        assert!(a.blocks == crate::generate_decorated(seed, -50, 30, 120, 90).blocks);
     }
 }
 
@@ -1606,5 +1601,234 @@ fn wetness_water_search_and_tree_reach_stay_inside_the_decoration_margin() {
         assert!(FLORA_WETNESS_WATER_RADIUS > 0);
         assert!(FLORA_WETNESS_WATER_RADIUS + TREE_REACH <= MARGIN_CELLS * 16);
         assert!(FLORA_WETNESS_WATER_RADIUS <= READ_REACH);
+    }
+}
+
+/// The shipped entry `name` with its chance made certain in Taiga, so only its
+/// niche decides.
+fn berry(name: &str) -> Vec<Flora> {
+    let f = FLORA.iter().find(|f| f.name == name).expect(name);
+    vec![Flora {
+        biomes: &[(Biome::Taiga, 1e9)],
+        ..*f
+    }]
+}
+
+/// Hand-built flat Taiga grass at y 70 over 41 by 41 columns, `soil` blocks
+/// deep (grass included), with `leaves` over every column at x >= 21. Whether
+/// column (20, 20) got a ground-cover plant of `table`.
+fn berry_placed(soil: i32, leaves: Option<Block>, table: &[Flora]) -> bool {
+    let n = 41;
+    let mut blocks = vec![0u8; n * n * HEIGHT];
+    let biome = vec![Biome::Taiga as u8; n * n];
+    let mut world = World::for_test(&mut blocks, n as i32, n as i32).with_biome(&biome);
+    for z in 0..n as i32 {
+        for x in 0..n as i32 {
+            for y in 0..=70 {
+                let b = match y {
+                    70 => Block::Grass,
+                    _ if y > 70 - soil => Block::Dirt,
+                    _ => Block::Stone,
+                };
+                world.set(x, y, z, b as u8);
+            }
+            if let Some(l) = leaves.filter(|_| x >= 21) {
+                world.set(x, 76, z, l as u8);
+            }
+        }
+    }
+    let block = table[0].block as u8;
+    place(&mut world, 12345, (0, 0, n as i32, n as i32), table);
+    world.get(20, 71, 20) == block
+}
+
+#[test]
+fn lingon_grows_on_shallow_soil_beside_spruce_and_not_elsewhere() {
+    let t = berry("lingon");
+    assert!(t[0].snow_stays && t[0].shape == FloraShape::GroundCover);
+    assert!(berry_placed(2, Some(Block::SpruceLeaves), &t));
+    assert!(
+        !berry_placed(2, Some(Block::OakLeaves), &t),
+        "oak, not spruce"
+    );
+    assert!(!berry_placed(9, Some(Block::SpruceLeaves), &t), "deep soil");
+}
+
+#[test]
+fn blabar_grows_in_partial_light_beside_spruce_and_not_elsewhere() {
+    let t = berry("blabar");
+    assert!(berry_placed(4, Some(Block::SpruceLeaves), &t));
+    assert!(!berry_placed(4, None, &t), "open ground is too bright");
+}
+
+#[test]
+fn lingon_survives_the_snow_pass() {
+    let t = [Flora {
+        biomes: &COLD,
+        niche: &[],
+        ..berry("lingon")[0]
+    }];
+    let (_, held) = snow_cells(&t);
+    assert!(held > 50, "{held}");
+}
+
+#[test]
+fn berry_ground_cover_is_independent_of_region() {
+    let seed = 12345;
+    let big = gen(seed, -400, -400, 800, 800, &FLORA);
+    let (lingon, blabar) = (count(&big, Block::Lingon), count(&big, Block::Blabar));
+    assert!(lingon > 0 && blabar > 0, "{lingon} {blabar}");
+    assert_eq!(count(&big, Block::BerryBush), 0);
+    for (ox, oz, w, d) in [
+        (-37, 11, 141, 129),
+        (60, -50, 133, 133),
+        (-300, -300, 200, 200),
+    ] {
+        let small = gen(seed, ox, oz, w, d, &FLORA);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&big, x, y, z), at(&small, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}
+
+/// The shipped entry `name` made certain in `biome`, so only its niche decides.
+fn meadow(name: &str, biome: Biome) -> Vec<Flora> {
+    let f = FLORA.iter().find(|f| f.name == name).expect(name);
+    assert!(
+        f.biomes.iter().any(|&(b, _)| b == biome),
+        "{name} {biome:?}"
+    );
+    vec![Flora {
+        biomes: Box::leak(Box::new([(biome, 1e9)])),
+        ..*f
+    }]
+}
+
+/// One hand-built column of [`meadow_placed`]: ground height, leaves over it,
+/// water instead of grass on top.
+#[derive(Clone, Copy)]
+struct Col {
+    ground: i32,
+    leaves: bool,
+    water: bool,
+}
+
+/// Hand-built grass over `col(x, z)`. Whether column (20, 20) got the plant
+/// of `table` on its ground block.
+fn meadow_cols(biome: Biome, table: &[Flora], col: impl Fn(i32, i32) -> Col) -> bool {
+    let n = 41;
+    let mut blocks = vec![0u8; n * n * HEIGHT];
+    let biomes = vec![biome as u8; n * n];
+    let mut world = World::for_test(&mut blocks, n as i32, n as i32).with_biome(&biomes);
+    for z in 0..n as i32 {
+        for x in 0..n as i32 {
+            let c = col(x, z);
+            for y in 0..=c.ground {
+                let b = match y {
+                    _ if y == c.ground && c.water => Block::Water,
+                    _ if y == c.ground => Block::Grass,
+                    _ if y > c.ground - 3 => Block::Dirt,
+                    _ => Block::Stone,
+                };
+                world.set(x, y, z, b as u8);
+            }
+            if c.leaves {
+                world.set(x, c.ground + 6, z, Block::OakLeaves as u8);
+            }
+        }
+    }
+    let block = table[0].block as u8;
+    place(&mut world, 12345, (0, 0, n as i32, n as i32), table);
+    world.get(20, col(20, 20).ground + 1, 20) == block
+}
+
+/// Flat grass at y 70 with oak leaves over every column at x >= `leaves_from`.
+fn meadow_placed(biome: Biome, leaves_from: Option<i32>, table: &[Flora]) -> bool {
+    meadow_cols(biome, table, |x, _| Col {
+        ground: 70,
+        leaves: leaves_from.is_some_and(|f| x >= f),
+        water: false,
+    })
+}
+
+#[test]
+fn smultron_grows_a_few_columns_from_trees_and_not_in_the_open_or_under_them() {
+    let t = meadow("smultron", Biome::Forest);
+    assert!(meadow_placed(Biome::Forest, Some(22), &t), "2 from trees");
+    assert!(!meadow_placed(Biome::Forest, None, &t), "no trees near");
+    assert!(!meadow_placed(Biome::Forest, Some(20), &t), "under leaves");
+}
+
+#[test]
+fn johannesort_grows_where_its_niche_holds_and_not_where_a_layer_fails() {
+    let t = meadow("johannesort", Biome::Plains);
+    let flat = |_: i32, _: i32| Col {
+        ground: 70,
+        leaves: false,
+        water: false,
+    };
+    assert!(meadow_cols(Biome::Plains, &t, flat), "open, dry, sunny");
+    // Light: column (20, 20) is open but the columns to its east are not.
+    let shaded = |x, z| Col {
+        leaves: x >= 21,
+        ..flat(x, z)
+    };
+    assert!(!meadow_cols(Biome::Plains, &t, shaded), "light");
+    // Wetness: open water beside the column.
+    let wet = |x, z| Col {
+        water: (21..=22).contains(&x) && z == 20,
+        ..flat(x, z)
+    };
+    assert!(!meadow_cols(Biome::Plains, &t, wet), "wetness");
+    // Sun-facing: a slope falling towards the sun (+z) holds, one falling
+    // away from it fails.
+    let slope = |sign: i32| {
+        move |x, z| Col {
+            ground: 70 + sign * (20 - z),
+            ..flat(x, z)
+        }
+    };
+    assert!(meadow_cols(Biome::Plains, &t, slope(1)), "faces the sun");
+    assert!(!meadow_cols(Biome::Plains, &t, slope(-1)), "faces away");
+}
+
+#[test]
+fn new_meadow_flowers_are_cross_plants_in_their_biomes() {
+    for (name, want) in [
+        (
+            "smultron",
+            ["Forest", "Plains", "Seasonal Forest"].as_slice(),
+        ),
+        ("johannesort", ["Plains", "Shrubland"].as_slice()),
+    ] {
+        let f = FLORA.iter().find(|f| f.name == name).unwrap();
+        assert_eq!(f.shape, FloraShape::Cross);
+        assert_eq!(f.biomes.len(), want.len(), "{name}");
+        assert!(!f.niche.is_empty());
+    }
+}
+
+#[test]
+fn meadow_flowers_are_independent_of_region() {
+    let seed = 12345;
+    let big = gen(seed, -400, -400, 800, 800, &FLORA);
+    let (s, j) = (
+        count(&big, Block::Smultron),
+        count(&big, Block::Johannesort),
+    );
+    assert!(s > 0 && j > 0, "{s} {j}");
+    for (ox, oz, w, d) in [(-37, 11, 141, 129), (60, -50, 133, 133)] {
+        let small = gen(seed, ox, oz, w, d, &FLORA);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&big, x, y, z), at(&small, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
     }
 }

@@ -6,6 +6,7 @@
 pub struct HabitatRule {
     pub id: String,
     pub frozen: Option<bool>,
+    pub broken_ice: Option<bool>,
     pub temp_min: Option<f64>,
     pub temp_max: Option<f64>,
     pub depth_min: Option<u32>,
@@ -18,6 +19,7 @@ pub struct HabitatRule {
 impl HabitatRule {
     pub fn matches_everything(&self) -> bool {
         self.frozen.is_none()
+            && self.broken_ice.is_none()
             && self.temp_min.is_none()
             && self.temp_max.is_none()
             && self.depth_min.is_none()

@@ -48,6 +48,7 @@ fn level() -> Level {
         anchorage: [0, 20],
         island_center: [20, 20],
         spawn_water_radius: 4.0,
+        supplies: Vec::new(),
     }
 }
 
@@ -98,6 +99,10 @@ fn new_flora_decorates_its_tile() {
         Block::DryGrassTallLower,
         Block::DryGrassTallUpper,
         Block::LeafLitter,
+        Block::Lingon,
+        Block::Blabar,
+        Block::Smultron,
+        Block::Johannesort,
     ] {
         let mut r = island(0);
         put(&mut r, 20, TOP, 20, b);

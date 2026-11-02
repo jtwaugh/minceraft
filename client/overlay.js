@@ -96,10 +96,10 @@ export function readAnimals(walk) {
 }
 
 export function readFish(walk) {
-  const rows = Array.from(walk.fish()), species = walk.fish_species();
+  const rows = Array.from(walk.fish()), species = walk.fish_species(), lured = Array.from(walk.fish_lured());
   return species.map((name, i) => {
     const [id, x, y, z, heading, w, h] = rows.slice(i * 7, i * 7 + 7);
-    return { id, species: name, pos: [x, y, z], heading, size: [w, h] };
+    return { id, species: name, pos: [x, y, z], heading, size: [w, h], lured: lured[i] === 1 };
   });
 }
 
@@ -130,8 +130,7 @@ export function spawnTestAnimals(walk, kinds = ['cow', 'pig', 'chicken']) {
 
 // Same look convention as the sim: yaw 0 looks along -z and grows turning
 // right, pitch grows looking up.
-export function faceAnimal(walk, { yaw, pitch }, sensitivity = 0.0025) {
-  const a = readAnimals(walk)[0];
+export function faceAnimal(walk, { yaw, pitch }, sensitivity = 0.0025, a = readAnimals(walk)[0]) {
   if (!a) throw new Error('no animal to face');
   const eye = walk.eye(1);
   const dx = a.pos[0] - eye[0], dy = a.pos[1] + a.size[1] / 2 - eye[1], dz = a.pos[2] - eye[2];

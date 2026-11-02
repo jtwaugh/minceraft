@@ -48,9 +48,9 @@ pub fn validate(entries: &[RawFlora], blocks: &[String], biomes: &[String]) -> R
         } else if e.block.len() != want {
             return Err(format!("flora {n}: {} needs {want} block(s)", e.shape));
         }
-        if e.snow_stays && !matches!(e.shape.as_str(), "cross" | "tall_cross") {
+        if e.snow_stays && !matches!(e.shape.as_str(), "cross" | "tall_cross" | "ground_cover") {
             return Err(format!(
-                "flora {n}: snow_stays needs a cross or tall_cross shape"
+                "flora {n}: snow_stays needs a cross, tall_cross or ground_cover shape"
             ));
         }
         if let Some(r) = &e.requires {

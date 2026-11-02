@@ -33,6 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LABELS = {"factory", "local", "hold"}  # the only labels the page may add
 TOKEN = secrets.token_urlsafe(24)
 PENDING_MAX = 900  # seconds a local write is shown before GitHub must confirm it
+APPROVED_MAX = 86400  # seconds an approved ticket is listed if the tick never starts it
 
 
 class State:
@@ -42,6 +43,7 @@ class State:
         self.busy = False
         self.prev_runner = None  # FACTORY_RUNNER before the page cleared it, for "switch back"
         self.pending = []  # writes GitHub hasn't shown back yet: {"action", "number", "label", "at"}
+        self.approved = {}  # tickets approved from the page, until the tick starts them: number -> record
         self.lock = threading.Lock()
         self.wake = threading.Event()
 
@@ -79,6 +81,17 @@ class State:
         kind = body.get("action")
         if kind == "comment" and re.match(r"\s*/decide\s+\S", body.get("body") or ""):
             kind = "decide"  # the question leaves the queue for "decided"
+        if kind == "label" and body.get("label") == "factory":
+            t = next((i for i in (self.data or {}).get("needs_you") or []
+                      if i["number"] == body["number"] and i["type"] == "unapproved"), None)
+            if t:
+                with self.lock:
+                    self.approved[t["number"]] = {"number": t["number"], "title": t["title"],
+                                                  "labels": sorted(set(t.get("labels", [])) | {"factory"}),
+                                                  "at": time.time()}
+        if kind in ("close", "merge"):
+            with self.lock:
+                self.approved.pop(body.get("number"), None)
         if kind in ("close", "label", "merge", "approve", "decide"):
             action = "close" if kind == "merge" else kind  # a merged PR leaves the list
             with self.lock:
@@ -107,13 +120,22 @@ class State:
             now = time.time()
             self.pending = [w for w in self.pending
                             if not confirmed(w) and now - w["at"] < PENDING_MAX]
+            # An approved ticket stays listed until it starts, is closed, loses its label, or goes stale.
+            unapproved = {i["number"] for i in ny if i["type"] == "unapproved"}
+            gone = {t["number"] for t in st} | ({a["number"] for a in self.approved.values() if a["at"] < started}
+                                                & unapproved)
+            self.approved = {n: a for n, a in self.approved.items()
+                             if n not in gone and now - a["at"] < APPROVED_MAX}
 
     def overlaid(self):
         """The last read with local writes applied, so a closed item disappears at once."""
         with self.lock:
             pending = list(self.pending)
-        if not self.data or not pending:
+            tickets = sorted(self.approved.values(), key=lambda a: a["number"])
+        if not self.data:
             return self.data
+        if not pending:
+            return {**self.data, "approved": tickets}
         closed = {w["number"] for w in pending if w["action"] == "close"}
         decided = {w["number"]: w for w in pending if w["action"] == "decide"}
         approved = {w["number"] for w in pending if w["action"] == "approve"}
@@ -138,6 +160,7 @@ class State:
                 i = {**i, "approved": True}
             ny.append(i)
         d["needs_you"], d["decided"] = ny, dec
+        d["approved"] = [a for a in tickets if a["number"] not in closed]
         if d.get("started") is not None:
             d["started"] = [t for t in d["started"] if t["number"] not in closed]
         return d
@@ -198,8 +221,22 @@ CODEOWNERS_READY = "Ready, but it touches files only you can approve"
 
 
 def fix_pr_prompt(state, n):
-    """What a local Claude is asked to do with a ready PR that only the maintainer can approve."""
-    i = waiting_pr(state, n)
+    """What a local Claude is asked to do with a waiting PR: a broken one, or a ready one only you can approve."""
+    ny = (state.overlaid() or {}).get("needs_you") or []
+    i = next((x for x in ny if x.get("kind") == "pr" and x.get("number") == n), None)
+    if i and i.get("problems"):
+        return (f"PR #{n} in {state.repo} ({i.get('title', '')}) is broken: {'; '.join(i['problems'])}. "
+                "Fix it locally.\n"
+                f"First check nothing else is fixing it: `git fetch`, look for new commits on the branch, runs in "
+                f"progress, and any `@claude fix` comment or factory-fix marker newer than the failure. If a "
+                f"fixer is running, stop and tell me. Then check out the PR (`gh pr checkout {n}`). For a "
+                "conflict, merge origin/master into the branch (don't rebase or force-push) and resolve it. For "
+                "failed CI, read the failing logs (`gh pr checks`, `gh run view <id> --log-failed`), reproduce "
+                "the failure with the commands CLAUDE.md lists, and fix the cause, not the test. Stay within the "
+                "PR's scope. Never write \"@claude\" in a GitHub comment. Ask me before pushing, and don't merge, "
+                f"approve or close it. {NEVER_LIVE_TICK} End with what you changed and whether CI should pass now.")
+    if not i or i.get("type") != "pr":
+        raise ValueError(f"#{n} isn't a broken PR or a PR waiting on your review")
     if not (i.get("reason") or "").startswith(CODEOWNERS_READY):
         raise ValueError(f"#{n} isn't a ready PR touching CODEOWNERS paths")
     return (f"PR #{n} in {state.repo} ({i.get('title', '')}) is ready by the factory's checks, but it "

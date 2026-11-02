@@ -28,6 +28,8 @@ export const VERTEX_BYTES = 16;
 export const POS_SCALE = 1 / 16, UV_SCALE = 1 / 16, SHADE_SCALE = 1 / 128;
 // Shade multiplier per AO level (vertex byte 13).
 export const AO_SHADE = [1.0, 0.82, 0.68, 0.55];
+// Shade multiplier per face direction (top, bottom, +x, -x, +z, -z); FACES below uses it.
+export const FACE_SHADE = [1.0, 0.5, 0.8, 0.65, 0.9, 0.6];
 
 // Block ids (data/blocks.toml); names and colours come from legend().
 export const B = {
@@ -47,7 +49,7 @@ export const B = {
   test_waterlogged_plant: 68,
   thatch: 69, barrel: 70, plank_step: 71, drying_rack: 72, net: 73,
   counter: 74, plate_rack: 75, floe_ice: 76,
-  kelp_0: 77, kelp_1: 78, oyster: 79, scallop: 80, dock_planks: 81, dock_post: 82, chest: 83,
+  kelp_0: 77, kelp_1: 78, oyster: 79, scallop: 80, dock_planks: 81, dock_post: 82, chest: 83, lingon: 84, blabar: 85, smultron: 86, johannesort: 87,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -66,11 +68,11 @@ const SHAPES = {
   ground_cover: { lift: 1 / 16, tint: 'leaf' },
   pad: { lift: 1 / 16, tint: 'leaf' },
 };
-const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover, [B.lily_pad]: SHAPES.pad };
+const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover, [B.lingon]: SHAPES.ground_cover, [B.blabar]: SHAPES.ground_cover, [B.lily_pad]: SHAPES.pad };
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
   B.daisy, B.bluebell, B.marsh_orchid, B.tall_grass_double_lower, B.tall_grass_double_upper, B.dry_grass, B.dry_grass_tall_lower, B.dry_grass_tall_upper,
-  B.fern_double_lower, B.fern_double_upper, B.cattail_lower, B.cattail_upper, B.large_fern, B.broadleaf, B.cactus_flower, B.frost_grass, B.tulip_red, B.tulip_salmon, B.tulip_yellow, B.dune_grass_lower, B.dune_grass_upper,
+  B.fern_double_lower, B.fern_double_upper, B.cattail_lower, B.cattail_upper, B.large_fern, B.broadleaf, B.cactus_flower, B.frost_grass, B.tulip_red, B.tulip_salmon, B.tulip_yellow, B.dune_grass_lower, B.dune_grass_upper, B.smultron, B.johannesort,
   B.wheat_0, B.wheat_1, B.wheat_2, B.wheat_3, B.wheat_4, B.wheat_5, B.wheat_6, B.wheat_7]);
 
 // Upper blocks of two-block plants.
@@ -275,7 +277,7 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
     case B.water: return water ?? WHITE;
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper:
     case B.dune_grass_lower: case B.dune_grass_upper: return dry ?? WHITE;
-    case B.oak_leaves: case B.leaf_litter: case B.lily_pad: case B.berry_bush: case B.bush: case B.jungle_bush: return leaf;
+    case B.oak_leaves: case B.leaf_litter: case B.lingon: case B.blabar: case B.lily_pad: case B.berry_bush: case B.bush: case B.jungle_bush: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
@@ -284,12 +286,12 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
 
 // Faces: [normal, 4 corner offsets, shade]
 const FACES = [
-  { d: [0, 1, 0], c: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], s: 1.0 },   // top
-  { d: [0, -1, 0], c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s: 0.5 },  // bottom
-  { d: [1, 0, 0], c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], s: 0.8 },   // +x
-  { d: [-1, 0, 0], c: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s: 0.65 }, // -x
-  { d: [0, 0, 1], c: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s: 0.9 },   // +z
-  { d: [0, 0, -1], c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], s: 0.6 },  // -z
+  { d: [0, 1, 0], c: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], s: FACE_SHADE[0] },   // top
+  { d: [0, -1, 0], c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s: FACE_SHADE[1] },  // bottom
+  { d: [1, 0, 0], c: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], s: FACE_SHADE[2] },   // +x
+  { d: [-1, 0, 0], c: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s: FACE_SHADE[3] }, // -x
+  { d: [0, 0, 1], c: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s: FACE_SHADE[4] },   // +z
+  { d: [0, 0, -1], c: [[0,0,0],[0,1,0],[1,1,0],[1,0,0]], s: FACE_SHADE[5] },  // -z
 ];
 
 // Texture coords for a face corner: top/bottom map x,z; sides map the

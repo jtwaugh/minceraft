@@ -5,12 +5,16 @@
 //
 //   const p = createParticles();
 //   p.spawnMisses(events)  burst at the position of each `forage_missed position=x,y,z` event
+//   p.spawnSplash(events, bobberPos)
+//                          burst at `bobberPos` ([x, y, z], or null with no bobber out) for each `fish_bite`
+//                          event (fish-and-fishing.md 4.3); the event carries no position. Splash
+//                          particles have sprite 'splash' and a frame 0..3 (splash_0..splash_3) running with age
 //   p.spawnSnow(cells, eye, wind, dt)
 //                          flakes off the snow layers at world `cells` ([x, y, z] of each, from
 //                          snowOnFoliage) near `eye`: more as `wind.strength` (0..1) rises, in bursts
 //                          at the peaks of the sway wave at `wind.phase`, drifting along `wind.dir`
 //   p.update(dt)           age by dt seconds, drop the expired
-//   p.list                 live particles: { pos: [x, y, z], vel, age, life, size, snow }
+//   p.list                 live particles: { pos: [x, y, z], vel, age, life, size, snow, sprite, frame }
 //   p.count                how many are live
 
 import { B, H, swaysUnder } from '../viewer/mesh.js';
@@ -21,6 +25,13 @@ const LIFE = 0.6; // seconds
 const RISE = 0.8; // blocks per second
 const SPREAD = 0.35; // blocks, around the cell's centre
 const SIZE = 0.06;
+
+const SPLASH_BURST = 6;
+const SPLASH_LIFE = 0.5; // seconds
+const SPLASH_FRAMES = 4;
+const SPLASH_RISE = 0.6; // blocks per second
+const SPLASH_SPREAD = 0.15; // blocks, around the bobber
+const SPLASH_SIZE = 0.08;
 
 const SNOW_RADIUS = 24; // blocks from the eye; farther snow drops nothing
 const SNOW_RATE = 0.5; // flakes per second from one cell at the peak of a full-strength gust
@@ -70,6 +81,17 @@ export function createParticles() {
         }
       }
     },
+    spawnSplash(events, bobberPos) {
+      if (!bobberPos) return;
+      for (const e of events) {
+        if (e !== 'fish_bite' && !e.startsWith('fish_bite ')) continue;
+        for (let i = 0; i < SPLASH_BURST; i++) {
+          const a = (i / SPLASH_BURST) * 2 * Math.PI;
+          const pos = [bobberPos[0] + SPLASH_SPREAD * Math.cos(a), bobberPos[1], bobberPos[2] + SPLASH_SPREAD * Math.sin(a)];
+          list.push({ pos, vel: [0, SPLASH_RISE, 0], age: 0, life: SPLASH_LIFE, size: SPLASH_SIZE, sprite: 'splash', frame: 0 });
+        }
+      }
+    },
     spawnSnow(cells, eye, wind, dt) {
       const [ux, uz] = wind.dir;
       if (wind.strength <= 0 || (ux === 0 && uz === 0)) return;
@@ -94,7 +116,10 @@ export function createParticles() {
         if (p.age >= p.life) {
           if (p.snow) flakes--;
           list.splice(i, 1);
-        } else for (let k = 0; k < 3; k++) p.pos[k] += p.vel[k] * dt;
+        } else {
+          for (let k = 0; k < 3; k++) p.pos[k] += p.vel[k] * dt;
+          if (p.sprite === 'splash') p.frame = Math.min(SPLASH_FRAMES - 1, Math.floor((p.age / p.life) * SPLASH_FRAMES));
+        }
       }
     },
   };

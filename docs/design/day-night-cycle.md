@@ -6,7 +6,7 @@ source: "#1748"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
 ---
 
 ## Current state
@@ -20,7 +20,7 @@ Checked against `master` (731a1ff).
 - **Console:** commands are defined in Rust in `crates/game/src/commands.rs` (`tp`, `give`, `spawn`, `pause`, `resume`, `step`, ...), not in a data file. `data/commands.toml` holds only cheat-code aliases (`[[alias]]`).
 - **Reduced motion:** `client/scene.js:524` reads `prefers-reduced-motion`; it zeroes sway and water frames only. Nothing day-related is affected yet.
 - **Phase A done (plan #1888):** `data/day.toml`, `DayClock` (`crates/game/src/day.rs`), `time_of_day`, `sun_dir` and `daylight` (PRs #1851, #1869, #1880); the Walker holds the clock with an offset and freeze flag (#1898); the `time` console command (#1899); wasm exports in `crates/game-web` (#1900); time in the debug readout (#1929).
-- **Not built (Phase B):** the client still uses the constant `SUN_DIR`; sky, fog and scene brightness do not follow `daylight`.
+- **Phase B done (plans #1951, #2126):** wasm `day_ticks`, `sun_dir_at`, `daylight_at` (#1980); `readDay` in `client/daylook.js` gives the interpolated sun and daylight to the controller (#2003); the sun follows `sun_dir` (#2044); night and dusk sky colours in `data/day.toml` (#2002); `blendSky` in `client/skyblend.js` (#2088); the daylight uniform on terrain and plants (#2120) and on entities and models (#2123). The raft scene uses the same render path, and `client/test/scripts/day.input` covers it; the root menu is a DOM list with no backdrop, so no code was needed for #1959. The look itself stays a `[manual check]`.
 - **Waiting on this:** `villages-and-villagers.md` (note 10, deferred home-at-night), `fish-and-fishing.md` (spawning ignores time of day), `world-layout.md` Phase C (fish query omits time of day), `wind.md` (no daily swing), SPEC "Crop growth" (decided in #392, waits on a separate sky-light value).
 
 ## Reconciliation notes

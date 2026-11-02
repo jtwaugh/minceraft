@@ -180,6 +180,10 @@ mod tests {
             Block::DryGrassTallLower,
             Block::DryGrassTallUpper,
             Block::LeafLitter,
+            Block::Lingon,
+            Block::Blabar,
+            Block::Smultron,
+            Block::Johannesort,
         ];
         for (i, b) in plants.into_iter().enumerate() {
             w.set(i as i32 + 1, 1, 0, b);

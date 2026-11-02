@@ -10,6 +10,9 @@
 //   ?blend=R     biome colour blend radius, 0 to 7 (default: the legend's)
 //   ?plants=D    plant draw distance in blocks (default 48)
 //   ?debug=1     debug mode on (also on whenever ?scene= is set); see debug.js
+//   ?pixel=1     fixed render for exact checks: fog, biome tints and daylight off, fixed sky and sun,
+//                canvas at a fixed size with preserveDrawingBuffer so pixels can be read (pixelmode.js);
+//                add &pose=x,y,z,yaw,pitch (eye in blocks, angles in radians) and &view=WxH
 //   ?log=N      console.log the frame-time summary every N frames, for headless runs
 //
 // window.frameStats() returns { frames, p50, p99, max, hitches, records } at any time:
@@ -27,9 +30,10 @@ import { meshBlocksWasm } from '../viewer/meshwasm.js';
 import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
+import { bobberBoxes, lineBoxes, bobberDraw } from './bobbermodel.js';
 import { fishBoxes, fishDraw, createTailTracker } from './fishmodels.js';
 import { raftBoxes, raftMatrix } from './raftmodel.js';
-import { itemBoxes, itemDraws } from './itemmodel.js';
+import { itemBoxes, itemDraws, readStations, stationDraws } from './itemmodel.js';
 import { heldBoxes, heldDraw } from './helditem.js';
 import { SCENE_TEXTURES } from './scenetextures.js';
 import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
@@ -46,7 +50,7 @@ import { mountHint, hintScale } from './hintui.js';
 import { mountCue } from './cueui.js';
 import { waitingForClick } from './waitingcue.js';
 import { mountCornerButton, CORNER_MARGIN } from './cornerbutton.js';
-import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readFish, readItems } from './overlay.js';
+import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, readAnimals, readFish, readItems, readBobber, readRodTip } from './overlay.js';
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { createSpans } from './perfspans.js';
@@ -59,6 +63,7 @@ import { SNAP_GLSL, SNAP_SAMPLE_GLSL } from './texsnap.js';
 import { SKY_GLSL } from '../viewer/sky.js';
 import { WATER_GLSL, WATER_DEPTH_GLSL } from '../viewer/water.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
+import { parsePixelMode, PIXEL_UNIFORMS } from './pixelmode.js';
 import { debugEnabled } from './debug.js';
 import { parseBlend } from './blend.js';
 import { sceneById } from './scenes.js';
@@ -78,12 +83,13 @@ const raftScene = sceneById(qs.get('scene'))?.id === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
 const blendRadius = parseBlend(qs.get('blend')); // undefined: the legend default
 const logEvery = +(qs.get('log') ?? 0);
+const pixel = parsePixelMode(location.search); // null unless ?pixel=1
 const debug = debugEnabled(location.search); // ?debug=1 or any ?scene=; console keys are gated on it
 window.debugMode = debug;
 
 const canvas = document.getElementById('gl');
 const overlay = document.getElementById('overlay');
-const gl = canvas.getContext('webgl2', { antialias: true });
+const gl = canvas.getContext('webgl2', pixel ? { antialias: true, preserveDrawingBuffer: true } : { antialias: true });
 if (!gl) throw new Error('WebGL2 is not available');
 
 // ---------------------------------------------------------------- shaders
@@ -148,7 +154,7 @@ function program(cut) {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir; in float vdepth;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir; uniform float daylight;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir; uniform float daylight; uniform float biomeTint;
     uniform float waterFresnel; // 1 while drawing water from above the surface
     out vec4 o;
     ${FOG_GLSL}
@@ -165,7 +171,7 @@ function program(cut) {
       float g = texture(tintTex, vuv).r;
       // depth shading is for water seen from above; under water the look is unchanged
       float wd = vdepth * waterFresnel;
-      vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint * waterColorFactor(wd);
+      vec3 c = (t.rgb + biomeTint * g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint * waterColorFactor(wd);
       vec3 vd = normalize(vdir);
       // water reflects the sky: blend toward it at low view angles (as in the viewer)
       c = mix(c, skyColor(fogColor, vec3(vd.x, -vd.y, vd.z), sunDir), waterFresnel * fresnel(vd));
@@ -284,6 +290,16 @@ function drawFish(mvp, fish, timeSeconds, daylight) {
   }
 }
 
+// The bobber cube and its line, drawn with the fish (nothing while no line is out).
+let bobberModels = null;
+function drawBobber(mvp, bobber, tip, daylight) {
+  const d = bobberDraw(bobber, tip);
+  if (!d) return;
+  bobberModels ??= { bobber: models.addModel(bobberBoxes()), line: models.addModel(lineBoxes()) };
+  models.drawModel(mvp, d.bobber, bobberModels.bobber, undefined, daylight);
+  if (d.line) models.drawModel(mvp, d.line, bobberModels.line, d.lineTint, daylight);
+}
+
 // Loose items as camera-facing icon slabs, one model per item name.
 const itemModels = {};
 function drawItems(mvp, items, timeSeconds, camera, daylight) {
@@ -391,6 +407,7 @@ if (!scene) { // stand on the highest block of the spawn column
   while (top > 0 && !walk.block_at(CHUNK / 2, top, CHUNK / 2)) top--;
   if (top > 0) walk.teleport(CHUNK / 2, top + 1.5, CHUNK / 2); // 0: region not loaded yet, keep the start
 }
+if (pixel && !scene) walk.teleport(pixel.pose[0], pixel.pose[1] - 1.62, pixel.pose[2]); // stream around the pose
 const surfaceY = walk.feet()[1];
 const loadRadius = Walk.load_radius();
 if (scene) { spawnTestItems(walk); spawnTestAnimals(walk); }
@@ -553,7 +570,8 @@ function drawParts(prog, parts) {
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const windState = createWindState(new Wind(seed), Wind, SWAY_SPEED);
+const windField = new Wind(seed);
+const windState = createWindState(windField, Wind, SWAY_SPEED);
 let lastWind = null; // windState.frame of the previous render
 let simTicks = 0; // sim ticks this session, the wind field's clock
 
@@ -562,10 +580,11 @@ function render(now) {
   remeshFarm();
 
   const snow = reducedMotion.matches || !lastWind ? null : { cells: snowCells, wind: lastWind }; // last frame's wind: this frame's needs the eye
-  const { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = spans.span('tick', () => controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow));
+  let { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = spans.span('tick', () => controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow));
+  if (pixel) [eye, yaw, pitch] = [pixel.pose.slice(0, 3), pixel.pose[3], pixel.pose[4]];
   work.ticks = ticks;
   simTicks += ticks;
-  const wind = windState.frame(eye[0], eye[2], simTicks, alpha, (now - (lastFrame ?? now)) / 1000, reducedMotion.matches);
+  const wind = windState.frame(eye[0], eye[2], simTicks, alpha, (now - (lastFrame ?? now)) / 1000, reducedMotion.matches, walk.wind_pin());
   if (reducedMotion.matches) wind.dir = [0, 0];
   lastWind = wind;
   if (regions) {
@@ -579,20 +598,26 @@ function render(now) {
     }
   }
 
+  if (pixel) { // quiet frames in a row: nothing queued or left to mesh (pixelpass.mjs waits on this)
+    const idle = regions && regions.loaded > 0 && !regions.pending && !regions.mesh.length && !regions.remesh.length;
+    window.pixelQuietFrames = idle ? (window.pixelQuietFrames ?? 0) + 1 : 0;
+  }
+
   const dpr = window.devicePixelRatio || 1;
-  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  const w = pixel ? pixel.width : Math.round(canvas.clientWidth * dpr), h = pixel ? pixel.height : Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   gl.viewport(0, 0, w, h);
   const fogFar = (loadRadius + 0.5) * REGION_SIZE * 1.1;
   const dtSky = lastFrame === null ? 0 : (now - lastFrame) / 1000;
   if (now - skySampleAt > 250) { skySampleAt = now; skyTarget = sampleSkyAt(eye); if (!skyReady) skyColor = skyTarget; skyReady = true; }
   skyColor = easeSky(skyColor, skyTarget, dtSky);
-  const day = controller.state.day;
+  const day = pixel ? null : controller.state.day;
   const base = underwater || !day ? skyColor : blendSky(skyColor, day.daylight, walk.daylight_at(0), Array.from(walk.night_sky()), Array.from(walk.dusk_sky()));
-  const view = look({ underwater, skyColor: base, fogFar, water: ctx.COLORS[B.water] });
+  let view = look({ underwater: underwater && !pixel, skyColor: base, fogFar, water: ctx.COLORS[B.water] });
+  if (pixel) view = { ...view, ...PIXEL_UNIFORMS };
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h, controller.state.day?.sunDir);
+  const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h, pixel ? PIXEL_UNIFORMS.sunDir : controller.state.day?.sunDir);
   if (sky) {
     gl.useProgram(skyProg);
     gl.uniform3fv(skyProg.u('camRight'), sky.right);
@@ -627,6 +652,7 @@ function render(now) {
     gl.uniform3fv(prog.u('eye'), eye);
     gl.uniform3fv(prog.u('tint'), view.tint);
     gl.uniform1f(prog.u('daylight'), daylightFactor(day));
+    gl.uniform1f(prog.u('biomeTint'), pixel ? PIXEL_UNIFORMS.biomeTint : 1);
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
@@ -639,9 +665,14 @@ function render(now) {
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
-    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel, undefined, daylightFactor(day));
+    const raft = raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min);
+    models.drawModel(mvp, raft, raftModel, undefined, daylightFactor(day));
+    for (const { key, model } of stationDraws(readStations(walk), raft, scene.min)) {
+      models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)), undefined, daylightFactor(day));
+    }
   }
   drawFish(mvp, readFish(walk), now / 1000, daylightFactor(day));
+  drawBobber(mvp, readBobber(walk), readRodTip(walk, flying ? 1 : alpha), daylightFactor(day));
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   // Water faces point out of the water, so from below the surface they are
@@ -680,7 +711,7 @@ function render(now) {
       `${flying ? 'fly' : 'walk'} (F to switch)${underwater ? ', under water' : ''}
 cheated: ${walk.cheated() ? 'yes' : 'no'}
 ${formatTime(walk.time_of_day(), walk.day_frozen())}
-${formatWind(wind.vec[0], wind.vec[1], wind.strength)}
+${formatWind(wind.vec[0], wind.vec[1], wind.strength, windField.roughness(eye[0], eye[2]), windField.ground_multiplier(eye[0], eye[2]))}
 pos ${eye.map((v) => v.toFixed(1)).join(' ')}${flying ? "" : `
 ${formatBelt(controller.state.belt)}
 ${formatAim(aim)}`}`;

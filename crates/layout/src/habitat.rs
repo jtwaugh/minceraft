@@ -11,6 +11,7 @@ pub use crate::habitat_rule::HabitatRule;
 pub(crate) struct StaticRule {
     pub id: &'static str,
     pub frozen: Option<bool>,
+    pub broken_ice: Option<bool>,
     pub temp_min: Option<f64>,
     pub temp_max: Option<f64>,
     pub depth_min: Option<u32>,
@@ -35,11 +36,13 @@ pub struct HabitatInputs {
     pub bottom: u8,
     pub shore_distance: u32,
     pub frozen: bool,
+    pub broken_ice: bool,
 }
 
 impl HabitatRule {
     pub fn matches(&self, i: &HabitatInputs) -> bool {
         self.frozen.is_none_or(|f| f == i.frozen)
+            && self.broken_ice.is_none_or(|b| b == i.broken_ice)
             && self.temp_min.is_none_or(|m| i.temperature >= m)
             && self.temp_max.is_none_or(|m| i.temperature <= m)
             && self.depth_min.is_none_or(|m| i.depth >= m)
@@ -76,6 +79,7 @@ impl Habitats {
             .map(|r| HabitatRule {
                 id: r.id.to_string(),
                 frozen: r.frozen,
+                broken_ice: r.broken_ice,
                 temp_min: r.temp_min,
                 temp_max: r.temp_max,
                 depth_min: r.depth_min,

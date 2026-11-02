@@ -194,6 +194,26 @@ impl Scene {
         self.0.helm.to_vec()
     }
 
+    /// World x, y and z of the raft's first counter at the rest pose, or
+    /// nothing when it has none.
+    #[wasm_bindgen(getter)]
+    pub fn counter(&self) -> Vec<i32> {
+        let scene = &self.0;
+        let id = Block::Counter as u8;
+        scene
+            .cells
+            .iter()
+            .find(|c| {
+                let i = scene.raft.index(
+                    (c[0] - scene.raft.x0) as u32,
+                    c[1] as u32,
+                    (c[2] - scene.raft.z0) as u32,
+                );
+                scene.raft.blocks[i] == id
+            })
+            .map_or_else(Vec::new, |c| c.to_vec())
+    }
+
     /// Sea floor and water, in `generate_region_decorated` layout.
     pub fn sea_blocks(&self) -> Vec<u8> {
         self.0.sea.blocks.clone()
@@ -257,6 +277,12 @@ fn describe_event(e: &GameEvent) -> String {
         } => {
             format!("fish_caught player={player} species={species} item={item} method={method}")
         }
+        GameEvent::FishBite { player, species } => {
+            format!("fish_bite player={player} species={species}")
+        }
+        GameEvent::FishEscaped { player, species } => {
+            format!("fish_escaped player={player} species={species}")
+        }
         GameEvent::ItemDropped {
             item,
             position,
@@ -272,6 +298,16 @@ fn describe_event(e: &GameEvent) -> String {
         }
         GameEvent::ItemPutDown { item, target } => {
             format!("item_put_down item={item} target={target}")
+        }
+        GameEvent::ItemStored { item, chest, slot } => {
+            format!("item_stored item={item} chest={} slot={slot}", pos(chest))
+        }
+        GameEvent::ChestRestocked { chest, items } => {
+            format!(
+                "chest_restocked chest={} items={}",
+                pos(chest),
+                items.join(",")
+            )
         }
         GameEvent::BlockTilled { position, from, to } => {
             format!(
@@ -718,10 +754,20 @@ impl Walk {
         self.0.fish().iter().map(|f| f.species.clone()).collect()
     }
 
+    /// One number per fish in [`Walk::fish`], in the same order: 1 if the
+    /// fish is swimming to the bobber (it has a lure point), else 0.
+    pub fn fish_lured(&self) -> Vec<f64> {
+        self.0
+            .fish()
+            .iter()
+            .map(|f| f64::from(f.lure.is_some()))
+            .collect()
+    }
+
     /// The fishing bobber: empty with no line out, else five numbers,
     /// `state, dipping, x, y, z`. `state` is 0 flying, 1 floating, 2
-    /// resting; `dipping` is 1 while a bite is on the line (always 0 until
-    /// bites exist); `(x, y, z)` is the centre of the bobber.
+    /// resting; `dipping` is 1 while a bite is on the line (a fish has
+    /// bitten); `(x, y, z)` is the centre of the bobber.
     pub fn bobber(&self) -> Vec<f64> {
         use game::bobber::BobberState;
         self.0.bobber().map_or_else(Vec::new, |b| {
@@ -731,7 +777,7 @@ impl Walk {
                 BobberState::Resting => 2.0,
             };
             let [x, y, z] = b.pos();
-            vec![state, 0.0, x, y, z]
+            vec![state, f64::from(u8::from(b.dipping())), x, y, z]
         })
     }
 
@@ -772,6 +818,41 @@ impl Walk {
     /// The item on each station in [`Walk::station_cells`], in the same order.
     pub fn station_item_names(&self) -> Vec<String> {
         self.0.station_items().into_iter().map(|(_, i)| i).collect()
+    }
+
+    /// The occupied chest slots, three numbers each: the chest's raft-local
+    /// cell `x, y, z`. Item names are in [`Walk::chest_item_names`], in the
+    /// same order.
+    pub fn chest_cells(&self) -> Vec<i32> {
+        self.0
+            .chest_items()
+            .into_iter()
+            .flat_map(|(c, _)| c)
+            .collect()
+    }
+
+    /// The item in each slot in [`Walk::chest_cells`], in the same order.
+    pub fn chest_item_names(&self) -> Vec<String> {
+        self.0.chest_items().into_iter().map(|(_, i)| i).collect()
+    }
+
+    /// Whether a full chest refused a deposit within the last few ticks.
+    pub fn chest_refused(&self) -> bool {
+        self.0.chest_refused()
+    }
+
+    /// What the last chest restock could not fit: chest cell `x,y,z` and count,
+    /// four numbers per entry; item names are in [`Walk::restock_lost_items`].
+    pub fn restock_lost_cells(&self) -> Vec<i32> {
+        let lost = self.0.restock_lost();
+        lost.iter()
+            .flat_map(|(c, _, n)| [c[0], c[1], c[2], *n as i32])
+            .collect()
+    }
+
+    /// The item of each entry in [`Walk::restock_lost_cells`].
+    pub fn restock_lost_items(&self) -> Vec<String> {
+        self.0.restock_lost().into_iter().map(|l| l.1).collect()
     }
 
     /// How many loose items lie in the world.
@@ -840,6 +921,11 @@ impl Walk {
         self.0.player().pos.to_vec()
     }
 
+    /// The pinned wind vector `[dx, dz]`, empty when the wind is not pinned.
+    pub fn wind_pin(&self) -> Vec<f64> {
+        self.0.wind_pin().map(|v| v.to_vec()).unwrap_or_default()
+    }
+
     pub fn teleport(&mut self, x: f64, y: f64, z: f64) {
         self.0.teleport([x, y, z]);
     }
@@ -873,6 +959,16 @@ impl Wind {
     pub fn at(&self, x: f64, z: f64, ticks: f64) -> Vec<f64> {
         let (dx, dz) = self.0.at(x, z, ticks);
         vec![dx, dz]
+    }
+
+    /// Surface roughness `R` in `[0, 1]` at `(x, z)`.
+    pub fn roughness(&self, x: f64, z: f64) -> f64 {
+        self.0.roughness_at(x, z)
+    }
+
+    /// Speed multiplier roughness gives the mean wind at the ground.
+    pub fn ground_multiplier(&self, x: f64, z: f64) -> f64 {
+        self.0.ground_multiplier(x, z)
     }
 
     /// `clamp(|wind| / speed_ceiling, 0, 1)` for a wind vector from `at`.
@@ -918,6 +1014,35 @@ mod tests {
     }
 
     #[test]
+    fn describes_fish_bite() {
+        let e = GameEvent::FishBite {
+            player: "player".into(),
+            species: "mackerel".into(),
+        };
+        assert_eq!(
+            describe_event(&e),
+            "fish_bite player=player species=mackerel"
+        );
+    }
+
+    #[test]
+    fn describes_fish_escaped_and_rod_catch() {
+        let e = GameEvent::FishEscaped {
+            player: "player".into(),
+            species: "mackerel".into(),
+        };
+        assert_eq!(
+            describe_event(&e),
+            "fish_escaped player=player species=mackerel"
+        );
+        let e = GameEvent::LineReeled {
+            player: "player".into(),
+            caught: true,
+        };
+        assert_eq!(describe_event(&e), "line_reeled player=player caught=true");
+    }
+
+    #[test]
     fn describes_fish_caught() {
         let e = GameEvent::FishCaught {
             player: "player".into(),
@@ -929,6 +1054,30 @@ mod tests {
             describe_event(&e),
             "fish_caught player=player species=mackerel item=raw_mackerel method=sword"
         );
+    }
+
+    #[test]
+    fn wind_roughness_exports_match_the_game_crate() {
+        let seed = 12345;
+        let pts = [
+            (0.0, 0.0),
+            (37.5, -120.25),
+            (-900.0, 410.0),
+            (5000.0, 5000.0),
+        ];
+        let cfg = game::wind_config::WindConfig::default_from_data().unwrap();
+        let rough = game::wind_roughness_config::RoughnessConfig::default_from_data().unwrap();
+        let reference = game::wind_field::Wind::new(seed, cfg, &rough);
+        let w = Wind::new(seed).unwrap_or_else(|_| panic!());
+        // Cold cache here, in reverse order, then again warm.
+        for _ in 0..2 {
+            for &(x, z) in pts.iter().rev() {
+                let r = w.roughness(x, z);
+                assert!((0.0..=1.0).contains(&r));
+                assert_eq!(r, reference.roughness_at(x, z));
+                assert_eq!(w.ground_multiplier(x, z), reference.ground_multiplier(x, z));
+            }
+        }
     }
 
     fn walk() -> Walk {
@@ -976,6 +1125,20 @@ mod tests {
     }
 
     #[test]
+    fn fish_lured_is_one_only_for_a_fish_with_a_lure() {
+        let mut w = walk();
+        assert!(w.fish_lured().is_empty());
+        let species = w.0.fish().bodies().bodies[0].species.clone();
+        let a = w.spawn_fish(&species, 1.5, 6.0, 2.5, 0.0);
+        let b = w.spawn_fish(&species, -3.0, 7.0, 4.0, 0.0);
+        assert_eq!(w.fish_lured(), vec![0.0, 0.0]);
+        w.0.lure_fish(b as _, [0.0, 6.0, 0.0]);
+        assert_eq!(w.fish_lured(), vec![0.0, 1.0]);
+        w.0.lure_fish(a as _, [0.0, 6.0, 0.0]);
+        assert_eq!(w.fish_lured(), vec![1.0, 1.0]);
+    }
+
+    #[test]
     fn bobber_rows_are_empty_without_a_line_and_the_rod_tip_is_near_the_eye() {
         let w = walk();
         assert!(w.bobber().is_empty());
@@ -986,6 +1149,16 @@ mod tests {
             .sum::<f64>()
             .sqrt();
         assert!(d > 0.1 && d < 2.0, "{d}");
+    }
+
+    #[test]
+    fn wind_pin_is_empty_until_pinned() {
+        let mut w = walk();
+        assert!(w.wind_pin().is_empty());
+        w.0.set_wind_pin(Some([1.5, -2.0]));
+        assert_eq!(w.wind_pin(), vec![1.5, -2.0]);
+        w.0.set_wind_pin(None);
+        assert!(w.wind_pin().is_empty());
     }
 
     #[test]

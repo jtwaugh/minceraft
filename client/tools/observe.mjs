@@ -27,7 +27,7 @@ const CLASSES = {
     'mode', 'locked', 'prompt', 'hint', 'target.kind', 'belt.selected', ...BELT_SLOTS.map((n) => `belt.slot.${n}`),
     'hands', 'health', 'hearts.full', 'hearts.half', 'hearts.empty', 'hud.selected', 'hud.hands', 'hud.ready', 'phase',
     // The last `layout` line's HUD geometry, which play.mjs already returns in player mode.
-    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction',
+    'layout.scale', 'layout.problems', 'layout.belt.w', 'layout.belt.fraction', 'layout.belt.offcentre', 'layout.hud.height',
   ],
   partial: ['target.id', 'target.face', 'box', 'console.last', 'console.text', 'phase.left'],
   debug: [
@@ -37,8 +37,9 @@ const CLASSES = {
     'underwater', 'held', 'held.drawn', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
     'planter.ground', 'planter.crop', 'events', 'events.foraged', 'particles', 'sim_tick', 'paused', 'sprinting', 'fov',
     'animals', 'animals.dying', 'animals.hurt', 'bobber', 'bobber.near', 'fish', 'fish.near',
+    'wind.dir.x', 'wind.dir.z', 'wind.strength', 'wind.sway', 'wind.readout',
     'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
-    'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
+    'station.count', 'station.item', 'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
   diagnostic: ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults'],
 };

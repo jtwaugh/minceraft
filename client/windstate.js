@@ -20,9 +20,11 @@ export function createWindState(wind, Wind, swaySpeed) {
      * second, strength 0..1, phase
      * radians in [0, 2pi), sway amplitude scale 0..1 }. Under
      * `reducedMotion` phase and sway are 0; dir and strength stay real.
+     * `pin` (optional `[dx, dz]`, empty or absent when unpinned) replaces the
+     * `wind.at` result.
      */
-    frame(x, z, tick, alpha, dt, reducedMotion) {
-      const [wx, wz] = wind.at(x, z, tick + alpha);
+    frame(x, z, tick, alpha, dt, reducedMotion, pin) {
+      const [wx, wz] = pin && pin.length === 2 ? pin : wind.at(x, z, tick + alpha);
       const strength = wind.strength(wx, wz);
       const dir = [...Wind.direction(wx, wz)];
       if (reducedMotion) {

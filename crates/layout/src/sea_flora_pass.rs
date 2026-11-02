@@ -17,8 +17,8 @@ use terrain::noise::{hash_f64, mix64, OctavePerlin, Rng};
 use terrain::{Block, ProtectedMask, Region, HEIGHT, SEA_LEVEL};
 
 use crate::{
-    raft_footprint, ChannelEval, DerivedMaps, HabitatMap, Habitats, Layout, SeaFlora,
-    SeaFloraEntry, SeaFloraShape, NO_HABITAT, SHORE_PAD,
+    raft_footprint, ChannelEval, DerivedMaps, HabitatInputs, HabitatMap, Habitats, Layout,
+    SeaFlora, SeaFloraEntry, SeaFloraShape, NO_HABITAT, SHORE_PAD,
 };
 
 /// Habitats nothing grows in (section 3).
@@ -29,13 +29,30 @@ fn patch_noise(seed: u64, e: &SeaFloraEntry) -> OctavePerlin {
     OctavePerlin::new(&mut Rng::new(mix64(seed ^ mix64(u64::from(e.salt)))), 2)
 }
 
+/// The habitat of column `i` as sea flora sees it: the floe band
+/// (`broken_ice`) is ignored, so placement is as before sea ice floes.
+pub(crate) fn flora_habitat(map: &HabitatMap, habitats: &Habitats, i: usize) -> u8 {
+    let h = map.habitat[i];
+    if h == NO_HABITAT || habitats.id_of("broken_ice").map(|b| b.0) != Some(usize::from(h)) {
+        return h;
+    }
+    let m = &map.derived;
+    let id = habitats.classify(&HabitatInputs {
+        temperature: f64::from(map.temperature[i]),
+        depth: u32::from(m.water_depth[i]),
+        bottom: m.bottom_block[i],
+        shore_distance: u32::from(m.shore_distance[i]),
+        frozen: false,
+        broken_ice: false,
+    });
+    u8::try_from(id.0).expect("fewer than 255 habitat rules")
+}
+
 /// Whether `e` grows in column `i` of `map`.
-fn fits(e: &SeaFloraEntry, map: &HabitatMap, i: usize) -> bool {
+fn fits(e: &SeaFloraEntry, map: &HabitatMap, i: usize, habitat: u8) -> bool {
     let m = &map.derived;
     let depth = u32::from(m.water_depth[i]);
-    e.habitats
-        .iter()
-        .any(|h| h.0 == usize::from(map.habitat[i]))
+    e.habitats.iter().any(|h| h.0 == usize::from(habitat))
         && e.bottom.contains(&m.bottom_block[i])
         && (e.depth_min..=e.depth_max).contains(&depth)
         && e.shore_distance_max
@@ -108,9 +125,10 @@ impl Layout {
             for lx in 0..region.width {
                 let i = (lz * region.width + lx) as usize;
                 let (x, z) = (region.x0 + lx as i32, region.z0 + lz as i32);
-                let h = map.habitat[i];
+                let h = flora_habitat(map, habitats, i);
                 if h == NO_HABITAT
                     || map.derived.frozen[i]
+                    || map.derived.floe[i]
                     || barren.contains(&usize::from(h))
                     || channels.iter().any(|c| c.weight(x, z) > 0.0)
                     || self.flora_free.iter().any(|e| e.protected(x, 0, z))
@@ -124,7 +142,7 @@ impl Layout {
                     continue;
                 }
                 let grows = |(e, n): &(&SeaFloraEntry, &OctavePerlin)| {
-                    if !fits(e, map, i) {
+                    if !fits(e, map, i, h) {
                         return false;
                     }
                     let v = n.sample2d(x as f64 / e.cluster_scale, z as f64 / e.cluster_scale);

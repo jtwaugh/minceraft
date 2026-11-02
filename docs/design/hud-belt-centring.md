@@ -5,8 +5,8 @@ scope: game
 source: "#2001"
 superseded_by: ""
 phases:
-  A: todo
-  B: todo
+  A: done
+  B: done
 ---
 
 ## Current state
@@ -17,6 +17,8 @@ Checked against the code:
 - **Scale.** `hudScale` is `interfaceScale` (`client/hud.js:24`, `client/uipx.js:26`). It is the least of: belt-width limit (`BELT_MAX_WIDTH_FRACTION = 0.5`), `floor(vh / MIN_VIEW_TEXELS_H)` (`MIN_VIEW_TEXELS_H = 160`) and the 100x65 panel fit. It gives scale 4 at 1366x768 and 3 at 390x844, so the scale-11 finding in #1520 is already fixed. The `hudsizes` scripts assert those two values (`client/test/scripts/hudsizes.input`).
 - **Checks.** `client/hudcheck.js` has `overlapChecks`, `offscreenChecks`, `scaleChecks`, `clearZoneChecks`, `handsDistanceChecks` and `containmentChecks`, combined in `layoutChecks`. There is no centring check and no check on the height of the HUD.
 - **Sweep.** `client/test/scripts/hudsizes.input` runs `layout <w> <h>` at 390x844, 1366x768, 1920x1080 and 3440x1440 and expects `layout.problems = 0`, belt fraction at most 0.5, and the timer, slot numbers and hands label inside the viewport. `layout.belt.w` and `layout.belt.fraction` are readable paths (`client/test/dsl.mjs`); no path exposes the belt's centre or the HUD height. Unit tests are in `client/test/hudlayout.test.mjs` and `client/test/hudcheck.test.mjs`.
+- **Phase A done.** #2049 centres the belt panel in `hudLayout` with the column fallback; #2115 adds `beltCentreChecks` and `MAX_BELT_OFFCENTRE = 2` in `client/hudcheck.js`, skipped in the fallback, with tests. The bullets above describe the code before those PRs.
+- **Phase B done.** #2189 adds `MAX_HUD_HEIGHT_FRACTION = 0.2` and `hudHeightChecks` to `layoutChecks` in `client/hudcheck.js`; #2203 adds the `layout.belt.offcentre` and `layout.hud.height` paths in `client/test/dsl.mjs` and asserts them in `hudsizes.input` at all four sweep sizes.
 - **Not yet satisfied.** Everything in section 2: the belt is not centred (by the current code, about 36 px left of centre at 1366x768 and 27 px at 390x844), and neither check exists.
 
 ## Reconciliation notes
