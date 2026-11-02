@@ -68,16 +68,17 @@ export function readStations(walk) {
 
 /**
  * Column-major model matrix, in raft-local coordinates (those of raftBoxes), of
- * an item resting on the station at `cell` `[x, y, z]`: centred over the cell's
+ * an item resting on the station at world `cell` `[x, y, z]`, `origin` being the
+ * world coordinate of the region's min corner (scene.min): centred over the cell's
  * top face with its bottom edge on it. Apply the raft matrix on top to place it
  * in the world.
  */
-export function stationPose(cell, size = STATION_ITEM_SIZE) {
+export function stationPose(cell, origin = 0, size = STATION_ITEM_SIZE) {
   return new Float32Array([
     size, 0, 0, 0,
     0, size, 0, 0,
     0, 0, size, 0,
-    cell[0] + 0.5, cell[1] + 1 + size / 2, cell[2] + 0.5, 1,
+    cell[0] - origin + 0.5, cell[1] + 1 + size / 2, cell[2] - origin + 0.5, 1,
   ]);
 }
 
@@ -99,6 +100,6 @@ export function mulMat4(a, b) {
  * `model` the station pose carried by `raft`, the raft's own matrix, so the
  * item moves and turns with the raft's blocks.
  */
-export function stationDraws(stations, raft) {
-  return stations.map(({ cell, name }) => ({ key: name, model: mulMat4(raft, stationPose(cell)) }));
+export function stationDraws(stations, raft, origin = 0) {
+  return stations.map(({ cell, name }) => ({ key: name, model: mulMat4(raft, stationPose(cell, origin)) }));
 }

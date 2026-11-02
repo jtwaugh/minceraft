@@ -641,7 +641,7 @@ function render(now) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
     const raft = raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min);
     models.drawModel(mvp, raft, raftModel, undefined, daylightFactor(day));
-    for (const { key, model } of stationDraws(readStations(walk), raft)) {
+    for (const { key, model } of stationDraws(readStations(walk), raft, scene.min)) {
       models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)), undefined, daylightFactor(day));
     }
   }

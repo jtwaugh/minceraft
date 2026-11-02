@@ -30,6 +30,14 @@ test('station draws carry the raft transform', () => {
   assert.deepEqual(Array.from(moved[0].model), Array.from(mulMat4(raft, stationPose([3, 5, 2]))));
 });
 
+test('world cells are made region-local before the raft matrix adds the origin back', () => {
+  const raft = raftMatrix([0, 0, 0], 0, [0, 0], -32);
+  const [d] = stationDraws([{ cell: [0, 64, 0], name: 'wheat' }], raft, -32);
+  const c = centre(d.model);
+  assert.ok(Math.abs(c[0] - 0.5) < 1e-5 && Math.abs(c[2] - 0.5) < 1e-5);
+  assert.ok(Math.abs(c[1] - (65 + STATION_ITEM_SIZE / 2)) < 1e-5);
+});
+
 test('no stations, no instances; a removed item drops out next frame', () => {
   assert.deepEqual(stationDraws([], IDENTITY), []);
   let cells = [1, 4, 1], names = ['wheat'];
