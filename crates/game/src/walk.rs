@@ -221,6 +221,8 @@ pub struct Walker {
     day_offset: u64,
     /// While set, the offset backs off one tick per tick so the time holds.
     day_frozen: bool,
+    /// Wind override in blocks per second `[dx, dz]`; the client uses it in place of the derived wind.
+    wind_pin: Option<[f64; 2]>,
     item_table: Items,
     state: PlayerState,
     /// Test override of the derived held thing.
@@ -297,6 +299,7 @@ impl Walker {
             day: DayClock::default_day().map_err(|e| PhysicsError::Invalid(e.to_string()))?,
             day_offset: 0,
             day_frozen: false,
+            wind_pin: None,
             item_table: Items::default_items(),
             state: PlayerState::new(&Items::default_items())
                 .map_err(|e| PhysicsError::Invalid(e.to_string()))?,
@@ -407,6 +410,15 @@ impl Walker {
         self.day_frozen
     }
 
+    /// Pin the wind to a fixed vector (or release it with `None`).
+    pub fn set_wind_pin(&mut self, pin: Option<[f64; 2]>) {
+        self.wind_pin = pin;
+    }
+
+    pub fn wind_pin(&self) -> Option<[f64; 2]> {
+        self.wind_pin
+    }
+
     /// FNV-1a 64 of the replay-relevant state; the set is listed in the
     /// `replay` module docs.
     pub fn world_hash(&self) -> u64 {
@@ -414,6 +426,13 @@ impl Walker {
         h.u64(self.sim_tick);
         h.u64(self.day_offset);
         h.u64(u64::from(self.day_frozen));
+        match self.wind_pin {
+            Some(v) => {
+                h.u64(1);
+                h.f64s(&v);
+            }
+            None => h.u64(0),
+        }
         h.u64(u64::from(self.cheated));
         let p = &self.player;
         h.f64s(&p.pos);
@@ -2813,6 +2832,27 @@ mod tests {
         assert_eq!(run(true, true), run(true, true));
         assert_ne!(run(false, false), run(true, false));
         assert_ne!(run(true, false), run(true, true));
+    }
+
+    #[test]
+    fn wind_pin_round_trips_and_is_hashed() {
+        let mut w = with_cmds();
+        assert_eq!(w.wind_pin(), None);
+        w.set_wind_pin(Some([1.5, -2.0]));
+        assert_eq!(w.wind_pin(), Some([1.5, -2.0]));
+        w.set_wind_pin(None);
+        assert_eq!(w.wind_pin(), None);
+
+        let run = |pin: Option<[f64; 2]>| {
+            let mut w = with_cmds();
+            w.set_wind_pin(pin);
+            w.tick(&TickInput::default());
+            w.world_hash()
+        };
+        assert_eq!(run(Some([1.0, 2.0])), run(Some([1.0, 2.0])));
+        assert_ne!(run(None), run(Some([1.0, 2.0])));
+        assert_ne!(run(Some([1.0, 2.0])), run(Some([2.0, 1.0])));
+        assert_ne!(run(None), run(Some([0.0, 0.0])));
     }
 
     #[test]
