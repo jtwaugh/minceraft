@@ -31,6 +31,8 @@ pub struct WindConfig {
     pub speed_ceiling: f64,
     /// Smoothed ground height lattice.
     pub height: WindHeightParams,
+    /// Blocks added to `H` for the surface height of a caller without one.
+    pub surface_offset: f64,
     /// Speed factor from height above the wide mean.
     pub exposure: ExposureParams,
     /// Upwind shelter.
@@ -39,7 +41,7 @@ pub struct WindConfig {
     pub channel: ChannelParams,
 }
 
-const KEYS: [&str; 26] = [
+const KEYS: [&str; 27] = [
     "front_size",
     "front_drift",
     "speed_scale",
@@ -53,6 +55,7 @@ const KEYS: [&str; 26] = [
     "height_step",
     "height_radius",
     "height_radius_wide",
+    "surface_offset",
     "exposure_gain",
     "exposure_floor",
     "exposure_ceiling",
@@ -227,6 +230,8 @@ impl WindConfig {
             speed_floor: non_negative(&root, "speed_floor")?,
             speed_ceiling: positive(&root, "speed_ceiling")?,
             height: height_params(&root)?,
+            surface_offset: finite(get(&root, "surface_offset")?)
+                .ok_or_else(|| invalid("`surface_offset` must be a finite number".into()))?,
             exposure: exposure_params(&root)?,
             shelter: shelter_params(&root)?,
             channel: channel_params(&root)?,
@@ -372,6 +377,11 @@ mod tests {
                 "height_radius_wide = 48",
                 "height_radius_wide = 8",
                 "need height_radius <= height_radius_wide",
+            ),
+            (
+                "surface_offset = 1.0",
+                "surface_offset = \"up\"",
+                "`surface_offset` must be a finite",
             ),
             (
                 "exposure_gain = 0.02",
