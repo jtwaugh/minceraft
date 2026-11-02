@@ -188,3 +188,33 @@ test('the hands frame draws the ready tool faded, a carried item opaque, and not
   const none = draw({ selected: 0, held: 'empty' });
   assert.equal(none.slot.children.length, 1);
 });
+
+test('every belt slot is dim exactly while stowed, and the selection is unchanged', () => {
+  const model = (b) => hudModel({ belt: { ...belt, ...b }, health: 20, maxHealth: 20 });
+  const empty = model({ selected: 2, hands: null, held: 'tool:hoe' });
+  const full = model({ selected: 2, hands: 'seeds', held: 'item:seeds' });
+  assert.deepEqual(empty.slots.map((s) => s.dim), [false, false, false, false, false]);
+  assert.deepEqual(full.slots.map((s) => s.dim), [true, true, true, true, true]);
+  assert.equal(full.selected, 2);
+  assert.deepEqual(full.slots.map((s) => s.selected), empty.slots.map((s) => s.selected));
+});
+
+test('while stowed the belt frames and icons are drawn faded; with empty hands they are opaque', async () => {
+  const { mountHud } = await import('../hud.js');
+  globalThis.ImageData = class { constructor(d, w, h) { Object.assign(this, { data: d, width: w, height: h }); } };
+  const grid = (w, h) => Array(h).fill('a'.repeat(w));
+  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), sun: grid(8, 8), crosshair: grid(7, 7), panel_c: grid(4, 4), sword: grid(8, 8), hoe: grid(6, 6), font_unknown: grid(5, 7), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => [`digit_${d}`, grid(4, 6)])) } } } };
+  const draw = (b) => {
+    const doc = fakeDocument();
+    mountHud(doc, set, doc.body, { innerWidth: 800, innerHeight: 450 }).update(hudModel({ belt: { ...belt, ...b }, health: 20, maxHealth: 20 }));
+    return doc.body.children[1].children[5].children;
+  };
+  const alpha = (el) => (el.style.opacity === undefined ? 1 : Number(el.style.opacity));
+  // Each slot is its frame, its icon if it has one, then its number.
+  const art = (slots) => slots.flatMap((el) => el.children.slice(0, -1));
+  const stowed = draw({ hands: 'seeds', held: 'item:seeds' });
+  assert.ok(stowed[1].className.includes('selected'));
+  assert.ok(art(stowed).length > stowed.length);
+  for (const el of art(stowed)) assert.ok(alpha(el) > 0 && alpha(el) < 1);
+  for (const el of art(draw({ hands: null, held: 'tool:sword' }))) assert.equal(alpha(el), 1);
+});
