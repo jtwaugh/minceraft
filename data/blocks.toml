@@ -847,3 +847,22 @@ collision = "none"
 opacity = 0
 opaque_cube = false
 color = "#d9b92e"
+
+# Meadow flowers (swedish-summer-flora D.3): cross plants.
+[[block]]
+id = 88
+name = "smorblomma"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#e3c02a"
+
+[[block]]
+id = 89
+name = "midsommarblomster"
+fire = [60, 100]
+collision = "none"
+opacity = 0
+opaque_cube = false
+color = "#6a5cb0"

@@ -427,6 +427,8 @@ mod tests {
             Block::Blabar,
             Block::Smultron,
             Block::Johannesort,
+            Block::Smorblomma,
+            Block::Midsommarblomster,
         ] {
             let mut w = MemoryWorld::new();
             w.set(3, 0, 0, b);

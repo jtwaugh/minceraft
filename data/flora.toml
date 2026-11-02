@@ -373,3 +373,27 @@ cluster_scale = 14.0
 salt = 26
 biomes = { Plains = 0.020, Shrubland = 0.020 }
 niche = { light = [0.8, 1.0], sun_facing = [0.4, 1.0], wetness = [0.0, 0.4] }
+
+# Buttercup: open, moist meadow.
+[[flora]]
+name = "smorblomma"
+block = "smorblomma"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 14.0
+salt = 27
+biomes = { Plains = 0.150 }
+niche = { light = [0.8, 1.0], wetness = [0.65, 1.0] }
+
+# Wood cranesbill: partly shaded, moist ground.
+[[flora]]
+name = "midsommarblomster"
+block = "midsommarblomster"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 14.0
+salt = 28
+biomes = { Forest = 0.080, Plains = 0.060 }
+niche = { light = [0.3, 0.8], wetness = [0.65, 1.0] }
