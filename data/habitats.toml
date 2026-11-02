@@ -6,6 +6,7 @@
 # must set no fields (the fallback).
 #
 # frozen              = surface is ice
+# broken_ice          = column is in broken sea ice (floes); frozen wins when both
 # temp_min / temp_max = column temperature, inclusive, 0..1
 # depth_min / depth_max = water depth in blocks, inclusive
 # shore_distance_min / shore_distance_max = distance to land in columns, inclusive
@@ -14,6 +15,10 @@
 [[habitat]]
 id = "frozen"
 frozen = true
+
+[[habitat]]
+id = "broken_ice"
+broken_ice = true
 
 [[habitat]]
 id = "warm_shallows"

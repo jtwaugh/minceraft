@@ -71,6 +71,7 @@ impl Layout {
                     bottom: derived.bottom_block[i],
                     shore_distance: u32::from(derived.shore_distance[i]),
                     frozen: derived.frozen[i],
+                    broken_ice: false,
                 });
                 u8::try_from(id.0).expect("fewer than 255 habitat rules")
             })
