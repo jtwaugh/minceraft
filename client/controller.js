@@ -49,11 +49,12 @@ import { readAim, readBelt } from './overlay.js';
 import { hudModel } from './hud.js';
 import { createStream, regionOf } from './stream.js';
 import { createParticles } from './particles.js';
+import { readDay } from './daylook.js';
 
 export function createController({ input, walk, fly, clock, document, flying = false, stream = null, sprintFov = { base: 70, extra: 0, seconds: 1 } }) {
   const regions = stream && createStream(stream);
   let followed = null;
-  const state = { flying, inventory: false, dead: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, events: [], particles: [], particleCount: 0 };
+  const state = { flying, inventory: false, dead: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, day: null, events: [], particles: [], particleCount: 0 };
   const particles = createParticles();
 
   const onKey = (e) => {
@@ -121,7 +122,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       particles.spawnMisses(events);
       if (snow) particles.spawnSnow(snow.cells, eye, snow.phase, dt);
       particles.update(dt);
-      Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, events, particles: particles.list, particleCount: particles.count });
+      Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, day: readDay(walk, alpha), events, particles: particles.list, particleCount: particles.count });
       return state;
     },
     submitConsole(line) {
