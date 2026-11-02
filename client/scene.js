@@ -10,6 +10,9 @@
 //   ?blend=R     biome colour blend radius, 0 to 7 (default: the legend's)
 //   ?plants=D    plant draw distance in blocks (default 48)
 //   ?debug=1     debug mode on (also on whenever ?scene= is set); see debug.js
+//   ?pixel=1     fixed render for exact checks: fog, biome tints and daylight off, fixed sky and sun,
+//                canvas at a fixed size with preserveDrawingBuffer so pixels can be read (pixelmode.js);
+//                add &pose=x,y,z,yaw,pitch (eye in blocks, angles in radians) and &view=WxH
 //   ?log=N      console.log the frame-time summary every N frames, for headless runs
 //
 // window.frameStats() returns { frames, p50, p99, max, hitches, records } at any time:
@@ -59,6 +62,7 @@ import { SNAP_GLSL, SNAP_SAMPLE_GLSL } from './texsnap.js';
 import { SKY_GLSL } from '../viewer/sky.js';
 import { WATER_GLSL, WATER_DEPTH_GLSL } from '../viewer/water.js';
 import { FrameTimes, FRAME_BUDGET_MS } from './frametimes.js';
+import { parsePixelMode, PIXEL_UNIFORMS } from './pixelmode.js';
 import { debugEnabled } from './debug.js';
 import { parseBlend } from './blend.js';
 import { sceneById } from './scenes.js';
@@ -78,12 +82,13 @@ const raftScene = sceneById(qs.get('scene'))?.id === 'raft';
 const plantDistance = Math.max(0, +(qs.get('plants') ?? 48)); // blocks; beyond it plants shrink away over PLANT_FADE_RANGE
 const blendRadius = parseBlend(qs.get('blend')); // undefined: the legend default
 const logEvery = +(qs.get('log') ?? 0);
+const pixel = parsePixelMode(location.search); // null unless ?pixel=1
 const debug = debugEnabled(location.search); // ?debug=1 or any ?scene=; console keys are gated on it
 window.debugMode = debug;
 
 const canvas = document.getElementById('gl');
 const overlay = document.getElementById('overlay');
-const gl = canvas.getContext('webgl2', { antialias: true });
+const gl = canvas.getContext('webgl2', pixel ? { antialias: true, preserveDrawingBuffer: true } : { antialias: true });
 if (!gl) throw new Error('WebGL2 is not available');
 
 // ---------------------------------------------------------------- shaders
@@ -148,7 +153,7 @@ function program(cut) {
     precision mediump sampler2DArray;
     in vec3 vuv; in float vshade; in float vdist; in vec3 vtint; in vec3 vdir; in float vdepth;
     uniform sampler2DArray tex; uniform sampler2DArray tintTex;
-    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir; uniform float daylight;
+    uniform float alpha; uniform float fogStart; uniform float fogEnd; uniform float fogFar; uniform vec3 fogColor; uniform vec3 tint; uniform vec3 sunDir; uniform float daylight; uniform float biomeTint;
     uniform float waterFresnel; // 1 while drawing water from above the surface
     out vec4 o;
     ${FOG_GLSL}
@@ -165,7 +170,7 @@ function program(cut) {
       float g = texture(tintTex, vuv).r;
       // depth shading is for water seen from above; under water the look is unchanged
       float wd = vdepth * waterFresnel;
-      vec3 c = (t.rgb + g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint * waterColorFactor(wd);
+      vec3 c = (t.rgb + biomeTint * g * vtint) / max(t.a, 1.0 / 255.0) * vshade * tint * waterColorFactor(wd);
       vec3 vd = normalize(vdir);
       // water reflects the sky: blend toward it at low view angles (as in the viewer)
       c = mix(c, skyColor(fogColor, vec3(vd.x, -vd.y, vd.z), sunDir), waterFresnel * fresnel(vd));
@@ -391,6 +396,7 @@ if (!scene) { // stand on the highest block of the spawn column
   while (top > 0 && !walk.block_at(CHUNK / 2, top, CHUNK / 2)) top--;
   if (top > 0) walk.teleport(CHUNK / 2, top + 1.5, CHUNK / 2); // 0: region not loaded yet, keep the start
 }
+if (pixel && !scene) walk.teleport(pixel.pose[0], pixel.pose[1] - 1.62, pixel.pose[2]); // stream around the pose
 const surfaceY = walk.feet()[1];
 const loadRadius = Walk.load_radius();
 if (scene) { spawnTestItems(walk); spawnTestAnimals(walk); }
@@ -562,7 +568,8 @@ function render(now) {
   remeshFarm();
 
   const snow = reducedMotion.matches || !lastWind ? null : { cells: snowCells, wind: lastWind }; // last frame's wind: this frame's needs the eye
-  const { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = spans.span('tick', () => controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow));
+  let { ticks, alpha, eye, yaw, pitch, fov, flying, aim, underwater, regions, particles } = spans.span('tick', () => controller.frame(lastFrame === null ? 0 : (now - lastFrame) / 1000, snow));
+  if (pixel) [eye, yaw, pitch] = [pixel.pose.slice(0, 3), pixel.pose[3], pixel.pose[4]];
   work.ticks = ticks;
   simTicks += ticks;
   const wind = windState.frame(eye[0], eye[2], simTicks, alpha, (now - (lastFrame ?? now)) / 1000, reducedMotion.matches);
@@ -580,19 +587,20 @@ function render(now) {
   }
 
   const dpr = window.devicePixelRatio || 1;
-  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  const w = pixel ? pixel.width : Math.round(canvas.clientWidth * dpr), h = pixel ? pixel.height : Math.round(canvas.clientHeight * dpr);
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   gl.viewport(0, 0, w, h);
   const fogFar = (loadRadius + 0.5) * REGION_SIZE * 1.1;
   const dtSky = lastFrame === null ? 0 : (now - lastFrame) / 1000;
   if (now - skySampleAt > 250) { skySampleAt = now; skyTarget = sampleSkyAt(eye); if (!skyReady) skyColor = skyTarget; skyReady = true; }
   skyColor = easeSky(skyColor, skyTarget, dtSky);
-  const day = controller.state.day;
+  const day = pixel ? null : controller.state.day;
   const base = underwater || !day ? skyColor : blendSky(skyColor, day.daylight, walk.daylight_at(0), Array.from(walk.night_sky()), Array.from(walk.dusk_sky()));
-  const view = look({ underwater, skyColor: base, fogFar, water: ctx.COLORS[B.water] });
+  let view = look({ underwater: underwater && !pixel, skyColor: base, fogFar, water: ctx.COLORS[B.water] });
+  if (pixel) view = { ...view, ...PIXEL_UNIFORMS };
   gl.clearColor(...view.fogColor, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h, controller.state.day?.sunDir);
+  const sky = skyInputs(view, yaw, pitch, fov * Math.PI / 180, w / h, pixel ? PIXEL_UNIFORMS.sunDir : controller.state.day?.sunDir);
   if (sky) {
     gl.useProgram(skyProg);
     gl.uniform3fv(skyProg.u('camRight'), sky.right);
@@ -627,6 +635,7 @@ function render(now) {
     gl.uniform3fv(prog.u('eye'), eye);
     gl.uniform3fv(prog.u('tint'), view.tint);
     gl.uniform1f(prog.u('daylight'), daylightFactor(day));
+    gl.uniform1f(prog.u('biomeTint'), pixel ? PIXEL_UNIFORMS.biomeTint : 1);
     gl.uniform1f(prog.u('alpha'), a);
     gl.uniform1f(prog.u('waterFresnel'), 0);
     gl.uniform1f(prog.u('waterFrame'), waterFrame(now, reducedMotion.matches));
