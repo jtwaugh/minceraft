@@ -134,8 +134,9 @@ impl Fishing {
 
 impl Fishing {
     /// Advance the bite one tick; call after the fish have moved. Only a
-    /// floating bobber gets bites. With no fish within `near_radius` when
-    /// the delay runs out, nothing happens and a new delay is drawn.
+    /// floating bobber gets bites. With no fish within `near_radius`, or an
+    /// empty daily stock, when the delay runs out, nothing happens and a new
+    /// delay is drawn.
     pub fn tick_bite(
         &mut self,
         world: &impl CollisionWorld,
@@ -156,6 +157,7 @@ impl Fishing {
         self.bite = match self.bite {
             Bite::Idle => Bite::Waiting(self.rng.range(lo as i32, hi as i32) as u32),
             Bite::Waiting(n) if n > 1 => Bite::Waiting(n - 1),
+            Bite::Waiting(_) if fish.stock() == 0 => Bite::Idle,
             Bite::Waiting(_) => match nearest_fish(fish, pos, self.cfg.near_radius) {
                 Some(id) => {
                     fish.lure_to_bobber(id, pos, world);
@@ -442,6 +444,47 @@ mod tests {
         let window = f.config().reel_window_ticks;
         assert_eq!(f.bite, Bite::Open(window));
         assert!(f.bobber().unwrap().dipping());
+    }
+
+    #[test]
+    fn an_empty_stock_means_no_bites_until_the_reset() {
+        let w = pen();
+        let mut world = FishWorld::default_from_data(1, 1 << 28).unwrap();
+        world.spawn("mackerel", [0.5, 57.5, 0.5], 0.0).unwrap();
+        world.set_stock(0);
+        let mut f = fishing();
+        let mut ev = Vec::new();
+        f.cast([0.5, 62.0, 0.5], [0.0, -1.0, 0.0], &mut ev);
+        let far = Aabb::new([100.0, 100.0, 100.0], [101.0, 102.0, 101.0]);
+        let bites = |ev: &mut Vec<GameEvent>| {
+            ev.drain(..)
+                .filter(|e| matches!(e, GameEvent::FishBite { .. }))
+                .count()
+        };
+        // Tick 0 enters gathering and resets the stock, so start at 1.
+        for t in 1..900 {
+            f.tick(&w, true, [0.5, 62.0, 0.5], &mut ev);
+            world.tick(t, [0.0, 0.0], &far, &w, |_, _| None);
+            f.tick_bite(&w, &mut world, &mut ev);
+            assert_eq!(bites(&mut ev), 0, "{t}");
+        }
+        assert_eq!(world.stock(), 0);
+        assert_eq!(f.bobber().unwrap().state(), BobberState::Floating);
+        world.tick(0, [0.0, 0.0], &far, &w, |_, _| None);
+        assert!(world.stock() > 0);
+        let [_, hi] = f.config().bite_delay_ticks;
+        let mut got = None;
+        // At most one delay left to run, plus the swim to the bobber.
+        for t in 1..=hi as u64 + 41 {
+            f.tick(&w, true, [0.5, 62.0, 0.5], &mut ev);
+            world.tick(t, [0.0, 0.0], &far, &w, |_, _| None);
+            f.tick_bite(&w, &mut world, &mut ev);
+            if bites(&mut ev) > 0 {
+                got = Some(t);
+                break;
+            }
+        }
+        assert!(got.is_some());
     }
 
     /// Run a pen until the window is open; returns the fish id.

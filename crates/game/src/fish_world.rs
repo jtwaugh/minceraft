@@ -138,6 +138,11 @@ impl FishWorld {
         self.spawner.stock()
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_stock(&mut self, stock: u32) {
+        self.spawner.set_stock(stock);
+    }
+
     /// True on the first tick of a phase, when fish may spawn.
     pub fn is_phase_change(&self, tick: u64) -> bool {
         self.spawner.is_phase_change(tick)

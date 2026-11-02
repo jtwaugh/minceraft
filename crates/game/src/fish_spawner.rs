@@ -69,6 +69,11 @@ impl FishSpawner {
         self.stock
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_stock(&mut self, stock: u32) {
+        self.stock = stock;
+    }
+
     /// True on the first tick of a phase (tick 0 starts gathering).
     pub fn is_phase_change(&self, tick: u64) -> bool {
         tick == 0 || self.clock.at(tick).0 != self.clock.at(tick - 1).0
