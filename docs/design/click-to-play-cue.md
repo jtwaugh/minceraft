@@ -6,7 +6,7 @@ source: "#1998"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
 ---
 
 ## Current state
@@ -20,7 +20,8 @@ Checked against the code:
 - **DSL gap is real.** In `client/test/dsl.mjs:147` the fake canvas's `requestPointerLock()` only counts (`lockRequests`); the fake document has `exitPointerLock` that clears `pointerLockElement` and fires `pointerlockchange`, but nothing sets it. `lock`, `unlock` and `blur` statements exist (`dsl.mjs:353-356`). The `blur` statement only fires the window event and does not unlock.
 - **Observation.** `client/tools/observe.mjs` classifies `mode` and `locked` as `player` and `lock_requests` as `debug`. There is no `prompt` or `hint` path, and `dsl.mjs` serves neither (`mode` is `death | console | inventory | fly | walk`, `dsl.mjs:217`).
 - **Nothing is built yet:** the cue, the DSL relock, and the `prompt` and `hint` observation paths.
-- **Phase A done (plan #2014).** The DSL fake canvas locks on request and `blur` unlocks (#2048, `client/test/dsl.mjs`); pure `waitingForClick` and the hint state exist (#2042, `client/waitingcue.js`); `prompt` and `hint` are served by the DSL and classified in `client/tools/observe.mjs` (#2083). Still not built: the cue itself (Phase B).
+- **Phase A done (plan #2014).** The DSL fake canvas locks on request and `blur` unlocks (#2048, `client/test/dsl.mjs`); pure `waitingForClick` and the hint state exist (#2042, `client/waitingcue.js`); `prompt` and `hint` are served by the DSL and classified in `client/tools/observe.mjs` (#2083). Phase B's cue is built.
+- **Phase B done (plan #2183).** `client/cueui.js` (`cueLayout`, `mountCue`) draws the centred "Click to play" panel with no dim layer (#2102, #2182). `client/scene.js` mounts it and calls `cue.update(waitingForClick(input))` each frame. `client/test/cueui.test.mjs` covers fit and centring; the `prompt` expectations in `client/test/scripts/inventory.input` cover visibility. The plan had no tickets.
 
 ## Reconciliation notes
 
