@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use crate::data_error::{DataError, DataErrorKind, DataFile};
-use crate::items::ItemInstance;
+use crate::items::{ItemInstance, Items};
 
 const DEFAULT_CHESTS: &str = include_str!("../../../data/chests.toml");
 
@@ -81,6 +81,80 @@ impl Chests {
     }
 }
 
+/// One supply line: `count` of `item` wanted in the chest at `cell`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Supply {
+    pub item: String,
+    pub count: usize,
+    pub cell: [i32; 3],
+}
+
+/// An amount of one item at one chest.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stocked {
+    pub cell: [i32; 3],
+    pub item: String,
+    pub count: usize,
+}
+
+/// What a restock did: what went in, and what did not fit.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Restock {
+    pub added: Vec<Stocked>,
+    pub lost: Vec<Stocked>,
+}
+
+/// Top each chest up to its supply list (cooking-stations.md section 7.1).
+/// Only the shortfall per line is added, in first-free-slot order; nothing
+/// stored is removed. What a full chest cannot take is lost and reported.
+/// An item not in `items` is an error and nothing is changed.
+pub fn restock(
+    chests: &mut Chests,
+    supplies: &[Supply],
+    items: &Items,
+) -> Result<Restock, DataError> {
+    if let Some(s) = supplies.iter().find(|s| !items.has_item(&s.item)) {
+        return Err(DataError::new(
+            DataFile::Chests,
+            DataErrorKind::UnknownItem {
+                entry: format!("supply at {:?}", s.cell),
+                item: s.item.clone(),
+            },
+        ));
+    }
+    let mut out = Restock::default();
+    for s in supplies {
+        let have = chests
+            .slots(s.cell)
+            .iter()
+            .flatten()
+            .filter(|i| i.item == s.item)
+            .count();
+        let (mut added, mut lost) = (0, 0);
+        for _ in have..s.count {
+            match chests.deposit(
+                s.cell,
+                ItemInstance {
+                    item: s.item.clone(),
+                },
+            ) {
+                Ok(_) => added += 1,
+                Err(_) => lost += 1,
+            }
+        }
+        for (n, list) in [(added, &mut out.added), (lost, &mut out.lost)] {
+            if n > 0 {
+                list.push(Stocked {
+                    cell: s.cell,
+                    item: s.item.clone(),
+                    count: n,
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +204,80 @@ mod tests {
         }
         let cells: Vec<_> = c.iter().map(|(cell, _)| cell).collect();
         assert_eq!(cells, [[-1, 5, 0], [0, 0, 0], [2, 0, 0]]);
+    }
+
+    fn supply(name: &str, count: usize, cell: [i32; 3]) -> Supply {
+        Supply {
+            item: name.into(),
+            count,
+            cell,
+        }
+    }
+
+    fn stocked(name: &str, count: usize, cell: [i32; 3]) -> Stocked {
+        Stocked {
+            cell,
+            item: name.into(),
+            count,
+        }
+    }
+
+    fn count_of(c: &Chests, cell: [i32; 3], name: &str) -> usize {
+        c.slots(cell)
+            .iter()
+            .flatten()
+            .filter(|i| i.item == name)
+            .count()
+    }
+
+    #[test]
+    fn restock_fills_an_empty_chest() {
+        let items = Items::default_items();
+        let mut c = Chests::new(5);
+        let r = restock(&mut c, &[supply("raw_salmon", 3, [0, 0, 0])], &items).unwrap();
+        assert_eq!(count_of(&c, [0, 0, 0], "raw_salmon"), 3);
+        assert_eq!(r.added, [stocked("raw_salmon", 3, [0, 0, 0])]);
+        assert!(r.lost.is_empty());
+    }
+
+    #[test]
+    fn restock_adds_only_the_shortfall_and_keeps_other_items() {
+        let items = Items::default_items();
+        let mut c = Chests::new(6);
+        c.deposit([0, 0, 0], item("raw_tuna")).unwrap();
+        c.deposit([0, 0, 0], item("raw_salmon")).unwrap();
+        let r = restock(&mut c, &[supply("raw_salmon", 3, [0, 0, 0])], &items).unwrap();
+        assert_eq!(count_of(&c, [0, 0, 0], "raw_salmon"), 3);
+        assert_eq!(count_of(&c, [0, 0, 0], "raw_tuna"), 1);
+        assert_eq!(r.added, [stocked("raw_salmon", 2, [0, 0, 0])]);
+        let r = restock(&mut c, &[supply("raw_salmon", 3, [0, 0, 0])], &items).unwrap();
+        assert_eq!(r, Restock::default());
+    }
+
+    #[test]
+    fn restock_into_a_full_chest_loses_the_rest() {
+        let items = Items::default_items();
+        let mut c = Chests::new(3);
+        c.deposit([0, 0, 0], item("raw_tuna")).unwrap();
+        let r = restock(&mut c, &[supply("raw_salmon", 4, [0, 0, 0])], &items).unwrap();
+        assert_eq!(count_of(&c, [0, 0, 0], "raw_salmon"), 2);
+        assert_eq!(count_of(&c, [0, 0, 0], "raw_tuna"), 1);
+        assert_eq!(r.added, [stocked("raw_salmon", 2, [0, 0, 0])]);
+        assert_eq!(r.lost, [stocked("raw_salmon", 2, [0, 0, 0])]);
+    }
+
+    #[test]
+    fn restock_unknown_item_is_a_data_error_and_changes_nothing() {
+        let items = Items::default_items();
+        let mut c = Chests::new(3);
+        let supplies = [
+            supply("raw_salmon", 1, [0, 0, 0]),
+            supply("nope", 1, [1, 0, 0]),
+        ];
+        let e = restock(&mut c, &supplies, &items).unwrap_err();
+        assert_eq!(e.file, DataFile::Chests);
+        assert!(e.to_string().contains("`nope` is not in items.toml"), "{e}");
+        assert_eq!(c, Chests::new(3));
     }
 
     #[test]
