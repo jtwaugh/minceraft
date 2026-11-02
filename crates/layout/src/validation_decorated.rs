@@ -45,6 +45,8 @@ fn is_decoration(b: u8) -> bool {
             Block::Blabar,
             Block::Smultron,
             Block::Johannesort,
+            Block::Smorblomma,
+            Block::Midsommarblomster,
         ]
         .iter()
         .any(|&d| d as u8 == b)

@@ -1832,3 +1832,87 @@ fn meadow_flowers_are_independent_of_region() {
         }
     }
 }
+
+/// Flat grass at y 70 with `leaves` over columns where it returns true and
+/// open water at (21..=22, 20) when `water`.
+fn moist(leaves: impl Fn(i32) -> bool, water: bool) -> impl Fn(i32, i32) -> Col {
+    move |x, z| Col {
+        ground: 70,
+        leaves: leaves(x),
+        water: water && (21..=22).contains(&x) && z == 20,
+    }
+}
+
+#[test]
+fn smorblomma_grows_in_open_moist_ground_and_not_dry_or_shaded() {
+    let t = meadow("smorblomma", Biome::Plains);
+    assert!(meadow_cols(Biome::Plains, &t, moist(|_| false, true)));
+    assert!(
+        !meadow_cols(Biome::Plains, &t, moist(|_| false, false)),
+        "dry"
+    );
+    assert!(
+        !meadow_cols(Biome::Plains, &t, moist(|x| x >= 20, true)),
+        "shaded"
+    );
+    // A steep slope is dry however open it is.
+    let steep = |x, z| Col {
+        ground: 70 + (z - 20) * 2,
+        ..moist(|_| false, true)(x, z)
+    };
+    assert!(!meadow_cols(Biome::Plains, &t, steep), "steep");
+}
+
+#[test]
+fn midsommarblomster_grows_in_partial_shade_and_moist_ground_only() {
+    let t = meadow("midsommarblomster", Biome::Forest);
+    assert!(meadow_cols(Biome::Forest, &t, moist(|x| x >= 21, true)));
+    assert!(
+        !meadow_cols(Biome::Forest, &t, moist(|_| false, true)),
+        "open"
+    );
+    assert!(
+        !meadow_cols(Biome::Forest, &t, moist(|_| true, true)),
+        "dark"
+    );
+    assert!(
+        !meadow_cols(Biome::Forest, &t, moist(|x| x >= 21, false)),
+        "dry"
+    );
+}
+
+#[test]
+fn buttercup_and_cranesbill_are_cross_plants_in_their_biomes() {
+    for (name, want) in [
+        ("smorblomma", ["Plains"].as_slice()),
+        ("midsommarblomster", ["Forest", "Plains"].as_slice()),
+    ] {
+        let f = FLORA.iter().find(|f| f.name == name).unwrap();
+        assert_eq!(f.shape, FloraShape::Cross);
+        assert_eq!(f.biomes.len(), want.len(), "{name}");
+        let layers: Vec<_> = f.niche.iter().map(|n| n.0).collect();
+        assert!(layers.contains(&NicheLayer::Light), "{name}");
+        assert!(layers.contains(&NicheLayer::Wetness), "{name}");
+    }
+}
+
+#[test]
+fn buttercup_and_cranesbill_are_independent_of_region() {
+    let seed = 42;
+    let big = gen(seed, -400, -400, 800, 800, &FLORA);
+    let (s, m) = (
+        count(&big, Block::Smorblomma),
+        count(&big, Block::Midsommarblomster),
+    );
+    assert!(s > 0 && m > 0, "{s} {m}");
+    for (ox, oz, w, d) in [(-37, 11, 141, 129), (60, -50, 133, 133)] {
+        let small = gen(seed, ox, oz, w, d, &FLORA);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&big, x, y, z), at(&small, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}

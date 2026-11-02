@@ -638,12 +638,14 @@ fn existing_block_ids_are_unchanged() {
         ("blabar", 85),
         ("smultron", 86),
         ("johannesort", 87),
+        ("smorblomma", 88),
+        ("midsommarblomster", 89),
     ] {
         assert_eq!(block_id(name), Some(id), "{name}");
     }
     let mut names: Vec<_> = BLOCK_INFO.iter().map(|b| b.name).collect();
-    assert_eq!(names.len(), 88);
+    assert_eq!(names.len(), 90);
     names.sort();
     names.dedup();
-    assert_eq!(names.len(), 88);
+    assert_eq!(names.len(), 90);
 }
