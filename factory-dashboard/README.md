@@ -68,7 +68,10 @@ out as you through `gh`:
   read. Your own PR, which GitHub won't let you approve, goes straight to
   *Merge*, still gated on CI. *Review the diff* opens the PR's
   files on GitHub; *Ask @claude to review* comments asking Claude for a
-  review; *Close PR* closes it unmerged.
+  review; *Close PR* closes it unmerged. A ready PR that touches CODEOWNERS paths also
+  gets *Fix locally*, which opens Terminal in your checkout and starts
+  Claude on the PR, told to check no fixer is already running, fix on the
+  PR branch, ask before pushing, and never merge.
 - **Comment** on any waiting issue.
 - **Alerts:** *Investigate locally* opens Terminal in your checkout and
   starts Claude with what the alert knows, told to investigate only and
