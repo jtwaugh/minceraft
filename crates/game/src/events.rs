@@ -64,6 +64,9 @@ pub enum GameEvent {
         chest: [i32; 3],
         slot: usize,
     },
+    /// A gathering start put `items` (one name per item added) into the
+    /// chest at raft-local cell `chest`.
+    ChestRestocked { chest: [i32; 3], items: Vec<String> },
     /// The hoe tilled the block at `position`. `from` and `to` are block
     /// names before and after.
     BlockTilled {
