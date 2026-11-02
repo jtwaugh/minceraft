@@ -427,6 +427,21 @@ impl Walk {
         self.0.phase().1
     }
 
+    /// Time of day now, in 0..1 (0 is midnight), with any offset or freeze.
+    pub fn time_of_day(&self) -> f64 {
+        self.0.time_of_day()
+    }
+
+    /// Scene brightness now, in 0..1.
+    pub fn daylight(&self) -> f64 {
+        self.0.daylight()
+    }
+
+    /// Unit vector toward the sun now, `[x, y, z]`.
+    pub fn sun_dir(&self) -> Vec<f64> {
+        self.0.sun_dir().to_vec()
+    }
+
     /// Whether the player is sprinting.
     pub fn sprinting(&self) -> bool {
         self.0.sprinting()
@@ -752,6 +767,25 @@ mod tests {
         );
         assert_eq!(w.item_names(), vec!["stick", "wheat"]);
         assert_eq!(w.loose_items(), 2);
+    }
+
+    #[test]
+    fn day_exports_match_the_walker_after_a_time_set() {
+        let mut w = walk();
+        for f in [0.0, 0.3, 0.75] {
+            w.0.set_time_of_day(f);
+            assert_eq!(w.time_of_day(), w.0.time_of_day());
+            assert!((w.time_of_day() - f).abs() < 1e-3);
+            assert_eq!(w.daylight(), w.0.daylight());
+            assert!((0.0..=1.0).contains(&w.daylight()));
+            assert_eq!(w.sun_dir(), w.0.sun_dir().to_vec());
+            let len: f64 = w.sun_dir().iter().map(|c| c * c).sum::<f64>().sqrt();
+            assert!((len - 1.0).abs() < 1e-9);
+        }
+        w.0.set_day_frozen(true);
+        let held = w.time_of_day();
+        w.0.tick(&TickInput::default());
+        assert_eq!(w.time_of_day(), held);
     }
 
     #[test]
