@@ -29,7 +29,7 @@ import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose } from './models.js';
 import { fishBoxes, fishDraw, createTailTracker } from './fishmodels.js';
 import { raftBoxes, raftMatrix } from './raftmodel.js';
-import { itemBoxes, itemDraws } from './itemmodel.js';
+import { itemBoxes, itemDraws, readStations, stationDraws } from './itemmodel.js';
 import { heldBoxes, heldDraw } from './helditem.js';
 import { SCENE_TEXTURES } from './scenetextures.js';
 import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } from './tiles.js';
@@ -639,7 +639,11 @@ function render(now) {
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
-    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel, undefined, daylightFactor(day));
+    const raft = raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min);
+    models.drawModel(mvp, raft, raftModel, undefined, daylightFactor(day));
+    for (const { key, model } of stationDraws(readStations(walk), raft, scene.min)) {
+      models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)), undefined, daylightFactor(day));
+    }
   }
   drawFish(mvp, readFish(walk), now / 1000, daylightFactor(day));
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

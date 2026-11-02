@@ -57,3 +57,49 @@ export function itemPose(item, timeSeconds, camera) {
 export function itemDraws(items, timeSeconds, camera) {
   return items.map((item) => ({ key: item.name, model: itemPose(item, timeSeconds, camera) }));
 }
+
+export const STATION_ITEM_SIZE = 0.5; // edge of an item resting on a station, in blocks
+
+/** `[{ cell, name }]` for the items on raft stations (Walk.station_cells, Walk.station_item_names). */
+export function readStations(walk) {
+  const cells = Array.from(walk.station_cells());
+  return Array.from(walk.station_item_names()).map((name, i) => ({ cell: cells.slice(i * 3, i * 3 + 3), name }));
+}
+
+/**
+ * Column-major model matrix, in raft-local coordinates (those of raftBoxes), of
+ * an item resting on the station at world `cell` `[x, y, z]`, `origin` being the
+ * world coordinate of the region's min corner (scene.min): centred over the cell's
+ * top face with its bottom edge on it. Apply the raft matrix on top to place it
+ * in the world.
+ */
+export function stationPose(cell, origin = 0, size = STATION_ITEM_SIZE) {
+  return new Float32Array([
+    size, 0, 0, 0,
+    0, size, 0, 0,
+    0, 0, size, 0,
+    cell[0] - origin + 0.5, cell[1] + 1 + size / 2, cell[2] - origin + 0.5, 1,
+  ]);
+}
+
+/** Column-major product a * b of two 4x4 matrices. */
+export function mulMat4(a, b) {
+  const out = new Float32Array(16);
+  for (let c = 0; c < 4; c++) {
+    for (let r = 0; r < 4; r++) {
+      let v = 0;
+      for (let k = 0; k < 4; k++) v += a[k * 4 + r] * b[c * 4 + k];
+      out[c * 4 + r] = v;
+    }
+  }
+  return out;
+}
+
+/**
+ * One { key, model } per station item: `key` the item name (for itemBoxes),
+ * `model` the station pose carried by `raft`, the raft's own matrix, so the
+ * item moves and turns with the raft's blocks.
+ */
+export function stationDraws(stations, raft, origin = 0) {
+  return stations.map(({ cell, name }) => ({ key: name, model: mulMat4(raft, stationPose(cell, origin)) }));
+}
