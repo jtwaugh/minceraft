@@ -16,13 +16,14 @@ use std::fmt;
 
 const DEFAULT_INTERACTIONS: &str = include_str!("../../../data/interactions.toml");
 
-const RULE_FIELDS: [&str; 7] = [
+const RULE_FIELDS: [&str; 8] = [
     "held",
     "button",
     "target",
     "target_face",
     "require_air_above",
     "require_state",
+    "require_line_out",
     "action",
 ];
 
@@ -54,6 +55,8 @@ pub enum Target {
     Station,
     Entity(String),
     None,
+    /// Matches any target: a block, an entity or nothing (`any`).
+    Any,
 }
 
 /// The function a matching rule runs.
@@ -66,6 +69,8 @@ pub enum ActionKind {
     Forage,
     PutDown,
     Take,
+    Cast,
+    Reel,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,6 +81,8 @@ pub struct Rule {
     pub target_face: Option<String>,
     pub require_air_above: bool,
     pub require_state: Option<String>,
+    /// `Some(b)`: the rule applies only when a fishing line is out (or not).
+    pub require_line_out: Option<bool>,
     pub action: ActionKind,
 }
 
@@ -192,8 +199,10 @@ fn parse_button(value: &str) -> Option<Button> {
 }
 
 fn parse_target(value: &str) -> Option<Target> {
-    if value == "none" {
-        return Some(Target::None);
+    match value {
+        "none" => return Some(Target::None),
+        "any" => return Some(Target::Any),
+        _ => {}
     }
     match split_named(value)? {
         ("block", "station") => Some(Target::Station),
@@ -212,6 +221,8 @@ fn parse_action(value: &str) -> Option<ActionKind> {
         "forage" => Some(ActionKind::Forage),
         "put_down" => Some(ActionKind::PutDown),
         "take" => Some(ActionKind::Take),
+        "cast" => Some(ActionKind::Cast),
+        "reel" => Some(ActionKind::Reel),
         _ => None,
     }
 }
@@ -249,6 +260,17 @@ fn parse_rule(rule: usize, table: &toml::value::Table) -> Result<Rule, Interacti
         }
     };
 
+    let require_line_out = match table.get("require_line_out") {
+        None => None,
+        Some(toml::Value::Boolean(b)) => Some(*b),
+        Some(_) => {
+            return Err(InteractionsError::WrongType {
+                rule,
+                field: "require_line_out",
+            })
+        }
+    };
+
     Ok(Rule {
         held: parse_held(&held).ok_or(InteractionsError::UnknownHeld { rule, value: held })?,
         button: parse_button(&button).ok_or(InteractionsError::UnknownButton {
@@ -262,6 +284,7 @@ fn parse_rule(rule: usize, table: &toml::value::Table) -> Result<Rule, Interacti
         target_face: optional_str("target_face")?,
         require_air_above,
         require_state: optional_str("require_state")?,
+        require_line_out,
         action: parse_action(&action).ok_or(InteractionsError::UnknownAction {
             rule,
             value: action,
@@ -324,6 +347,8 @@ pub struct TargetFacts {
     pub entity: Option<String>,
     pub air_above: bool,
     pub crop_state: Option<String>,
+    /// The player has a bobber in the water.
+    pub line_out: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -373,6 +398,8 @@ fn rule_matches(rule: &Rule, ctx: &ResolveCtx) -> bool {
         return false;
     }
     let face = match (&rule.target, &ctx.target) {
+        (Target::Any, targeting::Target::Block { face, .. }) => Some(*face),
+        (Target::Any, _) => None,
         (Target::None, targeting::Target::None) => None,
         (Target::Block(name), targeting::Target::Block { face, .. })
             if ctx.facts.block.as_deref() == Some(name) =>
@@ -397,6 +424,12 @@ fn rule_matches(rule: &Rule, ctx: &ResolveCtx) -> bool {
         }
     }
     if rule.require_air_above && !ctx.facts.air_above {
+        return false;
+    }
+    if rule
+        .require_line_out
+        .is_some_and(|want| want != ctx.facts.line_out)
+    {
         return false;
     }
     if let Some(want) = &rule.require_state {
@@ -453,7 +486,9 @@ fn run_action(
         | ActionKind::Plant
         | ActionKind::Pick
         | ActionKind::PutDown
-        | ActionKind::Take => {}
+        | ActionKind::Take
+        | ActionKind::Cast
+        | ActionKind::Reel => {}
         ActionKind::Forage => {
             forage();
         }
@@ -683,6 +718,7 @@ mod tests {
             target_face: None,
             require_air_above: false,
             require_state: None,
+            require_line_out: None,
             action,
         }
     }
@@ -762,7 +798,11 @@ mod tests {
         expected[4].require_air_above = true;
         expected[4].target_face = Some("top".into());
         expected[11].target_face = Some("top".into());
-        assert_eq!(Interactions::default_rules().rules, expected);
+        // Later sections append rules after the section 7 ones.
+        assert_eq!(
+            Interactions::default_rules().rules[..expected.len()],
+            expected[..]
+        );
     }
 
     fn one_rule(held: &str, button: &str, target: &str, action: &str) -> Vec<Rule> {
@@ -913,6 +953,68 @@ mod tests {
                 field: "colour".into()
             }
         );
+    }
+
+    fn rod(button: Button, line_out: bool) -> ResolveCtx {
+        let mut c = animal(tool("fishing_rod"));
+        c.button = button;
+        c.target = targeting::Target::None;
+        c.facts = TargetFacts {
+            line_out,
+            ..TargetFacts::default()
+        };
+        c
+    }
+
+    #[test]
+    fn rod_casts_without_a_line_and_reels_with_one() {
+        assert_eq!(
+            action(&rod(Button::Secondary, false)),
+            Some(ActionKind::Cast)
+        );
+        assert_eq!(
+            action(&rod(Button::Secondary, true)),
+            Some(ActionKind::Reel)
+        );
+        assert_eq!(action(&rod(Button::Primary, false)), None);
+        assert_eq!(action(&rod(Button::Primary, true)), None);
+        // `any` also covers a block or an entity under the crosshair.
+        let mut c = rod(Button::Secondary, true);
+        c.target = targeting::Target::Entity { id: 1 };
+        c.facts.entity = Some("animal".into());
+        assert_eq!(action(&c), Some(ActionKind::Reel));
+        let mut c = ctx(tool("fishing_rod"), Button::Secondary, "water", Face::Top);
+        assert_eq!(action(&c), Some(ActionKind::Cast));
+        c.facts.line_out = true;
+        assert_eq!(action(&c), Some(ActionKind::Reel));
+    }
+
+    #[test]
+    fn fishing_grammar_parses_and_rejects_bad_values() {
+        let text = "[[rule]]\nheld = \"any\"\nbutton = \"secondary\"\ntarget = \"any\"\nrequire_line_out = true\naction = \"reel\"\n";
+        let r = Interactions::from_toml(text).unwrap().rules;
+        assert_eq!(
+            (r[0].target.clone(), r[0].require_line_out, r[0].action),
+            (Target::Any, Some(true), ActionKind::Reel)
+        );
+        let bad = text.replace("true", "\"yes\"");
+        assert!(matches!(
+            Interactions::from_toml(&bad),
+            Err(InteractionsError::WrongType {
+                rule: 1,
+                field: "require_line_out"
+            })
+        ));
+        let bad = text.replace("\"reel\"", "\"snag\"");
+        assert!(matches!(
+            Interactions::from_toml(&bad),
+            Err(InteractionsError::UnknownAction { .. })
+        ));
+        let bad = text.replace("\"any\"\nrequire", "\"anything\"\nrequire");
+        assert!(matches!(
+            Interactions::from_toml(&bad),
+            Err(InteractionsError::UnknownTarget { .. })
+        ));
     }
 
     #[test]
