@@ -25,8 +25,8 @@
 // oldest first, as `name key=value ...` strings; each is delivered once.
 //
 // `particles` is the live particle list (particles.js: a burst per `forage_missed` event,
-// and flakes off snowy foliage when `frame` gets `snow` ({ cells, phase }: snowOnFoliage cells
-// and the sway phase, null while motion is reduced)), `particleCount` its length; scene.js only draws it.
+// and flakes off snowy foliage when `frame` gets `snow` ({ cells, wind }: snowOnFoliage cells
+// and the windstate.js frame { dir, strength, phase }, null while motion is reduced)), `particleCount` its length; scene.js only draws it.
 //
 // `underwater` is whether the drawn eye is in a water cell, in either mode;
 // scene.js switches the fog and tint on it.
@@ -120,7 +120,7 @@ export function createController({ input, walk, fly, clock, document, flying = f
       const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left() });
       const events = Array.from(walk.drain_events());
       particles.spawnMisses(events);
-      if (snow) particles.spawnSnow(snow.cells, eye, snow.phase, dt);
+      if (snow) particles.spawnSnow(snow.cells, eye, snow.wind, dt);
       particles.update(dt);
       Object.assign(state, { inventory: input.inventory, dead, ticks, alpha, eye, yaw, pitch, fov, aim: readAim(walk, alpha), belt, hud, underwater, day: readDay(walk, alpha), events, particles: particles.list, particleCount: particles.count });
       return state;
