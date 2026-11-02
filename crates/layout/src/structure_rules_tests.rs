@@ -59,6 +59,7 @@ fn every_kind_parses() {
         ("plaza", PieceKind::Plaza),
         ("dock", PieceKind::Dock),
         ("boardwalk", PieceKind::Boardwalk),
+        ("landing", PieceKind::Landing),
         ("building", PieceKind::Building),
         ("cap", PieceKind::Cap),
         ("decor", PieceKind::Decor),

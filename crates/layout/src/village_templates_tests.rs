@@ -8,7 +8,7 @@ fn count_range(kind: PieceKind) -> (usize, usize) {
     match kind {
         PieceKind::Plaza => (3, 6),
         PieceKind::Dock => (1, 1),
-        PieceKind::Boardwalk => (2, 4),
+        PieceKind::Boardwalk | PieceKind::Landing => (2, 4),
         PieceKind::Building => (1, 3),
         PieceKind::Cap | PieceKind::Decor => (1, 1),
     }
