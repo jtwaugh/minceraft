@@ -349,3 +349,27 @@ cluster_scale = 16.0
 salt = 24
 biomes = { Taiga = 0.100, Forest = 0.060 }
 niche = { conifer = [0.2, 1.0], light = [0.1, 0.8], wetness = [0.2, 0.8] }
+
+# Wild strawberry: sunny, medium-dry ground a few columns from the trees.
+[[flora]]
+name = "smultron"
+block = "smultron"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 14.0
+salt = 25
+biomes = { Forest = 0.030, Plains = 0.020, "Seasonal Forest" = 0.030 }
+niche = { edge = [1.0, 4.0], sun_facing = [0.4, 1.0], wetness = [0.0, 0.7] }
+
+# St John's wort: open, dry, sunny ground.
+[[flora]]
+name = "johannesort"
+block = "johannesort"
+shape = "cross"
+ground = ["grass"]
+tint = "none"
+cluster_scale = 14.0
+salt = 26
+biomes = { Plains = 0.020, Shrubland = 0.020 }
+niche = { light = [0.8, 1.0], sun_facing = [0.4, 1.0], wetness = [0.0, 0.4] }

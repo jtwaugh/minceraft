@@ -1694,3 +1694,95 @@ fn berry_ground_cover_is_independent_of_region() {
         }
     }
 }
+
+/// The shipped entry `name` made certain in `biome`, so only its niche decides.
+fn meadow(name: &str, biome: Biome) -> Vec<Flora> {
+    let f = FLORA.iter().find(|f| f.name == name).expect(name);
+    assert!(
+        f.biomes.iter().any(|&(b, _)| b == biome),
+        "{name} {biome:?}"
+    );
+    vec![Flora {
+        biomes: Box::leak(Box::new([(biome, 1e9)])),
+        ..*f
+    }]
+}
+
+/// Hand-built flat grass at y 70 with oak leaves over every column at
+/// x >= `leaves_from`. Whether column (20, 20) got the plant of `table`.
+fn meadow_placed(biome: Biome, leaves_from: Option<i32>, table: &[Flora]) -> bool {
+    let n = 41;
+    let mut blocks = vec![0u8; n * n * HEIGHT];
+    let biomes = vec![biome as u8; n * n];
+    let mut world = World::for_test(&mut blocks, n as i32, n as i32).with_biome(&biomes);
+    for z in 0..n as i32 {
+        for x in 0..n as i32 {
+            for y in 0..=70 {
+                let b = match y {
+                    70 => Block::Grass,
+                    67..=69 => Block::Dirt,
+                    _ => Block::Stone,
+                };
+                world.set(x, y, z, b as u8);
+            }
+            if leaves_from.is_some_and(|f| x >= f) {
+                world.set(x, 76, z, Block::OakLeaves as u8);
+            }
+        }
+    }
+    let block = table[0].block as u8;
+    place(&mut world, 12345, (0, 0, n as i32, n as i32), table);
+    world.get(20, 71, 20) == block
+}
+
+#[test]
+fn smultron_grows_a_few_columns_from_trees_and_not_in_the_open_or_under_them() {
+    let t = meadow("smultron", Biome::Forest);
+    assert!(meadow_placed(Biome::Forest, Some(22), &t), "2 from trees");
+    assert!(!meadow_placed(Biome::Forest, None, &t), "no trees near");
+    assert!(!meadow_placed(Biome::Forest, Some(20), &t), "under leaves");
+}
+
+#[test]
+fn johannesort_grows_in_the_open_and_not_under_trees() {
+    let t = meadow("johannesort", Biome::Plains);
+    assert!(meadow_placed(Biome::Plains, None, &t));
+    assert!(!meadow_placed(Biome::Plains, Some(20), &t), "shaded");
+}
+
+#[test]
+fn new_meadow_flowers_are_cross_plants_in_their_biomes() {
+    for (name, want) in [
+        (
+            "smultron",
+            ["Forest", "Plains", "Seasonal Forest"].as_slice(),
+        ),
+        ("johannesort", ["Plains", "Shrubland"].as_slice()),
+    ] {
+        let f = FLORA.iter().find(|f| f.name == name).unwrap();
+        assert_eq!(f.shape, FloraShape::Cross);
+        assert_eq!(f.biomes.len(), want.len(), "{name}");
+        assert!(!f.niche.is_empty());
+    }
+}
+
+#[test]
+fn meadow_flowers_are_independent_of_region() {
+    let seed = 12345;
+    let big = gen(seed, -400, -400, 800, 800, &FLORA);
+    let (s, j) = (
+        count(&big, Block::Smultron),
+        count(&big, Block::Johannesort),
+    );
+    assert!(s > 0 && j > 0, "{s} {j}");
+    for (ox, oz, w, d) in [(-37, 11, 141, 129), (60, -50, 133, 133)] {
+        let small = gen(seed, ox, oz, w, d, &FLORA);
+        for z in oz..oz + d as i32 {
+            for x in ox..ox + w as i32 {
+                for y in 0..HEIGHT {
+                    assert_eq!(at(&big, x, y, z), at(&small, x, y, z), "{x},{y},{z}");
+                }
+            }
+        }
+    }
+}
