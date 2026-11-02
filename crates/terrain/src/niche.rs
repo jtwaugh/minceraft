@@ -8,16 +8,18 @@
 //! hollow (surface height minus the mean of rings around the column) and
 //! forest edge (distance from an open column to the nearest leaf column) and
 //! exposure (open water upwind of the column) and conifer (share of spruce
-//! among the leaf columns near the column).
+//! among the leaf columns near the column) and wetness (low slope plus
+//! hollowness, weighted).
 
 use crate::data::{blocks_movement, is_leaves, is_liquid, Block};
 use crate::decorate::World;
 use crate::flora::{
     Flora, FLORA_CONIFER_NONE, FLORA_EDGE_RADIUS, FLORA_EXPOSURE_CAP, FLORA_HOLLOW_RADII,
-    FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT, FLORA_TREE_KIND_RADIUS, FLORA_WIND,
-    NICHE_MARGIN_CONIFER, NICHE_MARGIN_EDGE, NICHE_MARGIN_EXPOSURE, NICHE_MARGIN_HEIGHT_ABOVE_SEA,
-    NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT, NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH,
-    NICHE_MARGIN_SUN_FACING,
+    FLORA_LIGHT_RADIUS, FLORA_SUN, FLORA_SUN_FACING_FLAT, FLORA_TREE_KIND_RADIUS,
+    FLORA_WETNESS_HOLLOW_REF, FLORA_WETNESS_HOLLOW_WEIGHT, FLORA_WETNESS_SLOPE_REF,
+    FLORA_WETNESS_SLOPE_WEIGHT, FLORA_WIND, NICHE_MARGIN_CONIFER, NICHE_MARGIN_EDGE,
+    NICHE_MARGIN_EXPOSURE, NICHE_MARGIN_HEIGHT_ABOVE_SEA, NICHE_MARGIN_HOLLOW, NICHE_MARGIN_LIGHT,
+    NICHE_MARGIN_SLOPE, NICHE_MARGIN_SOIL_DEPTH, NICHE_MARGIN_SUN_FACING, NICHE_MARGIN_WETNESS,
 };
 use crate::trees::libm_sqrt;
 use crate::{HEIGHT, SEA_LEVEL};
@@ -35,6 +37,7 @@ pub enum NicheLayer {
     Edge,
     Exposure,
     Conifer,
+    Wetness,
 }
 
 impl NicheLayer {
@@ -50,6 +53,7 @@ impl NicheLayer {
             NicheLayer::Edge => NICHE_MARGIN_EDGE,
             NicheLayer::Exposure => NICHE_MARGIN_EXPOSURE,
             NicheLayer::Conifer => NICHE_MARGIN_CONIFER,
+            NicheLayer::Wetness => NICHE_MARGIN_WETNESS,
         }
     }
 }
@@ -87,6 +91,7 @@ pub(crate) fn column(world: &World, layer: NicheLayer, x: i32, y: i32, z: i32) -
         NicheLayer::Edge => Some(edge(world, x, y, z)),
         NicheLayer::Exposure => Some(exposure(world, x, z)),
         NicheLayer::Conifer => Some(conifer(world, x, y, z)),
+        NicheLayer::Wetness => Some(wetness(world, x, z)),
     }
 }
 
@@ -97,6 +102,19 @@ fn gradient(world: &World, x: i32, z: i32) -> (f64, f64) {
         (h(x + 1, z) - h(x - 1, z)) * 0.5,
         (h(x, z + 1) - h(x, z - 1)) * 0.5,
     )
+}
+
+/// 0 to 1 wetness index: `FLORA_WETNESS_SLOPE_WEIGHT` times how far the slope
+/// is below `FLORA_WETNESS_SLOPE_REF`, plus `FLORA_WETNESS_HOLLOW_WEIGHT`
+/// times how far [`hollow`] is below zero, as a share of
+/// `FLORA_WETNESS_HOLLOW_REF`; each term is clamped to 0..1 and so is the sum.
+pub(crate) fn wetness(world: &World, x: i32, z: i32) -> f64 {
+    let (gx, gz) = gradient(world, x, z);
+    let flat = 1.0 - libm_sqrt(gx * gx + gz * gz) / FLORA_WETNESS_SLOPE_REF;
+    let low = -hollow(world, x, z) / FLORA_WETNESS_HOLLOW_REF;
+    (FLORA_WETNESS_SLOPE_WEIGHT * flat.clamp(0.0, 1.0)
+        + FLORA_WETNESS_HOLLOW_WEIGHT * low.clamp(0.0, 1.0))
+    .clamp(0.0, 1.0)
 }
 
 /// [`surface_height`] at `(x, z)` minus its mean over 8 columns (axis and
