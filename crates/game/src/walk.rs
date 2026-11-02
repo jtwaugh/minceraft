@@ -1191,6 +1191,23 @@ impl Walker {
                 }
             }
         }
+        // A secondary press on a near target no rule covers. A loose item is
+        // `pick_up`'s to accept or refuse.
+        let loose = matches!(aim.target, Target::Entity { id } if self.items.get(id).is_some());
+        if pressed.secondary
+            && !matches!(aim.target, Target::None)
+            && !loose
+            && resolve(
+                &self.rules.rules,
+                &ResolveCtx {
+                    button: Button::Secondary,
+                    ..ctx.clone()
+                },
+            )
+            .is_none()
+        {
+            self.refuse("use", Reason::NothingHere);
+        }
         if pressed.primary {
             self.events.push(GameEvent::Swing {
                 player: "player".to_string(),
@@ -4002,6 +4019,40 @@ mod tests {
             primary: true,
             ..TickInput::default()
         });
+        assert!(refusals(&mut w).is_empty());
+    }
+
+    fn carrying(floor: Block, item: &str) -> Walker {
+        let mut w = floor_walker(8, floor);
+        w.clear_held_override();
+        w.state.hands = Some(ItemInstance { item: item.into() });
+        w.tick(&down(false, false));
+        w.drain_events();
+        w
+    }
+
+    #[test]
+    fn a_carried_item_with_no_use_on_the_target_refuses_once() {
+        for (floor, item) in [(Block::Stone, "seeds"), (Block::Grass, "dish")] {
+            let mut w = carrying(floor, item);
+            w.tick(&down(true, false));
+            assert_eq!(refusals(&mut w), [("use".to_string(), Reason::NothingHere)]);
+        }
+    }
+
+    #[test]
+    fn working_secondary_presses_add_no_refusal() {
+        // Tilling with the hoe, planting seeds, and picking up a loose item.
+        let mut w = grass_floor_walker(8);
+        w.tick(&down(true, false));
+        assert!(refusals(&mut w).is_empty());
+        w.clear_held_override();
+        w.state.hands = Some(seeds());
+        w.tick(&down(true, false));
+        assert!(refusals(&mut w).is_empty());
+        let (mut w, _) = facing_seeds();
+        w.drain_events();
+        w.tick(&pick_up());
         assert!(refusals(&mut w).is_empty());
     }
 
