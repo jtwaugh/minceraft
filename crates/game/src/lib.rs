@@ -35,6 +35,7 @@ pub mod input;
 pub mod interactions;
 pub mod item_entities;
 pub mod items;
+pub mod messages;
 pub mod movement;
 pub mod phase;
 pub mod physics;

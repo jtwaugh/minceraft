@@ -1,0 +1,28 @@
+# HUD message line text. See docs/design/action-feedback.md section 2.
+#
+# Each string may use `{field}` placeholders naming the event's `key=value`
+# fields (as `Walk::drain_events` writes them), plus `{drop_key}`, the display
+# name of the first key bound to `drop` in data/input.toml. Lists such as
+# `yields` arrive comma-joined. Swing misses have no entry and stay silent.
+
+[timing]
+# Sim ticks (20 a second) the latest message shows at full strength, then
+# takes to fade out: about two seconds in all.
+hold_ticks = 30
+fade_ticks = 10
+
+# Keyed by event name.
+[events]
+item_picked_up = "Picked up {item}"
+block_tilled = "Tilled soil"
+crop_planted = "Planted {crop}"
+crop_harvested = "Harvested {crop}"
+foraged = "Foraged {yields}"
+
+# `action_refused`, keyed by `reason`.
+[reasons]
+too_far = "Too far away"
+hands_full = "Hands full: drop with {drop_key}"
+tools_stowed = "Tools stowed while carrying"
+nothing_here = "Nothing to do here"
+chest_full = "Chest full"
