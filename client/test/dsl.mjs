@@ -191,6 +191,7 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   const controller = createController({
     input, walk, fly, clock: new SimClock(), document, flying: mode === 'fly', stream: stream ? { budget } : null,
     sprintFov: { base: sampler.fov_degrees, extra: sampler.sprint_fov_extra_degrees, seconds: sampler.sprint_fov_ease_seconds },
+    messages: terrain_game.message_templates(),
   });
   const seen = [];
   const most = stream ? { regions: 0, chunks: 0, verts: 0 } : null; // running maxima of one frame's work

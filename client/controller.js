@@ -22,6 +22,8 @@
 // `hud` is hudModel (hud.js) for the walking player, filled from the belt and health.
 // A belt selection change while carrying starts the hands-frame pulse: `hud.pulse` is 1
 // on that frame and falls linearly to 0 over PULSE_SECONDS of frame time.
+// `hud.message` is the message line (message.js) fed this frame's events, from
+// `messages` (game-web's message_templates()); without them it stays empty.
 //
 // `events` is the sim's events since the previous frame (every tick of this one),
 // oldest first, as `name key=value ...` strings; each is delivered once.
@@ -50,17 +52,19 @@
 import { stepWalk } from './walk.js';
 import { readAim, readBelt, readBobber, readFish } from './overlay.js';
 import { hudModel } from './hud.js';
+import { createMessage } from './message.js';
 import { createStream, regionOf } from './stream.js';
 import { createParticles } from './particles.js';
 import { readDay } from './daylook.js';
 
 const PULSE_SECONDS = 0.4;
 
-export function createController({ input, walk, fly, clock, document, flying = false, stream = null, sprintFov = { base: 70, extra: 0, seconds: 1 } }) {
+export function createController({ input, walk, fly, clock, document, flying = false, stream = null, sprintFov = { base: 70, extra: 0, seconds: 1 }, messages = null }) {
   const regions = stream && createStream(stream);
   let followed = null;
   const state = { flying, inventory: false, dead: false, ticks: 0, alpha: 0, eye: [0, 0, 0], yaw: 0, pitch: 0, fov: sprintFov.base, aim: null, belt: null, hud: null, underwater: false, day: null, events: [], particles: [], particleCount: 0 };
   const particles = createParticles();
+  const message = messages && createMessage(messages);
 
   const onKey = (e) => {
     if (e.code !== 'KeyF' || e.repeat || !input.locked || input.console || input.inventory) return;
@@ -126,8 +130,9 @@ export function createController({ input, walk, fly, clock, document, flying = f
       if (state.belt && belt.selected !== state.belt.selected && belt.hands != null) pulseLeft = PULSE_SECONDS;
       else pulseLeft = Math.max(0, pulseLeft - dt);
       const pulse = pulseLeft / PULSE_SECONDS;
-      const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left(), pulse });
       const events = Array.from(walk.drain_events());
+      message?.feed(events, ticks);
+      const hud = hudModel({ belt, health: walk.health(), maxHealth: walk.max_health(), phase: walk.phase(), secondsLeft: walk.phase_seconds_left(), pulse, message: message?.view() });
       particles.spawnMisses(events);
       particles.spawnSplash(events, readBobber(walk)?.pos);
       particles.spawnWake(readFish(walk), dt);
