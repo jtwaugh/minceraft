@@ -13,8 +13,8 @@
 //                               `stream` is a streamed world (seed 12345) starting over region 0 0,
 //                               meshing one region per frame (`at <x> <z>` starts elsewhere, 72 up); every frame's new and remeshed regions
 //                               are meshed on the CPU as scene.js does (client/regionmesh.js, no upload)
-//   click                       click the canvas (requests pointer lock)
-//   lock | unlock | blur        pointer lock gained / lost; window loses focus
+//   click                       click the canvas (requests pointer lock, which is granted at once)
+//   lock | unlock | blur        pointer lock gained / lost; window loses focus (and the lock)
 //   down <code> | up <code>     KeyboardEvent.code, e.g. KeyW, Space, ShiftLeft
 //   repeat <code>               an auto-repeat keydown
 //   press <code>                down then up
@@ -76,7 +76,7 @@
 // flower.block (block name in the cell `place` filled, or air),
 // planter.ground and planter.crop (the same for the first planter),
 // driving (true|false: the player is steering the raft), raft.heading (radians), raft.x|z (raft offset from rest), raft.moved (the raft's distance since mark),
-// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, phase (gathering|service), phase.left (whole seconds),
+// sprinting (true|false: the player is sprinting), fov (vertical field of view in degrees, eased while sprinting), health (half-hearts, as the HUD shows it), hearts.full|half|empty, hud.selected, hud.hands, hud.ready (the selected tool when the hands are empty, or none), phase (gathering|service), phase.left (whole seconds),
 // layout.scale, layout.problems (count), layout.belt.w (CSS px), layout.belt.fraction (belt width / viewport width): the last `layout` statement's result (an error before any),
 // layout.timer|slotnumbers, layout.hands.label (inside|outside|missing: whether the timer box, every slot-number glyph rect, or the hands' label rect is in the last layout and entirely within the viewport),
 // particles (live particles: a burst per `forage_missed` event, gone after about 0.6 s of frames),
@@ -144,7 +144,14 @@ export function parse(src) {
 function world({ mode = 'walk', raft = false, debug = raft, stream = false, at = [50.5, 40.5], budget = 1, damage = null }) {
   init();
   const target = (extra) => Object.assign(new EventTarget(), extra);
-  const canvas = target({ lockRequests: 0, requestPointerLock() { this.lockRequests++; } });
+  const canvas = target({
+    lockRequests: 0,
+    requestPointerLock() { // as a browser grants it
+      this.lockRequests++;
+      document.pointerLockElement = canvas;
+      document.dispatchEvent(new Event('pointerlockchange'));
+    },
+  });
   const document = target({
     pointerLockElement: null,
     exitPointerLock() {
@@ -282,6 +289,7 @@ function read(w, path) {
   if (path === 'phase.left') return s.hud.timer.secondsLeft;
   if (path === 'hud.selected') return s.hud.selected;
   if (path === 'hud.hands') return s.hud.hands ?? 'none';
+  if (path === 'hud.ready') return s.hud.ready ?? 'none';
   if (path === 'items') return w.walk.loose_items();
   if (path === 'fish') return readFish(w.walk).length;
   if (path.startsWith('fish.near')) {
@@ -355,7 +363,10 @@ function step(w, { op, args }) {
     case 'lock': document.pointerLockElement = canvas; return fire(document, 'pointerlockchange');
     case 'unlock': document.pointerLockElement = null; return fire(document, 'pointerlockchange');
     case 'respawn': return w.controller.respawn();
-    case 'blur': return fire(window, 'blur');
+    case 'blur': // the browser drops the lock on focus loss
+      document.pointerLockElement = null;
+      fire(document, 'pointerlockchange');
+      return fire(window, 'blur');
     case 'down': return key('keydown', args[0]);
     case 'up': return key('keyup', args[0]);
     case 'repeat': return key('keydown', args[0], true);

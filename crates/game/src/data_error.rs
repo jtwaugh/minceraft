@@ -21,6 +21,7 @@ pub enum DataFile {
     FishSpawn,
     Wind,
     Day,
+    Stations,
 }
 
 impl DataFile {
@@ -40,6 +41,7 @@ impl DataFile {
             DataFile::FishSpawn => "fish_spawn.toml",
             DataFile::Wind => "wind.toml",
             DataFile::Day => "day.toml",
+            DataFile::Stations => "stations.toml",
         }
     }
 }

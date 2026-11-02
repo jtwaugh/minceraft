@@ -18,6 +18,7 @@ export function validateFinding(obj) {
   if (typeof obj.severity === 'string' && !SEVERITIES.includes(obj.severity)) {
     errors.push(`unknown severity: ${obj.severity}`);
   }
+  if ('advisory' in obj && typeof obj.advisory !== 'boolean') errors.push('field advisory is not a boolean');
   if (typeof obj.repro === 'string' && obj.repro.trim() === '') errors.push('repro is empty');
   return { ok: errors.length === 0, errors };
 }

@@ -149,3 +149,10 @@ test('the timer is a panel, then the phase icon, then the digits', async () => {
   assert.equal(timer.children.length, 4);
   assert.equal(timer.children[0].tag, 'canvas');
 });
+
+test('ready is the selected tool while the hands are empty', () => {
+  const ready = (b) => hudModel({ belt: { ...belt, ...b }, health: 20, maxHealth: 20 }).ready;
+  assert.equal(ready({ selected: 0, held: 'empty' }), null);
+  assert.equal(ready({ selected: 2, held: 'tool:hoe' }), 'hoe');
+  assert.equal(ready({ selected: 2, hands: 'seeds', held: 'item:seeds' }), null);
+});

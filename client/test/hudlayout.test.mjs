@@ -39,8 +39,15 @@ for (const [w, h, name] of sweep) {
     assert.deepEqual(rects.crosshair, { x: Math.floor((w - 7 * scale) / 2), y: Math.floor((h - 7 * scale) / 2), w: 7 * scale, h: 7 * scale });
     const bp = rects.beltPanel;
     const hp = rects.handsPanel;
-    assert.equal(bp.x, Math.floor((w - Math.max(hp.x + hp.w - bp.x, rects.hearts.w)) / 2));
-    assert.equal(rects.hearts.x, bp.x);
+    const rowEnd = hp.x + hp.w;
+    if (Math.floor((w - bp.w) / 2) + (rowEnd - bp.x) <= w) {
+      assert.equal(bp.x, Math.floor((w - bp.w) / 2));
+      if (w >= 390) assert.ok(Math.abs(bp.x + bp.w / 2 - w / 2) <= 1);
+    } else {
+      assert.equal(bp.x, Math.floor((w - Math.max(rowEnd - bp.x, rects.hearts.w)) / 2));
+    }
+    if (bp.x + rects.hearts.w <= w) assert.equal(rects.hearts.x, bp.x);
+    else assert.equal(rects.hearts.x, Math.max(0, w - rects.hearts.w));
     assert.equal(bp.y + bp.h, h - BOTTOM_MARGIN);
     assert.equal(rects.hearts.y + rects.hearts.h + HEARTS_BELT_GAP * scale, bp.y);
     // The strip encloses the slot row by BELT_PAD texels.
@@ -94,6 +101,16 @@ test('slot icons are centred in their slots on whole texels, null when empty or 
     // Without a hoe texture its slot shows the frame only.
     assert.equal(hudLayout(model, set, { w, h }).rects.slotIcons[2], null);
   }
+});
+
+test('the hands strip falls back to a centred column when it would run off the viewport', () => {
+  const view = { w: 80, h: 45 };
+  const { rects } = hudLayout(model, set, view);
+  const hp = rects.handsPanel, bp = rects.beltPanel;
+  assert.ok(Math.floor((view.w - bp.w) / 2) + (hp.x + hp.w - bp.x) > view.w, 'centring the belt would overflow');
+  assert.equal(bp.x, Math.floor((view.w - Math.max(hp.x + hp.w - bp.x, rects.hearts.w)) / 2));
+  assert.ok(hp.x >= 0 && hp.x + hp.w <= view.w, "hands strip inside the viewport");
+  assert.ok(rects.hearts.x >= 0);
 });
 
 test('minimum viewport has hud scale 1', () => {
@@ -205,4 +222,16 @@ test('a carried item wins over the ready tool', () => {
   const both = hudLayout({ ...withTimer(7, 'sword'), ready: 'hoe' }, withHoe, { w: 1366, h: 768 }).rects.handsSlot.icon;
   assert.deepEqual(both, held);
   assert.equal(held.w, held.h);
+});
+
+test('the belt panel is centred within 1px at 1366x768 and 390x844 and the hearts stay on screen', () => {
+  for (const [w, h] of [[1366, 768], [390, 844]]) {
+    const { rects } = hudLayout(model, set, { w, h });
+    const bp = rects.beltPanel;
+    assert.ok(Math.abs(bp.x + bp.w / 2 - w / 2) <= 1, `${w}x${h}`);
+    assert.ok(rects.hearts.x >= 0 && rects.hearts.x + rects.hearts.w <= w, `${w}x${h}`);
+    assert.deepEqual(layoutChecks(hudLayout(model, set, { w, h }), { w, h }), []);
+  }
+  const wide = hudLayout(model, set, { w: 1366, h: 768 }).rects;
+  assert.equal(wide.hearts.x, wide.beltPanel.x);
 });

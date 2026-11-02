@@ -44,6 +44,7 @@ pub mod rng;
 pub mod sampler;
 pub mod scene;
 pub mod shapes;
+pub mod stations;
 pub mod stream;
 pub mod targeting;
 pub mod till;

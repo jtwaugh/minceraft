@@ -41,3 +41,11 @@ test('verifyAll splits kept and dropped', () => {
   assert.deepEqual(dropped.map((d) => d.finding), [badExpect, noExpect]);
   assert.ok(dropped.every((d) => d.reason));
 });
+
+test('an advisory finding is kept without a replay; a non-advisory one still must reproduce', () => {
+  const advisory = { ...noExpect, advisory: true };
+  assert.equal(verifyFinding(advisory).reproduced, true);
+  const { kept, dropped } = verifyAll([advisory, badExpect, { ...badExpect, advisory: false }]);
+  assert.deepEqual(kept, [advisory]);
+  assert.equal(dropped.length, 2);
+});
