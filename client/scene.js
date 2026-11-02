@@ -583,7 +583,7 @@ function render(now) {
   if (pixel) [eye, yaw, pitch] = [pixel.pose.slice(0, 3), pixel.pose[3], pixel.pose[4]];
   work.ticks = ticks;
   simTicks += ticks;
-  const wind = windState.frame(eye[0], eye[2], simTicks, alpha, (now - (lastFrame ?? now)) / 1000, reducedMotion.matches);
+  const wind = windState.frame(eye[0], eye[2], simTicks, alpha, (now - (lastFrame ?? now)) / 1000, reducedMotion.matches, walk.wind_pin());
   if (reducedMotion.matches) wind.dir = [0, 0];
   lastWind = wind;
   if (regions) {

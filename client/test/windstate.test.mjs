@@ -58,3 +58,36 @@ test('reduced motion: phase 0, no sway, real wind still reported', () => {
   near(f.strength, w.strength(gx, gz), 'strength');
   assert.ok(Math.hypot(...f.dir) > 0.99);
 });
+
+test('a pin replaces the Wind.at result', () => {
+  const w = new Wind(12345n);
+  const f = createWindState(w, Wind, SWAY_SPEED).frame(3, 4, 10, 0.5, 1 / 60, false, [0, -6]);
+  assert.deepEqual(f.vec, [0, -6]);
+  near(f.strength, w.strength(0, -6), 'strength');
+  near(f.dir[0], 0, 'dir x');
+  near(f.dir[1], -1, 'dir z');
+  const none = createWindState(w, Wind, SWAY_SPEED).frame(3, 4, 10, 0.5, 1 / 60, false, []);
+  assert.deepEqual(none.vec, [...w.at(3, 4, 10.5)]);
+});
+
+test('pinning and unpinning does not jump the phase', () => {
+  const state = createWindState(new Wind(12345n), Wind, SWAY_SPEED);
+  const dt = 1 / 60;
+  let prev = state.frame(0, 0, 0, 0, dt, false).phase;
+  for (let i = 1; i < 120; i++) {
+    const pin = i >= 30 && i < 90 ? [i < 60 ? 12 : 0, 0] : [];
+    const p = state.frame(0, 0, i, 0, dt, false, pin).phase;
+    const d = (p - prev + 2 * Math.PI) % (2 * Math.PI);
+    assert.ok(d >= dt * SWAY_SPEED * PHASE_RATE_MIN - 1e-12 && d <= dt * SWAY_SPEED + 1e-12, `step ${d} at ${i}`);
+    prev = p;
+  }
+});
+
+test('reduced motion with a pin: phase 0, no sway, pinned wind reported', () => {
+  const state = createWindState(new Wind(12345n), Wind, SWAY_SPEED);
+  const f = state.frame(0, 0, 0, 0, 0.1, true, [5, 0]);
+  assert.equal(f.phase, 0);
+  assert.equal(f.sway, 0);
+  assert.deepEqual(f.vec, [5, 0]);
+  assert.ok(f.strength > 0);
+});
