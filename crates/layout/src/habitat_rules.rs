@@ -13,6 +13,7 @@ use crate::rule_check::check_range;
 struct RawRule {
     id: String,
     frozen: Option<bool>,
+    broken_ice: Option<bool>,
     temp_min: Option<f64>,
     temp_max: Option<f64>,
     depth_min: Option<u32>,
@@ -62,6 +63,7 @@ pub fn parse_rules(
         rules.push(HabitatRule {
             id: r.id,
             frozen: r.frozen,
+            broken_ice: r.broken_ice,
             temp_min: r.temp_min,
             temp_max: r.temp_max,
             depth_min: r.depth_min,

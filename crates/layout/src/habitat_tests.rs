@@ -8,6 +8,7 @@ fn inp() -> HabitatInputs {
         bottom: Block::Dirt as u8,
         shore_distance: 10,
         frozen: false,
+        broken_ice: false,
     }
 }
 
@@ -17,7 +18,7 @@ fn name(i: HabitatInputs) -> String {
 }
 
 #[test]
-fn shipped_has_six_rules_in_order() {
+fn shipped_has_seven_rules_in_order() {
     let ids: Vec<_> = Habitats::shipped()
         .rules
         .iter()
@@ -27,6 +28,7 @@ fn shipped_has_six_rules_in_order() {
         ids,
         [
             "frozen",
+            "broken_ice",
             "warm_shallows",
             "deep_water",
             "rocky_shore",
@@ -95,6 +97,36 @@ fn earlier_rule_wins() {
         ..inp()
     };
     assert_eq!(name(rc), "rocky_shore");
+}
+
+#[test]
+fn broken_ice_rule_matches_only_broken_ice() {
+    let broken = HabitatInputs {
+        broken_ice: true,
+        ..inp()
+    };
+    assert_eq!(name(broken), "broken_ice");
+    // Frozen is earlier in the file, so it wins.
+    let both = HabitatInputs {
+        frozen: true,
+        ..broken
+    };
+    assert_eq!(name(both), "frozen");
+    let h = Habitats::shipped();
+    let rule = &h.rules[h.id_of("broken_ice").unwrap().0];
+    assert!(!rule.matches(&inp()));
+    // An unset field matches anything.
+    assert!(h.rules[h.id_of("temperate_open").unwrap().0].matches(&broken));
+}
+
+#[cfg(feature = "toml-io")]
+#[test]
+fn broken_ice_key_parses_and_counts_as_a_condition() {
+    let ok = "[[habitat]]\nid='a'\nbroken_ice=true\n[[habitat]]\nid='z'\n";
+    let h = Habitats::from_toml(ok).unwrap();
+    assert_eq!(h.rules[0].broken_ice, Some(true));
+    let only = "[[habitat]]\nid='a'\nbroken_ice=true\n";
+    assert!(Habitats::from_toml(only).is_err());
 }
 
 #[test]

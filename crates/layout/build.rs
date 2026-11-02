@@ -180,10 +180,11 @@ fn main() {
         };
         writeln!(
             out,
-            "    StaticRule {{ id: {:?}, frozen: {}, temp_min: {}, temp_max: {}, depth_min: {}, \
+            "    StaticRule {{ id: {:?}, frozen: {}, broken_ice: {}, temp_min: {}, temp_max: {}, depth_min: {}, \
              depth_max: {}, shore_distance_min: {}, shore_distance_max: {}, bottom: {} }},",
             r.id,
             opt(&r.frozen),
+            opt(&r.broken_ice),
             opt(&r.temp_min),
             opt(&r.temp_max),
             opt(&r.depth_min),
