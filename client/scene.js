@@ -259,11 +259,11 @@ const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 
 // Animals as textured boxes (batch 15): red while hurt, tipped over while dying
 // (see animalPose). Unknown species draw grey.
 const animalModels = {};
-function drawAnimals(mvp, animals) {
+function drawAnimals(mvp, animals, daylight) {
   for (const a of animals) {
     const m = animalModels[a.species] ??= models.addModel(animalBoxes(a.species));
     const { model, tint } = animalPose(a);
-    models.drawModel(mvp, model, m, tint);
+    models.drawModel(mvp, model, m, tint, daylight);
   }
 }
 
@@ -272,20 +272,20 @@ function drawAnimals(mvp, animals) {
 // dorsal fin, one for the tail plate, which swings on its own (fishDraw).
 const fishModels = {};
 const tailTracker = createTailTracker();
-function drawFish(mvp, fish, timeSeconds) {
+function drawFish(mvp, fish, timeSeconds, daylight) {
   const swings = tailTracker.update(fish, timeSeconds);
   for (const { species, height, part, model, tint } of fishDraw(fish, swings)) {
     const m = fishModels[`${species}/${height}/${part}`] ??= models.addModel(
       part === 'tail' ? fishBoxes(species, height).slice(2) : fishBoxes(species, height).slice(0, 2));
-    models.drawModel(mvp, model, m, tint);
+    models.drawModel(mvp, model, m, tint, daylight);
   }
 }
 
 // Loose items as camera-facing icon slabs, one model per item name.
 const itemModels = {};
-function drawItems(mvp, items, timeSeconds, camera) {
+function drawItems(mvp, items, timeSeconds, camera, daylight) {
   for (const { key, model } of itemDraws(items, timeSeconds, camera)) {
-    models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)));
+    models.drawModel(mvp, model, itemModels[key] ??= models.addModel(itemBoxes(key)), undefined, daylight);
   }
 }
 
@@ -627,9 +627,9 @@ function render(now) {
   bind(cutProg, 1); cut(() => drawParts(cutProg, meshes.cutout));
   if (scene) {
     const [dx, dy, dz] = walk.raft_offset(flying ? 1 : alpha);
-    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel);
+    models.drawModel(mvp, raftMatrix([dx, dy, dz], walk.raft_heading(flying ? 1 : alpha), walk.raft_pivot(), scene.min), raftModel, undefined, daylightFactor(day));
   }
-  drawFish(mvp, readFish(walk), now / 1000);
+  drawFish(mvp, readFish(walk), now / 1000, daylightFactor(day));
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   // Water faces point out of the water, so from below the surface they are
@@ -642,8 +642,8 @@ function render(now) {
   bind(solidProg, 0.72); drawParts(solidProg, meshes.ice);
   gl.depthMask(true);
   gl.bindVertexArray(null);
-  if (scene) drawAnimals(mvp, readAnimals(walk));
-  drawItems(mvp, readItems(walk), now / 1000, { yaw });
+  if (scene) drawAnimals(mvp, readAnimals(walk), daylightFactor(day));
+  drawItems(mvp, readItems(walk), now / 1000, { yaw }, daylightFactor(day));
   if (!flying && aim.box) drawBox(mvp, aim.box, aim.kind === 'entity');
   for (const { pos, size, snow } of particles) drawBox(mvp, [...pos.map((v) => v - size), ...pos.map((v) => v + size)], snow ? 'flake' : true);
   if (!flying) drawHeld(proj);
