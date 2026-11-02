@@ -36,6 +36,30 @@ def question(body="B", **kw):
 
 
 class Test(unittest.TestCase):
+    def test_open_pr_uses_the_app_token_and_nothing_else_does(self):
+        from unittest import mock
+        seen = []
+
+        def fake(cmd, **kw):
+            seen.append((cmd[1:3], kw["env"]["GH_TOKEN"]))
+            return mock.Mock(stdout="", stderr="", returncode=0)
+        env = {"GH_TOKEN": "read", "WRITE_TOKEN": "write", "PROJECT_TOKEN": "project", "APP_TOKEN": "app"}
+        acts = [Action("open_pr", "issue#7", {"branch": "claude/issue-7-x", "title": "T", "body": "B"}, ""),
+                Action("add_label", "pr#9", {"label": "x"}, ""),
+                Action("merge_pr", "pr#9", {"sha": "abc1234"}, ""),
+                Action("start_fix", "pr#9", {"kind": "nits", "head": "abc1234", "task": "t"}, "")]
+        for with_app in (True, False):
+            seen.clear()
+            e = env if with_app else {k: v for k, v in env.items() if k != "APP_TOKEN"}
+            with mock.patch.dict(os.environ, e), mock.patch("factory_backend.subprocess.run", fake):
+                b = GhBackend("o/r")
+                s = snap()
+                s.prs[0]["head"] = "other"
+                for a in acts:
+                    b.apply(s, a)
+            self.assertEqual([t for _, t in seen],
+                             ["app" if with_app else "write", "write", "project", "write", "write"])
+
     def test_start_fix_comments_and_dispatches_once(self):
         b, calls = backend()
         s = snap()
