@@ -5,7 +5,7 @@ scope: game
 source: "#1525"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
   D: todo
@@ -27,12 +27,12 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Block edits on land.** The world edit layer decided in #512 is `FarmWorld` in `crates/game/src/farm.rs` (a per-position `edits` map consulted by `block_at`). Planters on land are placed by the test scene and a console command (#451).
 - **Inventory view.** `client/inventory.js` and `client/inventoryui.js` show only the belt and hands (`ui-art-and-inventory.md` Phase C, done). The multi-slot inventory was deferred to a separate design (#731); no multi-slot view exists.
 - **Particles.** `client/particles.js` exists; no `puff` particle is wired (no `puff` in `client/`).
-- **Phase A, partly built (plan #1538).** `counter` (id 74) and `plate_rack` (id 75) are in `data/blocks.toml`, with art and client textures (PRs #1599, #1578, #1765). `chest`, its art and the extended `raft_start` are not built.
+- **Phase A, done (plan #1825, earlier plan #1538).** `counter` (74), `plate_rack` (75) and `chest` (83) are in `data/blocks.toml`; `data/structures/raft_start.toml` is a 5 by 5 deck with two chests, two counters, a plate rack, a butcher block and a griddle, and no `crate`. Art, mesher and client: PRs #1599, #1578, #1765, #1843, #1838, #1850, #1886, #1934, #1948.
 - **Nothing else in this doc is built yet.**
 
 ## Reconciliation notes
 
-**Phase A still incomplete (plan #1538).** Only `counter` and `plate_rack` (blocks and art) were built. Missing: the `chest` block (`data/blocks.toml`) with `chest_top`, `chest_side`, `chest_front` art, and the extended `data/structures/raft_start.toml` (today still one butcher block, one griddle and one `crate`; needs two counters, two chests and a plate rack, with `crate` dropped from the palette and the deck grown if needed). Decisions #1541 (keep the `crate` block) and #1542 (chest front on +Z in raft-local coordinates) are now settled, so these can be planned.
+**Phase A resolved.** The gaps from plan #1538 (chest block and art, extended `raft_start`) were built by plan #1825; see Current state.
 
 1. **Stations already exist as blocks.** The intro says the butcher block, griddle and crate "are not blocks". They are in `data/blocks.toml` (ids 26 to 28) and stamped by `raft_start`; what they lack is behaviour. Phase A only adds `counter`, `chest` and `plate_rack`, and removes `crate` from the palette.
 2. **Removing `crate` touches world-layout.** `world-layout.md` section 4.4 and its Current state name `crate` in `raft_start`. The doc says `crate` "is not added as a block", yet it exists as id 28. Suggest keeping the block id (ids are stable and the existing `crate_*` art stays) but dropping it from `raft_start`'s palette, rather than deleting the block. Either way `crates/layout` tests that stamp the raft (`raft_tests.rs`, `structure_tests.rs`) and the exclusion and validation sizes change if the deck grows beyond 5 by 5, as the doc allows. Also check the raft footprint and flat-grass checks (world-layout Phase B) against the larger deck.
