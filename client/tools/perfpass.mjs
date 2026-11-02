@@ -34,10 +34,10 @@ export function buildReport(runs) {
   const v = perfVerdict(runs.map((r) => r.stats));
   if (!v.verdict) return { ...v, text: 'perf: no replays ran' };
   const slowest = runs.reduce((a, b) => (b.stats.max > a.stats.max ? b : a));
-  const spans = slowest.spans ?? [];
+  const spans = Object.entries(slowest.spans ?? {});
   const out = [v.text, 'spans (slowest replay):'];
   if (!spans.length) out.push('  none reported');
-  else for (const s of spans) out.push(`  ${s.name}: ${Number(s.ms).toFixed(1)} ms`);
+  else for (const [name, s] of spans) out.push(`  ${name}: ${s.count}x total ${Number(s.total).toFixed(1)} ms, max ${Number(s.max).toFixed(1)} ms`);
   out.push(`verdict: ${v.verdict} (advisory)`);
   return { ...v, text: out.join('\n') };
 }
@@ -79,7 +79,7 @@ async function replay(browser, url) {
     await new Promise((r) => setTimeout(r, WALK_MS));
     return await page.evaluate(() => ({
       stats: window.frameStats(),
-      spans: typeof window.perfSpans === 'function' ? window.perfSpans() : [],
+      spans: typeof window.perfSpans === 'function' ? window.perfSpans() : {},
     }));
   } finally {
     await page.close();
