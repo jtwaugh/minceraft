@@ -5,7 +5,7 @@ scope: game
 source: "#2000"
 superseded_by: ""
 phases:
-  A: todo
+  A: done
   B: todo
   C: todo
 ---
@@ -17,7 +17,8 @@ phases:
 - `client/hud.js` builds the model `{ slots, selected, hands, ... }` and draws the hands frame (`rects.handsSlot`) as a plain `slot` frame plus the carried item's icon; the belt slots use `slotView` (`slot` or `slot_selected`). `client/hudlayout.js` computes `handsSlot.icon` only from `model.hands`.
 - `client/tools/observe.mjs` serves the player `hud.selected` and `hud.hands`; `held` is debug-classified. There is no `hud.stowed` or `hud.ready`.
 - Belt keys move `belt.selected` while carrying (`client/test/scripts/belt.input`); tools stay stowed. The rule is decided in #215 (`docs/design/basic-gameplay.md`, section 6; Phase 5 done).
-- Nothing yet satisfies Section 2 of the idea: no dimmed belt, no tool icon in the empty hands frame, no `hud.stowed` / `hud.ready`.
+- Phase A is done (plan #2105; PRs #2043 `hud.ready`, #2047 ready-icon layout rect, #2186 faded icon drawn in the hands frame at `READY_ALPHA` in `client/hud.js`; `client/test/scripts/ready.input`). `hud.ready` is in the player observation.
+- Still missing: the dimmed belt and greyed selection frame, `hud.stowed` (Phase B) and the "Hands full" message (Phase C).
 
 ## Reconciliation notes
 
