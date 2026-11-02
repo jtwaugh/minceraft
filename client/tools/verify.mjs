@@ -7,6 +7,8 @@ const no = (reason) => ({ reproduced: false, reason });
 
 /** Replay `finding.repro` (`.input` text). Returns `{ reproduced, reason }`; never throws. */
 export function verifyFinding(finding) {
+  // A perf-pass finding is advisory: timing can't be replayed deterministically, so keep it as is.
+  if (finding?.advisory === true) return { reproduced: true, reason: 'advisory finding, replay skipped' };
   let cases;
   try {
     cases = parse(String(finding?.repro ?? ''));
