@@ -1324,7 +1324,7 @@ mod tp_tests {
         assert_eq!((p.pos[0], p.pos[2]), (700.5, -299.5));
         let top = (0..terrain::HEIGHT as i32)
             .rev()
-            .find(|&y| w.block_at(700, y, -300) != terrain::Block::Air)
+            .find(|&y| w.block_at(700, y, -300).info().collision != terrain::Collision::None)
             .unwrap();
         // One tick of gravity at most separates it from the surface.
         assert!((p.pos[1] - (top as f64 + 1.0)).abs() < 0.5, "{p:?} {top}");

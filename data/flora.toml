@@ -9,7 +9,7 @@
 #                 highest grass with air above and leaves higher in the column) |
 #                 coast (sand at y coast_min_y to coast_max_y with water at its y or
 #                 one below, within coast_radius columns, square not circle)
-#   snow_stays    optional bool: a cross plant the snow pass leaves standing (no snow in its cell)
+#   snow_stays    optional bool: a cross, tall_cross or ground_cover plant the snow pass leaves standing (no snow in its cell)
 #   pad           ground is the water the pad floats on; land must lie within
 #                 pad_land_radius columns
 #   biomes        biome name -> chance per eligible column (0 to 1)
@@ -149,16 +149,6 @@ tint = "grass"
 cluster_scale = 16.0
 salt = 4
 biomes = { Taiga = 0.060 }
-
-[[flora]]
-name = "berry_bush"
-block = "berry_bush"
-shape = "bush"
-ground = ["grass"]
-tint = "none"
-cluster_scale = 28.0
-salt = 5
-biomes = { Taiga = 0.012, Shrubland = 0.015 }
 
 [[flora]]
 name = "dry_grass"
@@ -333,3 +323,29 @@ requires = "coast"
 cluster_scale = 16.0
 salt = 22
 biomes = { Rainforest = 0.100, Swampland = 0.100, "Seasonal Forest" = 0.100, Forest = 0.100, Savanna = 0.100, Shrubland = 0.100, Desert = 0.100, Plains = 0.100 }
+
+# Lingonberry: dry conifer heath (swedish-summer-flora D.1). Evergreen, so it
+# stays under snow like frost_grass.
+[[flora]]
+name = "lingon"
+block = "lingon"
+shape = "ground_cover"
+ground = ["grass"]
+tint = "leaf"
+snow_stays = true
+cluster_scale = 16.0
+salt = 23
+biomes = { Taiga = 0.100, Shrubland = 0.060 }
+niche = { conifer = [0.5, 1.0], soil_depth = [0.0, 3.0], wetness = [0.0, 0.5] }
+
+# Bilberry: partly shaded, moist ground under conifers.
+[[flora]]
+name = "blabar"
+block = "blabar"
+shape = "ground_cover"
+ground = ["grass"]
+tint = "leaf"
+cluster_scale = 16.0
+salt = 24
+biomes = { Taiga = 0.100, Forest = 0.060 }
+niche = { conifer = [0.2, 1.0], light = [0.1, 0.8], wetness = [0.2, 0.8] }

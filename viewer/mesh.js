@@ -47,7 +47,7 @@ export const B = {
   test_waterlogged_plant: 68,
   thatch: 69, barrel: 70, plank_step: 71, drying_rack: 72, net: 73,
   counter: 74, plate_rack: 75, floe_ice: 76,
-  kelp_0: 77, kelp_1: 78, oyster: 79, scallop: 80, dock_planks: 81, dock_post: 82, chest: 83,
+  kelp_0: 77, kelp_1: 78, oyster: 79, scallop: 80, dock_planks: 81, dock_post: 82, chest: 83, lingon: 84, blabar: 85,
 };
 
 const flags = (ids) => { const a = new Uint8Array(256); for (const b of ids) a[b] = 1; return a; };
@@ -66,7 +66,7 @@ const SHAPES = {
   ground_cover: { lift: 1 / 16, tint: 'leaf' },
   pad: { lift: 1 / 16, tint: 'leaf' },
 };
-const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover, [B.lily_pad]: SHAPES.pad };
+const SHAPE_OF = { [B.leaf_litter]: SHAPES.ground_cover, [B.lingon]: SHAPES.ground_cover, [B.blabar]: SHAPES.ground_cover, [B.lily_pad]: SHAPES.pad };
 // Drawn as two crossed quads.
 export const CROSS = flags([B.tall_grass, B.fern, B.dead_bush, B.dandelion, B.rose, B.sugar_cane, B.brown_mushroom, B.red_mushroom,
   B.daisy, B.bluebell, B.marsh_orchid, B.tall_grass_double_lower, B.tall_grass_double_upper, B.dry_grass, B.dry_grass_tall_lower, B.dry_grass_tall_upper,
@@ -275,7 +275,7 @@ function tintFor(ctx, b, grass, leaf, water, dry) {
     case B.water: return water ?? WHITE;
     case B.dry_grass: case B.dry_grass_tall_lower: case B.dry_grass_tall_upper:
     case B.dune_grass_lower: case B.dune_grass_upper: return dry ?? WHITE;
-    case B.oak_leaves: case B.leaf_litter: case B.lily_pad: case B.berry_bush: case B.bush: case B.jungle_bush: return leaf;
+    case B.oak_leaves: case B.leaf_litter: case B.lingon: case B.blabar: case B.lily_pad: case B.berry_bush: case B.bush: case B.jungle_bush: return leaf;
     case B.birch_leaves: return lerp3(leaf, ctx.COLORS[B.birch_leaves].map((v) => v / 255), 0.55);
     case B.spruce_leaves: return lerp3(leaf, ctx.COLORS[B.spruce_leaves].map((v) => v / 255), 0.7);
     default: return WHITE;
