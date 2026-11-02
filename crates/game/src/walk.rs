@@ -708,9 +708,7 @@ impl Walker {
     /// below the eye by the amounts in `data/fishing.toml`.
     pub fn rod_tip(&self, alpha: f64) -> [f64; 3] {
         let cfg = self.fishing.config();
-        let (sy, cy) = f64::from(self.look_yaw).sin_cos();
-        let (sp, cp) = f64::from(self.look_pitch).sin_cos();
-        let look = [sy * cp, sp, -cy * cp];
+        let look = look_dir(self.look_yaw, self.look_pitch);
         let eye = self.eye(alpha);
         let mut tip = [0, 1, 2].map(|i| eye[i] + look[i] * cfg.rod_tip_reach);
         tip[1] -= cfg.rod_tip_drop;
@@ -1213,7 +1211,8 @@ impl Walker {
         }
         if ran.contains(&ActionKind::Cast) {
             let eye = self.cur_eye;
-            self.fishing.cast(eye, look_dir(input), &mut self.events);
+            self.fishing
+                .cast(eye, look_dir(input.yaw, input.pitch), &mut self.events);
         }
         if ran.contains(&ActionKind::Reel) {
             self.fishing.reel(&mut self.events);
@@ -1449,7 +1448,7 @@ impl Walker {
             return;
         };
         let speed = self.items.config().throw_speed;
-        let velocity = look_dir(input).map(|c| c * speed);
+        let velocity = look_dir(input.yaw, input.pitch).map(|c| c * speed);
         self.events.push(GameEvent::ItemDropped {
             item: carried.item.clone(),
             position: self.cur_eye,
@@ -1652,9 +1651,9 @@ fn name_raft_target(f: &Floating, mut aim: Aim) -> Aim {
 }
 
 /// Unit look vector, the same as `Pose::forward` in camera.rs, in f64.
-fn look_dir(input: &TickInput) -> [f64; 3] {
-    let (sy, cy) = (input.yaw as f64).sin_cos();
-    let (sp, cp) = (input.pitch as f64).sin_cos();
+fn look_dir(yaw: f32, pitch: f32) -> [f64; 3] {
+    let (sy, cy) = f64::from(yaw).sin_cos();
+    let (sp, cp) = f64::from(pitch).sin_cos();
     [sy * cp, sp, -cy * cp]
 }
 
@@ -1703,7 +1702,7 @@ fn aim_within(
     eye: [f64; 3],
     input: &TickInput,
 ) -> Aim {
-    let dir = look_dir(input);
+    let dir = look_dir(input.yaw, input.pitch);
     let target = cast_target(world, entities, cfg, eye, dir);
     match target {
         Target::Block { pos, .. } => {

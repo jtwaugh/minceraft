@@ -21,9 +21,9 @@
 //   readItems(walk) -> [{ id, name, pos, size }]
 //     pos     centre of the item's box; size the box's edge length
 //   readFish(walk) -> [{ id, species, pos, heading, size }]
+//     pos     centre of the bottom face; heading in degrees; size [width, height] of the box
 //   readBobber(walk) -> null | { state: flying|floating|resting, dipping, pos }
 //   readRodTip(walk, alpha) -> [x, y, z]
-//     pos     centre of the bottom face; heading in degrees; size [width, height] of the box
 //   spawnTestAnimals(walk, kinds) puts animals on the raft scene's islet
 //   faceAnimal(walk, look) -> [dx, dy] mouse movement that turns `look` ({ yaw, pitch })
 //     to the first animal's middle
