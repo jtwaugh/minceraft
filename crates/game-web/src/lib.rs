@@ -302,6 +302,13 @@ fn describe_event(e: &GameEvent) -> String {
         GameEvent::ItemStored { item, chest, slot } => {
             format!("item_stored item={item} chest={} slot={slot}", pos(chest))
         }
+        GameEvent::ChestRestocked { chest, items } => {
+            format!(
+                "chest_restocked chest={} items={}",
+                pos(chest),
+                items.join(",")
+            )
+        }
         GameEvent::BlockTilled { position, from, to } => {
             format!(
                 "block_tilled position={} from={from} to={to}",
@@ -822,6 +829,20 @@ impl Walk {
     /// Whether a full chest refused a deposit within the last few ticks.
     pub fn chest_refused(&self) -> bool {
         self.0.chest_refused()
+    }
+
+    /// What the last chest restock could not fit: chest cell `x,y,z` and count,
+    /// four numbers per entry; item names are in [`Walk::restock_lost_items`].
+    pub fn restock_lost_cells(&self) -> Vec<i32> {
+        let lost = self.0.restock_lost();
+        lost.iter()
+            .flat_map(|(c, _, n)| [c[0], c[1], c[2], *n as i32])
+            .collect()
+    }
+
+    /// The item of each entry in [`Walk::restock_lost_cells`].
+    pub fn restock_lost_items(&self) -> Vec<String> {
+        self.0.restock_lost().into_iter().map(|l| l.1).collect()
     }
 
     /// How many loose items lie in the world.

@@ -56,6 +56,31 @@ pub fn refused_ticks_from_data() -> Result<u64, DataError> {
     })
 }
 
+const SHIPPED_LEVEL: &str = include_str!("../../../data/levels/v0.toml");
+
+/// A level's supply line: `count` of `item` for the chest numbered `chest`
+/// in raft cell order (the level file's `[[level.supplies]]`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LevelSupply {
+    pub item: String,
+    pub count: usize,
+    pub chest: usize,
+}
+
+/// The `[[level.supplies]]` of the shipped v0 level (`data/levels/v0.toml`).
+pub fn shipped_supplies() -> Vec<LevelSupply> {
+    let root: toml::Value = SHIPPED_LEVEL.parse().expect("shipped v0.toml");
+    let list = root["level"][0].get("supplies").and_then(|s| s.as_array());
+    list.into_iter()
+        .flatten()
+        .map(|s| LevelSupply {
+            item: s["item"].as_str().expect("supply item").to_string(),
+            count: s["count"].as_integer().expect("supply count") as usize,
+            chest: s["chest"].as_integer().expect("supply chest") as usize,
+        })
+        .collect()
+}
+
 /// The contents of every chest, keyed by raft-local cell.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chests {

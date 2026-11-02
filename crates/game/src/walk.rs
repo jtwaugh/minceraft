@@ -5,7 +5,10 @@
 use crate::aliases::Aliases;
 use crate::animal_entities::{AnimalStore, DroppedItem};
 use crate::animals::Animals;
-use crate::chests::{refused_ticks_from_data, slot_count_from_data, Chests};
+use crate::chests::{
+    refused_ticks_from_data, restock, shipped_supplies, slot_count_from_data, Chests, LevelSupply,
+    Stocked, Supply,
+};
 use crate::collision::{block_selection_boxes_in, Aabb, CollisionWorld, RegionWorld};
 use crate::commands::{run_line, GameState, Registry};
 use crate::crops::Crops;
@@ -247,6 +250,10 @@ pub struct Walker {
     chests: Chests,
     /// The tick before which a full chest's refusal still shows.
     chest_refused_until: u64,
+    /// The level's supplies, restocked into the chests at each gathering start.
+    supplies: Vec<LevelSupply>,
+    /// What the last restock could not fit.
+    restock_lost: Vec<Stocked>,
 }
 
 impl Walker {
@@ -325,6 +332,13 @@ impl Walker {
             stations: Stations::new(),
             chests: Chests::new(slot_count_from_data().expect("shipped chests.toml")),
             chest_refused_until: 0,
+            // The v0 level lists staples `data/items.toml` does not define yet
+            // (cooking-stations.md Phase A); until it does, stock what exists.
+            supplies: shipped_supplies()
+                .into_iter()
+                .filter(|s| Items::default_items().has_item(&s.item))
+                .collect(),
+            restock_lost: Vec::new(),
         })
     }
 
@@ -535,6 +549,61 @@ impl Walker {
     /// (`refused_ticks` in `data/chests.toml`), for the client's shake.
     pub fn chest_refused(&self) -> bool {
         self.sim_tick < self.chest_refused_until
+    }
+
+    /// Replace the level's supplies (the shipped v0 level's by default).
+    pub fn set_supplies(&mut self, supplies: Vec<LevelSupply>) {
+        self.supplies = supplies;
+    }
+
+    /// What the last restock could not fit, as `(chest cell, item, count)`.
+    pub fn restock_lost(&self) -> Vec<([i32; 3], String, usize)> {
+        let lost = self.restock_lost.iter();
+        lost.map(|s| (s.cell, s.item.clone(), s.count)).collect()
+    }
+
+    /// Top the raft chests up to the level's supplies when tick `tick` is the
+    /// first of a gathering phase (tick 0 included), and report each chest
+    /// that received something.
+    fn restock_chests(&mut self, tick: u64) {
+        let starts = self.phases.at(tick).0 == Phase::Gathering
+            && (tick == 0 || self.phases.at(tick - 1).0 != Phase::Gathering);
+        let (Some(f), true) = (&self.floating, starts) else {
+            return;
+        };
+        let chest = terrain::block_id("chest");
+        let mut cells: Vec<[i32; 3]> = f
+            .blocks
+            .iter()
+            .filter(|(_, b)| Some(**b) == chest)
+            .map(|(c, _)| *c)
+            .collect();
+        // Chest numbers follow raft cell order: y, then z, then x.
+        cells.sort_by_key(|&[x, y, z]| (y, z, x));
+        let supplies: Vec<Supply> = self
+            .supplies
+            .iter()
+            .filter_map(|s| {
+                Some(Supply {
+                    item: s.item.clone(),
+                    count: s.count,
+                    cell: *cells.get(s.chest)?,
+                })
+            })
+            .collect();
+        let r = restock(&mut self.chests, &supplies, &self.item_table).expect("supply items");
+        for s in &r.added {
+            match self.events.last_mut() {
+                Some(GameEvent::ChestRestocked { chest, items }) if *chest == s.cell => {
+                    items.extend(std::iter::repeat_n(s.item.clone(), s.count));
+                }
+                _ => self.events.push(GameEvent::ChestRestocked {
+                    chest: s.cell,
+                    items: vec![s.item.clone(); s.count],
+                }),
+            }
+        }
+        self.restock_lost = r.lost;
     }
 
     /// Whether a cheat command has run this session.
@@ -839,6 +908,7 @@ impl Walker {
         self.run_queued_commands();
         self.look_yaw = input.yaw;
         self.look_pitch = input.pitch;
+        self.restock_chests(self.sim_tick);
         self.sim_tick += 1;
         if self.day_frozen {
             let d = self.day.day_ticks();
