@@ -86,6 +86,7 @@ Counts catch too much work in one frame, but not one unit of work that is slow b
 - Want: a perf pass that runs a scripted walk on the real `scene.js` in headless Chrome, with `performance.mark` around tick, mesh and upload, and reads the hitch records from section 1.
 - In CI the GPU is SwiftShader (a software renderer), so only the CPU spans count. A finding needs its median over several replays to be over the threshold.
 - Its findings are advisory: they carry a repro but don't go through the `expect` verify pass.
+- This pass runs in CI on a schedule alongside the critic workflow. The pixel pass (section 5) is local only. (Decided in #1975.)
 
 > **Reconciler:** see notes 5, 9 and 10. `[manual check]` "median over several replays over the threshold": testable once the threshold and replay count are constants (note 5).
 
@@ -133,13 +134,11 @@ CLAUDE.md keeps screenshots for judging looks, only when the maintainer asks. Mo
 ## Open questions
 
 1. Hitch threshold and work budgets: fixed numbers, or derived from the 16.7 ms target?
-2. Should the headless Chrome passes (E, F) run in CI on a schedule, or only locally?
 3. Is moving CPU meshing out of `scene.js` (B) acceptable as part of this, or should it be its own design?
 
 ## Open questions (reconciler)
 
 1. **Q1 thresholds.** Options: A, derive the hitch threshold from `FRAME_BUDGET_MS` (`2 * FRAME_BUDGET_MS`) and keep work budgets as constants in a check module with tests (suggested, note 4); B, fixed numbers everywhere; C, put them in `data/*.toml` (not suggested, `data/` is for world data read by `build.rs`).
-2. **Q2 CI for E and F.** Options: A, E on a schedule with the critic workflow and F local only (suggested: F is maintainer-triggered by definition); B, both local only until SwiftShader's determinism is shown; C, both on a schedule.
 3. **Q3 mesh move.** Answered in note 3: keep it in this doc as Phase B, as its own no-behaviour-change ticket. Options: A, as suggested; B, split into its own design doc.
 4. **Q4 section 2 repro.** `expect regions.max_per_frame > 1` can't hold with `budget = 1` (note 1). Options: A, assert `<= 1` as a guard on the stream budget; B, add an edit on a border so remeshes push the count above 1; C, raise the stream budget (a behaviour change, not suggested).
 5. **Q5 advisory findings.** Options: A, an `advisory` boolean on the finding that the verify pass skips and `report.mjs` groups apart (suggested); B, a separate `kind` for each.
