@@ -99,6 +99,18 @@ pub fn cast_block(
     dir: [f64; 3],
     reach: f64,
 ) -> Option<(Target, f64)> {
+    cast_block_through(world, origin, dir, reach, false)
+}
+
+/// `cast_block`, optionally passing through plain water even from above, so
+/// an entity under the surface can be told apart from the surface itself.
+fn cast_block_through(
+    world: &impl CollisionWorld,
+    origin: [f64; 3],
+    dir: [f64; 3],
+    reach: f64,
+    through_water: bool,
+) -> Option<(Target, f64)> {
     let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt();
     if !len.is_finite() || len == 0.0 || !reach.is_finite() || reach < 0.0 {
         return None;
@@ -112,7 +124,7 @@ pub fn cast_block(
     let mut boxes = Vec::new();
     world.selection_boxes_in(&query, &mut boxes);
     let cell = origin.map(|v| v.floor() as i32);
-    let eye_in_water = world.block_at(cell[0], cell[1], cell[2]).info().is_water();
+    let eye_in_water = through_water || world.block_at(cell[0], cell[1], cell[2]).info().is_water();
     let mut best: Option<(Target, f64)> = None;
     for b in boxes.iter().filter(|b| !(eye_in_water && b.plain_water)) {
         if let Some(hit) = ray_vs_box(origin, d, &b.aabb) {
@@ -180,7 +192,12 @@ pub fn cast_target(
             best = Some((Target::Entity { id: e.id }, hit.distance));
         }
     }
-    if let Some((t, bd)) = cast_block(world, origin, d, f64::from(cfg.block_reach)) {
+    // An entity in reach is seen through the water surface; solid blocks
+    // still hide it.
+    let through_water = best.is_some();
+    if let Some((t, bd)) =
+        cast_block_through(world, origin, d, f64::from(cfg.block_reach), through_water)
+    {
         if best.is_none_or(|(_, ed)| bd < ed) {
             return t;
         }
@@ -483,6 +500,57 @@ mod tests {
     fn target(w: &MemoryWorld, es: &[TargetableEntity], o: [f64; 3], d: [f64; 3]) -> Target {
         let cfg = TargetingConfig::default_from_data().unwrap();
         cast_target(w, es, &cfg, o, d)
+    }
+
+    fn fish_at(id: EntityId, y: f64, x: f64) -> TargetableEntity {
+        ent(id, [x, y, 0.3], [x + 0.4, y + 0.3, 0.7])
+    }
+
+    #[test]
+    fn a_fish_below_the_surface_is_targeted_from_deck_and_swimming() {
+        let w = pool();
+        let fish = [fish_at(9, 0.8, 1.4)];
+        // From the deck: the eye is above the water, the ray crosses the surface.
+        let deck = [0.5, 3.0, 0.5];
+        let dir = [1.0, -2.0, 0.0];
+        assert!(matches!(
+            target(&w, &[], deck, dir),
+            Target::Block { pos: [_, 1, 0], .. }
+        ));
+        assert_eq!(target(&w, &fish, deck, dir), Target::Entity { id: 9 });
+        // Swimming: the eye is in the water.
+        assert_eq!(
+            target(
+                &w,
+                &[fish_at(9, 0.3, 1.4)],
+                [0.5, 0.5, 0.5],
+                [1.0, 0.0, 0.0]
+            ),
+            Target::Entity { id: 9 }
+        );
+    }
+
+    #[test]
+    fn a_fish_beyond_reach_is_not_targeted() {
+        let w = pool();
+        let cfg = TargetingConfig::default_from_data().unwrap();
+        let x = f64::from(cfg.entity_reach) + 2.0;
+        let fish = [fish_at(9, 0.4, x)];
+        assert_ne!(
+            target(&w, &fish, [0.5, 0.5, 0.5], [1.0, 0.0, 0.0]),
+            Target::Entity { id: 9 }
+        );
+    }
+
+    #[test]
+    fn a_solid_block_still_hides_a_fish_under_the_water() {
+        let mut w = pool();
+        w.set(1, 1, 0, terrain::Block::Stone);
+        let fish = [fish_at(9, 0.8, 1.4)];
+        assert!(matches!(
+            target(&w, &fish, [0.5, 3.0, 0.5], [1.0, -2.0, 0.0]),
+            Target::Block { .. }
+        ));
     }
 
     #[test]
