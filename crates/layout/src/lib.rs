@@ -354,12 +354,16 @@ pub use structure::{Structure, StructureError};
 pub use structure_piece::{Connector, Facing, PieceKind, Pool};
 mod validation;
 mod validation_decorated;
+#[cfg(feature = "toml-io")]
+mod validation_sea_flora;
 pub use validation::{
     raft_footprint, validate_flat_grass, validate_island, validate_level, validate_raft, window,
     CheckResult, Thresholds, ValidationReport, CHECK_CLEAR_FLAT, CHECK_FLAT_GRASS,
     CHECK_ISLAND_AREA, CHECK_RAFT_CLEAR, CHECK_RAFT_WATER, CHECK_SPAWN_CLEAR, CHECK_TREES,
 };
 pub use validation_decorated::validate_decorated;
+#[cfg(feature = "toml-io")]
+pub use validation_sea_flora::{validate_sea_flora, CHECK_SEA_FLORA_CLEAR};
 
 #[cfg(test)]
 mod builder_tests;
@@ -419,6 +423,8 @@ mod scoring_extra_tests;
 mod scoring_island_tests;
 #[cfg(test)]
 mod scoring_tests;
+#[cfg(all(test, feature = "toml-io"))]
+mod sea_flora_acceptance_tests;
 #[cfg(all(test, feature = "toml-io"))]
 mod sea_flora_pass_tests;
 #[cfg(all(test, feature = "toml-io"))]
