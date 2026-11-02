@@ -36,7 +36,7 @@ import { loadTiles, frontLayers, NAMES as LAYER_NAMES, ANIM_FIRST, ANIM_END } fr
 import { VARIANTS } from '../viewer/tilelist.js';
 import { waterFrame } from './waterframe.js';
 import { PLANT_FADE_RANGE } from './plantfade.js';
-import { SWAY_AMPLITUDE, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE, swayPhase } from './sway.js';
+import { FIXED_WIND, SWAY_FLOOR, SWAY_AMPLITUDE, SWAY_WAVE, TRUNK_SWAY_AMPLITUDE, swayPhase } from './sway.js';
 import { mountHud } from './hud.js';
 import { mountInventory } from './inventoryui.js';
 import { mountDeath } from './deathui.js';
@@ -95,7 +95,8 @@ if (!gl) throw new Error('WebGL2 is not available');
 // above and under water.
 // GLSL for swayOffset in sway.js at `amplitude`: moves `w.xz` by weight `top` along the shared wave.
 const swayGlsl = (amplitude) => `float k = ${SWAY_WAVE.toFixed(3)};
-      w.xz += ${amplitude.toFixed(3)} * top * vec2(sin(swayPhase + (w.x + 0.6 * w.z) * k), cos(swayPhase + (w.z - 0.6 * w.x) * k));`;
+      vec2 wd = vec2(${FIXED_WIND.dir[0].toFixed(6)}, ${FIXED_WIND.dir[1].toFixed(6)});
+      w.xz += ${(amplitude * (SWAY_FLOOR + (1 - SWAY_FLOOR) * FIXED_WIND.strength)).toFixed(6)} * top * sin(swayPhase + dot(w.xz, wd) * k) * wd;`;
 function program(cut) {
   const sh = (type, src) => {
     const s = gl.createShader(type);
