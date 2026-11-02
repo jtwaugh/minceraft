@@ -10,6 +10,8 @@ export const CROSSHAIR_CLEAR_MARGIN = 8;
 export const MAX_HANDS_BELT_GAP = 16;
 /** Largest distance, in CSS pixels, between the belt panel's centre and the viewport's. */
 export const MAX_BELT_OFFCENTRE = 2;
+/** Largest height of the bottom block (hearts to the bottom of the belt panel) as a fraction of the viewport height. */
+export const MAX_HUD_HEIGHT_FRACTION = 0.2;
 
 const ELEMENTS = ['crosshair', 'belt', 'hearts', 'timer', 'hands', 'handsPanel'];
 
@@ -80,6 +82,15 @@ export function beltCentreChecks(layout, viewport) {
   return [{ check: 'belt-centre', elements: ['beltPanel'], detail: `belt panel is ${Math.abs(off)}px off the viewport centre, more than ${MAX_BELT_OFFCENTRE}px` }];
 }
 
+/** The bottom block, from the top of the hearts to the bottom of the belt panel, taller than `MAX_HUD_HEIGHT_FRACTION` of the viewport. */
+export function hudHeightChecks(layout, viewport) {
+  const { hearts, beltPanel } = layout.rects;
+  if (!hearts || !beltPanel) return [];
+  const height = beltPanel.y + beltPanel.h - hearts.y;
+  if (height <= MAX_HUD_HEIGHT_FRACTION * viewport.h) return [];
+  return [{ check: 'hud-height', elements: ['hearts', 'beltPanel'], detail: `bottom HUD block is ${height}px tall, more than ${MAX_HUD_HEIGHT_FRACTION * 100}% of the ${viewport.h}px viewport` }];
+}
+
 const inside = (c, p) => c.x >= p.x && c.y >= p.y && c.x + c.w <= p.x + p.w && c.y + c.h <= p.y + p.h;
 
 /** Child rectangles that stick out of their parent: slot icons and numbers out of their slot frame, and the parts of the timer, hands and hearts. */
@@ -97,5 +108,5 @@ export function containmentChecks(layout) {
 
 /** All mechanical problems in `layout` (a `hudLayout` result) for `viewport`; empty when there are none. */
 export function layoutChecks(layout, viewport) {
-  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport), ...scaleChecks(layout, viewport), ...clearZoneChecks(layout), ...handsDistanceChecks(layout), ...beltCentreChecks(layout, viewport), ...containmentChecks(layout)];
+  return [...overlapChecks(layout), ...offscreenChecks(layout, viewport), ...scaleChecks(layout, viewport), ...clearZoneChecks(layout), ...handsDistanceChecks(layout), ...beltCentreChecks(layout, viewport), ...hudHeightChecks(layout, viewport), ...containmentChecks(layout)];
 }
