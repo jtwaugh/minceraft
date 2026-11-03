@@ -24,6 +24,8 @@ export const TOP_MARGIN = 8;
 export const TIMER_PAD_X = 8;
 export const TIMER_PAD_Y = 4;
 export const LABEL_GAP = 4;
+/** Texels between the message line and whatever sits below it (the hearts or the hands label). */
+export const MESSAGE_GAP = 2;
 /** The icon texture drawn for each timer phase. */
 export const PHASE_ICONS = { gathering: 'sun', service: 'moon' };
 
@@ -52,6 +54,7 @@ function row(set, names, x, y, gap) {
  * empty). The belt panel is centred in the viewport with the hands strip on its right (when that would run off the
  * viewport, the two strips are centred together as a column instead); the hearts sit above on the belt panel's left
  * edge and the name above it on its right edge, or above the hearts when the two would not fit side by side.
+ * `rects.message` is the message line (`{ x, y, w, h, scale, glyphs }`, zero-sized when empty), centred above the hearts and the name, shrunk in whole texels to clear the crosshair's zone.
  */
 export function hudLayout(model, set, viewport) {
   const { w: vw, h: vh } = viewport;
@@ -144,6 +147,18 @@ export function hudLayout(model, set, viewport) {
   const handsY = (beside ? heartsY + heartsH : heartsY) - handsH;
   const labelRect = name ? rect(handsX, handsY, handsW, handsH) : null;
 
+  // The message line is centred above the hearts and the hands label, in the pixel font, and shrinks like the label.
+  const text = model.message?.text ? String(model.message.text) : '';
+  const mMeasure = (k) => (text ? measureString(set, text, k) : { w: 0, h: 0 });
+  const mBottom = (k) => Math.min(heartsY, labelRect ? handsY : heartsY) - MESSAGE_GAP * k;
+  let msgScale = scale;
+  while (msgScale > 1 && (mBottom(msgScale) - mMeasure(msgScale).h < crossBottom || mMeasure(msgScale).w > vw) && mMeasure(msgScale).h > 0) msgScale--;
+  const { w: msgW, h: msgH } = mMeasure(msgScale);
+  const msgX = Math.max(0, Math.floor((vw - msgW) / 2)), msgY = mBottom(msgScale) - msgH;
+  const message = text
+    ? { ...rect(msgX, msgY, msgW, msgH), scale: msgScale, glyphs: stringRects(set, text, msgScale, msgX, msgY) }
+    : { ...rect(0, 0, 0, 0), scale: msgScale, glyphs: [] };
+
   return {
     scale,
     beltCentred: !fallback,
@@ -163,6 +178,7 @@ export function hudLayout(model, set, viewport) {
       },
       handsPanel: rect(handsPanelX, panelY, handsPanelW, panelH),
       handsSlot: { ...handsSlot, icon: heldIcon },
+      message,
       hands: {
         ...rect(handsX, handsY, handsW, handsH),
         scale: handsScale,

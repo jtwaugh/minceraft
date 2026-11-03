@@ -240,3 +240,22 @@ test('the hands frame pulses in proportion to pulse and draws plainly at 0', asy
   assert.equal(slot().style.transform, '');
   assert.equal(slot().style.filter, '');
 });
+
+test('the message element draws the text and takes its opacity from the model', async () => {
+  const { mountHud } = await import('../hud.js');
+  globalThis.ImageData = class { constructor(d, w, h) { Object.assign(this, { data: d, width: w, height: h }); } };
+  const grid = (w, h) => Array(h).fill('a'.repeat(w));
+  const set = { palette: { a: '#ffffff' }, batches: { ui: { textures: { slot: grid(10, 10), slot_selected: grid(10, 10), crosshair: grid(7, 7), panel_c: grid(4, 4), font_unknown: grid(5, 7), heart_full: grid(9, 9), heart_half: grid(9, 9), heart_empty: grid(9, 9) } } } };
+  const doc = fakeDocument();
+  const hud = mountHud(doc, set, doc.body, { innerWidth: 800, innerHeight: 450 });
+  const message = () => doc.body.children[1].children.find((e) => e.id === 'hud-message');
+  const model = (text, alpha) => hudModel({ belt, health: 20, maxHealth: 20, message: { text, alpha } });
+  hud.update(model('Hi', 0.5));
+  assert.equal(message().children.length, 1);
+  assert.equal(message().style.opacity, 0.5);
+  hud.update(model('Hi', 0.25));
+  assert.equal(message().style.opacity, 0.25);
+  hud.update(model('', 0));
+  assert.equal(message().children.length, 0);
+  assert.equal(message().style.opacity, 0);
+});
