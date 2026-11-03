@@ -10,7 +10,7 @@
 //
 // `ready` is the selected tool's name when the hands are empty, else null.
 // `stowed` is true while the hands are full, so the belt's tools are put away; every slot is then `dim`.
-// `pulse` is the hands-frame pulse strength, 0..1 (the controller's timer; 0 when idle).
+// `pulse` is the hands-frame pulse strength, 0..1 (the controller's timer; 0 when idle); pulseStyle turns it into the frame's CSS.
 // `message` is the message line's view (message.js); text '' and alpha 0 when nothing shows.
 // Dim slots draw their frame and icon at STOWED_ALPHA, so the selection frame reads as greyed too.
 // The ready tool is drawn in the hands frame at READY_ALPHA; a carried item is opaque.
@@ -23,6 +23,16 @@ import { findTexture, textureCanvas, interfaceScale } from './uipx.js';
 
 const READY_ALPHA = 0.5;
 const STOWED_ALPHA = 0.4;
+
+const PULSE_SCALE = 0.25;
+const PULSE_BRIGHTEN = 0.75;
+
+/** CSS for the hands frame at a pulse strength 0..1: scaled up and brightened in proportion, unset at 0. */
+export function pulseStyle(pulse) {
+  const p = Math.max(0, Math.min(1, Number(pulse) || 0));
+  if (p === 0) return { transform: '', filter: '' };
+  return { transform: `scale(${1 + PULSE_SCALE * p})`, filter: `brightness(${1 + PULSE_BRIGHTEN * p})` };
+}
 
 /** Which frame and icon a belt slot shows. Empty slots and items without a texture get a frame only. */
 export function slotView(set, name, selected) {
@@ -130,6 +140,7 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       place(handsPanel, hp);
       handsPanel.replaceChildren(drawPanel(set, hp.w / scale, hp.h / scale, scale, document));
       place(handsSlot, hs);
+      Object.assign(handsSlot.style, pulseStyle(m.pulse));
       const handsIcon = hs.icon && icon(m.hands || m.ready, hs.icon, hs.x, hs.y);
       if (handsIcon && !m.hands) handsIcon.style.opacity = READY_ALPHA;
       handsSlot.replaceChildren(...[icon('slot', { ...hs, x: 0, y: 0 }, 0, 0), handsIcon].filter(Boolean));
