@@ -6,7 +6,7 @@ source: "#2000"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
 ---
 
@@ -18,7 +18,8 @@ phases:
 - `client/tools/observe.mjs` serves the player `hud.selected` and `hud.hands`; `held` is debug-classified. There is no `hud.stowed` or `hud.ready`.
 - Belt keys move `belt.selected` while carrying (`client/test/scripts/belt.input`); tools stay stowed. The rule is decided in #215 (`docs/design/basic-gameplay.md`, section 6; Phase 5 done).
 - Phase A is done (plan #2105; PRs #2043 `hud.ready`, #2047 ready-icon layout rect, #2186 faded icon drawn in the hands frame at `READY_ALPHA` in `client/hud.js`; `client/test/scripts/ready.input`). `hud.ready` is in the player observation.
-- Still missing: the dimmed belt and greyed selection frame, `hud.stowed` (Phase B) and the "Hands full" message (Phase C).
+- Phase B is done (plan #2236; PRs #2249 `hud.stowed` in the model and player observation, #2251 dimmed belt slots and greyed selection frame, #2254 hands-frame pulse state in `client/controller.js`, #2264 pulse drawn via `pulseStyle` in `client/hud.js`; `client/test/scripts/stowed.input`).
+- Still missing: the "Hands full" message (Phase C).
 
 ## Reconciliation notes
 
