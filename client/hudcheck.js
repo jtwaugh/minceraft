@@ -13,7 +13,7 @@ export const MAX_BELT_OFFCENTRE = 2;
 /** Largest height of the bottom block (hearts to the bottom of the belt panel) as a fraction of the viewport height. */
 export const MAX_HUD_HEIGHT_FRACTION = 0.2;
 
-const ELEMENTS = ['crosshair', 'belt', 'hearts', 'timer', 'hands', 'handsPanel'];
+const ELEMENTS = ['crosshair', 'belt', 'hearts', 'timer', 'hands', 'handsPanel', 'message'];
 
 const area = (r) => r.w * r.h;
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;

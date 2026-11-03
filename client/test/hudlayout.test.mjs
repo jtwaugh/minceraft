@@ -242,3 +242,23 @@ test('the belt panel centre is within MAX_BELT_OFFCENTRE at 1366x768 and 390x844
     assert.ok(Math.abs(p.x + p.w / 2 - w / 2) <= MAX_BELT_OFFCENTRE, `${w}x${h}`);
   }
 });
+
+const withMessage = (text, hands = null) => hudModel({ belt: { ...belt, hands }, health: 19, maxHealth: 20, message: { text, alpha: 1 } });
+
+for (const [w, h, name] of [...sweep, [320, 568, 'narrow phone']]) {
+  test(`message line at ${w}x${h} (${name})`, () => {
+    const empty = hudLayout(withMessage(''), set, { w, h }).rects.message;
+    assert.deepEqual([empty.w, empty.h, empty.glyphs.length], [0, 0, 0]);
+    for (const hands of [null, 'sword']) {
+      const layout = hudLayout(withMessage('sword', hands), set, { w, h });
+      const { rects } = layout, m = rects.message, k = m.scale;
+      assert.deepEqual([m.w, m.h], [5 * 5 * k, 7 * k]);
+      assert.equal(m.glyphs.length, 5);
+      assert.ok(m.x >= 0 && m.x + m.w <= w && (h < 300 || m.y >= 0), 'inside the viewport');
+      assert.ok(m.y + m.h <= rects.hearts.y, 'above the hearts');
+      if (hands) assert.ok(m.y + m.h <= rects.hands.y, 'above the hands label');
+      assert.ok(k === 1 || m.y >= rects.crosshair.y + rects.crosshair.h + 8, 'clear of the crosshair zone');
+      if (w >= 320 && h >= 480) assert.deepEqual(layoutChecks(layout, { w, h }), [], `${hands} at ${w}x${h}`);
+    }
+  });
+}

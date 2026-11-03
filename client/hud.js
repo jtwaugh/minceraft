@@ -74,9 +74,9 @@ export function hudModel({ belt, health, maxHealth, phase = 'gathering', seconds
 
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font: 12px/14px ui-monospace, monospace; color: #fff; }
-#hud > *, #hud-cross > *, #hud-timer > *, #hud-hands > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot, .slot > * { position: absolute; }
+#hud > *, #hud-cross > *, #hud-timer > *, #hud-hands > *, #hud-message > *, #hud-hearts > *, #hud-belt-panel > *, #hud-belt > *, .slot, .slot > * { position: absolute; }
 #hud canvas { image-rendering: pixelated; }
-#hud-hands { text-shadow: 0 0 3px #000; }
+#hud-hands, #hud-message { text-shadow: 0 0 3px #000; }
 #hud span { white-space: nowrap; }
 `;
 
@@ -94,11 +94,11 @@ export function mountHud(document, set, parent = document.body, view = globalThi
   const root = document.createElement('div');
   root.id = 'hud';
   const make = (id) => Object.assign(document.createElement('div'), { id });
-  const cross = make('hud-cross'), timer = make('hud-timer'), hands = make('hud-hands');
+  const cross = make('hud-cross'), timer = make('hud-timer'), hands = make('hud-hands'), message = make('hud-message');
   const hearts = make('hud-hearts'), beltPanel = make('hud-belt-panel'), belt = make('hud-belt');
   const handsPanel = make('hud-hands-panel'), handsSlot = make('hud-hands-slot');
   handsSlot.className = 'slot';
-  root.append(cross, timer, hands, hearts, beltPanel, belt, handsPanel, handsSlot);
+  root.append(cross, timer, hands, hearts, beltPanel, belt, handsPanel, handsSlot, message);
   parent.append(style, root);
   let last = '';
   return {
@@ -135,6 +135,11 @@ export function mountHud(document, set, parent = document.body, view = globalThi
       const h = rects.hands;
       place(hands, h);
       hands.replaceChildren(...(m.hands && h.label && h.label.w ? [label(m.hands, h.label, h, h.scale)] : []));
+
+      const mr = rects.message;
+      place(message, mr);
+      message.style.opacity = m.message?.alpha ?? 0;
+      message.replaceChildren(...(mr.w ? [label(m.message.text, mr, mr, mr.scale)] : []));
 
       const hp = rects.handsPanel, hs = rects.handsSlot;
       place(handsPanel, hp);
