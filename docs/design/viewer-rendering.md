@@ -14,7 +14,7 @@ phases:
 
 ## Current state
 
-Checked against `master` (ba3a7e9). Phases A to E are done.
+Checked against `master` (1c91663). Phases A to E are done.
 
 - **Phase A is done:** the viewer (PRs #248, #250, #252) and the client (PR #520, ticket #505) both use radial fog with the shared curve in `viewer/fog.js`, trilinear and anisotropic filtering, texel snapping and the tint weight (plan #242).
 
@@ -26,31 +26,22 @@ Checked against `master` (ba3a7e9). Phases A to E are done.
 
 - **Phase E is done** (plans #1444 and #1505; earlier E.1a-f under plan #1470/#1493): stats readout (#1445), box visibility (E.3, #1446), greedy meshing in JS (E.2, #1447, #1448), half-resolution far chunks (E.4, #1449, #1450), and the Rust/wasm mesher in `crates/mesh` (E.1, decided option B in #1451) with plants (PR #1513), flat shapes (PR #1514), vertex AO (PR #1515), greedy water tops (PR #1516) and greedy opaque faces (PR #1517). The viewer worker and half-resolution meshing (PR #1518) and the client scene (PR #1519) call `meshBlocksWasm` from `viewer/meshwasm.js`. The 2x median mesh-time criterion and the `[manual check]` pop-in criterion were not measured here.
 
-- **F1** holds: `viewer/index.html` sets `vdist = gl_Position.w` (~line 636)
-  and fogs with a linear ramp from 0.55 to 1.15 × `fogFar` (~line 650).
-  `renderFly` culls by radial distance against `VIEW.fogEnd`
-  (`viewer/flyover/plan.js:574`, `index.html` ~1498); `FLY_FOG` is
-  `VIEW.fogEnd / 1.15` (~1291).
-- **F2** holds: the viewer's tile array uses `NEAREST` mag and
-  `NEAREST_MIPMAP_LINEAR` min (~lines 832 to 833), with no anisotropy.
-- **F3** holds: the viewer's shader tests `t.a < 0.9` for the tint (~649).
-- **F4** holds in the viewer: it calls `gl.generateMipmap` (~831).
-- **F6, F7** hold: `visibilitySchedule` (`plan.js:589`) tests 25 sample
-  points per chunk; `meshBlocks` (`viewer/mesh.js:180`) maps arrays per
-  face and `tintFor` calls `lerp3` per birch or spruce leaf.
-- **Mesh format:** vertex byte 13 is reserved for AO (`mesh.js:10`), as
-  Phase C assumes. `meshBlocks(ctx, blocks, tints, size, pad, {fast})` has
-  no world-origin parameter yet (Phase B.3).
-- **Stats panel** exists (`viewer/index.html`, `?debug=1`), as the
-  acceptance criteria assume.
-- `coarse_heightmap` is exported from `crates/web/src/lib.rs:53` and used
-  by `plan.js` and `viewer/worker.js` (Phase D).
+- **Findings F1 to F7 no longer hold in the code.** `viewer/index.html`
+  and `client/scene.js` no longer use `vdist = gl_Position.w`, call
+  `gl.generateMipmap`, use `NEAREST_MIPMAP_LINEAR` or test `t.a < 0.9`
+  (fog is radial via `viewer/fog.js`, mips come from `viewer/mips.js`, the
+  tint is a separate R8 array). `meshBlocks` (`viewer/mesh.js:452`) takes
+  `{fast, origin, greedy}` and the wasm mesher in `crates/mesh` replaces
+  the allocating JS path (`viewer/meshwasm.js`).
+- **Other pieces in place:** vertex byte 13 carries AO and byte 15 water
+  depth; the stats panel (`?debug=1`) exists; `coarse_heightmap`
+  (`crates/web/src/lib.rs`) feeds `viewer/farmesh.js` and `plan.js`.
 
 ## Reconciliation notes
 
-- **Phase E was incomplete (resolved by plan #1505, now `done`; the wasm mesher was missing at the time).** Built: the stats readout for median mesh time and face counts (#1445), box visibility in the schedule (E.3, #1446), greedy meshing for water tops and other opaque faces (E.2, #1447, #1448), and the half-resolution mesher and its wiring beyond about 120 blocks (E.4, #1449, #1450). Not built: E.1, the allocation-free mesher. Question #1451 was decided as option B (Rust/wasm, in `crates/web` or a new crate, not `crates/terrain`), but the plan made no ticket for it, and `crates/web/src/lib.rs` has no mesher; `viewer/mesh.js` is still the JS mesher. The 2x median mesh-time criterion is therefore unmet. Phase E stays `todo`; a ticket for the wasm mesher (reporting gzipped wasm size before and after) is needed.
+- **History: Phase E was incomplete (resolved by plan #1505, now `done`; the wasm mesher was missing at the time).** Built: the stats readout for median mesh time and face counts (#1445), box visibility in the schedule (E.3, #1446), greedy meshing for water tops and other opaque faces (E.2, #1447, #1448), and the half-resolution mesher and its wiring beyond about 120 blocks (E.4, #1449, #1450). Not built: E.1, the allocation-free mesher. Question #1451 was decided as option B (Rust/wasm, in `crates/web` or a new crate, not `crates/terrain`), but the plan made no ticket for it, and `crates/web/src/lib.rs` has no mesher; `viewer/mesh.js` is still the JS mesher. The 2x median mesh-time criterion is therefore unmet. Phase E stays `todo`; a ticket for the wasm mesher (reporting gzipped wasm size before and after) is needed.
 
-- **Phase C was incomplete (resolved by plan #1291, now `done`; water depth missing at the time).**
+- **History: Phase C was incomplete (resolved by plan #1291, now `done`; water depth missing at the time).**
   Built: C.1 vertex AO (PRs #688, #692, #694; `viewer/mesh.js`,
   `viewer/test/mesh_ao.test.mjs`), C.2 sky gradient, sky pass and
   directional fog (PRs #691, #701, #724; `viewer/sky.js`), and the C.3
@@ -61,7 +52,7 @@ Checked against `master` (ba3a7e9). Phases A to E are done.
   but it was never created. C.4 is optional and not built. Suggest a
   planned ticket for the byte 15 depth in `meshBlocks` plus the viewer and
   client shader mapping. Phase C stays `todo`.
-- **Phase A was incomplete (resolved by PR #520, now `done`): the viewer was done, the client was not**
+- **History: Phase A was incomplete (resolved by PR #520, now `done`): the viewer was done, the client was not**
   (checked after plan #242 closed; PRs #248, #250, #252). `viewer/index.html`
   now has radial fog (`camPos`, `distance(wp, camPos)`, `viewer/fog.js`),
   `LINEAR_MIPMAP_LINEAR` with anisotropy, `textureGrad` texel snapping and
