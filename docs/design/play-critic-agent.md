@@ -1,6 +1,6 @@
 ---
 title: Play critic agent
-status: accepted
+status: done
 scope: game
 source: "#732"
 superseded_by: ""
@@ -14,7 +14,7 @@ phases:
 
 ## Current state
 
-Checked against the code on `master`:
+Checked against the code on `master`. Every phase is done, so the header is `done`; the bullets from "Script runner" down to "No critic tooling" describe the code before Phase A and are kept as history.
 
 - **Phase A done.** Plan #738: PR #752 (`createSession` and `exec` in `client/test/dsl.mjs`, `run` rebuilt on it) and PR #769 (session `transcript()` replays as an `.input` case); tests in `client/test/session.test.mjs`. The script-runner bullet below describes the code before these PRs.
 - **Phase B done.** Plan #773: PR #779 (path classification and player/debug observations in `client/tools/observe.mjs`), PR #782 (`client/tools/play.mjs`, JSON lines over `createSession`) and PR #960 (player mode refuses debug paths, verify mode allows them); tests in `client/test/observe.test.mjs` and `client/test/play.test.mjs`. The "No critic tooling" bullet below predates these PRs for `client/tools/`.
