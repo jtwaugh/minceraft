@@ -13,7 +13,7 @@ phases:
 
 Checked against `master` (f1c2f75).
 
-- **Constant sway** is in `client/sway.js`: `SWAY_AMPLITUDE` 0.08, `SWAY_SPEED` 1.6, `SWAY_WAVE` 0.45, `TRUNK_SWAY_AMPLITUDE`, `swayPhase(nowMs, reducedMotion)` (0 under reduced motion), `swayOffset(weight, x, z, phase, amplitude)` and `trunkLean`. The direction is baked into the `sin`/`cos` terms.
+- **Constant sway** is in `client/sway.js`: `SWAY_AMPLITUDE` 0.08, `SWAY_SPEED` 1.6, `SWAY_WAVE` 0.45, `TRUNK_SWAY_AMPLITUDE`, `swayPhase(nowMs, reducedMotion)` (0 under reduced motion), `swayOffset(weight, x, z, phase, wind, amplitude)` and `trunkLean`. Since Phase B the direction and strength come from the `wind` argument (with `SWAY_FLOOR`), no longer baked into the `sin`/`cos` terms.
 - **Shader mirror** is `swayGlsl` and the `program(cut)` vertex shader in `client/scene.js` (~lines 88-124), fed by one `swayPhase` uniform (~line 592). `trunkLean` is already mirrored for the opaque program, so tree trunk sway (`tree-trunk-sway.md`) has partly landed.
 - **Snow shake-off** is `spawnSnow` in `client/particles.js`; it calls `swayOffset(1, cx, cz, phase, 1)` and `scene.js` (~line 530) passes `swayPhase(now, false)` as `snow.phase` to `controller.frame`.
 - **Sim clock:** `crates/game/src/clock.rs` has the fixed 20 Hz tick (`TICKS_PER_SECOND`) and `Step { ticks, alpha }`. `Walker::sim_tick()` (`crates/game/src/walk.rs`) returns the tick count. `replay.rs` replays sims.
@@ -22,7 +22,7 @@ Checked against `master` (f1c2f75).
 - **Data:** `data/*.toml` has no `data/wind.toml`. Game data files are read by the game crate with `toml` (see `data/player.toml`, `data/input.toml`).
 - **Phase A done (plan #1940):** the wind function with fronts, gusts and direction wobble (`crates/game/src/wind_front.rs`, `wind_gust.rs`, `wind_field.rs`), `data/wind.toml` and the `game-web` `Wind` export are built, with tests for determinism, replay, range, calm and storm samples and unchanged climate. Closing PRs: #1978, #1981, #2052 (earlier tickets of plan #1853 built the fronts, `Wind` type and export).
 - **Phase B done (plan #2133):** sway, trunks and snow follow the per-frame wind (`client/windstate.js`, `client/sway.js`, `client/scene.js`, `client/particles.js`), the readout is `client/windreadout.js`, the pin lives in the Walker and is set by the `wind` console command (`crates/game/src/commands.rs`), and `client/test/scripts/wind.input` checks readout, pinned direction and reduced motion. Closing PRs: #2221 (ticket #2137); earlier tickets #2090-#2094, #2134-#2136 built the rest.
-- **Not built (as of the first reconcile; Phase A has since landed, see above):** no wind function, no fronts or gusts, no wind readout or pin command, no day cycle or weather. Climate output does not depend on any of this.
+- **Still not built:** no day cycle or weather in this doc's scope. Climate output does not depend on wind. Later layers on the same function (terrain shelter, channelling, roughness; `crates/game/src/wind_shelter.rs`, `wind_channel.rs`, `wind_roughness.rs`) belong to their own docs (`terrain-wind-shelter.md`, `biome-roughness-wind.md`).
 - Related docs: `tree-trunk-sway.md` (#1609), `biome-flora.md` (Phase C.5 introduced the sway), `debug-console.md` (command and alias tables in `data/commands.toml`).
 
 ## Reconciliation notes
