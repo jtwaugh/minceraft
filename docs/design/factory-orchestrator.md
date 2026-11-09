@@ -1,6 +1,6 @@
 ---
 title: Factory orchestrator
-status: accepted
+status: done
 scope: both
 source: "#566"
 superseded_by: ""
@@ -77,10 +77,10 @@ What exists today that this doc relies on or overlaps (checked against the code)
   views, and the board, ready and plan-closing passes are in
   `.github/scripts/factory_store*.py` and `factory_views.py` (PRs #1136,
   #1141, #1142, #1143, #1162, #1167, #1170, #1179, #1180, #1181, #1193,
-  #1194, #1198; `FACTORY.md` updated in #1200). Still a maintainer step
-  (note 2): `factory-tick.yml` does not yet set `FACTORY_STORE` or fetch and
-  publish the `factory-state` branch, so the store is off until it does
-  (steps in `FACTORY.md`). `[manual check]`
+  #1194, #1198; `FACTORY.md` updated in #1200). `factory-tick.yml` now sets
+  `FACTORY_STORE` (a db under `RUNNER_TEMP`) and publishes it to the
+  `factory-state` branch when the tick finishes, so the store is on.
+  `[manual check]` that the branch is being updated.
 - **Phase C done (plan #1217, closed).** Result schemas and validator
   (`agent_results.py`, PRs #1232, #1234), question issues from
   `needs_maintainer` (#1235), implementer result checks (#1236), planner,
@@ -104,12 +104,7 @@ What exists today that this doc relies on or overlaps (checked against the code)
   hand-found items all appear (#1486, `test_factory_needs_you_history.py`).
   The push-notification channel is `[external]` and not built; the alert is
   an issue comment. Whether the maintainer sees it is a `[manual check]`.
-- **Not present** (the `factory-tick` workflow and the `needs-you` label
-  now exist, see Phase A progress): any state store, any `factory-state`
-  branch, file leases, per-transition history, a "needs
-  you" queue, a GitHub App identity, self-hosted runners, or any reference
-  to these in `docs/design/`. No other design doc covers the factory;
-  `docs/design/README.md` only describes the doc lifecycle the factory runs.
+- **Superseded.** The first bullets of this section ("No orchestrator", "Not present" and the like) describe the factory before Phase A; every item they list as missing now exists (tick, state store and branch, `needs-you` queue). A GitHub App identity is still not set up (open question 3), and self-hosted runners are `[external]`. No other design doc covers the factory; `docs/design/README.md` only describes the doc lifecycle the factory runs.
 
 ## Reconciliation notes
 
