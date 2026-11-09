@@ -16,7 +16,7 @@ phases:
 
 ## Current state
 
-Nothing in phases A to F is built yet. What exists and is relied on:
+All five phases (A to E) are done; the log below records what was built and where, and the `[manual check]` looks remain for the maintainer. What the code had before, and still relies on:
 
 - `viewer/mesh.js` has `columnTints` (per-column grass and leaf tints from
   `ramp3(biome.grass | leaf, humidity)`, no blending), `tintFor`, `CROSS`
@@ -35,18 +35,17 @@ Nothing in phases A to F is built yet. What exists and is relied on:
   column (deviation B3 in SPEC) and runs snow last, per column.
 - `data/blocks.toml` has `tall_grass`, `fern`, `dandelion` (collision
   `none`, opacity 0); `data/biomes.toml` has `grass_ramp`, `leaf_ramp`,
-  `sky_ramp` per biome. No `[blend]`, `water_ramp`, `dry_ramp` or
-  `flora.toml` yet.
-- Phase A progress: A.1 and A.3 are built (PR #208, `client/samplers.js`: per-pass samplers, cutout clamp and LOD cap); A.5 is built (PR #210: plant top flag in vertex byte 14 and distance fade). Phase A is not done: A.2 and A.4 remain (see Reconciliation notes).
+  `sky_ramp` per biome. `[blend]`, `water_ramp`, `dry_ramp` and
+  `data/flora.toml` were added by Phases B and D.
+- Phase A progress (superseded by the next bullet): A.1 and A.3 are built (PR #208, `client/samplers.js`: per-pass samplers, cutout clamp and LOD cap); A.5 is built (PR #210: plant top flag in vertex byte 14 and distance fade). Phase A is not done: A.2 and A.4 remain (see Reconciliation notes).
 - Phase A is done: A.1, A.3 and A.5 in PRs #208 and #210 (`client/samplers.js`, plant top flag and fade); A.2 and A.4 arrived through `viewer-rendering.md` Phase B (`viewer/mips.js` `buildMips`, used by `client/tiles.js`; coverage-preserving alpha, `fwidth` alpha sharpening and cutoff 0.5 in `client/scene.js`). Plan #203's tickets #206 and #207 closed via #208 and #210.
 - Phase B is done (plan #1028): `[blend] radius` and legend (PR #1042), blurred column tints (PR #1043), per-vertex corner tints (PR #1045), client `blend` setting and flyover radius (PR #1047), sky and fog easing toward the player (PR #1048), biome water tint ramp (PR #1049). The `[manual check]` item for Phase B remains for the maintainer.
 - Phase C is done (plan #1052): variant art (PR #1061), shared tile list and `VARIANTS` (`viewer/tilelist.js`, PR #1062), texture variants in the mesher (PR #1063), plant offset (PR #1064), plant mirror, height, brightness and dark base (PR #1065), wind sway for plants and leaves (`client/sway.js`, PRs #1067 and #1068, as decided in #1053). C.1 came from `viewer-rendering.md` Phase B. The `[manual check]` items for Phase C remain for the maintainer.
-- Phase D is mostly built (plan #1070): block ids (PR #1092), art (PRs #1090, #1091), cross and tall cross mesher shapes (PR #1095), `dry_ramp` (PR #1094), `ground_cover` (PR #1093), `bush` (PR #1099), `data/flora.toml` and loader (PR #1096), column-local placement pass (PR #1100), winner noise (PR #1103), two-block tall plants (PR #1104), first set and `stats` per biome (PR #1105). One item is missing, so Phase D stays `todo` (see Reconciliation notes).
+- Phase D, first pass (plan #1070; completed by the next bullet): block ids (PR #1092), art (PRs #1090, #1091), cross and tall cross mesher shapes (PR #1095), `dry_ramp` (PR #1094), `ground_cover` (PR #1093), `bush` (PR #1099), `data/flora.toml` and loader (PR #1096), column-local placement pass (PR #1100), winner noise (PR #1103), two-block tall plants (PR #1104), first set and `stats` per biome (PR #1105). One item is missing, so Phase D stayed `todo` then (see Reconciliation notes).
 - Phase D is done: the missing Taiga `fern_double` arrived in plan #1281 (ticket #1278, PR #1288: `fern_double_lower`/`fern_double_upper` blocks, art and the Taiga entry in `data/flora.toml`). The `[manual check]` items for Phase D, if any, remain for the maintainer.
-- Phase E is mostly built (plan #1302): snow replaces `cross`/`tall_cross` flora (PR #1351), `requires` condition and cattail (PR #1354), marsh_orchid (PR #1371), lily_pad (PR #1368), `canopy` condition and jungle_bush (PR #1372), large_fern and broadleaf (PR #1374), Shrubland bush, berry_bush and dry_grass (PR #1376), tulips (PR #1401), cactus_flower (PR #1399), frost_grass (PR #1402). The coast `dune_grass` is only half built (plan #1408: block ids and art in PR #1412; the column condition and the flora entry are missing), so Phase E stays `todo`.
+- Phase E, first pass (plan #1302; completed by the next bullet): snow replaces `cross`/`tall_cross` flora (PR #1351), `requires` condition and cattail (PR #1354), marsh_orchid (PR #1371), lily_pad (PR #1368), `canopy` condition and jungle_bush (PR #1372), large_fern and broadleaf (PR #1374), Shrubland bush, berry_bush and dry_grass (PR #1376), tulips (PR #1401), cactus_flower (PR #1399), frost_grass (PR #1402). The coast `dune_grass` is only half built (plan #1408: block ids and art in PR #1412; the column condition and the flora entry are missing), so Phase E stayed `todo` then.
 - Phase E is done: the coast `dune_grass` arrived in plan #1415 (ticket #1416, PR #1417: `coast` column condition in `crates/terrain/src/flora.rs` and the `dune_grass` entry in `data/flora.toml`), completing the set begun in plan #1302 and #1408. The `[manual check]` items for Phase E, if any, remain for the maintainer.
-- Art for the existing plants is in `art/batches_13_14.json`. None of the
-  new tiles listed in C.2, D.5 or E exist.
+- Art for the original plants is in `art/batches_13_14.json`; the new tiles from C.2, D.5 and E are in later batches (for example `art/batches_20.json`, `batches_23.json`, `batches_25.json`).
 
 ## Reconciliation notes
 
