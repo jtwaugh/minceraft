@@ -1,6 +1,6 @@
 ---
 title: Debug console
-status: accepted
+status: done
 scope: game
 source: "#309"
 superseded_by: ""
@@ -39,10 +39,8 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Phase 1 done** (plan #313; PRs #326, #329, #397, #380, #388). `crates/game/src/commands.rs` has the registry, parser, built-in `help`, `Console` (`cheated` flag, outcome buffer) and the `give_command`, `spawn_command` and `clear_command` entries with handlers, tested headless in `commands.rs`. `Walker` (`walk.rs`) holds a command queue, drains it at the top of `tick` before the tick's input, and exposes `set_commands`, `submit_command`, `drain_command_output` and `cheated`. `Walker` still starts with an empty registry; a host calls `set_commands` with these entries (Phase 2).
 - **Phase 2 done** (plan #401; PRs #413, #412, #414, #415, #416, #417). `game-web` exports `submit_command`, `drain_command_output` and `command_names`; `client/debug.js` gates debug mode on `?debug=1` or a scene; `client/consolelogic.js` has history and Tab completion; `client/consoleui.js` is the UI; console mode is in `client/input.js` and `client/controller.js`; `client/test/scripts/console.input` covers it.
 - **Phase 3 done** (plan #420; PRs #433, #437, #450, #439, #441, #458). `data/commands.toml` and `crates/game/src/aliases.rs` hold the alias table and its validation; aliases run in one tick (`client/test/scripts/aliases.input`); `pause`, `resume`, `step` and `tp` are registered in `crates/game/src/commands.rs`; `crates/game/src/replay.rs` has the recorder and `Walker::world_hash`; `crates/game/tests/replay_commands.rs` is the replay test.
-- **Not present:** `data/commands.toml`, command exports in `game-web`, a `?debug=1` flag or
-  any debug-mode gate, a pause or step facility, an input recording format,
-  a world hash, a teleport function, and a console UI. Nothing in the repo
-  reads `?tool=`.
+- **Superseded bullets.** The first six bullets above describe the code before Phase 1: the stubs `spawnTestItems` and `spawnTestAnimals`, the missing `game-web` command exports and the DSL without `type` are all gone or added by the phases below. `data/commands.toml`, the command exports (`submit_command`, `drain_command_output`, `command_names`), the `?debug=1` gate, pause and `step`, the recorder and world hash, `tp` and the console UI all exist now. Nothing in the repo reads `?tool=` (it never existed).
+- **Status.** Every phase is done, so the header is `done`. The `[manual check]` items in the reconciliation notes (fade timing, console look) remain visual judgments.
 
 ## Reconciliation notes
 
