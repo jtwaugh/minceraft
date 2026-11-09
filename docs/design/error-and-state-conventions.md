@@ -1,6 +1,6 @@
 ---
 title: Consistent error reporting and state machine conventions
-status: accepted
+status: done
 scope: both
 source: "#302"
 superseded_by: ""
@@ -14,7 +14,7 @@ phases:
 
 ## Current state
 
-Verified against the code on `master`:
+Verified against the code on `master`. The first group of bullets (down to "Client state machine") records the code before Phase A and is kept as history; the Phase A to E bullets below it say what changed. Every phase is done, so the header is `done`.
 
 - **Hand-written error types.** Each has its own `Display` and
   `impl std::error::Error`, with no shared helper:
