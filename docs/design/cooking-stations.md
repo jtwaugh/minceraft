@@ -29,7 +29,8 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Particles.** `client/particles.js` exists; no `puff` particle is wired (no `puff` in `client/`).
 - **Phase A, done (plan #1825, earlier plan #1538).** `counter` (74), `plate_rack` (75) and `chest` (83) are in `data/blocks.toml`; `data/structures/raft_start.toml` is a 5 by 5 deck with two chests, two counters, a plate rack, a butcher block and a griddle, and no `crate`. Art, mesher and client: PRs #1599, #1578, #1765, #1843, #1838, #1850, #1886, #1934, #1948.
 - **Phase B, done (plan #1990).** Station state (`crates/game/src/stations.rs`, `data/stations.toml`) is PR #2033; the `any_item` held value, `interact` button and `block:station` target are PR #2057; put down and take on raft stations are PR #2116; station contents in the world hash and the swell test (`crates/game/tests/stations.rs`) are PR #2128; DSL station commands and `client/test/scripts/stations.input` are PR #2149; the client drawing items resting on stations is PR #2139.
-- **Nothing else in this doc is built yet.**
+- **Phase C, partly built (plan #2171, still open).** Chest slot state and `slots`/`refused_ticks` in `data/chests.toml` (`crates/game/src/chests.rs`, #2172); the interact rule and deposit into raft chests with `item_stored` (#2173, #2174); a full chest refuses a deposit and `chest_refused` is exposed by `crates/game-web` (#2175); the level `[[level.supplies]]` table (#2176); restock at each gathering start with `chest_restocked` (#2177, #2178). Not built: withdrawing by slot and the chest view mode in `client/input.js` and `client/controller.js` (no withdraw event or chest UI found), so the Phase C "withdraws the second one by slot" criterion is unmet.
+- **Not built:** Phases D, E and F. `data/recipes.toml` does not exist, `data/items.toml` has no knife, plate or food items from this doc, and no `puff` particle is wired.
 
 ## Reconciliation notes
 
