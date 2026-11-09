@@ -1,6 +1,6 @@
 ---
 title: Sprinting
-status: accepted
+status: done
 scope: game
 source: "#808"
 superseded_by: ""
@@ -52,7 +52,7 @@ Phase A plan #815 closed (PRs #842, #868, #876, #877, #902, #908):
   the islet and runway still sprint) and covered by
   `client/test/scripts/sprint_raft.input`. With plans #1326 and #1377, every
   Phase B decision (window, jump boost and drag, wall tolerance, FOV, raft) is built.
-- Research spec-questions #819 and #820 and decisions #821 and #822 are closed.
+- Both phases are done, so the doc is `done`. Research spec-questions #819 and #820 and decisions #821 and #822 are closed.
 
 ## Reconciliation notes
 
@@ -163,7 +163,7 @@ along a wall, does not end the sprint. (Decided in #1331, #1334.)
 
 ## Reconciliation notes (phase-done, Phase B)
 
-10. **Phase B still incomplete (plan #1326).** Plan #1326's tickets (#1327,
+10. **Resolved (plans #1377, #1391).** Was: **Phase B still incomplete (plan #1326).** Plan #1326's tickets (#1327,
    #1329, #1330) closed: the double-tap window of n-1 ticks, the sprint-jump
    push (`sprint_jump_boost` in `data/player.toml`, `player.rs`) and input
    scripts (`sprint_ref.input`, `sprint_extras.input`). The decisions made
@@ -181,7 +181,7 @@ along a wall, does not end the sprint. (Decided in #1331, #1334.)
 
 ## Reconciliation notes (phase-done, Phase B, plan #1377)
 
-11. **Phase B still incomplete (plan #1377).** Plan #1377's tickets closed:
+11. **Resolved (plan #1391, PRs #1400, #1403).** Was: **Phase B still incomplete (plan #1377).** Plan #1377's tickets closed:
    the head-on wall rule (#1378, PR #1383: `sprint_wall_tolerance_degrees` in
    `data/player.toml`, `player.rs`) and the sprint-jump drag (#1379, PR #1386).
    Still missing: the raft rule (#1333, #1380, option A). Nothing in
