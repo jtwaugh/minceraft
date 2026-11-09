@@ -1,6 +1,6 @@
 ---
 title: Player death and death screen
-status: accepted
+status: done
 scope: game
 source: "#807"
 superseded_by: ""
@@ -15,13 +15,13 @@ phases:
 - Phase A is done: the dead flag, `PlayerDied` / `PlayerRespawned` events, the `respawn` command and the replay state landed in #841, #875, #881 and #897 (plan #817); `crates/game/tests/death.rs` covers death, respawn and replay.
 - Phase B is done: `Walk.dead()` (#936), the death mode in `client/input.js` and `controller.js` with `client/test/scripts/death.input` (#939), `controller.respawn()` (#950) and the death screen panel `client/deathui.js` with a respawn button, mounted in `scene.js` (#951); plan #918. Layout is the Open question 1 default (title and one respawn button). The "like Minecraft's" look stays a `[manual check]`.
 - Phase C is done: the hands item is dropped at the death position as an item entity with `ItemDropped` source `"death"` (#1022, plan #999); loose tools can be picked up onto the belt (#1328) and the belt's tools drop on death, leaving the belt empty after respawn (#1361); plan #1314 (`crates/game/src/walk.rs`, `crates/game/tests/death.rs`). The other Phase C answers (#955, #957, #958, #959) are the Phase A/B defaults and need no code. Reconciliation note 13 is resolved by these PRs.
-> **Reconciler:** the bullets from "Player health exists" down to "Replays" were written before Phase A. Phases A and B added the dead flag, `PlayerDied` / `PlayerRespawned`, a `respawn` command, replay state and the death screen (first two bullets), so "nothing reads a 0 health" and "no death event" no longer hold. Phase C is still unbuilt: no `"death"` source for `ItemDropped` exists in `crates/game`, so items are still kept on death.
+> **Reconciler:** all three phases are done. The bullets below, down to "Replays", describe the code before Phase A and are kept as history; the bullets above are current.
 
-- Player health exists: `crates/game/src/player.rs` has `Player.health` (starts at `physics.max_health`, 20) and fall damage saturates it at 0 (`update_fall`, tested by `drop_from(100.0, &w).health == 0`). Nothing reads a 0 health: no dead flag, no event, input still drives the player.
+- Player health exists: `crates/game/src/player.rs` has `Player.health` (starts at `physics.max_health`, 20) and fall damage saturates it at 0 (`update_fall`, tested by `drop_from(100.0, &w).health == 0`). (Before Phase A nothing read a 0 health; the dead flag, `PlayerDied` and `PlayerRespawned` now exist.)
 - Health reaches the client: `Walker::health` / `max_health` (`crates/game/src/walk.rs`), `Walk.health()` / `max_health()` (`crates/game-web/src/lib.rs`), and `client/hud.js` draws the hearts from `client/controller.js`.
-- Events: `crates/game/src/events.rs` implements the section 11 events of `basic-gameplay.md` (`EntityHurt`, `EntityKilled`, `Swing`, ...). There is no player death or respawn event, and `EntityHurt` / `EntityKilled` are for animals, not the player. The client receives them through `walk.drain_events()`.
+- Events: `crates/game/src/events.rs` implements the section 11 events of `basic-gameplay.md` (`EntityHurt`, `EntityKilled`, `Swing`, ...). (Before Phase A there was no player death or respawn event; `PlayerDied` and `PlayerRespawned` now exist in this file.) `EntityHurt` / `EntityKilled` are for animals, not the player. The client receives them through `walk.drain_events()`.
 - Animal death is the model for a death animation: `crates/game/src/animal_entities.rs` has `death_ticks_left` and a tip-over of about 20 ticks (`basic-gameplay.md` section 8).
-- Replays: `crates/game/src/replay.rs` serialises the player's position, velocity, ground flag and health, so a death flag and respawn state must be added there too.
+- Replays: `crates/game/src/replay.rs` serialises the player's position, velocity, ground flag and health, and the death flag and respawn state are now carried there too (Phase A).
 - The client already has a non-walking overlay mode: `state.inventory` in `client/controller.js` (sim ticks on with neutral input), plus `client/inventoryui.js`, `client/consoleui.js` and `client/overlay.js`. Modes and pointer lock are tested by `client/test/scripts/modes.input` and `inventory.input`.
 - Spawn: only the raft test scene has a spawn (`crates/game/src/scene.rs`, `spawn`). The real-world scene is chosen in `client/scene.js`; `world-layout.md` covers the raft and start area.
 - The phase clock is `crates/game/src/phase.rs` (`PhaseClock::at(tick)`, a pure function of the tick, data in `data/phases.toml`).
@@ -43,7 +43,7 @@ phases:
 11. **`[manual check]`**: "like Minecraft's" is a visual judgment. Measurable version: the death screen shows exactly the elements decided in Open question 1 (listed by id in the DOM model), a respawn control, and nothing else.
 12. **Invariants.** Nothing here needs a dependency or std in `crates/terrain`; all work is in `crates/game`, `crates/game-web` and `client/`. Report wasm size changes in PRs.
 
-13. **Phase C is incomplete: belt tools are not dropped.** The doc (decided in #1000, `/decide B`) says the belt's tools drop as loose items and the belt is empty after respawn until they are picked up. #1022 left the belt untouched, and tools are still not item entities (`crates/game/src/item_entities.rs` holds only `ItemInstance`), with no way to put a picked-up tool back on the belt. Plan #999 opened no ticket for this. Suggest the planner plans it: tools as pickable item entities, re-equipping onto the belt, then dropping the belt on death and leaving it empty after `Walker::respawn`.
+13. **Resolved (Phase C done): belt tools are dropped.** The doc (decided in #1000, `/decide B`) says the belt's tools drop as loose items and the belt is empty after respawn until they are picked up. #1022 left the belt untouched, and tools are still not item entities (`crates/game/src/item_entities.rs` holds only `ItemInstance`), with no way to put a picked-up tool back on the belt. Plan #999 opened no ticket for this. Suggest the planner plans it: tools as pickable item entities, re-equipping onto the belt, then dropping the belt on death and leaving it empty after `Walker::respawn`.
 
 ## Player death and death screen
 
@@ -69,5 +69,5 @@ The player can die, and dying shows a death screen like Minecraft's.
 
 ## Open questions
 
-1. **What does the death screen show and offer?** A: research Beta's screen (needs a `research` spec question, then SPEC.md). B: our own minimal layout, title plus a respawn button (suggested). C: B plus a score or cause of death line.
-5. **Does death interact with the phase clock?** A: keeps running (suggested). B: resets to the start of gathering.
+1. **(Resolved: default B, built in Phase B.) What does the death screen show and offer?** A: research Beta's screen (needs a `research` spec question, then SPEC.md). B: our own minimal layout, title plus a respawn button (suggested). C: B plus a score or cause of death line.
+5. **(Resolved: default A, the clock keeps running.) Does death interact with the phase clock?** A: keeps running (suggested). B: resets to the start of gathering.
