@@ -35,7 +35,8 @@ test('the module meshes a streamed region the same as padRegion, columnTints and
 });
 
 test('meshPadded on gatherRegion, given only plain data, meshes the same as before and finds the snowy foliage', () => {
-  const ctx = legendContext(terrain.legend());
+  const faceLayer = new Uint8Array(256 * 3 * 2).map((_, i) => (i * 7) % 241);
+  const ctx = { ...legendContext(terrain.legend()), faceLayer };
   const seed = 12345n, blendRadius = 2, walk = Walk.streamed(seed, 32, 127, 32);
   for (const [rx, rz] of [[0, 0], [-1, 0], [0, 1], [1, -1]]) {
     const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
