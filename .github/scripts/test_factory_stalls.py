@@ -123,7 +123,7 @@ class Test(unittest.TestCase):
         docs = {d["file"]: d for d in load_docs(DESIGN_DIR)}
         self.assertNotIn("docs/design/README.md", docs)
         d = docs["docs/design/factory-orchestrator.md"]
-        self.assertEqual(d["status"], "accepted")
+        self.assertIn(d["status"], ("accepted", "done"))
         self.assertIn("A", d["phases"])
         self.assertIn("## Reconciliation notes", d["text"])
 

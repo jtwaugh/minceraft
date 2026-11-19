@@ -31,7 +31,7 @@ import { attachInput } from './input.js';
 import { createModelDrawer } from './modelgl.js';
 import { animalBoxes, animalPose, CLEAR_EDGES } from './models.js';
 import { bobberBoxes, lineBoxes, bobberDraw } from './bobbermodel.js';
-import { fishBoxes, fishDraw, createTailTracker } from './fishmodels.js';
+import { fishPart, fishDraw, createTailTracker } from './fishmodels.js';
 import { raftBoxes, raftMatrix } from './raftmodel.js';
 import { itemBoxes, itemDraws, itemPose, readStations, stationDraws } from './itemmodel.js';
 import { heldBoxes, heldDraw } from './helditem.js';
@@ -278,14 +278,14 @@ function drawAnimals(mvp, animals, daylight) {
 
 // Fish as textured boxes, drawn opaque before the water pass so the water
 // blends over them. One model per species and body height for the body and
-// dorsal fin, one for the tail plate, which swings on its own (fishDraw).
+// dorsal fin, one for the tail plate, which swings on its own (fishDraw);
+// squid have no tail and draw the body model only.
 const fishModels = {};
 const tailTracker = createTailTracker();
 function drawFish(mvp, fish, timeSeconds, daylight) {
   const swings = tailTracker.update(fish, timeSeconds);
   for (const { species, height, part, model, tint } of fishDraw(fish, swings)) {
-    const m = fishModels[`${species}/${height}/${part}`] ??= models.addModel(
-      part === 'tail' ? fishBoxes(species, height).slice(2) : fishBoxes(species, height).slice(0, 2));
+    const m = fishModels[`${species}/${height}/${part}`] ??= models.addModel(fishPart(species, height, part));
     models.drawModel(mvp, model, m, tint, daylight);
   }
 }
