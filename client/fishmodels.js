@@ -1,17 +1,19 @@
 // Fish box models: three boxes per fish (body, dorsal fin, tail plate) from the
-// batch 11 faces of the tileset export. The art draws only left faces; right
+// batch 11 faces of the tileset export; squid have a body and a tentacle box
+// and no tail. The art draws only left faces; right
 // faces reuse them mirrored (`~` prefix, see boxVertices). Front is -z at
 // heading 0, as for animals.
 
 // Fish models in the tileset export (batch 11); the client requests exactly these.
-export const FISH_MODELS = ['salmon', 'tuna', 'mackerel'];
+export const FISH_MODELS = ['salmon', 'tuna', 'mackerel', 'squid'];
 
 // Grid sizes from the tileset export, in art pixels: body [width, height,
-// length], and fin and tail [length, height].
+// length], fin and tail [length, height], and squid tentacles [width, height].
 const SIZES = {
   salmon: { body: [2, 4, 8], tail: [4, 4], dorsal: [3, 2] },
   tuna: { body: [3, 5, 10], tail: [5, 6], dorsal: [4, 3] },
   mackerel: { body: [2, 3, 7], tail: [3, 3], dorsal: [2, 2] },
+  squid: { body: [12, 16, 12], tentacle: [2, 18] },
 };
 const THIN = 0.04; // thickness of the flat fin and tail plates, in blocks
 const GREY = {};
@@ -20,7 +22,8 @@ const GREY = {};
  * The boxes of a `species` fish whose body is `bodyHeight` blocks tall, centred
  * on x and z at the origin with the body's bottom at y 0 and its nose at -z.
  * The tail plate sits behind the body, the dorsal fin on top of its middle.
- * Unknown species get one grey box.
+ * Squid get the body with the tentacle box hanging from its middle, its bottom
+ * at y 0. Unknown species get one grey box.
  */
 export function fishBoxes(species, bodyHeight) {
   const s = SIZES[species];
@@ -29,6 +32,20 @@ export function fishBoxes(species, bodyHeight) {
   const [w, h, l] = s.body.map((v) => v * k);
   const f = (n) => `${species}.${n}`;
   const flat = (n) => ({ left: f(n), right: `~${f(n)}` });
+  if (s.tentacle) {
+    const [tw, th] = s.tentacle.map((v) => v * k);
+    const side = f('tentacle_side'), end = f('tentacle_end');
+    return [
+      {
+        lo: [-w / 2, th, -l / 2], size: [w, h, l],
+        faces: {
+          front: f('body_front'), back: f('body_back'), left: f('body_left'),
+          right: f('body_right'), top: f('body_top'), bottom: f('body_bottom'),
+        },
+      },
+      { lo: [-tw / 2, 0, -tw / 2], size: [tw, th, tw], faces: { front: side, back: side, left: side, right: side, top: end, bottom: end } },
+    ];
+  }
   return [
     {
       lo: [-w / 2, 0, -l / 2], size: [w, h, l],
@@ -66,6 +83,18 @@ export function fishPose(f, swing = 0, hinge = 0) {
 export const TAIL_AMPLITUDE = 25; // largest tail swing either side of straight, degrees
 const TAIL_FULL_SPEED = 2; // blocks per second at which the swing reaches full amplitude
 const TAIL_CYCLES_PER_BLOCK = 1.5; // tail beats per block swum
+
+/** Whether `species` has a tail plate (fishBoxes box 2) that swings on its own. */
+export function hasTail(species) {
+  return Boolean(SIZES[species]?.tail);
+}
+
+/** The boxes of fishDraw's `part` ('body' or 'tail') of a `species` fish. */
+export function fishPart(species, bodyHeight, part) {
+  const boxes = fishBoxes(species, bodyHeight);
+  if (!hasTail(species)) return part === 'body' ? boxes : [];
+  return part === 'tail' ? boxes.slice(2) : boxes.slice(0, 2);
+}
 
 /** The z of the edge where the tail plate meets the body, in the fishBoxes frame. */
 export function tailHinge(species, bodyHeight) {
@@ -110,16 +139,17 @@ export function createTailTracker() {
 /**
  * What to draw for the frame's `fish` ({ id, species, pos, heading, size }) given
  * the tail `swings` (Map id -> degrees, from createTailTracker): two draws per
- * fish, { species, height, part: 'body' | 'tail', model, tint }. The body part
- * is the body and dorsal fin (fishBoxes 0 and 1), the tail part box 2.
+ * fish, { species, height, part: 'body' | 'tail', model, tint }, whose boxes are
+ * fishPart's. Species without a tail (hasTail) get the body draw only.
  */
 export function fishDraw(fish, swings) {
   const out = [];
   for (const f of fish) {
     const height = f.size[1];
-    const p = fishPose(f, swings.get(f.id) ?? 0, tailHinge(f.species, height));
+    const tail = hasTail(f.species);
+    const p = tail ? fishPose(f, swings.get(f.id) ?? 0, tailHinge(f.species, height)) : fishPose(f);
     out.push({ species: f.species, height, part: 'body', model: p.model, tint: p.tint });
-    out.push({ species: f.species, height, part: 'tail', model: p.tail, tint: p.tint });
+    if (tail) out.push({ species: f.species, height, part: 'tail', model: p.tail, tint: p.tint });
   }
   return out;
 }

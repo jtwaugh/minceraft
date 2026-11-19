@@ -2,14 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { packAtlas, boxVertices } from '../models.js';
-import { FISH_MODELS, fishBoxes, fishPose, createTailTracker, fishDraw, tailHinge, TAIL_AMPLITUDE } from '../fishmodels.js';
+import { FISH_MODELS, fishBoxes, fishPose, createTailTracker, fishDraw, fishPart, hasTail, tailHinge, TAIL_AMPLITUDE } from '../fishmodels.js';
 
 const exportJson = JSON.parse(readFileSync(new URL('../../viewer/textures.json', import.meta.url)));
 const atlas = packAtlas(exportJson);
 const rect = (n) => atlas.rects[n.replace('~', '')];
 
-test('fish boxes name only faces in the export, at the art proportions', () => {
+test('every FISH_MODELS species has its faces in the export', () => {
   for (const sp of FISH_MODELS) {
+    assert.ok(exportJson.batches['Batch 11'].models[sp], `${sp} not in batch 11`);
+    for (const b of fishBoxes(sp, 2)) {
+      for (const n of Object.values(b.faces)) assert.ok(rect(n), `${n} missing`);
+    }
+  }
+});
+
+test('fish boxes name only faces in the export, at the art proportions', () => {
+  for (const sp of FISH_MODELS.filter(hasTail)) {
     const boxes = fishBoxes(sp, 2);
     assert.equal(boxes.length, 3);
     for (const b of boxes) {
@@ -109,4 +118,35 @@ test('fishDraw gives a body and a tail draw per fish, swinging only the tail', (
   const still = fishDraw(fish, new Map());
   assert.ok(Array.from(still[0].model).every((v, i) => Math.abs(v - still[1].model[i]) < 1e-6));
   assert.deepEqual(fishDraw([], new Map()), []);
+});
+
+test('squid boxes: body over a tentacle box, bottom at y 0, centred, at the art proportions', () => {
+  const boxes = fishBoxes('squid', 2);
+  assert.equal(boxes.length, 2);
+  const [body, tent] = boxes;
+  assert.deepEqual(Object.values(body.faces).sort(), ['back', 'bottom', 'front', 'left', 'right', 'top'].map((n) => `squid.body_${n}`));
+  assert.deepEqual(new Set(Object.values(tent.faces)), new Set(['squid.tentacle_side', 'squid.tentacle_end']));
+  const k = 2 / rect('squid.body_left').h;
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  assert.equal(body.size[1], 2);
+  assert.ok(near(body.size[0], rect('squid.body_front').w * k) && near(body.size[2], rect('squid.body_left').w * k));
+  assert.ok(near(tent.size[0], rect('squid.tentacle_side').w * k) && near(tent.size[1], rect('squid.tentacle_side').h * k));
+  assert.equal(tent.lo[1], 0);
+  assert.equal(body.lo[1], tent.size[1]);
+  for (const b of boxes) for (const i of [0, 2]) assert.ok(near(b.lo[i] + b.size[i] / 2, 0));
+  assert.equal(hasTail('squid'), false);
+  assert.deepEqual(fishPart('squid', 2, 'body'), boxes);
+  assert.deepEqual(fishPart('squid', 2, 'tail'), []);
+  assert.equal(fishPart('salmon', 2, 'tail').length, 1);
+});
+
+test('fishDraw gives a squid a body draw and no tail draw; unknown species too', () => {
+  const fish = [
+    { id: 1, species: 'squid', pos: [0, 0, 0], heading: 0, size: [0.8, 0.8] },
+    { id: 2, species: 'salmon', pos: [1, 0, 0], heading: 0, size: [0.4, 0.3] },
+    { id: 3, species: 'kraken', pos: [2, 0, 0], heading: 0, size: [1, 1] },
+  ];
+  const d = fishDraw(fish, new Map([[1, 20], [2, 20]]));
+  assert.deepEqual(d.map((x) => [x.species, x.part]), [['squid', 'body'], ['salmon', 'body'], ['salmon', 'tail'], ['kraken', 'body']]);
+  assert.equal(fishPart('kraken', 1, 'body').length, 1);
 });
