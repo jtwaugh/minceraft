@@ -91,7 +91,7 @@ The three fish are spawned by this game's own rules (section 3). Each species ge
 
 ### 2.1 Squid
 
-Squid spawn and behave as SPEC 14's water spawn describes; this idea adds no squid rules of its own and does not put squid in `data/fish.toml`. The rod never hooks a squid. A squid killed with the sword (section 4.5) gives `raw_squid` the same way a fish gives its raw item.
+Squid take their population cap (5) and spawn weight (10) from SPEC 14's water spawn. Everything else (box, swim speed, turn rate, health, school size, depth range and the raw item `raw_squid`) comes from a game-owned `[[body]]` entry for squid in `data/fish_bodies.toml`, and squid are spawned and steered by the same machinery as fish, as a kind the rod can't hook. This idea does not put squid in `data/fish.toml`. Any further Beta fact about squid is a separate `research` question. The rod never hooks a squid. A squid killed with the sword (section 4.5) gives `raw_squid` the same way a fish gives its raw item. (Decided in #2262.)
 
 > **Reconciler:** SPEC 14 has weight and cap only. See note 1.
 
@@ -202,5 +202,3 @@ Add to the events of basic-gameplay section 11:
 5. The bite is a single timed press for every species (section 4.4).
 
 ## Open questions
-
-4. **Squid body and swim data (note 1).** A: game-owned `data/fish_bodies.toml` entry like the fish (suggested). B: open a `research` question for the facts SPEC 14 lacks.
