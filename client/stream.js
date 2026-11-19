@@ -6,7 +6,7 @@
 //   const s = createStream({ budget: 1 });
 //   const { mesh, free, stale } = s.frame(walk.drain_stream(), centre);
 //   // mesh: [{ rx, rz }] to mesh and upload now; free: [{ rx, rz }] to delete;
-//   // stale: [{ rx, rz }] to mesh again, at most one and only when mesh is empty
+//   // stale: [{ rx, rz, kind: 'stale' }] to mesh again, at most one and only when mesh is empty
 //
 // `events` is the flat [kind, rx, rz, ...] list of drain_stream: kind 1 a
 // region loaded, 0 unloaded. A region the sim loads twice is meshed once.
@@ -47,7 +47,7 @@ export function createStream({ budget = 1 } = {}) {
         meshed.add(key(r.rx, r.rz));
         for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
           const n = { rx: r.rx + dx, rz: r.rz + dz };
-          if (meshed.has(key(n.rx, n.rz))) stale.set(key(n.rx, n.rz), n);
+          if (meshed.has(key(n.rx, n.rz))) stale.set(key(n.rx, n.rz), { ...n, kind: 'stale' });
         }
         stale.delete(key(r.rx, r.rz));
       }
@@ -63,7 +63,7 @@ export function createStream({ budget = 1 } = {}) {
       for (let i = 0; i < pairs.length; i += 2) {
         const k = key(pairs[i], pairs[i + 1]);
         if (meshed.has(k)) {
-          out.push({ rx: pairs[i], rz: pairs[i + 1] });
+          out.push({ rx: pairs[i], rz: pairs[i + 1], kind: 'edit' });
           stale.delete(k);
         }
       }

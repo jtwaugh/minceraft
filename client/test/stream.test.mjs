@@ -61,7 +61,7 @@ test('a region unloaded then loaded again is meshed again', () => {
 test('edited keeps only the meshed regions among the edited ones', () => {
   const s = createStream({ budget: 1 });
   s.frame(load([0, 0], [1, 0]), at(0, 0)); // (0, 0) meshed, (1, 0) still queued
-  assert.deepEqual(s.edited([0, 0, 1, 0, 5, 5]), [at(0, 0)]);
+  assert.deepEqual(s.edited([0, 0, 1, 0, 5, 5]), [{ ...at(0, 0), kind: 'edit' }]);
   assert.deepEqual(s.edited([]), []);
 });
 
@@ -84,7 +84,7 @@ test('one stale region is returned on a frame with no new mesh, none on a frame 
   assert.deepEqual(s.frame([], at(0, 0)).stale, []); // meshes the other side; (0, 0) still stale
   const spare = s.frame([], at(0, 0));
   assert.deepEqual(spare.mesh, []);
-  assert.deepEqual(spare.stale, [at(0, 0)]);
+  assert.deepEqual(spare.stale, [{ ...at(0, 0), kind: 'stale' }]);
   assert.deepEqual(s.frame([], at(0, 0)).stale, []);
 });
 
@@ -113,6 +113,6 @@ test('an edited region is meshed again, so no longer stale', () => {
   const s = createStream({ budget: 1 });
   s.frame(load([0, 0], [1, 0]), at(0, 0));
   s.frame([], at(0, 0)); // (0, 0) stale
-  assert.deepEqual(s.edited([0, 0]), [at(0, 0)]);
+  assert.deepEqual(s.edited([0, 0]), [{ ...at(0, 0), kind: 'edit' }]);
   assert.deepEqual(s.frame([], at(0, 0)).stale, []);
 });
