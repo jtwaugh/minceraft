@@ -5,8 +5,9 @@ import { legendContext, columnTints } from '../../viewer/mesh.js';
 import { meshBlocksWasm } from '../../viewer/meshwasm.js';
 import * as terrain from '../../viewer/pkg/terrain_web.js';
 import { initSync, Walk } from '../pkg/game_web.js';
+import { snowOnFoliage } from '../particles.js';
 import { padRegion } from '../regionpad.js';
-import { meshRegionCpu } from '../regionmesh.js';
+import { gatherRegion, meshPadded, meshRegionCpu } from '../regionmesh.js';
 import { REGION_SIZE } from '../stream.js';
 
 await terrain.default({ module_or_path: fs.readFileSync(new URL('../../viewer/pkg/terrain_web_bg.wasm', import.meta.url)) });
@@ -30,5 +31,30 @@ test('the module meshes a streamed region the same as padRegion, columnTints and
       assert.equal(got.mesh[k].faces, want[k].faces, `${rx},${rz} ${k}`);
       assert.deepEqual(new Uint8Array(got.mesh[k].verts), new Uint8Array(want[k].verts), `${rx},${rz} ${k}`);
     }
+  }
+});
+
+test('meshPadded on gatherRegion, given only plain data, meshes the same as before and finds the snowy foliage', () => {
+  const ctx = legendContext(terrain.legend());
+  const seed = 12345n, blendRadius = 2, walk = Walk.streamed(seed, 32, 127, 32);
+  for (const [rx, rz] of [[0, 0], [-1, 0], [0, 1], [1, -1]]) {
+    const x = rx * REGION_SIZE, z = rz * REGION_SIZE;
+    const blocks = padRegion((a, b) => walk.region_blocks(a, b), (a, b, dx, dz) => walk.region_border(a, b, dx, dz), rx, rz, REGION_SIZE);
+    const tints = columnTints(terrain, ctx, seed, x, z, REGION_SIZE, blendRadius);
+    const want = meshBlocksWasm(terrain, ctx, blocks, tints, REGION_SIZE, 1, { origin: [x, z] });
+    const gathered = gatherRegion({ walk }, { rx, rz });
+    assert.deepEqual(gathered.origin, [x, z]);
+    assert.deepEqual(gathered.blocks, blocks);
+    // as a worker would get it: a structured copy, and no walk in reach
+    const msg = structuredClone({ rx, rz, blocks: gathered.blocks });
+    const got = meshPadded({ terrain, ctx, seed, blendRadius }, msg);
+    assert.deepEqual(got.origin, [x, z]);
+    assert.deepEqual(got.tints, tints);
+    assert.deepEqual(got.snow, snowOnFoliage(blocks, REGION_SIZE, 1, [x, z]));
+    for (const k of ['opaque', 'cutout', 'water', 'ice']) {
+      assert.equal(got.mesh[k].faces, want[k].faces, `${rx},${rz} ${k}`);
+      assert.deepEqual(new Uint8Array(got.mesh[k].verts), new Uint8Array(want[k].verts), `${rx},${rz} ${k}`);
+    }
+    assert.deepEqual(meshRegionCpu({ walk, terrain, ctx, seed, blendRadius }, { rx, rz }).snow, got.snow);
   }
 });
