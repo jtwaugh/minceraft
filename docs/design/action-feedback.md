@@ -15,11 +15,10 @@ phases:
 - **Phase A done** (plans #2022, #2028, #2145). `ActionRefused { action, reason }` and the four-value `Reason` enum are in `crates/game/src/events.rs`, emitted from `walk.rs`, exposed in `crates/game-web/src/lib.rs`, and covered by `client/test/scripts/refusals.input`. PRs #2032, #2041, #2081, #2122, #2129, #2140, #2194, #2201, #2217.
 - **Sim events exist.** `crates/game/src/events.rs` has `GameEvent` with `ItemPickedUp`, `BlockTilled`, `CropPlanted`, `CropHarvested`, `Foraged`, `ForageMissed`, `Swing` and the rest of basic-gameplay section 11. `Walker::drain_events` (`crates/game/src/walk.rs:1018`) returns them; `crates/game-web/src/lib.rs:416` turns them into strings; `client/controller.js` passes them out as `events` each frame.
 - **Events are not in the world hash.** `Walker::world_hash` (`crates/game/src/replay.rs` header) covers tick, player, belt, hands, items, animals and raft, not the event list. Events are derived from the same inputs, so a replay regenerates them.
-- **Only `forage_missed` is a refusal.** No other no-op (out of reach, hands full while carrying, wrong tool, nothing to till) emits anything. There is no refusal reason in `GameEvent`.
-- **Observers see counts only.** In `client/tools/observe.mjs` `events` and `events.foraged` are `debug` paths; `client/test/dsl.mjs` serves `events` as a count and `events.foraged`.
-- **No message area in the HUD.** `client/hud.js` (`hudModel`, `mountHud`) draws crosshair, timer, hands, hearts and belt; `client/hudlayout.js` places them. Pixel text exists: `drawString` in `client/font.js`, used for the hands label and by `client/hintui.js`. `observe.mjs` lists `hud.selected` and `hud.hands` as player paths; there is no `hud.message`.
-- **Selection outline** is drawn in `client/scene.js` (around line 203) from the controller's `aim`. Nothing keeps it after the target changes or disappears.
-- **Data-file convention.** Game tuning lives in `data/*.toml` (`hands.toml`, `interactions.toml`, `input.toml`); no file holds display strings yet.
+- **Phase B mostly built, not marked done.** `data/messages.toml` holds the strings and timing (`hold_ticks`, `fade_ticks`), exported by `message_templates` in `crates/game-web/src/lib.rs` (`crates/game/src/messages.rs`). `client/message.js` is the message model, fed events by `client/controller.js` (`hud.message`, `{ text, alpha }`). `client/hud.js` and `client/hudlayout.js` (`rects.message`) draw it above the hearts; `client/test/hud.test.mjs` covers it. Not yet found: `hud.message` as a player path in `client/tools/observe.mjs`. Plan #2232 is still open.
+- **Refusals are sim events.** `ActionRefused` covers `too_far`, `hands_full`, `tools_stowed`, `nothing_here`; `forage_missed` stays separate. `observe.mjs` and `dsl.mjs` still serve `events` as debug counts.
+- **Selection outline** is drawn in `client/scene.js` (around line 203) from the controller's `aim`. Nothing keeps it after the target changes or disappears (Phase C not started).
+- **Data-file convention.** Game tuning lives in `data/*.toml`; `data/messages.toml` now holds the display strings.
 
 ## Reconciliation notes
 
