@@ -23,6 +23,7 @@ Checked against `master` (1c91663).
 
 ## Reconciliation notes
 
+- **Phase A still incomplete (plan #1760).** Plan #1760 closed with no tickets, but nothing of Phase A is in the code: no `L(x, z)` field, cell cache, `∇L`, breeze term, `breeze_*` keys in `data/wind.toml`, or breeze readout line (`grep -ri breeze crates data client` finds only comments in `wind_roughness_cache.rs`, `wind_height_cache.rs` and `wind_terrain.rs` saying it is not built). Phase A is not "nothing to build"; it needs planning, with open questions 2 and 3 decided first.
 - **Nothing of Phase A exists yet.** No `L(x, z)`, cell cache, `∇L`, breeze term or `breeze_*` keys. Wind Phase A and B and the day cycle are now built, so both phases can be planned; what remains is open questions 2 and 3.
 - **Front speed is not exposed.** Option B of open question 3 (`1 − front_speed / ceiling`) needs the front speed before the sum, but `Wind::at` returns only the final vector. The breeze ticket must split out the front speed (from `front_wind`) as an internal function, and the breeze must be added before the existing `[speed_floor, speed_ceiling]` clamp or the cap in `data/wind.toml` stated separately.
 - **Cache pattern exists.** `wind_roughness_cache.rs` and `wind_height_cache.rs` are bounded memo caches over `generate_coarse_heightmap`; reuse their shape for the `L` cell cache rather than inventing a third.
