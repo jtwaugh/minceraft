@@ -27,35 +27,16 @@ What exists today that this doc relies on or overlaps (checked against the code)
 - **Phase 6 done (plan #253).** `crates/game` has `data/animals.toml` and the animal loader and drop items (#269, `animals.rs`), the deterministic sim RNG (#270, `rng.rs`), the animal store and targeting (#273, #274, `animal_entities.rs`), wander (#275), sword damage and the hit rule (#276), primary press attacking the target (#277), knockback and hurt state (#278), flee (#279), death, tip-over and drops (#280), the headless test `crates/game/tests/animals.rs` (#283) and animals in the browser test scene (#285). Section 8.4 (daily top-up) and carrying drops to a crate are left to later phases, as decided in #255.
 - **Phase 7 done (plan #287).** `crates/game` has the crop data file and loader (#300, `crops.rs`), foraging tall grass (#301, `forage.rs`), the farmland and crop overlay (#321, `farm.rs`), tilling (#337, `till.rs`), planting (#342, `plant.rs`), harvest (#346, `harvest.rs`), growth on random ticks (#395, #419, `growth.rs`), the headless test `crates/game/tests/farming.rs` (#435), farming in the browser test scene (#438) and the planter block with tilling planters (#459, `data/blocks.toml`, `client/test/scripts/planter.input`).
 - **Phase 8 done (plan #469).** `crates/game` emits the events of section 11 (#485, #486, #487, #489, #492, #494; `events.rs`), they reach the client and input scripts (#493), the headless test `crates/game/tests/events.rs` covers every action (#497), health is exposed to the client (#496) and `client/hud.js` draws the crosshair, belt, hands and hearts (#498). The phase clock (`crates/game/src/phase.rs`, `data/phases.toml`) and the HUD day phase timer of section 12 were added in #500 (PR #516).
-- **No gameplay code beyond Phase 6.** There is no crop, event or HUD code in this repo. `crates/terrain` is the
-  generator; `crates/web/src/lib.rs` exports only generation, height, climate
-  and biome functions.
-- **Layout crate.** `crates/layout` (world-layout Phase A: bias terms,
-  channels, regions) is the only game-side crate. It holds no player, input
-  or sim code.
-- **Viewer.** `viewer/` has map tiles, a 3D view and the flyover
-  (`viewer/flyover/`). `viewer/flyover/player.js` is the flyover *video*
-  player (camera clock and chunk loading), not a game player. No pointer lock,
-  bindings or tick loop exist.
-- **Block data.** `data/blocks.toml` has a `collision` field
-  (`none | full | inset`) per block; this is the only collision data. Blocks
-  present: terrain, water, ice, logs, leaves, plants, `sugar_cane`, `cactus`,
-  `pumpkin`, `snow_layer`. Not present: `farmland`, crop-stage blocks,
-  `planter`, raft blocks, slabs or half blocks.
-- **Textures.** `art/PROMPT.md` lists `hoe`, `seeds`, `wheat_0..3`, `rice_0..3`,
-  `farmland_dry`, `farmland_wet`, `planter_side`, `heart_full`, `heart_half`.
-  It lists no sword and no animal textures. `art/batches_1_6.json` draws all
-  of the listed ones (`hoe`, `seeds`, `wheat_0`, `rice_0`, `farmland_dry`,
-  `farmland_wet`, `planter_side`, `heart_full`, `heart_half`); no sword or
-  animal texture exists in `art/batches_*.json`.
+- **All eight phases are built.** The game code is in `crates/game` (sim), `crates/game-web` (wasm bridge) and `client/` (pointer lock, input, HUD, scene, input-script tests under `client/test/`). `crates/web` still exports only generation, height, climate and biome functions; `viewer/` is the map, 3D view and flyover, not the game client. `crates/layout` holds the world layout and structures (`data/structures/`).
+- **Block data.** `data/blocks.toml` has a `collision` field (`none | full | inset`) per block. Blocks added for the game include `farmland_dry`, `farmland_wet`, `wheat_0..7`, the `planter_*` blocks and the raft deck and station blocks (`raft_planks`, `butcher_block`, `griddle`, `counter`, `plate_rack`, `chest`).
+- **Textures.** `art/PROMPT.md` now lists the sword and animal textures (for example `cow`, `pig`), drawn in `art/batches_7_12.json` and `art/batches_15.json`, alongside the Batch 1 to 6 farming and heart textures.
 - **Spawn lists.** SPEC 14 gives Beta's creature spawn lists (sheep, pig,
   chicken, cow, wolf). It says nothing about hit points, knockback or flee
   behaviour.
 - **Determinism.** The generator already guarantees a block depends only on
   seed and world coordinate (CLAUDE.md), which the doc's replay test relies on.
 
-Not present: `MECHANICS_SPEC.md`, animals, crops, the event system and the HUD.
-`WORLD_LAYOUT_SPEC.md` is `docs/design/world-layout.md`.
+`MECHANICS_SPEC.md` is not in the repo. `WORLD_LAYOUT_SPEC.md` is `docs/design/world-layout.md`.
 
 ## Reconciliation notes
 
