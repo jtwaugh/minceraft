@@ -54,7 +54,10 @@ import { formatTime, formatAim, formatBelt, spawnTestItems, spawnTestAnimals, re
 import { createSampler } from './samplers.js';
 import { createController } from './controller.js';
 import { createSpans } from './perfspans.js';
-import { meshRegionCpu } from './regionmesh.js';
+import { gatherRegion } from './regionmesh.js';
+import { createMeshClient } from './meshclient.js';
+import { createMeshQueue } from './meshqueue.js';
+import { createMeshJobs } from './meshjobs.js';
 import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs, daylightFactor } from './view.js';
 import { sampleSky, easeSky, blendSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
@@ -71,7 +74,7 @@ import { parseSeed } from './seed.js';
 import { History, complete, nameLists } from './consolelogic.js';
 import { OutputBuffer, createConsoleUI } from './consoleui.js';
 import { mountPanelStyle } from './uistyle.js';
-import { snowOnFoliage, particleTexture } from './particles.js';
+import { particleTexture } from './particles.js';
 
 const { InputSampler, Walk, Scene, SimClock, FlyCamera, Wind, view_matrix } = game;
 
@@ -469,10 +472,18 @@ const setSnow = (key, cells) => {
   snowCells = [...regionSnow.values()].flat();
 };
 const freeParts = (m) => { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.buf); };
-const meshRegion = (r, remesh) => spans.span('mesh', () => meshRegionNow(r, remesh));
-function meshRegionNow({ rx, rz }, remesh = false) {
-  work[remesh ? 'remeshed' : 'meshed']++;
-  const { mesh: m, blocks, tints, origin: [x, z] } = meshRegionCpu({ walk, terrain, ctx, seed, blendRadius }, { rx, rz });
+// Streamed regions are meshed in a worker (meshjobs.js); only the upload happens here.
+const meshJobs = createMeshJobs({
+  queue: createMeshQueue({ limit: 2 }),
+  client: createMeshClient({
+    spawn: () => new Worker(new URL('./meshworker.js', import.meta.url), { type: 'module' }),
+    init: { ctx, seed, blendRadius },
+  }),
+  gather: (rx, rz) => gatherRegion({ walk }, { rx, rz }).blocks,
+});
+function uploadRegion({ rx, rz, kind, result: { mesh: m, tints, origin: [x, z], snow } }) {
+  work[kind === 'new' ? 'meshed' : 'remeshed']++;
+  freeRegion({ rx, rz }); // a remesh replaces the old meshes only now, so the region never blinks out
   if (rx === 0 && rz === 0 && !skyReady) skyColor = skyTarget = ramp3(tints.centre.biome.sky, tints.centre.t).map((v) => v / 255);
   const parts = {};
   for (const k of Object.keys(meshes)) {
@@ -481,7 +492,7 @@ function meshRegionNow({ rx, rz }, remesh = false) {
     if (part) meshes[k].push(part);
   }
   regionParts.set(`${rx},${rz}`, parts);
-  setSnow(`${rx},${rz}`, snowOnFoliage(blocks, REGION_SIZE, 1, [x, z]));
+  setSnow(`${rx},${rz}`, snow);
 }
 function freeRegion({ rx, rz }) {
   const parts = regionParts.get(`${rx},${rz}`);
@@ -601,17 +612,16 @@ function render(now) {
   lastWind = wind;
   if (regions) {
     work.chunks = regions.chunks;
-    regions.free.forEach(freeRegion);
-    regions.mesh.forEach((r) => meshRegion(r));
-    // An edit changed these regions' blocks, or a new neighbour left them stale: mesh them again.
-    for (const r of regions.remesh) {
-      freeRegion(r);
-      meshRegion(r, true);
-    }
+    for (const r of regions.free) { meshJobs.cancel(r.rx, r.rz); freeRegion(r); }
+    // Edits go first in the queue, so their remesh does not wait behind new regions.
+    for (const r of regions.mesh) meshJobs.submit({ ...r, kind: 'new' });
+    for (const r of regions.remesh) meshJobs.submit(r);
+    meshJobs.pump(regions.centre);
   }
+  spans.span('mesh', () => meshJobs.take().forEach(uploadRegion));
 
-  if (pixel) { // quiet frames in a row: nothing queued or left to mesh (pixelpass.mjs waits on this)
-    const idle = regions && regions.loaded > 0 && !regions.pending && !regions.mesh.length && !regions.remesh.length;
+  if (pixel) { // quiet frames in a row: nothing queued, in flight or left to upload (pixelpass.mjs waits on this)
+    const idle = regions && regions.loaded > 0 && !regions.pending && !meshJobs.busy;
     window.pixelQuietFrames = idle ? (window.pixelQuietFrames ?? 0) + 1 : 0;
   }
 
