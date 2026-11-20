@@ -12,6 +12,9 @@
 //! - Each level also gets the decorated checks of `validate_decorated`
 //!   (Phase G) on its `window(level, t)` generated with decoration on; their
 //!   `required` text starts with the level id.
+//! - With `toml-io`, each level also gets `sea_flora_clear`
+//!   (`validate_sea_flora`) on its `window(level, t)` generated with the sea
+//!   flora pass and the layout's structures.
 //! - `anchorage_reachable` is one check per consecutive pair: A* over the
 //!   eroded navigable set from one anchorage to the next. Its `name` is the
 //!   shared constant; the pair is named in `required`.
@@ -115,6 +118,19 @@ fn decorated_checks(layout: &Layout, level: &Level, t: &Thresholds) -> Vec<Check
     checks
 }
 
+/// The sea flora check for one level, on its decorated `window(level, t)`
+/// with sea flora. `required` is prefixed with the level id.
+#[cfg(feature = "toml-io")]
+fn sea_flora_checks(layout: &Layout, level: &Level, t: &Thresholds) -> Vec<CheckResult> {
+    let (x0, z0, w, d) = window(level, t);
+    let region = layout.generate_layout_region(x0, z0, w, d, true).region;
+    let mut checks = crate::validate_sea_flora(&region, layout, level).checks;
+    for c in &mut checks {
+        c.required = format!("{}: {}", level.id, c.required);
+    }
+    checks
+}
+
 /// Validate every level, every consecutive anchorage pair and the channel
 /// along `route`.
 pub fn validate_route(
@@ -127,6 +143,8 @@ pub fn validate_route(
     for level in levels {
         checks.extend(validate_level(layout, level, t).checks);
         checks.extend(decorated_checks(layout, level, t));
+        #[cfg(feature = "toml-io")]
+        checks.extend(sea_flora_checks(layout, level, t));
     }
     let channel = layout.density.iter().find_map(|d| match d {
         DensityTerm::Channel {
