@@ -58,6 +58,8 @@ import { gatherRegion } from './regionmesh.js';
 import { createMeshClient } from './meshclient.js';
 import { createMeshQueue } from './meshqueue.js';
 import { createMeshJobs } from './meshjobs.js';
+import { createUploadQueue } from './uploadqueue.js';
+import { UPLOAD_VERTS_PER_FRAME } from './workbudget.js';
 import { REGION_SIZE } from './stream.js';
 import { NEAR, farPlane, look, skyInputs, daylightFactor } from './view.js';
 import { sampleSky, easeSky, blendSky, SKY_SAMPLE_RADIUS } from './skyblend.js';
@@ -481,6 +483,10 @@ const meshJobs = createMeshJobs({
   }),
   gather: (rx, rz) => gatherRegion({ walk }, { rx, rz }).blocks,
 });
+const uploads = createUploadQueue({ budget: UPLOAD_VERTS_PER_FRAME });
+let uploadCentre = { rx: 0, rz: 0 }; // the last frame's region centre, for frames without streaming
+// Vertices in a finished mesh over its parts, as uploadBuffers counts them.
+const meshVerts = (m) => Object.keys(meshes).reduce((n, k) => n + (m[k]?.faces ? m[k].verts.byteLength / VERTEX_BYTES : 0), 0);
 function uploadRegion({ rx, rz, kind, result: { mesh: m, tints, origin: [x, z], snow } }) {
   work[kind === 'new' ? 'meshed' : 'remeshed']++;
   freeRegion({ rx, rz }); // a remesh replaces the old meshes only now, so the region never blinks out
@@ -612,16 +618,19 @@ function render(now) {
   lastWind = wind;
   if (regions) {
     work.chunks = regions.chunks;
-    for (const r of regions.free) { meshJobs.cancel(r.rx, r.rz); freeRegion(r); }
+    for (const r of regions.free) { meshJobs.cancel(r.rx, r.rz); uploads.cancel(r.rx, r.rz); freeRegion(r); }
     // Edits go first in the queue, so their remesh does not wait behind new regions.
     for (const r of regions.mesh) meshJobs.submit({ ...r, kind: 'new' });
     for (const r of regions.remesh) meshJobs.submit(r);
     meshJobs.pump(regions.centre);
   }
-  spans.span('mesh', () => meshJobs.take().forEach(uploadRegion));
+  // Ready meshes wait in the upload queue and go to the GPU nearest first, up to a vertex budget a frame.
+  for (const job of meshJobs.take()) uploads.add({ ...job, verts: meshVerts(job.result.mesh) });
+  if (regions) uploadCentre = regions.centre;
+  spans.span('mesh', () => uploads.take(uploadCentre).forEach(uploadRegion));
 
   if (pixel) { // quiet frames in a row: nothing queued, in flight or left to upload (pixelpass.mjs waits on this)
-    const idle = regions && regions.loaded > 0 && !regions.pending && !meshJobs.busy;
+    const idle = regions && regions.loaded > 0 && !regions.pending && !meshJobs.busy && !uploads.pending;
     window.pixelQuietFrames = idle ? (window.pixelQuietFrames ?? 0) + 1 : 0;
   }
 
