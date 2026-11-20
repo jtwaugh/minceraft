@@ -9,6 +9,12 @@ export const MAX_REGIONS_PER_FRAME = 1;
 export const MAX_CHUNKS_PER_TICK = 16;
 /** Vertices meshed in one frame; one region of seed 12345 near the start peaks at about 805 000. */
 export const MAX_VERTS_PER_FRAME = 1_000_000;
+/**
+ * Vertices uploaded in one frame (client/uploadqueue.js). One region of seed 12345 near the
+ * start peaks at about 805 000, so the budget sits above one peak region, which then uploads
+ * in one frame, and below two, which then go in separate frames.
+ */
+export const UPLOAD_VERTS_PER_FRAME = 1_000_000;
 
 const BUDGETS = { regions: MAX_REGIONS_PER_FRAME, chunks: MAX_CHUNKS_PER_TICK, verts: MAX_VERTS_PER_FRAME };
 
