@@ -6,7 +6,7 @@ source: "#1566"
 superseded_by: ""
 phases:
   A: done
-  B: todo
+  B: done
   C: todo
   D: todo
 ---
@@ -24,7 +24,8 @@ Checked against the code on `master`:
 - **Determinism tests.** `crates/game/src/stream.rs` has `streamed_walk_matches_one_large_region`; `crates/terrain` and `crates/layout` have the overlapping-region tests. Nothing tests when a region joins the world, because it always joins in the tick that asks.
 - **Phase A done (plan #1568).** `Walker::region_border` (`crates/game/src/walk.rs`, `Walk.region_border` in `crates/game-web`) exports a neighbour's facing strip with edits applied (PR #1581); `padRegion` (`client/regionpad.js`) reads only those strips, so `region_blocks` is called once per meshed region (PR #1589).
 - **Unblocked.** `docs/design/play-critic-perf-render.md` is `done` (all phases), so note 1's wait is over: Phase B here may be planned. `Walk.region_border` is the border export Phase B's worker can use. The per-frame work counts (`work` with `verts` in `client/scene.js`, `client/workbudget.js`) exist for Phase C's assertion. There is still no client worker, no upload vertex budget, no `prefetch` key in `data/streaming.toml`, and `Streamer` still clones each region into the world (`crates/game/src/stream.rs`).
-- **Not done yet:** sections 2 to 4 (Phases B to D). Section 1 otherwise describes the present code; its per-neighbour copy is gone.
+- **Phase B done (plan #2305).** Meshing runs in a worker: `client/meshqueue.js` (priority queue, edits first; PR #2318), `gatherRegion` and `meshPadded` split out of `meshRegionCpu` (PR #2319), `client/meshworker.js` and `client/meshclient.js` with transferable results (PR #2328), and `render` in `client/scene.js` only uploads worker-meshed regions via `client/meshjobs.js` (PR #2329).
+- **Not done yet:** sections 2 and 4 (Phases C and D). Section 1 otherwise describes the present code; its per-neighbour copy is gone.
 
 ## Reconciliation notes
 
