@@ -67,7 +67,7 @@ Walking or flying across a region border in a streamed world (`Walk.streamed`) f
 - Want: a region's blocks are generated in a worker, not in the sim tick. The sim asks for a region early, gets it back later and adds it to the world when it arrives.
 - Want: regions are requested before the player needs them. When the player enters a region, its neighbours are about 128 blocks from the far edge, which is several seconds of sprinting or flying. So a worker has time if requests go out when the centre changes (or earlier, on a prefetch radius larger than `load`).
 - Want: a fallback if the player gets to a region that has not arrived (a fast fly, a teleport, a slow device). Options: generate it synchronously then (the stall comes back only in that case), or hold the player at the border until it arrives.
-- **Determinism.** A block still depends only on the seed and its coordinate. What changes is *when* a region joins the world. The sim must not behave differently depending on worker timing in a way the harness can't reproduce. Options: the sim treats arrival as an input event it records (so a transcript replays exactly), or the harness runs the worker synchronously and the rule "a region a player can touch is always loaded" is tested on its own.
+- **Determinism.** A block still depends only on the seed and its coordinate. What changes is *when* a region joins the world. The sim must not behave differently depending on worker timing in a way the harness can't reproduce. Options: the sim treats arrival as an input event it records (so a transcript replays exactly), or the harness runs the worker synchronously and the rule "a region a player can touch is always loaded" is tested on its own. Decision: the sim records region arrival as an input event, so a transcript replays exactly. (Decided in #2341.)
 
 > **Reconciler:** see notes 2, 5, 6, 7 and 8. A worker needs a `layout`-based wasm export in `crates/game-web`, not `terrain`, and the sim's second per-region clone goes with it.
 
@@ -109,14 +109,12 @@ Walking or flying across a region border in a streamed world (`Walk.streamed`) f
 ## Open questions
 
 1. Generation fallback (section 2): generate synchronously when needed, or hold the player at the border?
-2. Determinism (section 2): record region arrival as an input event, or run synchronously in the harness and test the "touchable regions are loaded" rule apart?
 3. Should the sim itself (the `Walk` wasm instance) move into a worker, with the main thread only rendering? That would cover generation and meshing at once, but it changes how input, the HUD and the debug console reach the sim.
 4. Prefetch radius: keep `load = 1` and request on centre change, or add a prefetch radius in `data/streaming.toml`?
 
 ## Open questions (reconciler)
 
 1. **Q1 fallback.** Options: A, generate synchronously when the player reaches an unarrived region (suggested: the stall returns only in a rare case, and the harness needs no hold logic); B, hold the player at the border (needs a collision rule and a HUD cue, and is the same code path in the harness).
-2. **Q2 determinism.** Options: A, the sim records arrival as an input event, so a transcript replays exactly (suggested if generation really runs in a worker); B, the harness runs generation synchronously and the "touchable regions are loaded" rule is tested separately (cheaper, but the real worker path is untested by scripts).
 3. **Q3 sim in a worker.** Options: A, no (suggested, note 11: it breaks the harness's design); B, yes, as its own design doc.
 4. **Q4 prefetch.** Options: A, request on centre change with `load = 1` (suggested for the first cut, no data change); B, add `prefetch` to `data/streaming.toml` (note 8).
 5. **Q5 worker blocks.** Options: A, `region_border` from the main wasm (suggested: no edit sync); B, the worker keeps its own copy of loaded blocks and receives edits (less crossing, more state to keep in sync).
