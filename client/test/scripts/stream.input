@@ -76,6 +76,8 @@ expect no event overbudget
 # most UPLOAD_VERTS_PER_FRAME (1 000 000) vertices, or one region alone over it,
 # and one peak region near the start is about 805 000. The region under the eye
 # has its mesh up in every frame (regions.gaps counts the frames it doesn't).
+# The route stops at z=-3: past it one region alone is about 1 003 000, which
+# the queue sends by itself (and the overbudget event would then report).
 case sprinting and flying across several region borders uploads within the vertex budget
 start walk stream
 click
@@ -89,9 +91,9 @@ frame 100
 expect sprinting = true
 until regions.z = -1
 press KeyF
-until regions.z = -4
+until regions.z = -3
 frame 50 x20
-expect regions.z = -4
+expect regions.z = -3
 expect regions.loaded > 9
 expect verts.max_per_frame > 0
 expect verts.max_per_frame <= 1000000

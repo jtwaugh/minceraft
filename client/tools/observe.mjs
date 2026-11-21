@@ -31,7 +31,7 @@ const CLASSES = {
   ],
   partial: ['target.id', 'target.face', 'box', 'console.last', 'console.text', 'phase.left'],
   debug: [
-    'regions.loaded', 'regions.freed', 'regions.pending', 'regions.x', 'regions.z',
+    'regions.loaded', 'regions.freed', 'regions.pending', 'regions.x', 'regions.z', 'regions.gaps',
     'console.lines', 'cheated', 'time', 'time.frozen', ...axes('sun'), 'daylight', 'ticks', 'alpha', 'yaw', 'pitch', ...axes('eye'),
     'moved', ...axes('moved'), 'lock_requests', 'rule.primary', 'rule.secondary', 'rule.last',
     'underwater', 'held', 'held.drawn', 'hud.pulse', 'hands.swing', 'hands.use', 'items', 'field.ground', 'field.crop', 'flower.block',
@@ -41,7 +41,7 @@ const CLASSES = {
     'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
     'station.count', 'station.item', 'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
-  diagnostic: ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults', 'regions.gaps'],
+  diagnostic: ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults'],
 };
 
 export const PATHS = Object.freeze(
