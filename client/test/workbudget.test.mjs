@@ -2,7 +2,7 @@
 // Run: node --test client/test/workbudget.test.mjs (the DSL tests need ./build.sh first)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { overBudget, MAX_REGIONS_PER_FRAME, MAX_CHUNKS_PER_TICK, MAX_VERTS_PER_FRAME } from '../workbudget.js';
+import { overBudget, MAX_REGIONS_PER_FRAME, MAX_CHUNKS_PER_TICK, MAX_VERTS_PER_FRAME, UPLOAD_VERTS_PER_FRAME } from '../workbudget.js';
 import { createSession } from './dsl.mjs';
 
 const BUDGETS = { regions: MAX_REGIONS_PER_FRAME, chunks: MAX_CHUNKS_PER_TICK, verts: MAX_VERTS_PER_FRAME };
@@ -51,5 +51,20 @@ test('a stream meshing two regions a frame fires overbudget naming the regions',
   assert.ok(s.read('events.overbudget') > 0);
   assert.ok(s.exec('expect event overbudget regions=2').ok);
   assert.match(s.exec('expect no event overbudget').error, /unexpected event overbudget/);
+  s.close();
+});
+
+test('regions.gaps needs a streamed world', () => {
+  const s = createSession(['walk']);
+  assert.deepEqual(s.exec('expect regions.gaps = 0'), { ok: false, error: 'regions.gaps needs `start ... stream`' });
+  s.close();
+});
+
+test('a stream meshing two regions a frame still uploads within the vertex budget', () => {
+  const s = createSession(['walk', 'stream'], 'session', { streamBudget: 2 });
+  assert.ok(s.exec('frame 50 x8').ok);
+  assert.ok(s.read('verts.max_per_frame') > 0);
+  assert.ok(s.read('verts.max_per_frame') <= UPLOAD_VERTS_PER_FRAME);
+  assert.equal(s.read('regions.gaps'), 0);
   s.close();
 });

@@ -64,10 +64,12 @@
 //   expect <path> <op> <value>  op: = != < > <= >= ~ (within 1e-3)
 //
 // Paths: regions.loaded|freed|pending|x|z (stream only: regions meshed now, regions freed so far,
-// regions waiting to be meshed, and the region under the eye), regions.max_per_frame, chunks.max_per_tick,
+// regions waiting to be meshed, and the region under the eye), regions.gaps (stream only: frames since the
+// case began whose region under the eye had no mesh uploaded by the end of the frame), regions.max_per_frame, chunks.max_per_tick,
 // verts.max_per_frame (stream only: the most work any one frame has done since the case began: regions
-// meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices meshed over
-// all mesh kinds), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
+// meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices uploaded
+// over all mesh kinds: each meshed region joins the upload queue of client/uploadqueue.js, budget
+// UPLOAD_VERTS_PER_FRAME, and counts in the frame the queue lets it through, as in scene.js), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
 // every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
 // console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, sun.x|y|z (unit vector toward the sun this frame, time of day plus alpha), daylight (scene brightness this frame), locked, prompt (the click cue text, "Click to play", while the game waits for a click, else null; `expect prompt = none` tests for null), hint (open|folded: the controls hint panel), ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind
@@ -99,7 +101,8 @@ import { initSync, InputSampler, SimClock, FlyCamera, Walk, Scene } from '../pkg
 import * as terrain from '../../viewer/pkg/terrain_web.js';
 import { B, VERTEX_BYTES, legendContext } from '../../viewer/mesh.js';
 import { meshRegionCpu } from '../regionmesh.js';
-import { overBudget } from '../workbudget.js';
+import { overBudget, UPLOAD_VERTS_PER_FRAME } from '../workbudget.js';
+import { createUploadQueue } from '../uploadqueue.js';
 import { meshCracks } from '../meshcheck.js';
 import { REGION_SIZE } from '../stream.js';
 import { attachInput } from '../input.js';
@@ -126,18 +129,27 @@ let meshCtx; // no textures in the harness: every face on layer 0, which changes
 const STREAM_SEED = 12345n;
 
 /**
- * Meshes this frame's new and remeshed regions as scene.js would (no upload); returns the work done
- * and the crack faults (client/meshcheck.js) in their `opaque` parts, after `damage` (tests only) edits each.
+ * Meshes this frame's new and remeshed regions as scene.js would and puts them on `up` (the upload
+ * queue), then takes this frame's uploads into `shown` (the regions with a mesh up, freed ones
+ * removed). Returns the work done, verts counting what was uploaded; the crack faults
+ * (client/meshcheck.js) in the meshed `opaque` parts, after `damage` (tests only) edits each; and
+ * whether the region under the eye has no mesh up.
  */
-function meshFrame(walk, r, damage) {
+function meshFrame(walk, r, damage, up, shown) {
   meshCtx ??= legendContext(terrain.legend(), new Uint8Array(256 * 3 * 2));
-  let verts = 0, faults = 0;
-  for (const region of [...r.mesh, ...r.remesh]) {
+  let faults = 0;
+  for (const { rx, rz } of r.free) { up.cancel(rx, rz); shown.delete(`${rx},${rz}`); }
+  for (const region of [...r.mesh.map((m) => ({ ...m, kind: 'new' })), ...r.remesh]) {
     const { mesh } = meshRegionCpu({ walk, terrain, ctx: meshCtx, seed: STREAM_SEED }, region);
+    let verts = 0;
     for (const k of ['opaque', 'cutout', 'water', 'ice']) verts += mesh[k].verts.byteLength / VERTEX_BYTES;
+    up.add({ rx: region.rx, rz: region.rz, kind: region.kind, verts });
     faults += meshCracks(damage ? damage(mesh.opaque) : mesh.opaque, REGION_SIZE).length;
   }
-  return { work: { regions: r.mesh.length + r.remesh.length, chunks: r.chunks, verts }, faults };
+  let verts = 0;
+  for (const e of up.take(r.centre)) { verts += e.verts; shown.add(`${e.rx},${e.rz}`); }
+  const gap = !shown.has(`${r.centre.rx},${r.centre.rz}`);
+  return { work: { regions: r.mesh.length + r.remesh.length, chunks: r.chunks, verts }, faults, gap };
 }
 
 /** Where the raft's rest-pose point (x, y, z) is now: turned by the quarter turns so far about the pivot, then moved by the offset. */
@@ -195,7 +207,9 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
   });
   const seen = [];
   const most = stream ? { regions: 0, chunks: 0, verts: 0 } : null; // running maxima of one frame's work
-  const render = stream ? { faults: 0 } : null; // crack faults over every region meshed so far
+  const render = stream ? { faults: 0, gaps: 0 } : null; // crack faults over every region meshed so far; frames with no mesh under the eye
+  const uploads = stream ? createUploadQueue({ budget: UPLOAD_VERTS_PER_FRAME }) : null;
+  const shown = new Set(); // "rx,rz" of regions whose mesh is up
   const hint = createHintState();
   document.addEventListener('pointerlockchange', () => hint.update(input.locked));
   const windField = new terrain_game.Wind(STREAM_SEED);
@@ -210,8 +224,9 @@ function world({ mode = 'walk', raft = false, debug = raft, stream = false, at =
     hint.update(input.locked);
     seen.push(...state.events);
     if (most) {
-      const { work, faults } = meshFrame(walk, state.regions, damage);
+      const { work, faults, gap } = meshFrame(walk, state.regions, damage, uploads, shown);
       render.faults += faults;
+      if (gap) render.gaps++;
       for (const [k, v] of Object.entries(work)) most[k] = Math.max(most[k], v);
       const over = overBudget(work);
       if (over.length) seen.push(`overbudget ${over.map((k) => `${k}=${work[k]}`).join(' ')}`);
@@ -270,6 +285,10 @@ function read(w, path) {
   if (path === 'render.faults') {
     if (!w.render) throw new Error(`${path} needs \`start ... stream\``);
     return w.render.faults;
+  }
+  if (path === 'regions.gaps') {
+    if (!w.render) throw new Error(`${path} needs \`start ... stream\``);
+    return w.render.gaps;
   }
   if (path.startsWith('regions.')) {
     const r = s.regions;
