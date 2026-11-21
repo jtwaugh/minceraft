@@ -7,7 +7,7 @@ superseded_by: ""
 phases:
   A: done
   B: done
-  C: todo
+  C: done
   D: todo
 ---
 
@@ -25,7 +25,8 @@ Checked against the code on `master`:
 - **Phase A done (plan #1568).** `Walker::region_border` (`crates/game/src/walk.rs`, `Walk.region_border` in `crates/game-web`) exports a neighbour's facing strip with edits applied (PR #1581); `padRegion` (`client/regionpad.js`) reads only those strips, so `region_blocks` is called once per meshed region (PR #1589).
 - **Unblocked.** `docs/design/play-critic-perf-render.md` is `done` (all phases), so note 1's wait is over: Phase B here may be planned. `Walk.region_border` is the border export Phase B's worker can use. The per-frame work counts (`work` with `verts` in `client/scene.js`, `client/workbudget.js`) exist for Phase C's assertion. There is still no client worker, no upload vertex budget, no `prefetch` key in `data/streaming.toml`, and `Streamer` still clones each region into the world (`crates/game/src/stream.rs`).
 - **Phase B done (plan #2305).** Meshing runs in a worker: `client/meshqueue.js` (priority queue, edits first; PR #2318), `gatherRegion` and `meshPadded` split out of `meshRegionCpu` (PR #2319), `client/meshworker.js` and `client/meshclient.js` with transferable results (PR #2328), and `render` in `client/scene.js` only uploads worker-meshed regions via `client/meshjobs.js` (PR #2329).
-- **Not done yet:** sections 2 and 4 (Phases C and D). Section 1 otherwise describes the present code; its per-neighbour copy is gone.
+- **Phase C done (plan #2331).** Ready meshes go through a budgeted queue, nearest first: `client/uploadqueue.js` (PR #2335), used by `render` in `client/scene.js` with `UPLOAD_VERTS_PER_FRAME` from `client/workbudget.js` (PR #2336), and the harness uploads through the same queue and asserts the budget on a multi-border script in `client/test/scripts/stream.input` (PR #2337). Section 4's fog bullet stays a `[manual check]`.
+- **Not done yet:** section 2 (Phase D). Section 1 otherwise describes the present code; its per-neighbour copy is gone.
 
 ## Reconciliation notes
 
