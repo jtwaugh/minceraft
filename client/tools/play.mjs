@@ -8,7 +8,7 @@
 //                                 refuses them; the mode is fixed for the session. Player mode does
 //                                 allow expect/until on the diagnostic paths (regions.max_per_frame,
 //                                 chunks.max_per_tick, verts.max_per_frame, events.overbudget,
-//                                 render.faults) when the start words include "stream".
+//                                 render.faults, regions.gaps) when the start words include "stream".
 //   {"exec": "press KeyW"}        run one DSL line; the response carries the player observation
 //   {"observe": "player"}         the player observation, without doing anything
 //   {"transcript": true}          the session so far as a valid `.input` script

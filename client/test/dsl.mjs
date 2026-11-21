@@ -68,8 +68,8 @@
 // case began whose region under the eye had no mesh uploaded by the end of the frame), regions.max_per_frame, chunks.max_per_tick,
 // verts.max_per_frame (stream only: the most work any one frame has done since the case began: regions
 // meshed plus remeshed, chunks the sim loaded as in the controller's `regions.chunks`, and vertices uploaded
-// over all mesh kinds: each meshed region joins an upload queue (client/uploadqueue.js, budget
-// UPLOAD_VERTS_PER_FRAME) and counts in the frame the queue lets it through, as in scene.js), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
+// over all mesh kinds: each meshed region joins the upload queue of client/uploadqueue.js, budget
+// UPLOAD_VERTS_PER_FRAME, and counts in the frame the queue lets it through, as in scene.js), render.faults (stream only: crack faults client/meshcheck.js finds in the `opaque` part of
 // every region meshed or remeshed since the case began; 0 when the meshes have no cracks), mode (fly|walk|console|inventory|death; death while the player is dead), console.last (last command output line, or none),
 // console.lines (output lines so far), console.text (the box), cheated, time (time of day, 0..1), time.frozen, sun.x|y|z (unit vector toward the sun this frame, time of day plus alpha), daylight (scene brightness this frame), locked, prompt (the click cue text, "Click to play", while the game waits for a click, else null; `expect prompt = none` tests for null), hint (open|folded: the controls hint panel), ticks, alpha, yaw, pitch, eye.x|y|z,
 // moved (distance since mark), moved.x|y|z, lock_requests, target.kind

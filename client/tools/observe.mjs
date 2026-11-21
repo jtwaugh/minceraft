@@ -41,7 +41,7 @@ const CLASSES = {
     'layout.timer', 'layout.slotnumbers', 'layout.hands.label',
     'station.count', 'station.item', 'driving', 'raft.heading', 'raft.x', 'raft.z', 'raft.moved',
   ],
-  diagnostic: ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults'],
+  diagnostic: ['regions.max_per_frame', 'chunks.max_per_tick', 'verts.max_per_frame', 'events.overbudget', 'render.faults', 'regions.gaps'],
 };
 
 export const PATHS = Object.freeze(
