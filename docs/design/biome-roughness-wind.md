@@ -27,7 +27,7 @@ Checked against `master` (5a68a3b).
 
 ## Reconciliation notes
 
-- **Phase A still incomplete (plan #2142).** The readout fields are built (PRs #2190, #2212). Still missing: ordering roughness after terrain wind (`wind_terrain.rs`). `Wind::at` in `crates/game/src/wind_field.rs` does not call it, and its wiring belongs to plan #1881. Re-plan this once that wiring has merged: wait for plan #1881 to wire terrain wind into `Wind::at`, then re-run the planner and plan the re-ordering ticket. Phase A stays `todo` until then. (Decided in #2050.)
+- **Phase A still incomplete (plan #2142).** The readout fields are built (PRs #2190, #2212). Still missing: ordering roughness after terrain wind (`wind_terrain.rs`). `Wind::at` in `crates/game/src/wind_field.rs` does not call it, and its wiring belongs to plan #1881. Re-plan this once that wiring has merged: wait for plan #1881 to wire terrain wind into `Wind::at`, then re-run the planner and plan the re-ordering ticket. Phase A stays `todo` until then. (Decided in #2050.) The planner waits: it plans no roughness ticket until terrain wind is wired into `Wind::at` (by finishing or re-planning #1881), then it is re-run. (Decided in #2315.)
 
 - **Phase A still incomplete (plan #1931).** The cache and the wiring into `Wind::at` are built (PRs #1945, #1985). Still missing: the `R` and multiplier fields on the debug wind readout, which wait on wind Phase B (no wind command in `data/commands.toml` or `crates/game/src/commands.rs`); and re-ordering roughness after terrain wind (`wind_terrain.rs`) once that is wired into `Wind::at`.
 
